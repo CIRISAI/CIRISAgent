@@ -95,6 +95,17 @@ jobs:
                xargs -I{} sh -c 'gh api repos/${{ github.repository }}/actions/artifacts/{}/zip > /tmp/f.zip && unzip -q -o /tmp/f.zip -d /tmp/fixture'
           find /tmp/fixture -name '*.db' -printf '  %f %s bytes\n' || true
 
+      - name: Record the owner BEFORE boot
+        id: baseline
+        run: |
+          # Snapshot identity first. Without this, "no owner after" is
+          # indistinguishable from "no owner ever", and the job reports data loss
+          # on a fixture that never had a user — a false alarm dressed as a
+          # security finding, which is how a job earns being ignored.
+          B=$(python tools/release/check_longjump_state.py --home /tmp/fixture --emit-baseline | grep '^BASELINE=' | cut -d= -f2-)
+          echo "owners before upgrade: ${B:-<none>}"
+          echo "baseline=$B" >> "$GITHUB_OUTPUT"
+
       - name: Boot this code against it
         id: boot
         run: |
@@ -125,7 +136,7 @@ jobs:
           # health check: listeners up, no incidents, owner silently gone. Identity
           # survival is the only thing that separates a real upgrade from a fresh
           # install wearing the old data directory's clothes.
-          python tools/release/check_longjump_state.py --home /tmp/fixture
+          python tools/release/check_longjump_state.py --home /tmp/fixture --baseline '${{ steps.baseline.outputs.baseline }}'
 
       - name: Surface the boot log
         if: always()

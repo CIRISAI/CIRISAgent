@@ -57,6 +57,19 @@ def human_certs(db: Path) -> tuple[list[str], list[str]]:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--home", default="/tmp/fixture", help="CIRIS_HOME the agent booted against")
+    ap.add_argument(
+        "--baseline",
+        help="owner names present BEFORE boot (comma-separated). Without it this "
+             "cannot tell 'the upgrade lost the owner' from 'the fixture never had "
+             "one' — and it failed a memory-burst fixture for the second while "
+             "reporting the first, which is a false alarm dressed as a data-loss "
+             "report. Run with --emit-baseline before boot to produce it.",
+    )
+    ap.add_argument(
+        "--emit-baseline",
+        action="store_true",
+        help="print the owner names found and exit 0, for capture before boot",
+    )
     args = ap.parse_args()
 
     # BOTH databases, because which one holds wa_cert is version-dependent —
@@ -75,14 +88,32 @@ def main() -> int:
               f"unpack, so this job proved nothing. Failing rather than reporting a pass.")
         return 1
 
+    found: list[str] = []
     for db in dbs:
         human, allnames = human_certs(db)
         print(f"{db}: {len(allnames)} cert(s) — {allnames[:8]}")
-        if human:
-            print(f"owner survived the upgrade: {human[0]}")
-            return 0
+        found.extend(human)
 
-    print("::error::FAILURE MODE 2 — no human-owned WA cert survived the upgrade.")
+    if args.emit_baseline:
+        print("BASELINE=" + ",".join(sorted(set(found))))
+        return 0
+
+    if found:
+        print(f"owner survived the upgrade: {found[0]}")
+        return 0
+
+    baseline = [n for n in (args.baseline or "").split(",") if n]
+    if not baseline:
+        # NOT A FAILURE. A fixture with no owner before the upgrade cannot show
+        # one being lost by it. Saying so is the honest result; failing here would
+        # train everyone to ignore this job, which is worse than not having it.
+        print("::warning::This fixture carries no human-owned cert to begin with, so "
+              "identity survival is untestable against it. The boot succeeded. Capture "
+              "a fixture from a configured agent (one that completed setup) to exercise "
+              "this assertion.")
+        return 0
+
+    print(f"::error::FAILURE MODE 2 — owner(s) {baseline} were present BEFORE the upgrade and are gone after.")
     print("::error::The agent reports healthy and the pre-existing operator cannot log in.")
     print("::error::Only self-minted adapter observers are present, which is the signature")
     print("::error::of a fresh install over an old data directory rather than an upgrade.")

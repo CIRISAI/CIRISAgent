@@ -22,7 +22,10 @@ The fixes must not break rows written by the OLD code — every existing agent
 has them — so the read path deliberately accepts both shapes, permanently.
 
 `FakePersistEngine` below mirrors the real substrate's observed behavior
-(ciris-server 0.5.171 / persist wa_cert v1.5.19): `scopes` is stored verbatim
+(ciris-server 0.5.171 / persist wa_cert v1.5.19 — the pin has since moved to
+0.5.172 for the postgres bootstrap fix; the real substrate is re-exercised by
+CI's dual-backend Staged QA, which boots an agent on both backends): `scopes`
+is stored verbatim
 as whatever JSON value it receives, and `token_type` is a closed Rust enum
 that raises on an unknown variant. Both behaviors were confirmed against a
 real `Engine` before being encoded here.

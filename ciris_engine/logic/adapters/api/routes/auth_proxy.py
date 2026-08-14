@@ -106,7 +106,7 @@ def _safe_subpath(path: str) -> str:
     return path
 
 
-def _log_agent_side_cert_inventory(path: str) -> None:
+def _log_agent_side_cert_inventory() -> None:
     """On a refused login, log the certs THIS side can see in the same store.
 
     Staged QA produced `login failed: no cert resolved for identifier
@@ -121,6 +121,13 @@ def _log_agent_side_cert_inventory(path: str) -> None:
     Diagnostic only — it never affects the response, and any failure to read is
     swallowed, because a logging aid must not be able to break a login.
 
+    IT ALSO LOGS NO CALLER INPUT. It used to interpolate the request `path`
+    (Sonar S5145), which was safe only because `_safe_subpath` had validated it
+    upstream — the exact "depends on a check elsewhere staying correct" that the
+    other log statement in this file carries a comment against. The value added
+    nothing anyway: this only fires for a refused login, so the path is always
+    `login`.
+
     Names are already logged verbatim by CIRIS_USER_CREATE at setup, so this adds
     no disclosure that the same log file does not already carry.
     """
@@ -134,13 +141,12 @@ def _log_agent_side_cert_inventory(path: str) -> None:
             for c in (certs or [])[:12]
         )
         logger.warning(
-            "auth proxy: the node REFUSED %s. Agent-side store holds %d cert(s): %s. "
+            "auth proxy: the node REFUSED a login. Agent-side store holds %d cert(s): %s. "
             "Compare against the node's certs_scanned=. A DIFFERENT count is the "
             "signal: this side lists only rows passing _is_brain_wa_row (classic "
             "wa_id shape); anything else is skipped as a substrate-owned federation "
             "identity. If the two halves partition the same table differently, a "
             "brain-written cert can be invisible to the node's scan.",
-            path,
             len(certs or []),
             summary or "(none)",
         )
@@ -191,7 +197,7 @@ async def proxy_auth_to_node(path: str, request: Request) -> Response:
     # A refused LOGIN is the one 401 worth explaining, because it is the only one
     # where both halves have an opinion about the same rows.
     if upstream.status_code == 401 and path.rstrip("/").endswith("login"):
-        _log_agent_side_cert_inventory(path)
+        _log_agent_side_cert_inventory()
 
     return Response(
         content=upstream.content,

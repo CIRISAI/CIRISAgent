@@ -13,8 +13,9 @@ synchronously during every JWT verification. The migration preserves
 field round-tripping for every column the service depends on:
   password_hash, api_key_hash, oauth_provider/external_id, oauth_links,
   custom_permissions, adapter_id/name/metadata, veilid_id, parent_signature,
-  scopes_json (string), token_type, created_at (`created`), last_auth
-  (`last_login`).
+  scopes (JSON array), created_at (`created`), last_auth (`last_login`).
+
+`token_type` is deliberately NOT round-tripped — see `_wa_to_persist_payload`.
 
 Part of CIRISAgent#763 — eliminating dual-libsqlite WAL contention
 documented in CIRISPersist#58.
@@ -26,6 +27,7 @@ import json
 import logging
 import re
 from datetime import datetime
+from enum import Enum
 from typing import Any, Dict, List, Optional, cast
 
 from ciris_engine.schemas.services.authority_core import OAuthIdentityLink, WACertificate
@@ -95,15 +97,130 @@ def _coerce_oauth_links(value: Any) -> List[OAuthIdentityLink]:
     return out
 
 
+# Bound on how many times a `scopes` value may be JSON-decoded while unwrapping
+# historical double-encoding. One level is the legacy shape and two is a legacy
+# row re-upserted; the third is slack. The bound exists so a pathological value
+# can never spin.
+_MAX_SCOPES_UNWRAP = 3
+
+# Persist's `token_type` column is a closed set — a Rust enum behind a CHECK
+# constraint. It is NOT the same set as the agent's own `TokenType`
+# (standard | channel | oauth): persist has no `channel`, the agent has no
+# session/api_key/service. Anything outside this set makes `wa_cert_upsert`
+# raise `ValueError: WaCert decode: unknown variant ...` before the row is
+# written.
+_PERSIST_TOKEN_TYPES = frozenset({"standard", "session", "api_key", "oauth", "service"})
+_DEFAULT_TOKEN_TYPE = "standard"
+
+
+def _scopes_to_persist(value: Any) -> List[str]:
+    """Decode a legacy `scopes_json` string into the LIST persist's `scopes` wants.
+
+    Persist types `scopes` as a free-form JSON value and stores it verbatim.
+    Handing it the legacy JSON *string* `'["read:any"]'` therefore stores the
+    JSON encoding OF that string — `"[\\"read:any\\"]"` — a JSON string holding
+    a JSON array, not an array. Every `cirislens_wa_cert` row written before
+    this fix carries that shape, so any consumer reading the column directly
+    (persist itself, the node, plain SQL) sees a string where the schema
+    promises a list.
+
+    Unwrap defensively: `value` may already be a list, a JSON string (the
+    legacy shape), or a doubly-wrapped string (a legacy row read back and
+    re-upserted through `update_wa_certificate`). Anything that does not
+    resolve to a list yields `[]` — least privilege — with a warning, since
+    scopes drive authorization and a garbled value must not widen access.
+    """
+    if value is None or (isinstance(value, str) and not value.strip()):
+        # Absent, not garbled — the pre-fix code coerced this to "[]" too.
+        return []
+
+    decoded: Any = value
+    for _ in range(_MAX_SCOPES_UNWRAP):
+        if not isinstance(decoded, str):
+            break
+        try:
+            decoded = json.loads(decoded)
+        except json.JSONDecodeError:
+            break
+
+    if isinstance(decoded, list):
+        return [str(scope) for scope in decoded]
+    if decoded is None:
+        return []
+    # %r escapes newlines/CR in a value that came off disk or the wire
+    # (CWE-117 / Sonar S5145), matching the pattern used elsewhere here.
+    logger.warning(
+        "wa_cert scopes %r does not decode to a list — storing an empty scope set",
+        str(value)[:200],
+    )
+    return []
+
+
 def _coerce_scopes_json(value: Any) -> str:
-    """Persist returns `scopes` as a JSON string; tolerate already-decoded lists too."""
+    """Normalize persist's `scopes` into WACertificate's legacy `scopes_json` string.
+
+    Tolerates BOTH storage shapes on purpose, and permanently:
+      * a JSON *array*  — what `_scopes_to_persist` writes from now on
+      * a JSON *string* — every row written before that fix landed
+
+    Rows in the wild are the second shape, so this is not a transitional
+    branch that can be removed once writers are updated; existing agents keep
+    their double-encoded rows until something happens to rewrite them.
+    """
     if value is None:
         return "[]"
-    if isinstance(value, str):
-        return value
     if isinstance(value, list):
         return json.dumps(value)
+    if isinstance(value, str):
+        # The legacy double-encoded row: the string already IS the
+        # `scopes_json` WACertificate wants — but only if it parses.
+        # WACertificate validates scopes_json as JSON, and a non-JSON string
+        # would raise there and take down every enumeration that touches the
+        # row (the same blast radius as the #922 node-owner rows).
+        try:
+            decoded = json.loads(value)
+        except json.JSONDecodeError:
+            logger.warning(
+                "wa_cert scopes %r is not valid JSON — treating as an empty scope set",
+                value[:200],
+            )
+            return "[]"
+        if isinstance(decoded, list):
+            return value
+        # Wrapped deeper than one level — unwrap fully rather than hand
+        # WACertificate a scopes_json whose `.scopes` property yields a str.
+        return json.dumps(_scopes_to_persist(decoded))
     return "[]"
+
+
+def _coerce_token_type(value: Any) -> str:
+    """Map an incoming token_type onto persist's closed variant set.
+
+    `update_wa_certificate` forwards unrecognized keys straight onto the
+    persist row, so `{"token_type": ...}` reaches `wa_cert_upsert` verbatim.
+    The agent's own `TokenType.CHANNEL` is exactly a value persist rejects, so
+    without this the update would surface as an unhandled `ValueError` out of
+    the auth store rather than a write.
+
+    The mapping is deliberate, not a silent default: `channel` is the case the
+    agent re-derives from `adapter_id` at verification time (see
+    `authentication/service.py`), so collapsing it to `standard` loses nothing
+    the agent consults — and it says so in the log.
+    """
+    if value is None:
+        return _DEFAULT_TOKEN_TYPE
+    text = value.value if isinstance(value, Enum) else str(value)
+    if text in _PERSIST_TOKEN_TYPES:
+        return text
+    logger.warning(
+        "wa_cert token_type %r is not one of %s — storing %r instead. The "
+        "agent derives TokenType from adapter_id/oauth_provider at "
+        "verification time, so the stored column is advisory.",
+        text,
+        sorted(_PERSIST_TOKEN_TYPES),
+        _DEFAULT_TOKEN_TYPE,
+    )
+    return _DEFAULT_TOKEN_TYPE
 
 
 def _coerce_optional_json_string(value: Any) -> Optional[str]:
@@ -188,7 +305,9 @@ def _wa_to_persist_payload(wa: WACertificate) -> Dict[str, Any]:
 
     Persist accepts oauth_links/custom_permissions/adapter_metadata as nested
     types, not the legacy `_json` strings; we re-hydrate those from the
-    legacy fields if present.
+    legacy fields if present. `scopes` is the same story: persist wants the
+    decoded array, not WACertificate's `scopes_json` string (see
+    `_scopes_to_persist`).
     """
     wa_dict = wa.model_dump(mode="json")
 
@@ -198,7 +317,7 @@ def _wa_to_persist_payload(wa: WACertificate) -> Dict[str, Any]:
         "role": wa_dict["role"],
         "pubkey": wa_dict["pubkey"],
         "jwt_kid": wa_dict["jwt_kid"],
-        "scopes": wa_dict.get("scopes_json") or "[]",
+        "scopes": _scopes_to_persist(wa_dict.get("scopes_json")),
         "active": True,  # store_wa_certificate is always an INSERT path; new WAs are active
         "auto_minted": bool(wa_dict.get("auto_minted", False)),
     }
@@ -217,9 +336,28 @@ def _wa_to_persist_payload(wa: WACertificate) -> Dict[str, Any]:
     elif last_auth is not None:
         payload["last_login"] = str(last_auth)
 
-    # token_type defaults to "standard" in persist; pass through if set.
-    if wa_dict.get("token_type"):
-        payload["token_type"] = wa_dict["token_type"]
+    # token_type is pinned, NOT passed through from the certificate — three
+    # independent reasons, all of which have to hold for a passthrough to be
+    # correct, and none of which do:
+    #
+    #  1. There is nothing to pass through. `WACertificate` has no
+    #     `token_type` field and is `extra="forbid"`, so `wa_dict` can never
+    #     carry one. The predecessor of this line (`if wa_dict.get(
+    #     "token_type")`) was unreachable and only made the write path *look*
+    #     like it preserved a value it had never seen.
+    #  2. Nothing reads the column back. The agent derives `TokenType` at
+    #     verification time from `adapter_id` / `oauth_provider` (see
+    #     `authentication/service.py`), so a stored copy would be a second
+    #     source of truth for a fact that is already computed.
+    #  3. The two enums are incompatible. The agent's `TokenType` admits
+    #     `channel`, which persist rejects outright — promoting it to a stored
+    #     field would turn today's silent no-op into a hard write failure on
+    #     the auth path.
+    #
+    # Set explicitly rather than relying on persist's column default so the
+    # stored value is a decision this code made, and so a persist-side default
+    # change cannot move it underneath us.
+    payload["token_type"] = _DEFAULT_TOKEN_TYPE
 
     # Optional scalar fields — only set if not None to keep payload minimal.
     for k in (
@@ -453,11 +591,16 @@ def update_wa_certificate(wa_id: str, updates: Dict[str, Any]) -> None:
         if k == "active":
             row["active"] = _coerce_bool_update_value(v)
             continue
-        if k == "scopes_json":
-            row["scopes"] = str(v) if v is not None else "[]"
+        if k in ("scopes_json", "scopes"):
+            # Both spellings arrive here: `scopes_json` from
+            # `update_wa(updates=WAUpdate(permissions=[...]))`, `scopes` from
+            # direct callers. Persist wants the decoded array either way —
+            # assigning the JSON string double-encodes the column exactly the
+            # way `store_wa_certificate` used to.
+            row["scopes"] = _scopes_to_persist(v)
             continue
-        if k == "scopes":
-            row["scopes"] = _coerce_scopes_json(v)
+        if k == "token_type":
+            row["token_type"] = _coerce_token_type(v)
             continue
         if k == "oauth_links_json":
             try:
@@ -498,6 +641,15 @@ def update_wa_certificate(wa_id: str, updates: Dict[str, Any]) -> None:
         row["created"] = row["created"].isoformat()
     if isinstance(row.get("last_login"), datetime):
         row["last_login"] = row["last_login"].isoformat()
+
+    # The row we just read back may predate the scopes fix, in which case
+    # `scopes` came out of persist as a JSON *string*. Re-upserting it verbatim
+    # would carry the double-encoding forward forever, so normalize on the way
+    # out: any write to a legacy row heals its scopes column. Reads already
+    # tolerate both shapes (`_coerce_scopes_json`), so this changes storage,
+    # never behavior.
+    row["scopes"] = _scopes_to_persist(row.get("scopes"))
+    row["token_type"] = _coerce_token_type(row.get("token_type"))
 
     engine.wa_cert_upsert(json.dumps(row))
 

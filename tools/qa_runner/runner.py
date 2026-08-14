@@ -529,7 +529,18 @@ class QARunner:
         # So the identity-closing tests run LAST. Everything else keeps a live
         # credential exactly as before, logout is still executed and asserted,
         # and no coverage is traded away for a green.
-        all_tests.sort(key=lambda t: 1 if _closes_identity(t) else 0)
+        # Sorting them last within THIS phase was not enough: the SDK modules run in
+        # a LATER phase, so logout still preceded every one of them. all_2 went red
+        # with `Missing authorization header` across system_messages, air, deferral,
+        # secrets_encryption and the adapter modules — token_to_use was None for all
+        # of them — while all_1, whose subset carries no logout, passed clean.
+        #
+        # So hold them out entirely and run them after the SDK phase, i.e. genuinely
+        # last. Same principle as before, applied to the whole run instead of one
+        # phase: logout is still executed and still asserted, and nothing that needs
+        # a credential runs after the credential is gone.
+        identity_closing_tests = [t for t in all_tests if _closes_identity(t)]
+        all_tests = [t for t in all_tests if not _closes_identity(t)]
 
         success = True
 
@@ -617,6 +628,23 @@ class QARunner:
         if sdk_test_modules:
             sdk_success = self._run_sdk_modules(sdk_test_modules)
             success = success and sdk_success
+
+        # Phase 4: the identity-closing tests, genuinely last.
+        #
+        # `/v1/auth/logout` is the node's and DEACTIVATES the WA cert
+        # (CIRISServer#387) — resolve_login and every enumeration are active-only, so
+        # afterwards the account is not merely logged out, it is invisible and re-auth
+        # cannot succeed. Running these here means the whole suite has already had a
+        # live credential, and logout is still fully executed and asserted.
+        if identity_closing_tests:
+            self.console.print(
+                f"\n🔒 Running {len(identity_closing_tests)} identity-closing test case(s) LAST "
+                f"(they end the run's account by design)."
+            )
+            if self.config.parallel_tests:
+                success = self._run_parallel(identity_closing_tests) and success
+            else:
+                success = self._run_sequential(identity_closing_tests) and success
 
         # MANDATORY: Always show incidents log status after tests
         self._show_incidents_status("POST-TEST")

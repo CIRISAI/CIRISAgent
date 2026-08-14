@@ -120,6 +120,21 @@ def set_path(d: dict, dotted: str, value: str) -> bool:
     return True
 
 
+def _declared_identical() -> set[str]:
+    """Strings a human confirmed are the same word in Ukrainian and Russian.
+
+    Without this, `verify` can never reach zero: product names and genuinely
+    shared vocabulary are byte-identical to ru.json by definition, and they would
+    sit in the count forever, training everyone to ignore a non-zero number. The
+    fix is a reviewed declaration, NOT a looser detector — the detector stays
+    strict so anything NEW that matches Russian still surfaces.
+    """
+    f = ROOT / "tools/dev/uk_identical_allowlist.json"
+    if not f.exists():
+        return set()
+    return set(json.loads(f.read_text(encoding="utf-8")).get("identical", []))
+
+
 def needs_work(uk: dict, ru: dict) -> list[str]:
     """Keys whose value is Russian, by the two signals that do not false-positive.
 
@@ -131,10 +146,11 @@ def needs_work(uk: dict, ru: dict) -> list[str]:
     ("Скасувати") has none, and flagging it would send a translator to rewrite
     strings that are already right.
     """
+    declared = _declared_identical()
     out = []
     for k, v in uk.items():
         s = v.strip()
-        if len(s) <= 3:
+        if len(s) <= 3 or s in declared:
             continue
         if (RU_ONLY & set(s.lower())) or s == ru.get(k, "").strip():
             out.append(k)

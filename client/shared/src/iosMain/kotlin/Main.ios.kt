@@ -20,7 +20,7 @@ import ai.ciris.mobile.shared.platform.StoreKitPurchaseResultBridge
 fun MainViewController(): UIViewController = ComposeUIViewController {
     CIRISApp(
         accessToken = "",  // Empty initially, will be populated after login
-        baseUrl = "http://127.0.0.1:8080"  // Local Python server
+        apiBaseUrl = "http://127.0.0.1:8080"  // Local Python brain (node read API defaults to :4243)
     )
 }
 
@@ -69,7 +69,7 @@ fun MainViewControllerWithAuth(
         NSLog("[Main.ios][INFO] ComposeUIViewController content lambda executing, passing callback to CIRISApp")
         CIRISApp(
             accessToken = "",
-            baseUrl = "http://127.0.0.1:8080",
+            apiBaseUrl = "http://127.0.0.1:8080",
             googleSignInCallback = callback
         )
     }
@@ -216,7 +216,7 @@ fun MainViewControllerWithAuthAndStore(
         NSLog("[Main.ios][INFO] ComposeUIViewController content lambda executing with auth, store, and attestation callbacks")
         CIRISApp(
             accessToken = "",
-            baseUrl = "http://127.0.0.1:8080",
+            apiBaseUrl = "http://127.0.0.1:8080",
             googleSignInCallback = signInCallback,
             purchaseLauncher = purchaseLauncher,
             deviceAttestationCallback = attestationCallback

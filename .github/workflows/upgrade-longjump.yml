@@ -1,0 +1,164 @@
+# Long-jump upgrade test — boot THIS code against an OLD agent's database.
+#
+# WHY THIS EXISTS. We have produced upgrade fixtures for months
+# (`capture-upgrade-fixture` runs at the end of three workflows) and never
+# consumed them: the matrix meant to read them last ran 2026-05-17 on
+# release/2.8.13. So nothing boots current code against an older database, and
+# two distinct long-jump failures reached users before this job existed:
+#
+#   1. iOS, app v2.9.6 (301): "Engine Failed to Start — Server did not become
+#      healthy within 30 seconds". No logs, no cause, just a Retry button.
+#   2. Reproduced locally, 2.7.9 → 2.9.14: the agent boots GREEN — both listeners
+#      200, zero ERROR/CRITICAL incidents — and the pre-existing owner cannot log
+#      in on either surface. `wa_cert` is empty; the only certs in the store are
+#      freshly-minted adapter observers. 2.7.9 predates the substrate, so its
+#      users lived in the old Python tables and nothing carries them across.
+#
+# The second is the dangerous shape: every signal says success. A health check
+# alone would have passed it, which is why this job asserts on IDENTITY, not just
+# liveness.
+#
+# The fixture is a real agent's on-disk state, not a synthetic schema: setup
+# completed, an owner created, and real interactions run, so the databases carry
+# graph/audit/secrets rows of the shapes production actually produces.
+
+name: Upgrade Long Jump
+
+on:
+  workflow_dispatch:
+    inputs:
+      fixture-artifact:
+        description: "upgrade-fixture-* artifact name to boot against"
+        required: true
+      fixture-run-id:
+        description: "Run ID that produced it (blank = search recent runs)"
+        required: false
+  pull_request:
+    paths:
+      # Anything that can change how an old database is read.
+      - 'ciris_engine/logic/persistence/**'
+      - 'ciris_engine/logic/runtime/**'
+      - 'ciris_engine/logic/services/infrastructure/authentication/**'
+      - 'ciris_engine/logic/adapters/api/routes/setup/**'
+      - 'requirements.txt'
+      - '.github/workflows/upgrade-longjump.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  longjump:
+    name: Boot against an old database
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Fetch the oldest available fixture
+        id: fixture
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/fixture
+          if [ -n "${{ inputs.fixture-artifact }}" ]; then
+            NAME="${{ inputs.fixture-artifact }}"
+          else
+            # OLDEST unexpired fixture — the longest jump we can still prove.
+            # Sorting by created_at ascending is deliberate: a fixture from the
+            # previous release is a weaker test than one from three releases back,
+            # and retention silently shortens the jump over time. Log which one we
+            # got so a shrinking jump is visible rather than assumed.
+            NAME=$(gh api "repos/${{ github.repository }}/actions/artifacts?per_page=100" \
+              --jq '[.artifacts[] | select(.name|test("upgrade-fixture")) | select(.expired==false)]
+                    | sort_by(.created_at) | .[0].name // empty')
+          fi
+          if [ -z "$NAME" ]; then
+            echo "::error::No unexpired upgrade fixture exists. The capture steps produce them; if none survive, the long jump is untested and this job cannot pretend otherwise."
+            exit 1
+          fi
+          echo "Booting against fixture: $NAME"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          gh run download ${{ inputs.fixture-run-id }} -n "$NAME" -D /tmp/fixture 2>/dev/null \
+            || gh api "repos/${{ github.repository }}/actions/artifacts?per_page=100" \
+                 --jq ".artifacts[] | select(.name==\"$NAME\") | .id" | head -1 | \
+               xargs -I{} sh -c 'gh api repos/${{ github.repository }}/actions/artifacts/{}/zip > /tmp/f.zip && unzip -q -o /tmp/f.zip -d /tmp/fixture'
+          find /tmp/fixture -name '*.db' -printf '  %f %s bytes\n' || true
+
+      - name: Record the owner BEFORE boot
+        id: baseline
+        run: |
+          # Snapshot identity first. Without this, "no owner after" is
+          # indistinguishable from "no owner ever", and the job reports data loss
+          # on a fixture that never had a user — a false alarm dressed as a
+          # security finding, which is how a job earns being ignored.
+          B=$(python tools/release/check_longjump_state.py --home /tmp/fixture --emit-baseline | grep '^BASELINE=' | cut -d= -f2-)
+          echo "owners before upgrade: ${B:-<none>}"
+          echo "baseline=$B" >> "$GITHUB_OUTPUT"
+
+      - name: Boot this code against it
+        id: boot
+        run: |
+          set -uo pipefail
+          export CIRIS_HOME=/tmp/fixture
+          mkdir -p /tmp/fixture/data
+          # Fixtures store DBs at the bundle root or under data/; normalise.
+          find /tmp/fixture -maxdepth 2 -name '*.db' -exec cp -n {} /tmp/fixture/data/ \; || true
+          python main.py --adapter api --mock-llm --port 8080 > /tmp/boot.log 2>&1 &
+          echo $! > /tmp/agent.pid
+          # 120s, not 30: we are measuring "does it EVER come up", and a slow
+          # migration is a different finding from a broken one. The iOS client's
+          # 30s timeout is what the user meets; this job's job is to say why.
+          for i in $(seq 1 60); do
+            code=$(curl -s -m 2 -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/v1/system/health || true)
+            [ "$code" = "200" ] && { echo "healthy after ${i}0s"; echo "healthy=true" >> "$GITHUB_OUTPUT"; break; }
+            sleep 2
+          done
+          if [ "${{ steps.boot.outputs.healthy || '' }}" != "true" ] && ! grep -q healthy "$GITHUB_OUTPUT" 2>/dev/null; then
+            echo "::error::FAILURE MODE 1 — the agent never became healthy against an old database. This is the iOS 'Engine Failed to Start' shape."
+            tail -60 /tmp/boot.log
+            exit 1
+          fi
+
+      - name: The owner must still be able to log in
+        run: |
+          # THE ASSERTION THAT MATTERS. Failure mode 2 boots green and passes any
+          # health check: listeners up, no incidents, owner silently gone. Identity
+          # survival is the only thing that separates a real upgrade from a fresh
+          # install wearing the old data directory's clothes.
+          #
+          # --home /tmp/fixture/data, NOT /tmp/fixture. The boot step copies the
+          # bundle's DBs into data/ and the agent reads and writes THERE; the
+          # copies still sitting at the bundle root are the pristine pre-boot
+          # input, untouched by the upgrade. Pointing the assertion at the
+          # bundle root let it answer "the owner survived" out of a file the
+          # agent never opened — it would have passed even if the upgrade
+          # deleted every cert, which is the one outcome it exists to catch.
+          python tools/release/check_longjump_state.py --home /tmp/fixture/data --baseline '${{ steps.baseline.outputs.baseline }}'
+
+      - name: Surface the boot log
+        if: always()
+        run: |
+          echo "### Long jump: ${{ steps.fixture.outputs.name }}" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          grep -aE ' - (ERROR|CRITICAL) |Traceback' /tmp/boot.log | head -40 >> "$GITHUB_STEP_SUMMARY" || echo "(no ERROR/CRITICAL lines — which is itself the finding if an assertion above failed)" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: longjump-logs
+          path: |
+            /tmp/boot.log
+            /tmp/fixture/logs/
+          retention-days: 14

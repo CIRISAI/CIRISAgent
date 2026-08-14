@@ -1396,9 +1396,9 @@ Available tests (Android):
   app_launch        - Test that app launches and shows login screen
   google_signin     - Test Google Sign-In flow with test account
   local_login       - Test local login (BYOK mode)
-  setup_wizard      - Node-client first-run wizard (WELCOME -> ACCOUNT ->
-                      FED-ID w/ announce-gate assertions -> AGE_RANGE),
-                      driven via the in-app test server
+  setup_wizard      - First-run wizard (YOU -> JOIN_FEDERATION w/ consent
+                      reachability assertion -> [AI]), driven via the
+                      in-app test server
   catchup_add_fedid - Catch-up "Add Federation ID" flow (Manage Nodes ->
                       btn_add_federation_id; tolerated SKIP when the entry
                       isn't rendered)

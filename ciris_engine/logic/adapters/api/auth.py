@@ -8,6 +8,10 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer
 
 from .models import TokenData
+from ciris_engine.logic.adapters.api.dependencies.auth import (
+    SUBSTRATE_SESSION_PREFIX,
+    resolve_substrate_session,
+)
 
 # HTTP Bearer token security scheme
 security = HTTPBearer(auto_error=False)
@@ -133,6 +137,21 @@ async def get_current_user(request: Request, token: Optional[str] = Depends(secu
 
     # Fail closed if no auth services available
     _ensure_auth_services_available(wa_auth_service, api_auth_service)
+
+    # A SUBSTRATE-minted session token is verified by the substrate, before the
+    # local strategies are tried. This module authenticates a different family of
+    # routes (/v1/partnership, /v1/dsar, /v1/my_data, /v1/connectors) than
+    # dependencies/auth.py, and when only that one learned about node-issued
+    # tokens these answered 401 "Invalid or expired token" for a credential the
+    # rest of the API accepted. Same resolver, so the two cannot drift.
+    if token_str.startswith(SUBSTRATE_SESSION_PREFIX):
+        resolved = resolve_substrate_session(token_str)
+        return TokenData(
+            username=resolved.get("name") or resolved["wa_id"],
+            email=None,
+            role=resolved.get("role") or "OBSERVER",
+            exp=None,
+        )
 
     try:
         # Try API key validation first

@@ -1,0 +1,167 @@
+component_name: msaspdma
+description: "Speicherspezifische Aktionsauswahl — der Graph-Schreib-Leitfaden, angewendet auf eine vorgeschlagene MEMORIZE"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# EINKLASSIGE BLÖCKE.
+#
+# Der Leitfaden war ursprünglich ein einzelner `memory_guide`-Block. Dieser Block war
+# GEMISCHT — er trug, was der Graph IST (ontologisch), wie man ihn adressiert
+# (prozedural) und was niemals geschrieben werden darf (deontisch) in einem Body —
+# und das Compose-Tor lehnt einen Mixed Block ohne Disposition pro Block ab (§10.2.1).
+# Eine Disposition zu erklären wäre die einfache Lösung gewesen ; Teilen ist die
+# ehrliche, weil ein Forschungsregime, das beispielsweise die Wertordnung variiert,
+# den axiomatischen Inhalt OHNE auch die Adressierungsregeln, von denen es abhängt,
+# zu verschieben, verschieben können muss. Ein gemischter Block macht das unmöglich,
+# sauber zu tun.
+#
+# Jeder Block unten ist eine Klasse. Halten Sie es so beim Bearbeiten: Wenn ein Satz
+# nicht zur Klasse des Blocks gehört, gehört er in einen anderen Block.
+# ---------------------------------------------------------------------------
+
+# ONTOLOGISCH — was Speicher ist. Keine Anweisungen, keine Verbote.
+memory_model: |
+  === WAS IST SPEICHER ===
+
+  Der Graph enthält KNOTEN und KANTEN.
+
+  Ein Knoten ist etwas — eine Person, ein Kanal, ein Konzept — und die Fakten über
+  dieses Ding sind Attribute darauf.
+
+  Eine Kante ist eine Beziehung zwischen zwei Dingen. Kanten werden während DREAM
+  Konsolidierung aus Mustern über viele Erinnerungen hinweg gewebt.
+
+  Eine MEMORIZE-Aktion schreibt EINEN KNOTEN. Die Aktion trägt einen einzelnen
+  `node` und nichts anderes, daher kann ein Memorize keine Kante erstellen.
+
+  Ein Attribut, das Sie schreiben, das nicht vom System stammt, wird später in
+  diesem Benutzerprofil als `memorized_attributes` an Sie zurückgegeben. Dieser
+  Rückgabepfad ist das, was ein geschriebener Fakt zu einem erinnerten macht.
+
+# PROZEDURAL — wie man einen Knotenanerkennung konstruiert und wählt.
+addressing_convention: |
+  === ADRESSIERUNG ===
+
+  Knotenanerkennung folgen `prefix/{identifier}`:
+
+    user/{user_id}          Fakten über eine Person
+    channel/{channel_id}    Fakten über einen Ort der Konversation
+    consent/{user_id}       Zustimmungsstatus
+    preferences/{user_id}   Benutzereinstellungsdatensätze
+
+  Das Präfix ist, wie das System den Knoten wieder findet. Suchanfragen erfolgen
+  nach exakter Kennung: Der Benutzerkontext wird durch Abfrage von
+  `user/{user_id}` zusammengefügt, daher ist ein Fakt über eine Person nur
+  erreichbar, wenn er sich auf diesem genauen Knoten befindet.
+
+  Die Knoten, die bereits für diese Konversation existieren, werden als KANDIDATENKNOTEN
+  aufgelistet. Bevorzuge einen von ihnen ; konstruiere eine Kennung aus der Tabelle
+  oben nur, wenn keiner passt.
+
+# PROZEDURAL — wie man nennt, was man speichert.
+attribute_convention: |
+  === ATTRIBUTNAMEN ===
+
+  Verwenden Sie einfache, stabile Namen, die Sie wiedererkennen, wenn sie zu Ihnen
+  zurückkehren:
+
+    favorite_color: "chartreuse"        später erkennbar
+    fact_2026_08_09_1: "likes green"    später nicht erkennbar
+
+  Wenn Sie einen Knoten zurückschreiben, den ein Recall Ihnen übergeben hat, können
+  seine vom System stammenden Attribute unverändert durchgeleitet werden ; sie sind
+  im Kontext unten aufgelistet.
+
+# PROZEDURAL — die Umfangstabelle.
+scope_convention: |
+  === UMFANG ===
+
+    local        Fakten über Benutzer und Kanäle
+    identity     die eigene Identität des Agenten
+    environment  Fakten auf Bereitstellungsebene
+    community    gemeinsames Gemeinschaftswissen
+
+# DEONTISCH — was nicht passieren darf. Kategorisch und sicherheitsüberprüfbar.
+memory_prohibitions: |
+  === WAS NICHT PASSIEREN DARF ===
+
+  Erfinden Sie keine Knotenkennzeichnung. Ein Knoten, dessen Kennung die Konvention
+  nicht einhält, wird nie abgefragt, daher ist der Schreibvorgang erfolgreich und
+  die Information ist für immer unerreichbar — Sie werden sie nicht in Erinnerung
+  behalten, und Sie werden glauben, sie nie gelernt zu haben. Ein Schreibvorgang
+  zum falschen Knoten ist schlechter als gar kein Schreibvorgang, weil dir
+  niemand davon erzählt.
+
+  Schreiben Sie kein vom System stammendes Attribut. Sie werden von Diensten
+  gepflegt und der Schreibvorgang wird abgelehnt. Eine zu ändern kostet dich die
+  gesamte Memorize.
+
+  Schreiben Sie nicht zu `identity` oder `environment` Umfang ohne Genehmigung durch
+  Wise Authority.
+
+  Speichern Sie nicht, was Sie nicht aufbewahren sollten. Wenn die Information
+  bereits in der Konversation lebt, die Sie führen, lesen Sie sie dort. Wenn Sie
+  nicht sicher sind, dass die Person sie behalten möchte, fragen Sie lieber, als
+  zu speichern.
+
+# PROZEDURAL — was dieser Schritt ist.
+system_guidance_header: |
+  Sie haben MEMORIZE ausgewählt. Bevor es ausgeführt wird, werden Ihnen die
+  Graph-Konventionen und die bereits existierenden Knoten angezeigt, damit Sie
+  überprüfen können, ob der Schreibvorgang korrekt adressiert ist.
+
+  Dies ist ein zweiter Blick, keine Korrektur: Nichts wurde für Sie geändert. Wenn
+  der von Ihnen gewählte Knoten falsch ist, sagen Sie, was er sein sollte. Wenn Sie
+  dies überhaupt nicht speichern sollten, wechseln Sie die Aktion.
+
+# PROZEDURAL — die Methode.
+evaluation_steps: |
+  Arbeite dich durch diese der Reihe nach:
+
+  1. SOLLTE dies gespeichert werden?
+  2. WELCHER KNOTEN? Vergleichen Sie Ihre vorgeschlagene Kennung mit KANDIDATENKNOTEN
+     und der Adressierungskonvention.
+  3. WELCHE ATTRIBUTE? Benennen Sie sie, damit Sie sie später erkennen.
+  4. UMFANG.
+  5. Entscheiden Sie: MEMORIZE mit dem Knoten, den Sie überprüft haben, SPEAK, um
+     zu fragen, oder PONDER, um zu überdenken.
+
+# BEDINGT — nur Laufzeitwerte. Keine Leitfäden, keine Verbote.
+context_integration: |
+  Ursprünglicher Gedanke:
+  {original_thought_content}
+
+  Ihre Begründung zum Memorieren:
+  {aspdma_reasoning}
+
+  === WAS SIE VORGESCHLAGEN HABEN ===
+  Knotenkennzeichnung:  {proposed_node_id}
+  Knotentyp:            {proposed_node_type}
+  Umfang:               {proposed_node_scope}
+  Attribute:            {proposed_attributes}
+
+  === KANDIDATENKNOTEN (diese existieren bereits) ===
+  {candidate_nodes}
+
+  === VOM SYSTEM STAMMENDE ATTRIBUTE (auf diesem Knoten vorhanden, von Diensten gepflegt) ===
+  {system_owned_attributes}
+
+# PRAGMATISCH — der Drahtvertrag.
+response_format: |
+  Antworte mit JSON:
+
+  {{
+    "final_action": "MEMORIZE" | "SPEAK" | "PONDER",
+    "node_id": "die Knotenkennzeichnung zum Schreiben (erforderlich bei MEMORIZE)",
+    "node_type": "Knotentyp (erforderlich bei MEMORIZE)",
+    "node_scope": "Graph-Umfang (erforderlich bei MEMORIZE)",
+    "attributes": {{"name": "value"}},
+    "message": "was zu sagen (erforderlich bei SPEAK)",
+    "questions": ["was zu überdenken (erforderlich bei PONDER)"],
+    "reasoning": "warum diese Adressierung korrekt ist, oder warum Sie gewechselt haben"
+  }}
+
+# DEONTISCH — die abschließende Kategorische.
+closing_reminder: |
+  Die Adresse richtig zu machen, ist der Sinn dieses Schritts.

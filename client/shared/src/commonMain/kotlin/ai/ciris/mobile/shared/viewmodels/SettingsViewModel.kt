@@ -171,6 +171,7 @@ class SettingsViewModel(
         "mistral" to "Mistral",
         "cohere" to "Cohere",
         "deepseek" to "DeepSeek",
+        "deepinfra" to "DeepInfra",
         "xai" to "xAI (Grok)",
         "azure" to "Azure OpenAI",
         "local_inference" to "Local Inference Server",

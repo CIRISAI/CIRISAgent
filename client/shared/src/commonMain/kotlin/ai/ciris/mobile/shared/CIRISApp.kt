@@ -1,4 +1,5 @@
 package ai.ciris.mobile.shared
+import ai.ciris.mobile.shared.platform.openUrlInBrowser
 import ai.ciris.mobile.shared.platform.PlatformBackHandler
 import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.platform.TestAutomation
@@ -19,6 +20,8 @@ import ai.ciris.mobile.shared.platform.createSecureStorage
 import ai.ciris.mobile.shared.platform.getOAuthProviderName
 import ai.ciris.mobile.shared.platform.getOAuthProviderId
 import ai.ciris.mobile.shared.platform.platformLog
+import ai.ciris.mobile.shared.models.NodeOwnership
+import ai.ciris.mobile.shared.models.nodeOwnershipFrom
 import ai.ciris.mobile.shared.localization.CurrencyHelper
 import ai.ciris.mobile.shared.localization.CurrencyManager
 import ai.ciris.mobile.shared.localization.LocalCurrency
@@ -318,8 +321,22 @@ fun interface PurchaseResultCallback {
 @Composable
 fun CIRISApp(
     accessToken: String,
-    // Default to the local ciris-server node read API (node base :4242 → API :4243).
-    baseUrl: String = "http://127.0.0.1:4243",
+    /**
+     * The **Python brain** (the cognitive/agent API). Everything the shared
+     * [CIRISApiClient] addresses by default lives here: `/v1/agent`, `/v1/memory`,
+     * `/v1/telemetry`, `/v1/system`, and the wizard's `/v1/setup/status` +
+     * `/v1/setup/complete`.
+     */
+    apiBaseUrl: String = "http://127.0.0.1:8080",
+    /**
+     * The **ciris-server node** read API (node base :4242 → HTTP :4243). The
+     * substrate surface — `/v1/federation`, `/v1/self`, `/v1/accord`, `/v1/health`,
+     * `/v1/setup/root`, `/v1/setup/owned-nodes`, `/v1/setup/claim-remote`,
+     * `/v1/self/upgrade-owner` — is served natively here and is NEVER proxied from
+     * the brain. 8080 never fronts 4243, so a single base URL cannot address both:
+     * conflating them is what produced the 2.9.13 first-run loop (FSD §0.1).
+     */
+    nodeBaseUrl: String = CIRISApiClient.LOCAL_NODE_URL,
     pythonRuntime: PythonRuntime = createPythonRuntime(),
     secureStorage: SecureStorage = createSecureStorage(),
     envFileUpdater: EnvFileUpdater = createEnvFileUpdater(),
@@ -335,7 +352,7 @@ fun CIRISApp(
     platformLog(TAG, "[INIT] CIRISApp composable invoked - googleSignInCallback=${if (googleSignInCallback != null) "PRESENT (${googleSignInCallback.hashCode()})" else "NULL"}")
 
     val coroutineScope = rememberCoroutineScope()
-    val apiClient = remember { CIRISApiClient(baseUrl, accessToken) }
+    val apiClient = remember { CIRISApiClient(apiBaseUrl, accessToken) }
 
     // Start test automation server on non-desktop platforms (desktop starts it in Main.kt)
     LaunchedEffect(Unit) {
@@ -672,13 +689,13 @@ fun CIRISApp(
         TelemetryViewModel(apiClient)
     }
     val billingViewModel: BillingViewModel = viewModel {
-        BillingViewModel(apiClient, baseUrl)
+        BillingViewModel(apiClient, apiBaseUrl)
     }
     val sessionsViewModel: SessionsViewModel = viewModel {
         SessionsViewModel(apiClient)
     }
     val adaptersViewModel: AdaptersViewModel = viewModel {
-        AdaptersViewModel(apiClient, baseUrl)
+        AdaptersViewModel(apiClient, apiBaseUrl)
     }
     val wiseAuthorityViewModel: WiseAuthorityViewModel = viewModel {
         // secureStorage persists the notification dedupe set, so restarting the
@@ -758,6 +775,11 @@ fun CIRISApp(
     }
     val contactsViewModel: ContactsViewModel = viewModel {
         ContactsViewModel(apiClient)
+    }
+    // Delegate moderation duty — the co-scrubbed conferral of slash/moderate/review
+    // onto another self, with the sub-delegation depth stated up front.
+    val dutyConferralViewModel: ai.ciris.mobile.shared.viewmodels.DutyConferralViewModel = viewModel {
+        ai.ciris.mobile.shared.viewmodels.DutyConferralViewModel(apiClient)
     }
     val accordViewModel: ai.ciris.mobile.shared.viewmodels.AccordViewModel = viewModel {
         ai.ciris.mobile.shared.viewmodels.AccordViewModel(apiClient)
@@ -853,16 +875,31 @@ fun CIRISApp(
             platformLog(TAG, "[INFO] Startup READY, checking first-run status...")
 
             // ─── Derive the ONE node-vs-agent gate (server now reachable) ────
-            // Probe /v1/health ONCE: AGENT iff the server reports a
-            // cognitive_state / a non-empty agent service map; else a bare NODE.
-            // Drives the 22-light gating, "agent" wording, and the WORK-state
-            // wait below. nodeVersion feeds the version-mismatch banner.
+            // Probe the NODE's /v1/health ONCE for its version (the mismatch
+            // banner) and its role. The node's own health is deliberately bare —
+            // `role: "fabric-node"`, `services: {}`, no cognitive_state — and
+            // /v1/health is a substrate prefix that is never proxied, so the
+            // AGENT enrichment can only come from the brain's /v1/system/health.
+            // Probe that second and let it upgrade the gate: AGENT iff either
+            // surface reports a cognitive_state / a non-empty service map.
             try {
-                val nodeHealth = apiClient.getNodeHealth()
+                val nodeHealth = apiClient.getNodeHealth(nodeBaseUrl)
                 nodeVersion = nodeHealth.version
-                val mode = ai.ciris.mobile.shared.models.clientModeFrom(
+                var mode = ai.ciris.mobile.shared.models.clientModeFrom(
                     nodeHealth.cognitiveState, nodeHealth.serviceCount
                 )
+                if (mode.isNode) {
+                    // Bare node health — ask the brain whether it is running on top.
+                    runCatching { apiClient.getSystemStatus() }
+                        .onSuccess { sys ->
+                            mode = ai.ciris.mobile.shared.models.clientModeFrom(
+                                sys.cognitive_state, sys.services_total
+                            )
+                        }
+                        .onFailure { e ->
+                            platformLog(TAG, "[DEBUG][gate] brain health absent (${e.message?.take(60)}) — bare NODE")
+                        }
+                }
                 clientMode = mode
                 // Node mode has no 22 cognitive service lights — drive the count
                 // from the gate rather than the hardcoded agent default.
@@ -891,10 +928,15 @@ fun CIRISApp(
             // first-run → Setup and CYCLED for minutes. Instead HOLD a single
             // stable "reconfiguring" state and poll the local node until it is
             // back AND owned, then route to Login exactly once (the owner signs
-            // in). Reachable-but-unowned ⇒ a genuinely fresh node ⇒ Setup.
-            // Bounded (~4 min) so a dead rebind surfaces a clear timeout rather
-            // than a spinner forever. (CIRISServer#276 shutdown_node() will
-            // shorten the rebind; the bound is the safety net.)
+            // in). Bounded (~4 min) so a dead rebind surfaces a clear timeout
+            // rather than a spinner forever. (CIRISServer#276 shutdown_node()
+            // will shorten the rebind; the bound is the safety net.)
+            //
+            // THREE states, not two (FSD §5). "Reachable-but-no-owner-binding"
+            // is NOT the same as "fresh": a node owned the legacy way (ROOT
+            // WaCert, no fed-ID owner-binding) is already configured, and
+            // sending it back to Setup is the 2.9.13 loop — setup/root 409s and
+            // we land right back here. Only FRESH goes to Setup.
             if (reconfiguring) {
                 platformLog(TAG, "[INFO] Setup complete — holding reconfiguring state while the node restarts")
 
@@ -906,11 +948,16 @@ fun CIRISApp(
                 var reconfigPolls = 0
                 var routed = false
                 while (reconfigPolls < maxReconfigPolls) {
-                    if (isNodeReachable(baseUrl)) {
-                        if (nodeHasOwner(baseUrl)) {
-                            // Back + owned → configured. The reload invalidated
-                            // the setup token, so the owner must sign back in.
-                            platformLog(TAG, "[INFO] Node back + owned after reconfigure → Login")
+                    if (isNodeReachable(nodeBaseUrl)) {
+                        val ownership = probeNodeOwnership(nodeBaseUrl)
+                        if (ownership.isOwned) {
+                            // Back + owned (claimed OR legacy-owned) → configured.
+                            // The reload invalidated the setup token, so the owner
+                            // must sign back in. A legacy-owned node is then
+                            // re-rooted on a fed-ID by the Add Federation ID
+                            // catch-up (POST /v1/self/upgrade-owner) — never by
+                            // re-running the wizard.
+                            platformLog(TAG, "[INFO] Node back + $ownership after reconfigure → Login")
                             isFirstRun = false
                             reconfiguring = false
                             startupViewModel.setKeepTimerAlive(false)
@@ -918,8 +965,8 @@ fun CIRISApp(
                             routed = true
                             break
                         }
-                        // Reachable but UNOWNED → genuinely fresh node → first-run.
-                        platformLog(TAG, "[INFO] Node back but UNOWNED after reconfigure → Setup (first-run)")
+                        // Reachable, no ROOT WA and no owner-binding → genuinely fresh.
+                        platformLog(TAG, "[INFO] Node back but FRESH after reconfigure → Setup (first-run)")
                         isFirstRun = true
                         reconfiguring = false
                         startupViewModel.setKeepTimerAlive(false)
@@ -955,7 +1002,8 @@ fun CIRISApp(
             startupViewModel.setStatus(LocalizationHelper.getString("mobile.status_checking_setup"))
 
             isFirstRun = checkFirstRunStatus(
-                baseUrl = baseUrl,
+                apiBaseUrl = apiBaseUrl,
+                nodeBaseUrl = nodeBaseUrl,
                 maxRetries = 60,  // Wait up to 30 seconds (60 * 500ms)
                 onStatusUpdate = { status ->
                     startupViewModel.setStatus(status)
@@ -1327,7 +1375,11 @@ fun CIRISApp(
                 // multi-tenant server all degrade to a null hint and we
                 // render the Login screen exactly like 2.9.1 did.
                 LaunchedEffect(Unit) {
-                    runCatching { apiClient.getOwnerHint() }
+                    // PRESENTATION ONLY — the masked "welcome back" string. It
+                    // gates nothing (FSD §5); ownership routing uses
+                    // /v1/setup/owned-nodes. /v1/auth is node-native, so ask the
+                    // NODE, not the brain.
+                    runCatching { apiClient.getOwnerHint(nodeBaseUrl) }
                         .onSuccess { hint ->
                             ownerHint = hint
                             if (hint != null) {
@@ -1377,8 +1429,8 @@ fun CIRISApp(
 
                                         // Check if setup is already complete
                                         coroutineScope.launch {
-                                            platformLog(TAG, "[INFO] Checking setup status at $baseUrl...")
-                                            val setupRequired = checkFirstRunStatus(baseUrl) // No retries needed here - server is up
+                                            platformLog(TAG, "[INFO] Checking setup status at $apiBaseUrl...")
+                                            val setupRequired = checkFirstRunStatus(apiBaseUrl, nodeBaseUrl) // No retries needed here - server is up
                                             platformLog(TAG, "[INFO] Setup required check result: $setupRequired")
 
                                             if (setupRequired == false) {
@@ -1543,11 +1595,94 @@ fun CIRISApp(
                                     }
                                 }
                             }
-                        } else {
-                            // No callback provided - show error
-                            platformLog(TAG, "[ERROR][onGoogleSignIn] googleSignInCallback is NULL - cannot invoke native sign-in!")
-                            loginErrorMessage = "${getOAuthProviderName()} Sign-In not available"
+                    } else {
+                        // DESKTOP: no native Google SDK, so sign in through the
+                        // BROWSER against this node's OAuth front door. Until the
+                        // node minted a session on callback there was nothing for
+                        // this process to hold, so desktop offered local login
+                        // only and this branch just said "not available".
+                        //
+                        // Two processes, one sign-in: we generate a nonce, open the
+                        // browser with it, and poll until the node hands the bearer
+                        // over. 204 means NOT YET, which is why the loop keeps
+                        // going instead of treating a quiet answer as failure.
+                        platformLog(TAG, "[INFO][onGoogleSignIn] desktop browser flow (no native SDK)")
+                        isLoginLoading = true
+                        loginErrorMessage = null
+                        loginStatusMessage = LocalizationHelper.getString("auth.browser_signin.waiting")
+                        val nonce = buildString {
+                            val alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
+                            repeat(32) { append(alphabet[kotlin.random.Random.nextInt(alphabet.length)]) }
                         }
+                        val signInUrl = apiClient.oauthBrowserLoginUrl("google", nonce, nodeBaseUrl)
+                        // Log the URL we hand the browser. A sign-in completed in
+                        // some OTHER tab — one opened earlier at the plain
+                        // /login URL — carries no app_nonce, parks nothing, and
+                        // leaves this poll waiting forever while the node reports
+                        // a perfectly successful sign-in. Without this line the
+                        // two are indistinguishable from the client side.
+                        platformLog(TAG, "[INFO][onGoogleSignIn] opening browser: $signInUrl")
+                        openUrlInBrowser(signInUrl)
+                        coroutineScope.launch {
+                            // ~3 minutes: long enough for a real sign-in with a
+                            // password manager and 2FA, short enough that an
+                            // abandoned attempt does not spin forever.
+                            var token: ai.ciris.mobile.shared.models.OAuthHandoff? = null
+                            var attempts = 0
+                            while (token == null && attempts < 90) {
+                                kotlinx.coroutines.delay(2000)
+                                attempts++
+                                // After ~20s our own tab has had its chance;
+                                // accept a sign-in that completed in a stray
+                                // tab rather than spin while the node holds a
+                                // perfectly good session.
+                                token = apiClient.collectOAuthHandoff(
+                                    nonce,
+                                    nodeBaseUrl,
+                                    allowUnbound = attempts > 10,
+                                )
+                                // Heartbeat every ~20s: "still waiting" must be
+                                // visible, or a stalled flow looks like a crashed one.
+                                if (token == null && attempts % 10 == 0) {
+                                    platformLog(TAG, "[INFO][onGoogleSignIn] still waiting for the browser (${attempts * 2}s)")
+                                }
+                            }
+                            isLoginLoading = false
+                            loginStatusMessage = null
+                            val collected = token
+                            if (collected == null) {
+                                // Say WHICH failure this is. "Sign-in failed" would
+                                // cover both "you closed the tab" and "the node is
+                                // broken", and only one of those is the user's to fix.
+                                loginErrorMessage =
+                                    LocalizationHelper.getString("auth.browser_signin.timed_out")
+                                platformLog(TAG, "[WARN][onGoogleSignIn] no hand-off after ${attempts * 2}s. If you signed in successfully, the browser tab was probably an OLD one opened without ?app_nonce= — close stray CIRIS sign-in tabs and use the button again.")
+                            } else {
+                                platformLog(TAG, "[INFO][onGoogleSignIn] desktop browser sign-in collected a session")
+                                currentAccessToken = collected.accessToken
+                                apiClient.setAccessToken(collected.accessToken)
+                                secureStorage.saveAccessToken(collected.accessToken)
+                                onTokenUpdated?.invoke(collected.accessToken)
+                                if (isFirstRun == true) {
+                                    // Hand the identity to the wizard: it derives the
+                                    // federation-ID name from <provider>-<subject>, so
+                                    // arriving with only a bearer would put the user
+                                    // back to inventing a unique name by hand.
+                                    setupViewModel.setGoogleAuthState(
+                                        isAuth = true,
+                                        idToken = null,
+                                        email = collected.email,
+                                        userId = collected.externalId,
+                                        provider = collected.provider,
+                                    )
+                                    currentScreen = Screen.Setup
+                                } else {
+                                    interactViewModel.startPolling()
+                                    currentScreen = HOME_SCREEN
+                                }
+                            }
+                        }
+                    }
                     },
                     onLocalLogin = {
                         // First run - go to setup wizard for BYOK setup
@@ -3140,6 +3275,18 @@ fun CIRISApp(
                 )
             }
 
+            Screen.DutyConferral -> {
+                // Delegate moderation duty, reached from the Accord card. Confer
+                // slash / moderate / review on another self, stating in one control
+                // whether — and how far — they may pass the duty on. Co-scrubbed by
+                // the accord holders; the node signs, the app holds no keys.
+                PlatformLogger.d(TAG, "[Screen.DutyConferral] Rendering duty conferral screen")
+                DutyConferralScreen(
+                    viewModel = dutyConferralViewModel,
+                    onBack = { currentScreen = Screen.Accord },
+                )
+            }
+
             Screen.Accord -> {
                 // Accord card (Manage group): the HUMANITY_ACCORD constitutional
                 // surface — entrenched family + quorum:2/3 holder roster + pending
@@ -3150,6 +3297,7 @@ fun CIRISApp(
                     onBack = { currentScreen = Screen.Interact },
                     // Found-a-new-accord CTA — shown only when no family exists yet.
                     onStartCeremony = { currentScreen = Screen.AccordCeremony },
+                    onConferDuty = { currentScreen = Screen.DutyConferral },
                 )
             }
 
@@ -4013,24 +4161,31 @@ fun CIRISApp(
 }
 
 /**
- * Check if setup is required via /v1/setup/status API
+ * Check if setup is required via the BRAIN's `/v1/setup/status`.
  * Uses the API client for platform-independent HTTP handling.
  *
- * @param baseUrl The API base URL
+ * `/v1/setup` is split across the two services (FSD §2): `status` + `complete`
+ * are the brain's, `root` / `owned-nodes` / `claim-remote` are the node's. So the
+ * primary probe goes to [apiBaseUrl] and every degrade path — which asks the node
+ * whether it is reachable and owned — goes to [nodeBaseUrl].
+ *
+ * @param apiBaseUrl base URL of the Python brain (serves /v1/setup/status)
+ * @param nodeBaseUrl base URL of the ciris-server node (serves /v1/setup/owned-nodes)
  * @param maxRetries Maximum number of retries on connection error (0 = no retries, just fail)
  * @param onStatusUpdate Optional callback to update status message during retries
  * @return true if setup is required, false if not, null if server unreachable after retries
  */
 private suspend fun checkFirstRunStatus(
-    baseUrl: String,
+    apiBaseUrl: String,
+    nodeBaseUrl: String,
     maxRetries: Int = 0,
     onStatusUpdate: ((String) -> Unit)? = null
 ): Boolean? {
     var attempts = 0
     while (attempts <= maxRetries) {
         try {
-            platformLog("checkFirstRunStatus", "[INFO] Attempt ${attempts + 1}/${maxRetries + 1}: Checking setup status at $baseUrl")
-            val client = CIRISApiClient(baseUrl)
+            platformLog("checkFirstRunStatus", "[INFO] Attempt ${attempts + 1}/${maxRetries + 1}: Checking setup status at $apiBaseUrl")
+            val client = CIRISApiClient(apiBaseUrl)
             val setupStatus = client.getSetupStatus()
             platformLog("checkFirstRunStatus", "[INFO] Got setup status: setup_required=${setupStatus.data.setup_required}")
             return setupStatus.data.setup_required
@@ -4044,14 +4199,15 @@ private suspend fun checkFirstRunStatus(
             val absent = e::class.simpleName?.contains("NoTransformation") == true ||
                 e.message?.contains("404") == true ||
                 e.message?.contains("/v1/setup/status") == true
-            if (absent && isNodeReachable(baseUrl)) {
+            if (absent && isNodeReachable(nodeBaseUrl)) {
                 // OWNER-AWARE degrade: setup-status is unavailable, but a node
-                // that already has an OWNER is CONFIGURED, not first-run. Only a
-                // genuinely fresh (unowned) node is first-run. Without this, the
-                // post-setup runtime reload (during which setup-status is briefly
-                // unreachable / the node-fold rebinds 4243) degrades to first-run
-                // and the app loops the wizard/login forever on an owned node.
-                if (nodeHasOwner(baseUrl)) {
+                // that already has an OWNER — claimed OR legacy-owned — is
+                // CONFIGURED, not first-run. Only a genuinely FRESH node is
+                // first-run. Without this, the post-setup runtime reload (during
+                // which setup-status is briefly unreachable / the node-fold
+                // rebinds 4243) degrades to first-run and the app loops the
+                // wizard/login forever on an owned node.
+                if (nodeHasOwner(nodeBaseUrl)) {
                     platformLog("checkFirstRunStatus", "[INFO] setup-status absent but node has an OWNER → configured, NOT first-run")
                     return false
                 }
@@ -4070,11 +4226,11 @@ private suspend fun checkFirstRunStatus(
                 // If the node's read API answers (GET /v1/identity 2xx), treat this
                 // as a fresh first-run so the app reaches the federation-ID wizard
                 // instead of dead-ending on "Backend unreachable".
-                if (isNodeReachable(baseUrl)) {
+                if (isNodeReachable(nodeBaseUrl)) {
                     // OWNER-AWARE (see the fast-degrade branch above): an owned
                     // node is configured, not first-run — don't loop the wizard
                     // just because setup-status is transiently unreachable.
-                    if (nodeHasOwner(baseUrl)) {
+                    if (nodeHasOwner(nodeBaseUrl)) {
                         platformLog("checkFirstRunStatus", "[INFO] setup status unavailable but node has an OWNER → configured, NOT first-run")
                         return false
                     }
@@ -4092,28 +4248,60 @@ private suspend fun checkFirstRunStatus(
  * Lightweight node-up probe for the local ciris-server read API.
  * GET /v1/identity returning any 2xx means the node is serving.
  */
-private suspend fun isNodeReachable(baseUrl: String): Boolean {
+private suspend fun isNodeReachable(nodeBaseUrl: String): Boolean {
     return try {
-        CIRISApiClient(baseUrl).isLocalNodeUp(baseUrl.trimEnd('/'))
+        CIRISApiClient(nodeBaseUrl).isLocalNodeUp(nodeBaseUrl.trimEnd('/'))
     } catch (_: Exception) {
         false
     }
 }
 
 /**
- * Does the local node already have an OWNER? A claimed/owned node is CONFIGURED
- * (not first-run) even when /v1/setup/status is transiently unavailable — e.g.
- * during the post-setup runtime reload while the node-fold rebinds 4243. Uses
- * GET /v1/auth/owner-hint (null hint = no owner). Best-effort: any failure ⇒
- * false (fall back to the first-run assumption).
+ * Which of the [NodeOwnership] states is the local node in?
+ *
+ * Reads the two NODE-side signals (FSD §5) and never `/v1/auth/owner-hint`:
+ *
+ * 1. `GET /v1/setup/owned-nodes` → the CEG owner-binding projection, the same
+ *    predicate `require_owner_bound` consults at every owner-gated operation.
+ * 2. `GET /v1/setup/status` → the NODE's own first-run predicate (does an active
+ *    ROOT WaCert exist), which separates a LEGACY_OWNED node from a FRESH one.
+ *
+ * Best-effort: a failed owner-binding probe reads as "no binding" and a failed
+ * WaCert probe reads as "unknown", which together degrade to [NodeOwnership.FRESH]
+ * — the pre-2.9.14 assumption.
  */
-private suspend fun nodeHasOwner(baseUrl: String): Boolean {
-    return try {
-        CIRISApiClient(baseUrl).getOwnerHint() != null
-    } catch (_: Exception) {
-        false
+private suspend fun probeNodeOwnership(nodeBaseUrl: String): NodeOwnership {
+    val client = CIRISApiClient(nodeBaseUrl)
+    val ownerBinding = try {
+        client.getOwnedNodes(nodeBaseUrl).owner
+    } catch (e: Exception) {
+        platformLog("probeNodeOwnership", "[DEBUG] owned-nodes probe failed: ${e.message?.take(80)}")
+        null
     }
+    // Short-circuit: an owner-binding is decisive, no second probe needed.
+    if (!ownerBinding.isNullOrBlank()) return NodeOwnership.CLAIMED
+    val nodeSetupRequired = try {
+        client.getSetupStatus().data.setup_required
+    } catch (e: Exception) {
+        platformLog("probeNodeOwnership", "[DEBUG] node setup-status probe failed: ${e.message?.take(80)}")
+        null
+    }
+    val state = nodeOwnershipFrom(ownerBinding, nodeSetupRequired)
+    platformLog(
+        "probeNodeOwnership",
+        "[INFO] $state (owner_binding=${ownerBinding ?: "<none>"}, node_setup_required=$nodeSetupRequired)",
+    )
+    return state
 }
+
+/**
+ * Does the local node already have an OWNER — in EITHER form? A claimed node and a
+ * legacy-owned node are both CONFIGURED (not first-run) even when the brain's
+ * /v1/setup/status is transiently unavailable, e.g. during the post-setup runtime
+ * reload while the node-fold rebinds 4243.
+ */
+private suspend fun nodeHasOwner(nodeBaseUrl: String): Boolean =
+    probeNodeOwnership(nodeBaseUrl).isOwned
 
 /**
  * Category-based navigation for the top bar.
@@ -4575,6 +4763,7 @@ private sealed class Screen {
     object IdentityManagement : Screen()
     // Accord (HUMANITY_ACCORD — constitutional 2/3 kill-switch + holder roster).
     object Accord : Screen()
+    object DutyConferral : Screen()
     // Provision Accord Holder (mint a portable-2FA accord-holder identity).
     object ProvisionAccordHolder : Screen()
     // Accord Genesis Ceremony (stand up a new mesh's 2-of-3 human kill-switch).
@@ -4687,6 +4876,7 @@ private fun screenToSurface(s: Screen): ai.ciris.mobile.shared.ui.nav.NavSurface
     Screen.Delegations -> ai.ciris.mobile.shared.ui.nav.NavSurface.Delegations
     Screen.IdentityManagement -> ai.ciris.mobile.shared.ui.nav.NavSurface.IdentityManagement
     Screen.Accord -> ai.ciris.mobile.shared.ui.nav.NavSurface.Accord
+        Screen.DutyConferral -> ai.ciris.mobile.shared.ui.nav.NavSurface.Accord
     Screen.ProvisionAccordHolder -> ai.ciris.mobile.shared.ui.nav.NavSurface.ProvisionAccordHolder
     Screen.AccordCeremony -> ai.ciris.mobile.shared.ui.nav.NavSurface.AccordCeremony
     Screen.Moderation -> ai.ciris.mobile.shared.ui.nav.NavSurface.Moderation

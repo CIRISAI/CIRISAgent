@@ -821,7 +821,24 @@ class InteractViewModel(
                 if (!agentResponse.isNullOrBlank()) {
                     logInfo(method, "Agent response: '${agentResponse.take(100)}...'")
                     val agentMessage = ChatMessage(
-                        id = response.message_id,
+                        // "<message_id>_response", NOT the bare message_id.
+                        //
+                        // The bare id is the INTERACTION's id, and the line just
+                        // above reconciles the user's own message to it. Giving
+                        // the reply the same id put two messages in the list under
+                        // one id, and InteractScreen renders
+                        // `messages.distinctBy { it.id }` — so the reply won here
+                        // and the user's own question silently vanished from the
+                        // transcript. The counter underneath reads the UNFILTERED
+                        // list, which is why the screen said "Showing last 2
+                        // messages" above a single bubble.
+                        //
+                        // This is the server's own convention, not a new one:
+                        // routes/agent.py builds history as message_id for the user
+                        // turn and f"{message_id}_response" for the agent turn.
+                        // Matching it also keeps fetchHistory's dedupe-by-id
+                        // working, which is what the reconcile above exists for.
+                        id = "${response.message_id}_response",
                         text = agentResponse,
                         type = MessageType.AGENT,
                         timestamp = Clock.System.now(),
@@ -928,7 +945,22 @@ class InteractViewModel(
                     _lastSystemStatus = status
                     recomputeLocalScore()
                     val wasConnected = _isConnected.value
-                    _isConnected.value = status.status == "healthy"
+                    // "Can the user type?", not "is every subsystem nominal?".
+                    //
+                    // This was `status == "healthy"`, a single exact-string match
+                    // that gates the entire composer — text field, attach and send.
+                    // The agent reported "initializing" forever (a public method
+                    // the health check probed for did not exist), so the field,
+                    // attach and send buttons were all dead on an agent that was
+                    // in WORK, answering messages and sealing traces. Nothing on
+                    // screen said why; the user simply could not type.
+                    //
+                    // A reachable agent that reports a cognitive state is talking
+                    // to us and can accept input. Degraded is not offline, and
+                    // "some subsystem is unhappy" is not a reason to take away
+                    // someone's keyboard — if a send then fails, the send path
+                    // surfaces that error, which is where it belongs.
+                    _isConnected.value = status.status == "healthy" || status.cognitive_state != null
 
                     // Check if we got a real cognitive state
                     val cognitiveState = status.cognitive_state

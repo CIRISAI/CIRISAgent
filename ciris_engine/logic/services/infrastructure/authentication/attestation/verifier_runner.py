@@ -57,8 +57,56 @@ from .types import PythonHashesWrapper, VerifyThreadResult
 
 logger = logging.getLogger(__name__)
 
-# Timeout for attestation thread (seconds)
+# Absolute backstop for a wedged verifier thread. This is NOT the contract —
+# see attestation_deadline_seconds() for that. It exists only so a thread that
+# never returns cannot leak forever.
 ATTESTATION_TIMEOUT = 90
+
+
+def startup_attestation_budget_seconds() -> float:
+    """The attestation contract, read at CALL time.
+
+    An attestation is always produced within this many seconds. Not "usually",
+    and not "unless the build is unregistered" — if it takes longer, that is a
+    bug in the verifier, and the caller gets a degraded attestation rather than
+    a hang.
+
+    Read at call time on purpose. The equivalent constant in service.py is
+    evaluated at import, which silently discarded the override: mobile_main sets
+    CIRIS_STARTUP_ATTESTATION_BUDGET_SECONDS=45 at startup, but by then
+    authentication.service had already been imported and frozen the value at
+    20.0. The Android log proves it — "exceeded the 20s budget" on a runtime
+    that had asked for 45.
+    """
+    raw = os.environ.get("CIRIS_STARTUP_ATTESTATION_BUDGET_SECONDS", "").strip()
+    if raw:
+        try:
+            return max(1.0, float(raw))
+        except ValueError:
+            pass
+    return 20.0
+
+
+def attestation_deadline_seconds() -> float:
+    """How long to wait for the verifier before degrading.
+
+    The budget bounds the wait; ATTESTATION_TIMEOUT is only a ceiling for the
+    case where someone sets an absurd budget. Waiting past the budget cannot
+    help: the caller has already been told the run is a bug, and the result
+    delivered late is the same degraded `level=0, binary=FAIL` the timeout path
+    produces anyway.
+
+    This is the whole defect on Android. The verifier blocked on an HTTPS
+    source-availability check with no network (`https_ok=false`), the 90s
+    backstop was what actually bounded it, and the processor gate arrived 65s
+    in to find the budget long gone. The runtime never left the Setup cognitive
+    state, so the agent sat in front of a typed question and never answered it.
+    CIRIS_ATTESTATION_SKIP_REGISTRY did not save us: it removes the registry
+    fetch (CIRISVerify#212), and this was a different network call. Bounding
+    every path by the budget is what makes the promise hold regardless of which
+    call is slow.
+    """
+    return min(float(ATTESTATION_TIMEOUT), startup_attestation_budget_seconds())
 
 
 def _get_verifier_version(verifier: Any) -> str:
@@ -331,12 +379,24 @@ async def run_verification_thread(
 
     # Non-blocking wait: poll thread status while yielding to event loop
     # Use _async_timeout for Python 3.10 compatibility
+    deadline = attestation_deadline_seconds()
     try:
-        async with _async_timeout(ATTESTATION_TIMEOUT):
+        async with _async_timeout(deadline):
             while thread.is_alive():
                 await asyncio.sleep(0.1)  # Yield to event loop every 100ms
     except asyncio.TimeoutError:
-        logger.warning(f"[attestation] TIMEOUT: Thread still alive after {ATTESTATION_TIMEOUT} seconds!")
-        result.error = f"Attestation timed out after {ATTESTATION_TIMEOUT} seconds"
+        # Degrade AT the budget instead of past it. The thread is a daemon and
+        # keeps running; we simply stop letting it hold up startup. The result
+        # returned here is identical to the one the old 90s path produced —
+        # only 70s earlier, which is the difference between a degraded boot and
+        # a processor stuck in Setup with a question on screen.
+        logger.warning(
+            "[attestation] TIMEOUT: verifier still running after %.0fs (the startup "
+            "attestation budget). Degrading to an unverified attestation so startup "
+            "can proceed. An attestation that cannot be produced inside the budget is "
+            "a verifier bug — file it rather than raising the budget.",
+            deadline,
+        )
+        result.error = f"Attestation timed out after {deadline:.0f} seconds"
 
     return result

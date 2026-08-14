@@ -9,8 +9,9 @@ Supports:
 """
 
 import logging
+import re
 from datetime import datetime, timezone
-from typing import Any, Callable, List, Optional, Set
+from typing import Any, Callable, Dict, List, Optional, Set
 
 from fastapi import Depends, Header, HTTPException, Request, status
 
@@ -262,10 +263,171 @@ def _build_permissions_set(key_info: Any, user: Any) -> Set[Any]:
     return permissions
 
 
+#: Prefix of a session token minted by the SUBSTRATE (`issue_session_token` in
+#: ciris-server `auth/session.rs`) — `sess:<wa_id>:<mac>`. Every node login
+#: mechanism mints this one shape: password, Google/Apple native id_token, and the
+#: OAuth callback all funnel through that single function.
+SUBSTRATE_SESSION_PREFIX = "sess:"
+
+#: Grammar of a node-minted session token: ``sess:<wa_id>:<mac>``. Used ONLY to
+#: report whether a rejected token was structurally plausible — never to accept
+#: one. Authentication is the substrate's call; this must not become a second,
+#: weaker opinion about validity.
+_SESSION_TOKEN_RE = re.compile(r"sess:wa-\d{4}-\d{2}-\d{2}-[A-Za-z0-9]{6}:[A-Za-z0-9_\-=]+")
+
+
+def _describe_token_family(token: str) -> str:
+    """Name the token's minter, for logs only. Never a decision input.
+
+    The brain and the node mint DISJOINT token families and neither verifies the
+    other's, which is measurable:
+
+        node   `sess:wa-…`             -> :4243 200, :8080 401
+        python `ciris_system_admin_…`  -> :4243 401, :8080 200
+
+    Before this, presenting a substrate token to a brain route produced a bare
+    "Invalid API key" — indistinguishable from a typo'd credential, which is how
+    the /v1/auth cutover cost a day. A rejection should say WHICH minter issued
+    the thing it could not verify.
+    """
+    if token.startswith(SUBSTRATE_SESSION_PREFIX):
+        return "substrate-session"
+    if token.startswith("service:"):
+        return "service-token"
+    if token.startswith("ciris_"):
+        return "brain-issued"
+    return "unrecognized"
+
+
+def resolve_substrate_session(token: str) -> Dict[str, Any]:
+    """Ask the substrate who this `sess:` token is. Shared by BOTH auth surfaces.
+
+    There are two authenticators in this adapter — `dependencies/auth.py`
+    (AuthContext) and `api/auth.py` (TokenData) — reached by different route
+    families. They existed before the substrate did, and when only the first
+    learned to verify node-issued tokens, `/v1/partnership`, `/v1/dsar`,
+    `/v1/my_data` and `/v1/connectors` answered 401 "Invalid or expired token"
+    for a token the rest of the API accepted. Caught by Staged QA, not by me.
+
+    So the VERIFICATION lives here once and both callers use it. Two adapters onto
+    one resolver is fine; two resolvers is how they drift.
+
+    Raises HTTPException(503) when the substrate could not judge, and (401) on an
+    explicit rejection — never conflating "I could not look" with "forged".
+    """
+    try:
+        import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
+
+        resolved = ciris_server.resolve_bearer(token)
+    except ImportError:
+        logger.exception("auth: substrate session token presented but ciris_server is not importable")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Identity verification unavailable",
+        ) from None
+    except Exception as exc:  # noqa: BLE001 — an outage is NOT a rejection
+        logger.exception(
+            "auth: substrate COULD NOT judge this token (%s). Answering 503, not 401 — "
+            "the credential may be perfectly valid and we simply could not check it.",
+            exc,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Identity verification unavailable",
+        ) from None
+
+    if resolved is None:
+        # Log the token's SHAPE, never a slice of it.
+        #
+        # This used to log `token.split(":")[1]`, reasoning that a wa_id is not a
+        # secret. The wa_id is not — but that expression does not extract a wa_id,
+        # it extracts whatever the caller put between the first two colons. Anyone
+        # may send `sess:<anything>:x` unauthenticated and have it written verbatim
+        # into our warning log, and on a malformed token that slice can land on
+        # credential material instead (py/clear-text-logging-sensitive-data). A
+        # REJECTED token is precisely the input least entitled to that trust.
+        #
+        # `well_formed` is a bool from a fullmatch against the token grammar and
+        # `segments` an int, so neither can carry caller bytes — and together they
+        # still separate the diagnoses that matter: junk arriving at the endpoint
+        # (well_formed=False) from real tokens being refused (well_formed=True).
+        # When the subject itself is needed, the node has it: it made the judgement.
+        well_formed = bool(_SESSION_TOKEN_RE.fullmatch(token))
+        logger.warning(
+            "auth: substrate JUDGED this session token invalid "
+            "(well_formed=%s, segments=%d). This is a verdict, not an outage — "
+            "the substrate looked and said no; it logs the subject.",
+            well_formed,
+            token.count(":") + 1,
+        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session token")
+    return dict(resolved)
+
+
+def _handle_substrate_session_auth(
+    _request: Request, _auth_service: APIAuthService, token: str
+) -> AuthContext:
+    """Verify a node-minted `sess:` token by asking the SUBSTRATE, not ourselves.
+
+    This is the binding that lets the brain stop having an opinion about identity.
+    `ciris_server.resolve_bearer` is the same verification the node's own doors
+    use, so a token minted by ANY node login mechanism — password, Google or Apple
+    native id_token, the OAuth callback, anything added later — opens brain routes
+    without a second implementation here. Upstream funnels all of them through one
+    `issue_session_token`, so there is exactly one thing to verify.
+
+    THE CONTRACT, which must not be softened:
+
+        None      -> the substrate JUDGED the token and it is invalid  -> 401
+        exception -> the substrate COULD NOT judge it                  -> 503
+
+    `except Exception: return None` would turn a store outage into a silent
+    fleet-wide lockout whose logs read exactly like everyone presenting bad
+    tokens at once. The upstream messages say so in words ("the token was NOT
+    judged; do not treat this as a rejection") precisely because that collapse is
+    the tempting one to write.
+    """
+    resolved = resolve_substrate_session(token)
+
+    wa_id = resolved["wa_id"]
+    role = UserRole(resolved["role"]) if resolved.get("role") else UserRole.OBSERVER
+    # `actor` is distinct from `wa_id` on a delegated grant: the caller wields the
+    # owner's authority while the ACT is attributable to the delegate. Logging the
+    # wa_id alone would record the owner as having done what a delegate did.
+    actor = resolved.get("actor")
+    logger.debug(
+        "auth: substrate resolved session wa_id=%s role=%s actor=%s", wa_id, role.value, actor
+    )
+    return AuthContext(
+        user_id=wa_id,
+        role=role,
+        permissions=set(ROLE_PERMISSIONS.get(role, set())),
+        api_key_id=None,
+        authenticated_at=datetime.now(timezone.utc),
+    )
+
+
 def _handle_api_key_auth(request: Request, auth_service: APIAuthService, api_key: str) -> AuthContext:
     """Handle regular API key authentication."""
     key_info = auth_service.validate_api_key(api_key)
     if not key_info:
+        family = _describe_token_family(api_key)
+        if family == "substrate-session":
+            # THE CUTOVER EDGE. The caller authenticated against the node and is
+            # holding a perfectly valid `sess:` token; the brain simply has no way
+            # to verify it, because ciris_server exposes no bearer-resolution
+            # binding to Python (checked: its Python surface has no resolve/verify
+            # token export). This is the one line that tells an operator the
+            # difference between "bad credential" and "right credential, wrong
+            # verifier" — see CIRISAgent#1028 / the substrate ask.
+            logger.warning(
+                "auth: rejected a SUBSTRATE-minted session token on a brain route — "
+                "the credential may be entirely valid; the brain cannot verify it. "
+                "Until the substrate exposes bearer resolution to Python, node-issued "
+                "tokens do not open brain doors."
+            )
+        else:
+            logger.info("auth: rejected bearer token (family=%s)", family)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
 
     # Get user to check for custom permissions
@@ -455,6 +617,24 @@ async def get_auth_context(  # NOSONAR - FastAPI requires async for dependency i
 
     # Fall back to bearer token authentication
     api_key = _extract_bearer_token(authorization)
+
+    # A SUBSTRATE-minted session token, checked BEFORE anything else parses it.
+    #
+    # `sess:<wa_id>:<mac>` contains colons, so without this it falls into the
+    # `username:password` branch below and is rejected as "Invalid username or
+    # password" — a substrate token, shaped like a credential pair, reported as a
+    # bad credential. The caller may be perfectly authenticated: they logged in
+    # against the node and hold a valid token the brain simply cannot verify,
+    # because ciris_server exposes no bearer-resolution binding to Python.
+    #
+    # Measured, both directions:
+    #     node   `sess:wa-…`            -> :4243 200   :8080 401
+    #     python `ciris_system_admin_…` -> :4243 401   :8080 200
+    #
+    # Disjoint families, neither verifying the other's. This says so out loud
+    # rather than making the next person bisect it. See CIRISAgent#1028.
+    if api_key.startswith(SUBSTRATE_SESSION_PREFIX):
+        return _handle_substrate_session_auth(request, auth_service, api_key)
 
     # Check if this is a service token
     if api_key.startswith("service:"):

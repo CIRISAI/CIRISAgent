@@ -123,6 +123,14 @@ fun AccordScreen(
      * 2-of-3 human kill-switch).
      */
     onStartCeremony: () -> Unit = {},
+    /**
+     * Open the DUTY conferral card (CIRISServer#392) — the accord confers a
+     * moderation duty on a fed-ID at its own quorum. It lives here rather than on
+     * the Moderation card because the duty is ABOUT moderation but the authority
+     * being exercised is the accord's: two seated holders, real tokens, the same
+     * holder-custody inputs (key_id + USB ML-DSA + PKCS#11) as the co-scrub flows.
+     */
+    onConferDuty: () -> Unit = {},
 ) {
     val family by viewModel.family.collectAsState()
     val holders by viewModel.holders.collectAsState()

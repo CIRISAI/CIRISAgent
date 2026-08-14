@@ -85,6 +85,14 @@ SYSTEM_WA_KEY_FILENAME = "system_wa.key"
 # BUDGET_SECONDS lets those builds tolerate the slow degrade (paired with
 # CIRIS_ATTESTATION_SKIP_REGISTRY, which removes the block entirely on verify
 # that accepts it). Default unchanged → production still enforces 20s.
+#
+# READ AT CALL TIME. This used to be a module-level constant evaluated at
+# import, which silently discarded every override that arrived later:
+# mobile_main sets CIRIS_STARTUP_ATTESTATION_BUDGET_SECONDS=45 during startup,
+# but authentication.service had already been imported, so the value stayed
+# 20.0 and the Android log read "exceeded the 20s budget" on a runtime that had
+# explicitly asked for 45. An env var that only works if it is set before an
+# unrelated import is not a knob, it is a coin flip.
 def _startup_attestation_budget() -> float:
     raw = os.environ.get("CIRIS_STARTUP_ATTESTATION_BUDGET_SECONDS", "").strip()
     if raw:
@@ -95,6 +103,9 @@ def _startup_attestation_budget() -> float:
     return 20.0
 
 
+# Kept for the import-time default and for callers that only want a number to
+# print. Anything ENFORCING the budget must call _startup_attestation_budget()
+# so a late override is honoured.
 STARTUP_ATTESTATION_BUDGET_SECONDS = _startup_attestation_budget()
 
 
@@ -600,8 +611,54 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         return await self.get_wa(wa_id)
 
     async def _store_wa_certificate(self, wa: WACertificate) -> None:
-        """Store a WA certificate in the database."""
+        """Store a WA certificate in the database, and verify it is really there.
+
+        WRITE-VERIFY, because a silent loss here is invisible until login. Staged
+        QA logged "✅ Created NEW WA: … name=jeff" and six seconds later BOTH the
+        node and this side enumerated the same five certs with no `jeff` among
+        them — a write that reported success and did not survive.
+
+        The read-back is deliberately narrow: `get_wa_by_id` on the id we just
+        wrote. It answers the question the enumeration cannot, because
+        `list_wa_certificates` is ALWAYS active-only (persist exposes only
+        `wa_cert_list_by_role`, which restricts to active=true), so an absent row
+        and an inactive row look identical from there — and they need opposite
+        fixes.
+
+        Never raises. A verification probe that can fail the operation it verifies
+        would turn a diagnostic into an outage.
+        """
         authentication_store.store_wa_certificate(wa)
+
+        try:
+            readback = authentication_store.get_wa_by_id(wa.wa_id)
+        except Exception as exc:  # noqa: BLE001 — diagnostics must not break writes
+            logger.warning("WA_WRITE_VERIFY: could not read back %s: %s", wa.wa_id, exc)
+            return
+
+        if readback is None:
+            logger.error(
+                "WA_WRITE_VERIFY: LOST WRITE — stored WA %s (name=%s, role=%s) and it is "
+                "NOT readable immediately afterwards. Any login as this identity will fail "
+                "with 'no cert resolved', and the creation log above will say it succeeded.",
+                wa.wa_id,
+                wa.name,
+                wa.role,
+            )
+        elif not getattr(readback, "active", True):
+            logger.error(
+                "WA_WRITE_VERIFY: WA %s (name=%s) persisted INACTIVE. It exists but is "
+                "invisible to every active-only listing, including the node's login scan.",
+                wa.wa_id,
+                wa.name,
+            )
+        else:
+            logger.info(
+                "WA_WRITE_VERIFY: %s (name=%s, role=%s) written and read back active",
+                wa.wa_id,
+                wa.name,
+                wa.role,
+            )
 
     async def _create_adapter_observer(self, adapter_id: str, name: str) -> WACertificate:
         """Create or reactivate adapter observer WA."""
@@ -1093,6 +1150,20 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         )
 
         # Store in database
+        # ENTRY MARKER. `create_wa` is linear — this call always runs — so if a
+        # "✅ Created NEW WA" appears in the setup log with no WA_CREATE_ENTRY and
+        # no WA_WRITE_VERIFY beside it, the module executing is not this one.
+        # Staged QA showed exactly that shape for `jeff`, and this workflow has an
+        # error string for the mechanism: "Canonical staged tree and wheel install
+        # diverge". Absence of a log is weak evidence; this makes presence the
+        # signal instead.
+        logger.warning(
+            "WA_CREATE_ENTRY: about to store %s (name=%s, role=%s) via %s",
+            wa_cert.wa_id,
+            wa_cert.name,
+            wa_cert.role,
+            __file__,
+        )
         await self._store_wa_certificate(wa_cert)
 
         # Store private key in CIRISVerify for signing capability
@@ -2377,7 +2448,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
     async def await_attestation_ready(
         self,
-        budget_seconds: float = STARTUP_ATTESTATION_BUDGET_SECONDS,
+        budget_seconds: Optional[float] = None,
     ) -> None:
         """Block until the startup attestation task has completed.
 
@@ -2408,6 +2479,13 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
           - If task raised: the exception is re-raised so the caller
             fails loudly. We do not swallow attestation failures.
         """
+        # Resolve at CALL time. As a default argument this was evaluated at
+        # import, so a runtime override (mobile_main sets 45) was discarded and
+        # the frozen 20.0 was enforced instead — the Android log said "20s
+        # budget" on a runtime that had asked for 45.
+        if budget_seconds is None:
+            budget_seconds = _startup_attestation_budget()
+
         if self._attestation_task is None:
             raise RuntimeError(
                 "AuthenticationService.start() has not been called — "
@@ -2614,13 +2692,13 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 "max_level": result.max_level,
                 "level_pending": result.level_pending,
             }
-            if elapsed > STARTUP_ATTESTATION_BUDGET_SECONDS:
+            if elapsed > _startup_attestation_budget():
                 logger.warning(
                     "[attestation] Startup attestation exceeded the %.0fs budget: "
                     "took %.2fs. Per-bool: binary=%s functions=%s python=%s "
                     "registry=%s audit=%s. Investigate the verifier — do not "
                     "raise the budget.",
-                    STARTUP_ATTESTATION_BUDGET_SECONDS,
+                    _startup_attestation_budget(),
                     elapsed,
                     result.binary_ok,
                     result.function_integrity,

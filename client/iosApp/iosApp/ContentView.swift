@@ -952,6 +952,15 @@ struct StartupErrorView: View {
 
     let cirisColor = Color(red: 0.255, green: 0.612, blue: 0.627)
 
+    // A user hit "Engine Failed to Start — Server did not become healthy within
+    // 30 seconds" and could send us nothing but a photograph of this screen. The
+    // agent writes detailed logs the entire time it is failing; they were simply
+    // unreachable from the one screen the user could actually see. This exists so
+    // the next report arrives with evidence attached instead of a description.
+    @State private var showLogs = false
+    @State private var logText = ""
+    @State private var logSource = ""
+
     var body: some View {
         ZStack {
             Color(red: 0.1, green: 0.1, blue: 0.18)
@@ -1035,18 +1044,104 @@ struct StartupErrorView: View {
 
                     Spacer().frame(height: 20)
 
-                    Button(action: onRetry) {
-                        Text("Retry")
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 32)
-                            .padding(.vertical, 12)
-                            .background(cirisColor)
-                            .cornerRadius(8)
-                    }
+                        HStack(spacing: 12) {
+                            Button(action: onRetry) {
+                                Text("Retry")
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 32)
+                                    .padding(.vertical, 12)
+                                    .background(cirisColor)
+                                    .cornerRadius(8)
+                            }
+
+                            Button(action: { loadLogs(); showLogs = true }) {
+                                Text("View Logs")
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 24)
+                                    .padding(.vertical, 12)
+                                    .background(Color.white.opacity(0.12))
+                                    .cornerRadius(8)
+                            }
+                        }
                 }
                 .padding(.vertical, 40)
             }
         }
+        .sheet(isPresented: $showLogs) {
+            NavigationView {
+                ScrollView {
+                    Text(logText.isEmpty ? "(empty)" : logText)
+                        .font(.system(size: 10, design: .monospaced))
+                        .textSelection(.enabled)   // so the user can copy it into an issue
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                }
+                .navigationTitle(logSource.isEmpty ? "Logs" : logSource)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        // Copy, because the failure this screen reports is one the
+                        // user can only communicate by sending it to us. A log you
+                        // can read but not share is barely better than none.
+                        Button("Copy") { UIPasteboard.general.string = logText }
+                    }
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button("Done") { showLogs = false }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Read the tail of whichever log actually has something in it.
+    ///
+    /// Order matters: incidents first, because a boot failure writes there and it
+    /// is the shortest path to a cause. `latest.log` is the fallback — long, but a
+    /// startup that never reaches the incident writer still leaves a trace in it.
+    /// The Swift/KMP bridge logs come last; they catch the case where the Python
+    /// runtime never started at all, which is precisely the 30-second-timeout
+    /// shape and the one where the other two files may not exist.
+    private func loadLogs() {
+        let fm = FileManager.default
+        guard let docs = fm.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            logText = "Could not locate the app's Documents directory."
+            logSource = "unavailable"
+            return
+        }
+        let logsDir = docs.appendingPathComponent("ciris/logs")
+        let candidates = [
+            "incidents_latest.log",
+            "latest.log",
+            "kmp_errors.log",
+            "swift_bridge.log",
+        ]
+
+        for name in candidates {
+            let url = logsDir.appendingPathComponent(name)
+            guard let data = try? String(contentsOf: url, encoding: .utf8), !data.isEmpty else { continue }
+            // Tail, not head: a boot failure's cause is at the END of the file, and
+            // the head is banner noise. 400 lines is enough to carry a traceback
+            // plus the lines that led to it without producing a wall nobody reads.
+            let tail = data.split(separator: "\n", omittingEmptySubsequences: false).suffix(400)
+            logText = tail.joined(separator: "\n")
+            logSource = name
+            return
+        }
+
+        // Say WHERE we looked. "No logs found" with no path sends the next person
+        // hunting the filesystem; this makes the absence itself a usable report.
+        let present = (try? fm.contentsOfDirectory(atPath: logsDir.path)) ?? []
+        logText = """
+        No log file had any content.
+
+        Looked in: \(logsDir.path)
+        Files present: \(present.isEmpty ? "(none — the log directory is empty or missing)" : present.joined(separator: ", "))
+
+        An empty log directory usually means the Python runtime never started, so
+        it never opened a log file. That is itself the finding — please include
+        this screen in the report.
+        """
+        logSource = "none"
     }
 
     private func getDebugInfo() -> String {

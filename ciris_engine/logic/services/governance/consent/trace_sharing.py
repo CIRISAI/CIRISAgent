@@ -117,8 +117,32 @@ def _canonical_targets() -> List[str]:
         return []
 
 
-def _author_ship_grant(result: TraceSharingGrantResult) -> None:
-    """Author the replication (+analyze) grant naming each canonical peer."""
+def recorded_analyze_stance(default: bool = True) -> bool:
+    """The owner's LAST RECORDED ``analyze`` decision, for replay paths.
+
+    The session-less paths (node fold, delivery probe) re-author a grant the owner
+    already made, so they must not silently re-grant a dimension the owner
+    declined. The CEG state is the record: read it and reuse it. When it is
+    unreadable — which includes the first authoring, before any row exists —
+    fall back to [default], which preserves the pre-2.9.14 behaviour for every
+    install that never expressed a preference.
+    """
+    try:
+        stance = trace_sharing_status().analyze
+    except Exception as exc:  # noqa: BLE001 — diagnostics must never raise
+        logger.debug("trace-consent: analyze stance unreadable: %s", exc)
+        return default
+    return default if stance is None else bool(stance)
+
+
+def _author_ship_grant(result: TraceSharingGrantResult, analyze: bool) -> None:
+    """Author the replication grant naming each canonical peer.
+
+    [analyze] is the CC#46 be-scored dimension. The substrate marks it
+    ``required: false`` with named costs, and ``fold_consent_surface.rs`` is
+    explicit that "marking it required misrepresents a legitimate choice as a
+    misconfiguration" — so it is the owner's answer, passed in, never a literal.
+    """
     try:
         import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
 
@@ -139,9 +163,10 @@ def _author_ship_grant(result: TraceSharingGrantResult) -> None:
                 # prefixes=None -> the build's own default, NEVER restated here.
                 # A restated list is how ["capacity:"] shipped while the authority
                 # said ["capacity:", "trace:"], stranding every trace it failed to
-                # name. analyze=True is the consent to BE SCORED; without it the
-                # grant is incomplete and the peer builds no reputation.
-                author(peer, None, True)
+                # name. `analyze` is the consent to BE SCORED: with it the peer
+                # builds reputation, without it the traces ship unscored — which
+                # is a legitimate choice the owner is entitled to make.
+                author(peer, None, analyze)
 
                 # ASSERT THE STANCE, NOT THE CALL. A row can exist and still fold
                 # to `unspecified` — which reads as consented to anything counting
@@ -166,6 +191,7 @@ def grant_trace_sharing(
     *,
     granted_at: Optional[str] = None,
     require_opt_in: bool = True,
+    analyze: Optional[bool] = None,
 ) -> TraceSharingGrantResult:
     """Grant trace sharing COMPLETELY — capture gate and ship/score gate.
 
@@ -176,6 +202,10 @@ def grant_trace_sharing(
             the owner's act in-band (the wizard checkbox, the data card toggle)
             pass False — the click IS the consent, and the env var may not be
             written yet at that point. Session-less paths must leave this True.
+        analyze: the CC#46 be-scored dimension. Paths that carry the owner's
+            answer in-band pass it explicitly. None means "reuse whatever the
+            owner last recorded" (see [recorded_analyze_stance]) — the correct
+            behaviour for a REPLAY, which must not re-grant a declined dimension.
 
     Never raises: a failed consent emit must not break setup completion or boot.
     """
@@ -207,7 +237,7 @@ def grant_trace_sharing(
         result.errors.append(f"capture grant failed: {exc}")
 
     # 2. SHIP + SCORE — consent:replication:v1 (+ analyze)
-    _author_ship_grant(result)
+    _author_ship_grant(result, recorded_analyze_stance() if analyze is None else analyze)
 
     result.status = trace_sharing_status()
 

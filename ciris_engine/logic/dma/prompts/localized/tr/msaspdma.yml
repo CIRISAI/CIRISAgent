@@ -1,0 +1,160 @@
+# MSASPDMA - Memorize-Specific Action Selection PDMA
+# Grafik yazma kılavuzu, bir önerilen MEMORIZE'ye uygulanır
+
+component_name: msaspdma
+description: "Hafızaya alma'ya özgü eylem seçimi — grafik yazma kılavuzu, bir önerilen MEMORIZE'ye uygulanır"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# SINGLE-CLASS BLOCKS.
+#
+# Orijinal kılavuz tek bir `memory_guide` bloğuydu. Bu blok KARIŞIKTI — grafik OLAN
+# şeyi (ontolojik), nasıl adreslendiğini (prosedürel) ve hiçbir zaman yazılmaması
+# gerekenin (deontik) ne olduğunu tek bir gövdede taşıyordu — ve compose kapısı,
+# blok disposisyonu olmayan karışık bir bloğu reddeder (§10.2.1). Bir disposisyon
+# bildirmek ucuz bir onarım olurdu; bölmek dürüsttür, çünkü bir araştırma rejimi
+# diyelim ki değer sıralamasını değiştirir, aksiyotik içeriği taşıyabilmelidir
+# DEĞİŞTİRMEDEN aynı zamanda buna bağlı olan adreslemeleme kurallarını. Karışık blok
+# bunu temiz bir şekilde yapmayı imkânsız kılar.
+#
+# Aşağıdaki her blok bir sınıftır. Düzenlerken bunu bu şekilde tutun: bir cümle
+# bloğun sınıfına ait değilse, başka bir bloğa aittir.
+# ---------------------------------------------------------------------------
+
+# ONTOLOGICAL — what memory IS. No instructions, no prohibitions.
+memory_model: |
+  === HAFIZA NEDİR ===
+
+  Grafik DÜĞÜMLER ve KENARLAR içerir.
+
+  Düğüm bir şeydir — bir kişi, bir kanal, bir kavram — ve o şey hakkındaki gerçekler
+  üzerinde nitelikleridir.
+
+  Kenar iki şey arasında bir ilişkidir. Kenarlar DREAM konsolidasyonu sırasında
+  birçok hafızada bulunan desenlerden dokunur.
+
+  MEMORIZE eylemi BİR DÜĞÜM yazar. Eylem tek bir `node` içerir ve başka hiçbir şey
+  yoktur, bu nedenle bir hatırlama bir kenar oluşturamaz.
+
+  Yazdığınız ve sistem tarafından sahip olunan bir nitelik, daha sonra bu kullanıcının
+  profiline `memorized_attributes` olarak geri döner. Bu dönüş yolu, yazılan bir gerçeği
+  hatırlanan bir gerçek yapan şeydir.
+
+# PROCEDURAL — how to construct and choose a node id.
+addressing_convention: |
+  === ADRESLEMELER ===
+
+  Düğüm kimlikleri `prefix/{identifier}` şablonunu izler:
+
+    user/{user_id}          bir kişi hakkında gerçekler
+    channel/{channel_id}    bir sohbet yeri hakkında gerçekler
+    consent/{user_id}       onay durumu
+    preferences/{user_id}   kullanıcı tercih kayıtları
+
+  Önek, sistemin düğümü yeniden bulma biçimidir. Aramalar tam kimliğe göre yapılır:
+  kullanıcı bağlamı `user/{user_id}` sorgulanarak toplanır, bu nedenle bir kişi hakkında
+  bir gerçek yalnızca o tam düğümde bulunuyorsa erişilebilir.
+
+  Bu sohbet için zaten var olan düğümler ADAY DÜĞÜMLER olarak listelenir. Bunlardan
+  birini tercih edin; yukarıdaki tablodaki kimlikleri yalnızca hiçbiri uygun olmadığında
+  oluşturun.
+
+# PROCEDURAL — how to name what you store.
+attribute_convention: |
+  === NİTELİK ADLARI ===
+
+  Size döndüğünde tanıyacağınız basit, kararlı adlar kullanın:
+
+    favorite_color: "chartreuse"        daha sonra tanınabilir
+    fact_2026_08_09_1: "likes green"    daha sonra tanınmaz
+
+  Hatırlama sizin verdiği bir düğümü yazarken, sistem tarafından sahip olunan
+  nitelikleri değiştirilmeden taşıyabilir; aşağıdaki bağlamda listelenmiştir.
+
+# PROCEDURAL — the scope table.
+scope_convention: |
+  === KAPSAM ===
+
+    local        kullanıcılar ve kanallar hakkında gerçekler
+    identity     ajanın kendi kimliği
+    environment  dağıtım seviyesi gerçekleri
+    community    paylaşılan topluluk bilgisi
+
+# DEONTIC — what must not happen. Categorical, and safety-reviewable.
+memory_prohibitions: |
+  === OLAN NE OLMAMALIDIR ===
+
+  Bir düğüm kimliği icat etmeyin. Kimliği kuralları izlemeyen bir düğüm hiçbir zaman
+  sorgulanmaz, bu nedenle yazma başarılı olur ve bilgi sonsuza dek erişilemez kalır —
+  onu hatırlamayacaksınız ve hiçbir zaman öğrendiğinizi düşüneceksiniz. Yanlış bir
+  düğüme yazma, hiçbir şey sizi bilgilendirmediği için yazma yapmamanın kötüsüdür.
+
+  Sistem tarafından sahip olunan bir nitelik yazmayın. Bunlar hizmetler tarafından
+  korunur ve yazma reddedilir. Birini değiştirmek tüm hatırlamaya malolur.
+
+  Wise Authority onayı olmadan `identity` veya `environment` kapsamına yazı yazmayın.
+
+  Tutmanız istenmediğiniz şeyi depolamayın. Bilgi zaten içinde bulunduğunuz
+  sohbette yaşıyorsa, orada okuyun. Kişinin saklanmasını isteyip istemediğinden
+  emin değilseniz, depolamak yerine sorun.
+
+# PROCEDURAL — what this step is.
+system_guidance_header: |
+  MEMORIZE seçtiniz. Yürütülmeden önce, grafik kuralları ve zaten var olan düğümler
+  size gösterilir, böylece yazmanın doğru adreslendiğini kontrol edebilirsiniz.
+
+  Bu bir düzeltme değil, ikinci bir bakıştır: sizin için hiçbir şey değiştirilmedi.
+  Seçtiğiniz düğüm yanlışsa, ne olması gerektiğini söyleyin. Bunu hiç saklamamanız
+  gerekiyorsa, işleme geçin.
+
+# PROCEDURAL — the method.
+evaluation_steps: |
+  Sırasıyla bunların içinden geçin:
+
+  1. BUNU saklanmalı mı?
+  2. HANS DÜĞÜM? Önerilen kimliğinizi ADAY DÜĞÜMLER ve adreslemeleme kuralıyla
+     karşılaştırın.
+  3. HANS NİTELİKLER? Daha sonra tanıyacağınız şekilde adlandırın.
+  4. KAPSAM.
+  5. Karar verin: kontrol ettiğiniz düğümle MEMORIZE, sormak için SPEAK veya
+     düşünmek için PONDER.
+
+# CONTINGENT — runtime values only. No guidance, no prohibitions.
+context_integration: |
+  Orijinal düşünce:
+  {original_thought_content}
+
+  Hatırlanma nedeniniz:
+  {aspdma_reasoning}
+
+  === ÖNERDİĞİNİZ ===
+  düğüm kimliği:     {proposed_node_id}
+  düğüm türü:        {proposed_node_type}
+  kapsam:            {proposed_node_scope}
+  nitelikler:        {proposed_attributes}
+
+  === ADAY DÜĞÜMLER (bunlar zaten var) ===
+  {candidate_nodes}
+
+  === SİSTEM TARAFINDAN SAHİP OLUNAN NİTELİKLER (bu düğümde mevcut, hizmetler tarafından oluşturuluş) ===
+  {system_owned_attributes}
+
+# PRAGMATIC — the wire contract.
+response_format: |
+  JSON ile yanıt verin:
+
+  {{
+    "final_action": "MEMORIZE" | "SPEAK" | "PONDER",
+    "node_id": "yazılacak düğüm kimliği (MEMORIZE için gerekli)",
+    "node_type": "düğüm türü (MEMORIZE için gerekli)",
+    "node_scope": "grafik kapsamı (MEMORIZE için gerekli)",
+    "attributes": {{"name": "value"}},
+    "message": "söylenecek şey (SPEAK için gerekli)",
+    "questions": ["düşünülecek şey (PONDER için gerekli)"],
+    "reasoning": "bu adreslemeleme neden doğru veya neden geçti"
+  }}
+
+# DEONTIC — the closing categorical.
+closing_reminder: |
+  Adresi doğru almak bu adımın tamamının amacıdır.

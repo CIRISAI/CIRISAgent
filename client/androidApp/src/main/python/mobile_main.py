@@ -915,14 +915,22 @@ def setup_android_environment():
     os.environ["CIRIS_OFFLINE_MODE"] = "true"
     os.environ["CIRIS_CLOUD_SYNC"] = "false"
 
-    # An offline mobile node has no registry entry — verify v10.5.0's startup
-    # attestation would block ~27s on the missing Agent-build-record fetch and
-    # trip the 20s budget gate, bricking the processor (CIRISVerify#212).
-    # Offline ⇒ skip the registry step (degrades to L4-skipped FAST, the same
-    # end-state the fetch reaches anyway) and give the budget headroom as a
-    # belt-and-suspenders for a bundled verify that predates skip_registry.
+    # An offline mobile node has no registry entry, so skip the Agent-build-record
+    # fetch: it blocks ~27s to reach exactly the L4-skipped state an unregistered
+    # build lands in anyway (CIRISVerify#212). Skipping is free correctness, not a
+    # relaxation.
     os.environ.setdefault("CIRIS_ATTESTATION_SKIP_REGISTRY", "true")
-    os.environ.setdefault("CIRIS_STARTUP_ATTESTATION_BUDGET_SECONDS", "45")
+    #
+    # The budget is NOT relaxed here. It used to set 45 as belt-and-suspenders,
+    # and that was wrong twice over. First, it never applied: the value was read
+    # into a module-level constant when authentication.service was imported,
+    # which happens before this line runs, so the runtime enforced 20 while the
+    # log claimed we had asked for 45. Second, and the reason it is not simply
+    # moved earlier — an attestation always completes within 20s, registry entry
+    # or not. A build that cannot is a verifier bug to file, and buying it 25
+    # more seconds only converts a fast degrade into a slow one. The wait is now
+    # bounded by the budget itself (verifier_runner.attestation_deadline_seconds),
+    # so exceeding it degrades to an unverified attestation instead of hanging.
 
     # Rust log filter. init_tracing (edge_runtime) does `RUST_LOG or <default>`,
     # so whatever we set here WINS over its ciris_edge=debug default — the old

@@ -28,6 +28,7 @@ class CLIObserver(BaseObserver[IncomingMessage]):
         memory_service: Optional[Any] = None,
         agent_id: Optional[str] = None,
         bus_manager: Optional[BusManager] = None,
+        bus_manager_provider: Optional[Callable[[], Optional[BusManager]]] = None,
         filter_service: Optional[Any] = None,
         secrets_service: Optional[SecretsService] = None,
         time_service: Optional[TimeServiceProtocol] = None,
@@ -38,6 +39,7 @@ class CLIObserver(BaseObserver[IncomingMessage]):
         super().__init__(
             on_observe,
             bus_manager=bus_manager,
+            bus_manager_provider=bus_manager_provider,
             memory_service=memory_service,
             agent_id=agent_id,
             filter_service=filter_service,

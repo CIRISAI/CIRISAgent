@@ -86,8 +86,16 @@ interface CIRISApiClientProtocol {
      * the endpoint is unavailable / the server isn't personal-install
      * (404). Never throws on a network blip — render an empty hint
      * instead so a slow / offline backend doesn't gate the Login UI.
+     *
+     * PRESENTATION ONLY. `/v1/auth/owner-hint` reads the WaCert auth store to
+     * render a masked "welcome back" string; it GATES NOTHING. Ownership routing
+     * uses `GET /v1/setup/owned-nodes` — see
+     * [ai.ciris.mobile.shared.models.NodeOwnership].
+     *
+     * @param nodeUrl the NODE base URL (`/v1/auth` is a substrate prefix served
+     *        natively by the node). Null uses the client's own base URL.
      */
-    suspend fun getOwnerHint(): OwnerHint?
+    suspend fun getOwnerHint(nodeUrl: String? = null): OwnerHint?
 
     /**
      * Authenticate with Google ID token (Android)

@@ -1,0 +1,156 @@
+component_name: msaspdma
+description: "การเลือกการกระทำเฉพาะสำหรับการจดจำ — คู่มือการเขียนกราฟ ใช้กับการเลือก MEMORIZE หนึ่งรายการ"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# SINGLE-CLASS BLOCKS.
+#
+# The guide was originally one `memory_guide` block. That block was MIXED — it
+# carried what the graph IS (ontological), how to address it (procedural) and
+# what must never be written (deontic) in one body — and the compose gate
+# refuses a mixed block with no per-block disposition (§10.2.1). Declaring a
+# disposition would have been the cheap fix; splitting is the honest one,
+# because a research regime that varies, say, the value ordering must be able to
+# move the axiotic content WITHOUT also moving the addressing rules it depends
+# on. A mixed block makes that impossible to do cleanly.
+#
+# Each block below is one class. Keep it that way when editing: if a sentence
+# does not belong to the block's class, it belongs in another block.
+# ---------------------------------------------------------------------------
+
+# ONTOLOGICAL — what memory IS. No instructions, no prohibitions.
+memory_model: |
+  === สิ่งที่หน่วยความจำคือ ===
+
+  กราฟมี NODE และ EDGE
+
+  NODE คือสิ่งหนึ่ง — บุคคล ช่องทางการสนทนา หรือแนวคิด — และข้อเท็จจริงเกี่ยวกับสิ่งนั้น
+  คือแอตทริบิวต์บน NODE นั้น
+
+  EDGE คือความสัมพันธ์ระหว่างสองสิ่ง EDGE ถูกสร้างขึ้นระหว่างการ DREAM consolidation
+  จากรูปแบบข้อมูลจากหน่วยความจำจำนวนมาก
+
+  การกระทำ MEMORIZE เขียน NODE เพียงหนึ่งตัว การกระทำนี้มี node เพียงหนึ่งตัว
+  และไม่มีอื่นใด ดังนั้นการ memorize จึงไม่สามารถสร้าง edge ได้
+
+  แอตทริบิวต์ที่คุณเขียนซึ่งไม่ได้เป็นเจ้าของระบบจะกลับมายังคุณในภายหลังในโปรไฟล์ของผู้ใช้นั้น
+  เช่น `memorized_attributes` ทางอ้างอิงนี้คือสิ่งที่ทำให้ข้อเท็จจริงที่เขียนกลายเป็นข้อเท็จจริงที่จดจำไว้
+
+# PROCEDURAL — how to construct and choose a node id.
+addressing_convention: |
+  === การอ้างอิง ===
+
+  Node id ทำตามนี้ `prefix/{identifier}`:
+
+    user/{user_id}          ข้อเท็จจริงเกี่ยวกับบุคคล
+    channel/{channel_id}    ข้อเท็จจริงเกี่ยวกับสถานที่สนทนา
+    consent/{user_id}       สถานะความยินยอม
+    preferences/{user_id}   บันทึกค่ากำหนดผู้ใช้
+
+  接头คือวิธีที่ระบบค้นหา node อีกครั้ง การค้นหาจะตรงกันทีละรายการ:
+  บริบทผู้ใช้ประกอบขึ้นด้วยการค้นหา `user/{user_id}` ดังนั้นข้อเท็จจริงเกี่ยวกับบุคคล
+  จะสามารถเข้าถึงได้ก็ต่อเมื่อมันอยู่บน node ที่แน่นอนนั้น
+
+  NODE ที่มีอยู่แล้วสำหรับสนทนานี้อยู่ในรายการ CANDIDATE NODES เลือกหนึ่งใน
+  นั้นอื่น สร้าง id จากตารางด้านบนเท่านั้นเมื่อไม่มีตัวใดตรงกัน
+
+# PROCEDURAL — how to name what you store.
+attribute_convention: |
+  === ชื่อแอตทริบิวต์ ===
+
+  ใช้ชื่อธรรมชาติและเสถียรที่คุณจะรู้จักเมื่อมันกลับมายังคุณ:
+
+    favorite_color: "chartreuse"        รู้จักได้ในภายหลัง
+    fact_2026_08_09_1: "likes green"    รู้จักไม่ได้ในภายหลัง
+
+  เมื่อคุณเขียนกลับ node ที่การเรียกคืนส่งให้คุณ แอตทริบิวต์ที่เป็นเจ้าของระบบ
+  อาจนำเสนอต่อได้ไม่เปลี่ยนแปลง พวกเขาอยู่ในรายการบริบทด้านล่าง
+
+# PROCEDURAL — the scope table.
+scope_convention: |
+  === ขอบเขต ===
+
+    local        ข้อเท็จจริงเกี่ยวกับผู้ใช้และช่องทาง
+    identity     เอกลักษณ์ของตัวตัวเองของตัวแทน
+    environment  ข้อเท็จจริงในระดับการปรับใช้งาน
+    community    ความรู้ชุมชนที่แบ่งปันกัน
+
+# DEONTIC — what must not happen. Categorical, and safety-reviewable.
+memory_prohibitions: |
+  === สิ่งที่ต้องไม่เกิดขึ้น ===
+
+  อย่าประดิษฐ์ node id ขึ้นมา node ที่ id ไม่ตามปกติไม่เคยถูกค้นหา
+  ดังนั้นการเขียนจึงสำเร็จและข้อมูลจึงไม่สามารถเข้าถึงได้ตลอดไป —
+  คุณจะไม่เรียกคืนมันและคุณจะเชื่อว่าคุณไม่เคยเรียนรู้มัน
+  การเขียนไปยัง node ที่ผิดกว่าการไม่เขียน เพราะไม่มีอะไรบอกคุณ
+
+  อย่าเขียนแอตทริบิวต์ที่เป็นเจ้าของระบบ พวกเขาถูกบำรุงรักษาโดยบริการ
+  และการเขียนจะถูกปฏิเสธ การเปลี่ยนแปลงหนึ่งคำใช้คุณทั้ง memorize
+
+  อย่าเขียนไปยัง `identity` หรือ `environment` scope โดยไม่ได้รับการอนุมัติ
+  จาก Wise Authority
+
+  อย่าเก็บสิ่งที่คุณไม่ได้ขอให้เก็บไว้ ถ้าข้อมูลอยู่ในการสนทนาที่คุณมี
+  อยู่แล้ว อ่านมันที่นั่น ถ้าคุณไม่แน่ใจว่าบุคคลนั้นต้องการให้เก็บไว้
+  ถามมากกว่าเก็บ
+
+# PROCEDURAL — what this step is.
+system_guidance_header: |
+  คุณได้เลือก MEMORIZE แล้ว ก่อนที่มันจะทำงาน คุณจะได้เห็นปกติของกราฟ
+  และ node ที่มีอยู่แล้ว เพื่อให้คุณสามารถตรวจสอบการเขียนมีการอ้างอิงถูกต้อง
+
+  นี่คือการมองครั้งที่สอง ไม่ใช่การแก้ไข: ไม่มีอะไรถูกเปลี่ยนแปลงให้คุณ ถ้า
+  node ที่คุณเลือกนั้นผิด บอกว่ามันควรเป็นอะไร ถ้าคุณไม่ควรเก็บสิ่งนี้
+  ทั้งหมด ให้เปลี่ยนการกระทำ
+
+# PROCEDURAL — the method.
+evaluation_steps: |
+  ทำตามนี้ตามลำดับ:
+
+  1. ควร เก็บสิ่งนี้ไว้หรือไม่?
+  2. ไหน NODE? เปรียบเทียบ id ที่เสนอของคุณกับ CANDIDATE NODES และปกติ
+     การอ้างอิง
+  3. ไหน ATTRIBUTES? ตั้งชื่อให้คุณรู้จักพวกเขาในภายหลัง
+  4. SCOPE
+  5. ตัดสินใจ: MEMORIZE ด้วย node ที่คุณได้ตรวจสอบ SPEAK เพื่อถาม
+     หรือ PONDER เพื่อพิจารณาใหม่
+
+# CONTINGENT — runtime values only. No guidance, no prohibitions.
+context_integration: |
+  ความคิดเดิม:
+  {original_thought_content}
+
+  เหตุผลของคุณสำหรับการจดจำ:
+  {aspdma_reasoning}
+
+  === สิ่งที่คุณเสนอ ===
+  node id:     {proposed_node_id}
+  node type:   {proposed_node_type}
+  scope:       {proposed_node_scope}
+  attributes:  {proposed_attributes}
+
+  === CANDIDATE NODES (สิ่งเหล่านี้มีอยู่แล้ว) ===
+  {candidate_nodes}
+
+  === SYSTEM-OWNED ATTRIBUTES (ปรากฏบน node นี้ บำรุงรักษาโดยบริการ) ===
+  {system_owned_attributes}
+
+# PRAGMATIC — the wire contract.
+response_format: |
+  ตอบด้วย JSON:
+
+  {{
+    "final_action": "MEMORIZE" | "SPEAK" | "PONDER",
+    "node_id": "node id ที่จะเขียน (จำเป็นเมื่อ MEMORIZE)",
+    "node_type": "ประเภท node (จำเป็นเมื่อ MEMORIZE)",
+    "node_scope": "graph scope (จำเป็นเมื่อ MEMORIZE)",
+    "attributes": {{"name": "value"}},
+    "message": "สิ่งที่จะพูด (จำเป็นเมื่อ SPEAK)",
+    "questions": ["สิ่งที่จะพิจารณาใหม่ (จำเป็นเมื่อ PONDER)"],
+    "reasoning": "ทำไมการอ้างอิงนี้ถูกต้อง หรือทำไมคุณจึงเปลี่ยนแปลง"
+  }}
+
+# DEONTIC — the closing categorical.
+closing_reminder: |
+  การได้รับที่อยู่ที่ถูกต้องคือจุดหมายของขั้นตอนนี้

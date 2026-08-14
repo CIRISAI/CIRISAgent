@@ -294,7 +294,22 @@ SOFT_ALLOWED_LOSS = 1  # institutional names: lose ≤1 mention per file
 
 
 def _count_token(text: str, token: str) -> int:
-    return len(re.findall(rf"\b{re.escape(token)}\b", text))
+    """Count a canonical Latin token, ignoring what script follows it.
+
+    `\b` is a boundary between a word char and a non-word char, and Korean,
+    Japanese and Chinese characters are all word chars. So `MEMORIZE를` — the
+    verb with a Korean particle attached, which is how Korean agglutinates —
+    has no boundary after the E and was not counted. Korean scored 3 of 8
+    MEMORIZE occurrences and failed the check while every occurrence was
+    present, correct and in the right block.
+
+    The rule the check actually wants is "this token, not a longer LATIN word
+    containing it" — MEMORIZE but not MEMORIZED. Bounding on Latin word
+    characters says exactly that, and lets any script or punctuation follow.
+    Base counts are unaffected (the base file is English); locale counts can
+    only rise, so this removes false failures without weakening the check.
+    """
+    return len(re.findall(rf"(?<![A-Za-z0-9_]){re.escape(token)}(?![A-Za-z0-9_])", text))
 
 
 # Catches lines like

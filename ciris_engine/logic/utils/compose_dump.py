@@ -397,6 +397,39 @@ BLOCK_ANNOTATIONS: Dict[str, BlockAnnotation] = {
     # It governs when the system must hand over — a permission structure, not a
     # value ranking — so deontic, and its replacement is safety-reviewable.
     "dsaspdma.taxonomy_text": BlockAnnotation(_C.DEONTIC, None),
+    # ---- msaspdma -----------------------------------------------------------
+    # The memorize second pass (#1027). Split into single-class blocks on
+    # purpose: as one `memory_guide` body it was MIXED (ontological + procedural
+    # + deontic) and the gate refused it, correctly — a regime varying one class
+    # could not move it without dragging the others along.
+    "msaspdma.system_guidance_header": BlockAnnotation(_C.PROCEDURAL, None),
+    "msaspdma.evaluation_steps": BlockAnnotation(_C.PROCEDURAL, None),
+    # What the graph IS: nodes hold facts, edges are relationships woven in
+    # DREAM, a memorize writes exactly one node. Description, not instruction.
+    "msaspdma.memory_model": BlockAnnotation(_C.ONTOLOGICAL, None),
+    # How to construct and choose an id, and how to name what you store.
+    "msaspdma.addressing_convention": BlockAnnotation(_C.PROCEDURAL, None),
+    "msaspdma.attribute_convention": BlockAnnotation(_C.PROCEDURAL, None),
+    "msaspdma.scope_convention": BlockAnnotation(_C.PROCEDURAL, None),
+    # The categoricals: never invent an id, never write a system-owned
+    # attribute, no identity/environment scope without WA, do not store what you
+    # were not asked to keep. It governs whether information can ever be
+    # recalled, so replacing it is safety-reviewable — deontic.
+    "msaspdma.memory_prohibitions": BlockAnnotation(_C.DEONTIC, None),
+    "msaspdma.closing_reminder": BlockAnnotation(_C.DEONTIC, None),
+    # Runtime values only — proposed node, candidate nodes, the rendered
+    # system-owned list. Guidance was moved out so this stays slots.
+    # The composed user message. Unlike DSASPDMA's — which embeds `taxonomy_text`
+    # verbatim and so splits on it — this one is `.format()`-ed before anything
+    # records it, so no recorded part matches inside and it arrives as one block.
+    # That is honest here: guidance was moved OUT to the system side, so what
+    # remains is purely runtime values (the proposed node, the candidate nodes,
+    # the rendered system-owned list). Contingent, single-class, and the whole
+    # reason the split was worth doing.
+    "msaspdma.user": BlockAnnotation(_C.CONTINGENT, None),
+    "msaspdma.context_integration": BlockAnnotation(_C.CONTINGENT, None),
+    # JSON contract — pragmatic, as with the other second passes.
+    "msaspdma.response_format": BlockAnnotation(_C.PRAGMATIC, None),
     # ---- action_selection_pdma ---------------------------------------------
     # The hand-composed ASPDMA system message. Assembled from Python literals
     # (DEFAULT_TEMPLATE + the conscience-retry block), so no render seam exists
@@ -911,6 +944,9 @@ class _RoutedRecorder:
         self._real_safe_format: Callable[..., str] = _safe_format
         self._real_aspdma_system: Callable[..., str] = ActionSelectionPDMAEvaluator._build_system_message
         self._real_dsaspdma_prompt: Callable[..., Optional[str]] = DSASPDMAEvaluator._get_prompt_value
+        from ciris_engine.logic.dma.msaspdma import MSASPDMAEvaluator
+
+        self._real_msaspdma_prompt: Callable[..., Optional[str]] = MSASPDMAEvaluator._get_prompt_value
         #: Parts recorded since the last ``take_parts()``. INSTANCE state, never
         #: a module global: one recorder is constructed per dump run
         #: (``compose_dump_rows``) and dies with it.
@@ -1043,6 +1079,29 @@ class _RoutedRecorder:
                 _RecordedPart(
                     key=f"dsaspdma.{key}",
                     label=f"dma_prompt:dsaspdma.{key}",
+                    text=value,
+                    frame=None,
+                    payload=None,
+                )
+            )
+        return value
+
+    def msaspdma_prompt_value(self, evaluator: object, key: str) -> Optional[str]:
+        """Recording pass-through around ``MSASPDMAEvaluator._get_prompt_value`` (#997).
+
+        MSASPDMA is the one DMA that reads its prompt fields directly and joins
+        them itself, so neither ``get_system_message`` nor ``safe_format`` ever
+        sees them — its 2,354 B system message and the 3,273 B rights/needs
+        deferral taxonomy inside its user message were one ``mixed`` block each.
+        This is the composer's own field funnel; recording it is the same trick
+        one level down.
+        """
+        value = self._real_msaspdma_prompt(evaluator, key)
+        if isinstance(value, str) and value:
+            self._parts.append(
+                _RecordedPart(
+                    key=f"msaspdma.{key}",
+                    label=f"dma_prompt:msaspdma.{key}",
                     text=value,
                     frame=None,
                     payload=None,
@@ -1379,6 +1438,10 @@ def compose_dump_rows(
         """Plain function, same descriptor-binding reason as above."""
         return recorder.dsaspdma_prompt_value(evaluator, key)
 
+    def _msaspdma_prompt_seam(evaluator: object, key: str) -> Optional[str]:
+        """Plain function, same descriptor-binding reason as above."""
+        return recorder.msaspdma_prompt_value(evaluator, key)
+
     for locale in locales:
         env = golden.prompt_content_environment(  # type: ignore[attr-defined]
             language=locale,
@@ -1392,6 +1455,7 @@ def compose_dump_rows(
             format_part=_format_part_seam,
             aspdma_system_message=_aspdma_system_seam,
             dsaspdma_prompt_value=_dsaspdma_prompt_seam,
+            msaspdma_prompt_value=_msaspdma_prompt_seam,
         )
         with env:
             for step in step_names:

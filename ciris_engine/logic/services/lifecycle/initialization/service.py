@@ -236,9 +236,35 @@ class InitializationService(BaseInfrastructureService, InitializationServiceProt
             phase_results=phase_results,
         )
 
-    def _is_initialized(self) -> bool:
-        """Check if initialization is complete (internal)."""
+    def is_initialized(self) -> bool:
+        """Whether initialization completed.
+
+        PUBLIC because callers outside this class ask. `_get_actions` has always
+        advertised "is_initialized" as one of this service's actions, but the
+        method was named `_is_initialized`, so the name was a promise the class
+        did not keep.
+
+        What that cost: the API health check probes
+        `hasattr(init_service, "is_initialized")` and falls back to reporting
+        "initializing" when it is absent (routes/system/helpers.py:119, a
+        deliberate fail-closed per #943). The attribute was never there, so the
+        fallback fired on EVERY poll and the agent reported `initializing`
+        forever — 269 seconds after logging "✓ CIRIS Agent Initialization
+        Complete (9.6s)", with cognitive_state=work and every service group
+        healthy.
+
+        Downstream, the mobile client sets `isConnected = status == "healthy"`
+        and gates the message composer on it, so the user could not type: the
+        text field, attach and send buttons were all disabled on a fully working
+        agent, with nothing on screen to explain why.
+
+        `_is_initialized` is kept as an alias so any internal caller and existing
+        tests keep working.
+        """
         return self._initialization_complete
+
+    # Backwards-compatible alias for the original private name.
+    _is_initialized = is_initialized
 
     async def get_initialization_status(self) -> InitializationStatus:
         """Get detailed initialization status."""

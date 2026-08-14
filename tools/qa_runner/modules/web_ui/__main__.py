@@ -256,30 +256,31 @@ class DesktopAppTestRunner:
         trace_opt_in: bool = True,
         age_band: str = "adult",
     ) -> bool:
-        """Drive the NODE-CLIENT first-run setup wizard via the test server.
+        """Drive the first-run setup wizard via the test server.
 
-        Node-client first-run order (SetupViewModel / SetupScreen, 2.9.x):
+        2.9.14 first-run order (SetupState.nextSetupStep):
 
-            WELCOME → ACCOUNT_AND_CONFIRMATION → FEDERATION_IDENTITY_SETUP
-            → [LLM_CONFIGURATION] → AGE_RANGE → COMPLETE
+            YOU → JOIN_FEDERATION → [AI] → COMPLETE
 
-        LLM_CONFIGURATION appears only on AGENT builds (CIRISBuild.HAS_AGENT):
-        it is probed for after the fed-ID step and handled when present —
-        prefer the CIRIS-hosted option if rendered (OAuth path), else the
-        keyless "local" (Ollama) provider (the desktop QA backend runs
-        --mock-llm, so the values only need to satisfy the wizard's gating).
-        Node-client builds skip straight to AGE_RANGE. This flow drives the
-        reframed federation-identity step whose announce decision is a
-        first-class `AnnounceDecisionCard`:
-          - `toggle_announce_ownership` — the pivotal announce switch
-          - `toggle_trace_opt_in` — trace opt-in, GATED: only present/enabled
-            once announce is ON (verified explicitly below)
-          - `input_fedid_label` — the required, non-generic fed-ID name
+        Three screens, one question each. The AI screen appears only on AGENT
+        builds (CIRISBuild.HAS_AGENT); the node client goes straight to COMPLETE
+        after the consent screen.
+
+        Screen 1 (YOU) carries what used to be four screens — the fed-ID name
+        (`input_fedid_label`), the local account (`input_username` /
+        `input_password` / `input_password_confirm`) and the age band
+        (`age_band_*`). Screen 2 (JOIN_FEDERATION) carries the consent toggles,
+        which are now REACHABLE on every path (through 2.9.13 the trace checkbox
+        lived on a step nothing routed to):
+          - `toggle_announce_ownership` — announce, ON by default
+          - `toggle_trace_opt_in`       — send traces (consent:replication:v1)
+          - `toggle_trace_analyze`      — be scored (CC#46 analyze)
+          - `toggle_share_location`     — rough location, OFF by default
 
         Requires the desktop app to be sitting on the Setup wizard (backend
         in first-run mode). Use `desktop-setup --launch` to bring that up.
         """
-        print("\n🧭 Testing Setup Wizard Flow (node-client first-run)")
+        print("\n🧭 Testing Setup Wizard Flow (first-run, 3 screens)")
 
         if not self.helper:
             raise RuntimeError("Test runner not started")
@@ -296,102 +297,63 @@ class DesktopAppTestRunner:
 
         await self.run_test("wait_for_setup_wizard", wait_for_setup)
 
-        # ── Step 1: WELCOME → Continue ────────────────────────────────
-        async def welcome_continue():
-            self._log("WELCOME → btn_next")
-            if not await self.helper.click("btn_next"):
-                raise RuntimeError("Failed to click btn_next on WELCOME")
-            await asyncio.sleep(0.4)
-
-        await self.run_test("welcome_continue", welcome_continue)
-
-        # ── Step 2: ACCOUNT_AND_CONFIRMATION ──────────────────────────
-        async def account_step():
-            self._log("ACCOUNT: waiting for input_username")
-            if not await self.helper.wait_for_element("input_username", timeout=8000):
-                raise RuntimeError("input_username not found on account step")
+        # ── Screen 1: YOU (fed-ID name + account + age band) ──────────
+        async def you_step():
+            self._log(f"YOU: fed-ID label={fed_label}, username={username}, band={age_band}")
+            if not await self.helper.wait_for_element("input_fedid_label", timeout=10000):
+                raise RuntimeError("input_fedid_label not found on screen 1")
+            await self.helper.input_text("input_fedid_label", fed_label)
             await self.helper.input_text("input_username", username)
             await self.helper.input_text("input_password", password)
             await self.helper.input_text("input_password_confirm", password)
-            await asyncio.sleep(0.2)
+            band_tag = f"age_band_{age_band}"
+            if await self.helper.is_element_visible(band_tag):
+                await self.helper.click(band_tag)
+            await asyncio.sleep(0.3)
             if not await self.helper.click("btn_next"):
-                raise RuntimeError("Failed to click btn_next on account step")
-            await asyncio.sleep(0.4)
-
-        await self.run_test("account_and_confirmation", account_step)
-
-        # ── Step 3: FEDERATION_IDENTITY_SETUP ─────────────────────────
-        async def fedid_label_step():
-            self._log(f"FED-ID: waiting for input_fedid_label, label={fed_label}")
-            if not await self.helper.wait_for_element("input_fedid_label", timeout=8000):
-                raise RuntimeError("input_fedid_label not found on fed-ID step")
-            await self.helper.input_text("input_fedid_label", fed_label)
-            await asyncio.sleep(0.2)
-
-        await self.run_test("fedid_enter_label", fedid_label_step)
-
-        # Gating assertion: trace opt-in must be ABSENT while announce is OFF.
-        async def trace_gated_off():
-            self._log("Asserting toggle_trace_opt_in is hidden while announce OFF")
-            if await self.helper.is_element_visible("toggle_trace_opt_in"):
-                raise RuntimeError(
-                    "toggle_trace_opt_in is visible before announce is ON "
-                    "(gating broken)"
-                )
-
-        await self.run_test("trace_opt_in_gated_off", trace_gated_off)
-
-        if announce:
-
-            async def announce_on():
-                self._log("Clicking toggle_announce_ownership → ON")
-                if not await self.helper.click("toggle_announce_ownership"):
-                    raise RuntimeError("Failed to click toggle_announce_ownership")
-                # Trace opt-in should now be revealed by the AnnounceDecisionCard.
-                if not await self.helper.wait_for_element("toggle_trace_opt_in", timeout=4000):
-                    raise RuntimeError(
-                        "toggle_trace_opt_in did not appear after announce ON "
-                        "(gating broken)"
-                    )
-
-            await self.run_test("announce_ownership_on", announce_on)
-
-            if trace_opt_in:
-
-                async def opt_in_traces():
-                    self._log("Clicking toggle_trace_opt_in → ON")
-                    if not await self.helper.click("toggle_trace_opt_in"):
-                        raise RuntimeError("Failed to click toggle_trace_opt_in")
-                    await asyncio.sleep(0.2)
-
-                await self.run_test("trace_opt_in_on", opt_in_traces)
-
-        async def fedid_continue():
-            self._log("FED-ID → btn_next")
-            if not await self.helper.click("btn_next"):
-                raise RuntimeError("Failed to click btn_next on fed-ID step")
+                raise RuntimeError("Failed to click btn_next on screen 1 (YOU)")
             await asyncio.sleep(0.5)
 
-        await self.run_test("fedid_continue", fedid_continue)
+        await self.run_test("you_step", you_step)
 
-        # ── Step 3.5: LLM_CONFIGURATION (agent build only) ────────────
-        async def llm_configuration_step():
-            self._log("Probing for LLM_CONFIGURATION (agent builds only)")
+        # ── Screen 2: JOIN_FEDERATION (consent) ───────────────────────
+        # The regression this guards: through 2.9.13 NO path reached a trace
+        # consent control, so no production node could ever ship a trace.
+        async def consent_step():
+            self._log("JOIN_FEDERATION: waiting for toggle_announce_ownership")
+            if not await self.helper.wait_for_element("toggle_announce_ownership", timeout=8000):
+                raise RuntimeError("toggle_announce_ownership not found on the consent screen")
+            if not await self.helper.is_element_visible("toggle_trace_opt_in"):
+                raise RuntimeError(
+                    "toggle_trace_opt_in is not reachable on the consent screen — "
+                    "this is the 2.9.13 sealed-consent regression"
+                )
+            if not announce:
+                await self.helper.click("toggle_announce_ownership")
+            if not trace_opt_in:
+                await self.helper.click("toggle_trace_opt_in")
+            await asyncio.sleep(0.3)
+            if not await self.helper.click("btn_next"):
+                raise RuntimeError("Failed to click btn_next on screen 2 (JOIN_FEDERATION)")
+            await asyncio.sleep(0.5)
+
+        await self.run_test("join_federation", consent_step)
+
+        # ── Screen 3: AI (agent build only; final step there) ─────────
+        async def ai_step():
+            self._log("Probing for the AI screen (agent builds only)")
             if not await self.helper.wait_for_element("input_llm_provider", timeout=6000):
-                # Node-client build: no LLM step on this path — AGE_RANGE next.
-                if await self.helper.is_element_visible(f"age_band_{age_band}"):
-                    self._log("No LLM step (node-client build) — continuing to AGE_RANGE")
-                    return
-                raise RuntimeError("Neither LLM step nor AGE_RANGE appeared after fed-ID step")
+                self._log("No AI screen (node-client build) — the wizard is finishing")
+                return
             if await self.helper.is_element_visible("btn_use_free_ai"):
                 # CIRIS-hosted proxy option (OAuth path) — no key entry needed.
-                self._log("LLM: choosing CIRIS-hosted option (btn_use_free_ai)")
+                self._log("AI: choosing CIRIS-hosted option (btn_use_free_ai)")
                 if not await self.helper.click("btn_use_free_ai"):
-                    raise RuntimeError("Failed to click btn_use_free_ai on LLM step")
+                    raise RuntimeError("Failed to click btn_use_free_ai on the AI screen")
             else:
                 # Keyless "local" (Ollama) provider — satisfies gating without a
                 # real key; the --mock-llm backend ignores the values anyway.
-                self._log("LLM: selecting keyless 'local' provider")
+                self._log("AI: selecting keyless 'local' provider")
                 if not await self.helper.click("input_llm_provider"):
                     raise RuntimeError("Failed to open LLM provider dropdown")
                 if not await self.helper.wait_for_element("menu_provider_local", timeout=4000):
@@ -399,27 +361,13 @@ class DesktopAppTestRunner:
                 if not await self.helper.click("menu_provider_local"):
                     raise RuntimeError("Failed to select menu_provider_local")
             await asyncio.sleep(0.3)
+            # On the agent build this is the FINAL step: btn_next self-claims and
+            # advances to COMPLETE.
             if not await self.helper.click("btn_next"):
-                raise RuntimeError("Failed to click btn_next on LLM step")
-            await asyncio.sleep(0.5)
-
-        await self.run_test("llm_configuration", llm_configuration_step)
-
-        # ── Step 4: AGE_RANGE (final → COMPLETE) ──────────────────────
-        async def age_range_step():
-            band_tag = f"age_band_{age_band}"
-            self._log(f"AGE_RANGE: waiting for {band_tag}")
-            if not await self.helper.wait_for_element(band_tag, timeout=8000):
-                raise RuntimeError(f"{band_tag} not found on age-range step")
-            if not await self.helper.click(band_tag):
-                raise RuntimeError(f"Failed to click {band_tag}")
-            await asyncio.sleep(0.2)
-            # AGE_RANGE is the final step: btn_next self-claims + advances to COMPLETE.
-            if not await self.helper.click("btn_next"):
-                raise RuntimeError("Failed to click btn_next (finish) on age-range step")
+                raise RuntimeError("Failed to click btn_next (finish) on the AI screen")
             await asyncio.sleep(1.0)
 
-        await self.run_test("age_range_finish", age_range_step)
+        await self.run_test("ai_configuration", ai_step)
 
         # ── Step 5: COMPLETE (best-effort — CompleteStep is in SetupScreen) ──
         async def wait_for_complete():
@@ -883,7 +831,7 @@ Examples:
 def _apply_platform_defaults(args: argparse.Namespace) -> None:
     """Fill in port defaults that depend on the target platform.
 
-    - desktop (default): test-server :8091, API :8080
+    - desktop (default): test-server :9091 (bound DIRECTLY), API :8080
     - --android:          test-server :8091 forwards to device :9091; API :8080→8080
     - --ios:              test-server :18091→9091; API :18080→8080 (iproxy convention)
 
@@ -897,6 +845,20 @@ def _apply_platform_defaults(args: argparse.Namespace) -> None:
             args.desktop_port = 18091
         if args.api_port is None:
             args.api_port = 18080
+    elif not getattr(args, "android", False):
+        # DESKTOP binds 9091 DIRECTLY — TestAutomationServer.kt:39
+        # (`private val port: Int = 9091`). Android and iOS reach it through a
+        # forward (adb 8091->9091, iproxy 18091->9091), which is why the shared
+        # 8091 default is correct for them; on desktop there is no forward to
+        # translate it, so 8091 hits nothing.
+        #
+        # The effect was that EVERY desktop test aborted with "CIRIS Desktop app
+        # is not running with test mode enabled" while the app was running and
+        # answering `{"status":"ok","testMode":true}` on 9091. The failure names
+        # the wrong cause — it reads as an app/config problem, so the operator
+        # goes and checks CIRIS_TEST_MODE instead of the port.
+        if args.desktop_port == 8091:
+            args.desktop_port = 9091
     if args.api_port is None:
         args.api_port = 8080
 
@@ -922,18 +884,13 @@ def list_tests() -> None:
     for name, desc in browser_info.items():
         print(f"    • {name:20s} - {desc}")
 
-    # Desktop test-server driven NODE-CLIENT wizard steps (new 2.9.x flow).
-    print("\n  Desktop node-client wizard steps (test server :8091):")
+    # Desktop test-server driven first-run wizard steps (2.9.14 three-screen flow).
+    print("\n  Desktop first-run wizard steps (test server :8091):")
     node_info = {
         "wait_for_setup_wizard": "Land on the Setup wizard (first-run)",
-        "welcome_continue": "WELCOME → btn_next",
-        "account_and_confirmation": "input_username/password/confirm → btn_next",
-        "fedid_enter_label": "FEDERATION_IDENTITY_SETUP → input_fedid_label",
-        "trace_opt_in_gated_off": "assert toggle_trace_opt_in hidden while announce OFF",
-        "announce_ownership_on": "toggle_announce_ownership → reveals toggle_trace_opt_in",
-        "trace_opt_in_on": "toggle_trace_opt_in → opt into reasoning traces",
-        "fedid_continue": "fed-ID step → btn_next",
-        "age_range_finish": "AGE_RANGE → age_band_* → btn_next (final)",
+        "you_step": "YOU → fed-ID label + username/password + age band → btn_next",
+        "join_federation": "JOIN_FEDERATION → announce/traces/analyze/location → btn_next",
+        "ai_configuration": "AI (agent builds) → provider → btn_next (final)",
         "setup_complete": "COMPLETE (self-claim + leave wizard)",
     }
     for name, desc in node_info.items():
@@ -1458,7 +1415,11 @@ async def run_desktop_up(args: argparse.Namespace) -> int:
     if not _complete_setup(server.base_url, args.mock_llm):
         server.stop()
         return 1
-    print(f"  ✅ admin created: {TEST_ADMIN_USERNAME} / {TEST_ADMIN_PASSWORD}")
+    # Username only. The password is a fixed constant in this file
+    # (TEST_ADMIN_PASSWORD) and anyone who needs it reads it there. Echoing it
+    # puts a working credential into CI logs, terminal scrollback, and every
+    # transcript of a QA session, for no information the reader lacks.
+    print(f"  ✅ admin created: {TEST_ADMIN_USERNAME} (password: see TEST_ADMIN_PASSWORD)")
 
     # Restart backend without CIRIS_FORCE_FIRST_RUN so /v1/setup/status
     # returns is_first_run=false and the desktop goes to the Login screen,
@@ -1540,7 +1501,8 @@ async def run_desktop_up(args: argparse.Namespace) -> int:
 
     print()
     print(f"✅ Ready. Backend: {server.base_url}  Desktop test server: http://localhost:{args.desktop_port}")
-    print(f"   Admin: {TEST_ADMIN_USERNAME} / {TEST_ADMIN_PASSWORD}")
+    # Username only — see the note at the admin-created line above.
+    print(f"   Admin: {TEST_ADMIN_USERNAME} (password: see TEST_ADMIN_PASSWORD)")
     print("   Processes left running — kill with: pkill -9 -f 'CIRIS-macos|main.py --adapter api'")
     return 0
 
@@ -2091,9 +2053,9 @@ async def run_desktop_tests(args: argparse.Namespace) -> int:
             return 0 if success else 1
 
         elif args.command == "desktop-setup":
-            # NODE-CLIENT first-run wizard:
-            #   WELCOME → ACCOUNT_AND_CONFIRMATION → FEDERATION_IDENTITY_SETUP
-            #   (announce decision + gated trace opt-in) → AGE_RANGE → COMPLETE
+            # First-run wizard (2.9.14, three screens):
+            #   YOU (fed-ID + account + age) → JOIN_FEDERATION (consent)
+            #   → [AI] → COMPLETE
             success = await runner.test_setup_wizard_flow(
                 username=args.username or TEST_ADMIN_USERNAME,
                 password=args.password or TEST_ADMIN_PASSWORD,

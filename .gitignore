@@ -222,3 +222,39 @@ local_fixtures/
 
 # Orphaned dev-only demo-capture tool (no .gitmodules URL) — not part of any build
 tools/SwiftCapture/
+
+# Node identity and key material — NEVER commit this.
+#
+# `identity/` holds this node's federation keys: sealed classical Ed25519 seed
+# blobs (`<alias>.ed25519.seed.blob`), their 32-byte master keys
+# (`<alias>.master.key`), the TPM seal, and the bare ML-DSA-65 PQC seed. Every
+# boot of a checkout mints another set, so the directory accumulates silently —
+# 124 of these files were tracked before this rule existed, and 122 reached
+# main.
+#
+# A committed private key is compromised the moment it is pushed, and it stays
+# in history after the file is deleted. The matching rule already exists in
+# .dockerignore for the same reason (key material must not ride inside an image
+# layer either); git needed its own.
+#
+# A node MINTS its identity — persist's create_identity_if_missing does it at
+# boot. There is no case where a checkout should carry one.
+identity/
+keys/
+
+# First-run node state produced by running a node from the checkout.
+ceg/
+claim_pin
+
+# iOS native substrate payload — FETCHED, not tracked.
+#
+# tools/update_substrate_libs.py downloads the ciris-server wheel and stages
+# `_native.abi3.so` here (75 MB) on the way to building Resources.zip. Its
+# siblings (aiohttp, cryptography, pydantic_core) are tracked for historical
+# reasons; this one is not, because a build artifact a script fetches on demand
+# does not belong in git — the same rule that keeps pre-built binaries out (see
+# tools/update_ciris_verify.py for the canonical fetch-on-install pattern).
+#
+# Run the updater to populate it:
+#   python -m tools.update_substrate_libs --platform ios --lib server <version>
+client/iosApp/app_packages_native/ciris_server/

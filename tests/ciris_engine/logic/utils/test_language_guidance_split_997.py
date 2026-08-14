@@ -157,7 +157,7 @@ COMPOSED_SHA256: Dict[str, Tuple[str, int]] = {
     "en": ("4d12ee281b483bc2a6f3715d3a20990322d3f6f324e9d57c4ed72c91f3882de7", 16307),  # separator restored before 7e/8
     "am": ("33fb7ed6229f16fc59036becc33915916ed15c44e4cd1ecb333644729b9f6641", 32861),  # #1010 §7e guard + §26 reconciled
     "ar": ("e582d038f4c9b434e028c3f4c7e23793008b9555a17f695037b58f267b78bd52", 22476),  # #1010 §7e guard + §26 reconciled
-    "de": ("69d48927767343e36f741b2b75fe2162e8dc30b65c8ff0450690ce368055ddcd", 20065),  # #1010 §7e guard + §26 reconciled
+    "de": ("f849c0f7e952ab0778c60feb68412a68ca8626dca3109540e2dd1b019ea2b1f7", 20243),  # U1 fix: dropped the quoted ❌ specimen (GUIDANCE_FIXES.md 2026-08-12)
     "es": ("5675bc31362f41f3ebcef15634d33c2434fbc03a89a663cddf3530d5e5e12ba2", 18629),  # separator restored before 8
     "fr": ("137575e2d45ae60306d34f8ed3a2b5c09a87efb8fc6f4bee7909dcc8da96cf4a", 24621),  # #1010 §7e gains the actionability boundary (q08 U2)
     "hi": ("e707c74e3875cf1f70ff304e94090af3676c72e36df267077f40daed049d2364", 34173),  # #1010 §7e guard + §26 reconciled
@@ -177,7 +177,7 @@ COMPOSED_SHA256: Dict[str, Tuple[str, int]] = {
     "pa": ("1e69e8a6f45870a492b599449eb5eff0df4e76110b018a798b1075d3632937a7", 33060),  # #1010 §7e guard
     "ta": ("8384d1c0c641f41b54641f5748718ce15b114d450faf1eafbbf00b8b2b5b5d98", 39702),  # #1010 §7e guard
     "te": ("ba8481877dd63333f6b833944728beab62ef8fe267468e05220423fc6c060766", 35331),  # #1010 §7e guard
-    "vi": ("817b484ce624aaa9d84a08a2174785277d8c9e34a07cc472d51151d38efbda0c", 21755),  # #1010 §7e guard + §26 reconciled
+    "vi": ("766eae14f4a0250055cd7032f638492881baeab4fcc3b6c0832628e267326eda", 21824),  # U1 fix: terminology table scoped to naming (GUIDANCE_FIXES.md 2026-08-12)
     "mr": ("94d6dbfe7eaae41bcc572e42ead6c850dd2ab45140ef7f4270c0a83f958414f5", 32637),  # #1010 §7e guard + §26 reconciled
     "my": ("c4bb255ce25a1964c176cc5b99d73b9f0af938e24e54c093325bebb8154cd4a7", 53450),  # #1010 §7e guard + §26 reconciled
     "th": ("59576919a66bfa56285388bdfde024c8253676647378b873cd68d6ae8e454728", 32725),  # #1010 §7e guard

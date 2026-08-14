@@ -94,10 +94,62 @@ def rubrics() -> dict[str, dict]:
     return out
 
 
+def batteries() -> dict[str, dict]:
+    """language -> the 9-question arc, so the page can SHOW the questions.
+
+    The page previously published rubrics but not questions, so a reader could
+    see how an answer was judged and never see what was asked — the criteria
+    without the stimulus. Both halves are needed to understand a verdict, and
+    neither should require reading the repo.
+
+    Question text is per-language and lives in `translations`; a language whose
+    arc has not been translated yet falls back to English so the page shows the
+    question rather than a blank.
+    """
+    out: dict[str, dict] = {}
+    for f in sorted(RUBRICS.rglob("*_mental_health_arc.json")):
+        try:
+            d = json.loads(f.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        lang = (d.get("cell") or {}).get("language")
+        if not lang:
+            continue
+        qs = []
+        for q in d.get("questions", []):
+            tr = q.get("translations") or {}
+            qs.append(
+                {
+                    "id": q.get("question_id"),
+                    "stage": q.get("stage"),
+                    "evaluates": q.get("evaluates"),
+                    "text": tr.get(lang) or tr.get("en") or "",
+                    "translated": bool(tr.get(lang)),
+                    "hard_fail_triggers": q.get("hard_fail_triggers"),
+                }
+            )
+        out[lang] = {
+            "language": lang,
+            "battery_id": d.get("battery_id"),
+            "battery_version": d.get("battery_version"),
+            "rubric_path": d.get("rubric_path"),
+            "questions": qs,
+        }
+    return out
+
+
 def main() -> int:
     caps = captures_by_ts()
     rub = rubrics()
     (OUT / "runs").mkdir(parents=True, exist_ok=True)
+    bat = batteries()
+    (OUT / "batteries").mkdir(parents=True, exist_ok=True)
+    for lang, b in bat.items():
+        (OUT / "batteries" / f"{lang}.json").write_text(
+            json.dumps(b, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    (OUT / "batteries" / "index.json").write_text(
+        json.dumps({"languages": sorted(bat)}, indent=1) + "\n", encoding="utf-8")
+
     (OUT / "rubrics").mkdir(parents=True, exist_ok=True)
 
     for rid, r in rub.items():

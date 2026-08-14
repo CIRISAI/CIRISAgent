@@ -41,6 +41,19 @@ logger = logging.getLogger(__name__)
 # Modern PEP 695 generic syntax (Python 3.12+)
 
 PASSIVE_CONTEXT_LIMIT = 20
+
+# Conversation-history window: asymmetric by design (RATCHET#20).
+#
+# A flat "last N messages" spends half the window on the agent's own output, so
+# the agent reads mostly itself — and what it reads is the text it is about to
+# continue. Keeping many turns of the OTHER party and only the last few of our
+# own gives the agent the conversation it is in, with just enough of its own
+# recent voice to stay coherent.
+HISTORY_USER_MESSAGE_LIMIT = 10  # non-agent messages retained
+HISTORY_AGENT_MESSAGE_LIMIT = 3  # most-recent agent messages retained
+# Scan window: wide enough that 10 non-agent messages are still reachable in a
+# channel where the agent has spoken repeatedly between user turns.
+HISTORY_FETCH_LIMIT = 40
 PRIORITY_CONTEXT_LIMIT = 30  # More context for high-priority messages
 
 
@@ -137,6 +150,7 @@ class BaseObserver(Generic[MessageT], ABC):
         self,
         on_observe: Callable[[JSONDict], Awaitable[None]],
         bus_manager: Optional[BusManager] = None,
+        bus_manager_provider: Optional[Callable[[], Optional[BusManager]]] = None,
         memory_service: Optional[Any] = None,
         agent_id: Optional[str] = None,
         filter_service: Optional[Any] = None,
@@ -154,7 +168,8 @@ class BaseObserver(Generic[MessageT], ABC):
         )
 
         self.on_observe = on_observe
-        self.bus_manager = bus_manager
+        self._bus_manager = bus_manager
+        self._bus_manager_provider = bus_manager_provider
         self.memory_service = memory_service
         self.agent_id = agent_id
         self.filter_service = filter_service
@@ -340,6 +355,40 @@ class BaseObserver(Generic[MessageT], ABC):
             "is_agent": is_agent_message,
         }
 
+    @property
+    def bus_manager(self) -> Optional[BusManager]:
+        """The bus manager, resolved LATE.
+
+        Adapters build their observer inside `start()` and used to pass
+        `bus_manager=getattr(self.runtime, "bus_manager", None)`. That reads a
+        live property — CIRISRuntime.bus_manager delegates to
+        `service_initializer.bus_manager` — but it reads it ONCE and stores the
+        result. At observer-construction time the ServiceInitializer has not
+        created the BusManager yet (service_initializer.py:750), so the observer
+        captured None and kept it for the life of the process, while the very
+        same property started returning a live BusManager moments later.
+
+        The visible effect: `_get_channel_history` returned [] on every call, so
+        every conversation was single-turn — the agent never saw what was said
+        before. It logged "No bus manager available for channel history" and
+        carried on, and nothing else failed, because SPEAK reaches the bus by a
+        different route. On one Android run the observer reported the bus absent
+        at 19:06:31 while the SPEAK handler sent through it at 19:06:51, in the
+        same process.
+
+        Resolving through the provider on each access removes the ordering
+        dependency entirely: whenever the bus exists, the observer sees it. The
+        result is cached once non-None, so the steady state is one attribute
+        read.
+        """
+        if self._bus_manager is None and self._bus_manager_provider is not None:
+            self._bus_manager = self._bus_manager_provider()
+        return self._bus_manager
+
+    @bus_manager.setter
+    def bus_manager(self, value: Optional[BusManager]) -> None:
+        self._bus_manager = value
+
     async def _fetch_messages_from_bus(self, channel_id: str, limit: int) -> List[Any]:
         """Fetch messages from communication bus."""
         if not self.bus_manager or not hasattr(self.bus_manager, "communication"):
@@ -348,6 +397,37 @@ class BaseObserver(Generic[MessageT], ABC):
 
         return await self.bus_manager.communication.fetch_messages(channel_id, limit, "DiscordAdapter")
 
+    @staticmethod
+    def _select_history_window(ordered: List[Any]) -> List[Any]:
+        """Keep the last N non-agent messages and the last M agent messages.
+
+        `ordered` is chronological (oldest first); the return preserves that
+        order, so the agent reads the conversation as it happened rather than as
+        two concatenated blocks.
+
+        The asymmetry is the point (RATCHET#20). A flat "last 20" is roughly half
+        the agent's own output, so most of what it reads before answering is text
+        it wrote itself — and self-conditioning on your own recent phrasing is how
+        a voice narrows over a long conversation. Ten turns of the other party
+        with three of our own keeps the counterpart's context while retaining just
+        enough of ours for continuity.
+        """
+        keep = set()
+        users = 0
+        agents = 0
+        # Walk backwards: "last N" of each kind, decided from the newest end.
+        for i in range(len(ordered) - 1, -1, -1):
+            if getattr(ordered[i], "is_bot", False):
+                if agents < HISTORY_AGENT_MESSAGE_LIMIT:
+                    keep.add(i)
+                    agents += 1
+            elif users < HISTORY_USER_MESSAGE_LIMIT:
+                keep.add(i)
+                users += 1
+            if users >= HISTORY_USER_MESSAGE_LIMIT and agents >= HISTORY_AGENT_MESSAGE_LIMIT:
+                break
+        return [m for i, m in enumerate(ordered) if i in keep]
+
     async def _get_channel_history(self, channel_id: str, limit: int = PASSIVE_CONTEXT_LIMIT) -> List[JSONDict]:
         """Get message history from channel using communication bus."""
         if not self.bus_manager:
@@ -355,27 +435,30 @@ class BaseObserver(Generic[MessageT], ABC):
             return []
 
         try:
-            # Fetch messages from the channel
-            messages = await self._fetch_messages_from_bus(channel_id, limit)
+            # Scan a wide window, then keep the asymmetric slice. The window has
+            # to exceed the slice: in a channel where the agent answers several
+            # times per user turn, the 10th-most-recent user message can sit well
+            # past the 13th message overall.
+            messages = await self._fetch_messages_from_bus(channel_id, max(limit, HISTORY_FETCH_LIMIT))
 
-            # Convert FetchedMessage objects to the expected history format
-            history = []
-            total_messages = len(messages)
+            # The bus returns newest-first; work chronologically from here on.
+            ordered = list(reversed(messages))
+            selected = self._select_history_window(ordered)
 
-            for index, msg in enumerate(messages):
+            # Number AFTER selecting. The MESSAGE_n_OF_total markers are
+            # anti-spoofing: numbering the scan window and then dropping messages
+            # would leave gaps and an inflated total, which is indistinguishable
+            # from content having been removed by an attacker.
+            history: List[JSONDict] = []
+            total_messages = len(selected)
+            for index, msg in enumerate(selected):
                 is_agent_message = getattr(msg, "is_bot", False)
                 raw_content = getattr(msg, "content", "") or ""
 
-                # Process content through helper methods
                 clean_content = self._process_message_content(raw_content)
-                message_number = total_messages - index  # Messages come in reverse chronological order
-                protected_content = self._create_protected_content(clean_content, message_number, total_messages)
-                history_entry = self._create_history_entry(msg, protected_content, is_agent_message)
+                protected_content = self._create_protected_content(clean_content, index + 1, total_messages)
+                history.append(self._create_history_entry(msg, protected_content, is_agent_message))
 
-                history.append(history_entry)
-
-            # Messages come in reverse chronological order, reverse to get chronological
-            history.reverse()
             return history
 
         except Exception as e:
@@ -756,7 +839,9 @@ class BaseObserver(Generic[MessageT], ABC):
             # Allow subclasses to add custom context sections before conversation history
             await self._add_custom_context_sections(task_lines, msg, history_context)
 
-            task_lines.append(f"\n=== CONVERSATION HISTORY (Last {PASSIVE_CONTEXT_LIMIT} messages) ===")
+            # Describe the window we actually built, not a fixed number: the
+            # slice is asymmetric and its size varies with what the channel holds.
+            task_lines.append(f"\n=== CONVERSATION HISTORY ({len(history_context)} messages) ===")
             observation_timestamp = (
                 self.time_service.now().isoformat() if self.time_service else datetime.now(timezone.utc).isoformat()
             )
@@ -780,8 +865,13 @@ class BaseObserver(Generic[MessageT], ABC):
 
             task_content = "\n".join(task_lines)
 
-            # Log context building details
-            history_line_count = len([line for line in task_lines for i in range(1, 11) if line.startswith(f"{i}. @")])
+            # Log context building details.
+            # Count what we actually put in, not lines numbered 1..10. The old
+            # expression scanned `range(1, 11)`, so it capped the reported figure at
+            # 10 and under-reports the current window (up to 13). A context-size log
+            # that saturates is worse than none — it reads as "history is fine"
+            # exactly when history grows past the cap.
+            history_line_count = len(history_context)
             logger.info(
                 f"[CONTEXT] Built thought context with {history_line_count} history messages, "
                 f"total thought size: {len(task_content)} chars"

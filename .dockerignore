@@ -29,6 +29,24 @@ MANIFEST
 *.log
 logs/
 
+# Node identity — NEVER build this into an image.
+#
+# `identity/` holds the node's federation key material: the sealed classical
+# blobs (`<alias>.ed25519.seed.blob` + `.master.key`) and the bare ML-DSA-65
+# PQC seed. Building from a working checkout was copying ALL of it in — on this
+# tree, 63 sealed blobs, 63 master keys and 2 PQC seeds, ~540 KB of accumulated
+# identities from every boot the checkout has ever had.
+#
+# Two consequences, and the second is the serious one:
+#   1. The research container inherits identities it must not have, and then
+#      fails in exactly the way the isolated harness exists to prevent.
+#   2. Private key material leaves the host inside an image layer, where it
+#      persists in the build cache and in anything the image is pushed to.
+#
+# A container must mint its own identity. There is no case where copying in a
+# host's is correct, so this is an unconditional exclusion, not a convenience.
+identity/
+
 # Data files
 data/
 data_old/

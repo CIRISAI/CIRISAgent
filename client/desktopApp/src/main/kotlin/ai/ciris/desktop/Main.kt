@@ -172,7 +172,14 @@ fun main() {
             ) {
                 CIRISApp(
                     accessToken = accessToken,
-                    baseUrl = System.getenv("CIRIS_API_URL") ?: "http://localhost:8080",
+                    // TWO services, two URLs — they are not interchangeable.
+                    // CIRIS_API_URL is the Python brain; CIRIS_NODE_URL is the
+                    // ciris-server node read API (node base :4242 → HTTP :4243).
+                    // Passing 8080 for the node is what looped first-run in
+                    // 2.9.13: every node call 404'd, the node read as unowned,
+                    // and the wizard restarted forever.
+                    apiBaseUrl = System.getenv("CIRIS_API_URL") ?: "http://localhost:8080",
+                    nodeBaseUrl = System.getenv("CIRIS_NODE_URL") ?: "http://127.0.0.1:4243",
                     pythonRuntime = pythonRuntime,
                     secureStorage = createSecureStorage(),
                     envFileUpdater = createEnvFileUpdater(),

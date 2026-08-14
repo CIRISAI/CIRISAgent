@@ -184,7 +184,10 @@ class MainActivity : ComponentActivity() {
                 // Show the full KMP app with native StartupScreen (22 lights)
                 CIRISApp(
                     accessToken = "pending", // Will be set after auth
-                    baseUrl = "http://localhost:8080",
+                    // The Python brain. The ciris-server node read API is
+                    // separate (:4243) and takes the CIRISApp default —
+                    // 8080 never fronts 4243 (FSD FIRST_RUN_WIZARD_2.9.14 §2).
+                    apiBaseUrl = "http://localhost:8080",
                     googleSignInCallback = googleSignInCallback,
                     purchaseLauncher = purchaseLauncher,
                     deviceAttestationCallback = deviceAttestationCallback,

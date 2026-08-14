@@ -38,6 +38,7 @@ PROVIDER_BASE_URLS: Dict[str, str] = {
     "deepseek": "https://api.deepseek.com/v1",
     "together": "https://api.together.xyz/v1",
     "groq": "https://api.groq.com/openai/v1",
+    "deepinfra": "https://api.deepinfra.com/v1/openai",
 }
 
 _TIMEOUT = 30

@@ -52,8 +52,16 @@ fun clientModeFrom(cognitiveState: String?, serviceCount: Int): ClientMode =
  * time: it is a `const val` in the foundational commonMain module, so mutating
  * it recompiled the whole Compose client and defeated the desktop-JAR gradle
  * cache every leg (CIRISServer#272). Do not hand-edit — run the script.
+ *
+ * IN THIS REPO there is no Cargo.toml and no sync script: CIRISAgent consumes
+ * the substrate as a pinned wheel, so the value this must equal is the
+ * `ciris-server==` pin in requirements.txt (and the matching Android gradle
+ * pin). Nothing enforced that, and it drifted to 0.5.159 while the bundled node
+ * moved to 0.5.163 — so the app showed every user a VERSION-MISMATCH banner
+ * against the node it ships with. `tools/dev/check_version_alignment.py` now
+ * asserts this equality, which is the enforcement the upstream comment assumes.
  */
-const val CLIENT_VERSION = "0.5.159"
+const val CLIENT_VERSION = "0.5.171"
 
 /**
  * Whether [nodeVersion] differs materially from [CLIENT_VERSION] — i.e. a

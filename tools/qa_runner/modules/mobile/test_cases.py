@@ -387,6 +387,41 @@ def _click_or_tap(client: TestServerClient, adb: ADBHelper, test_tag: str) -> bo
     return False
 
 
+def _wizard_entered(adb: ADBHelper, config: dict, ui: UIAutomator, timeout: float = 15.0) -> bool:
+    """Did sign-in land us on the first-run wizard?
+
+    Asserted on the wizard's own testTags, not on prose. The previous check
+    looked for the literal words "Setup" / "LLM" / "Provider", which was true of
+    the pre-2.9.14 wizard whose first screen was the LLM step. The redesign
+    opens on YOU ("Create your federation ID") and moves LLM to screen 3, so
+    that check failed against a wizard that was rendering perfectly — it
+    reported "Setup screen not found" while dumping the new screen's full text.
+
+    Prose was the wrong anchor for a second reason: the screen is localized into
+    29 languages, and an emulator whose locale is not English fails a
+    English-substring match no matter which wizard is on screen. testTags are
+    stable across both redesigns and locales.
+    """
+    deadline = time.time() + timeout
+    client = connect_test_server(adb, config, launch_if_needed=False, clear_data=False)
+    if client is not None:
+        # Screen 1 of the wizard, by tag. `input_fedid_label` is the required
+        # fed-ID name field; `step_indicator` is the 1-2-3 chrome.
+        while time.time() < deadline:
+            tags = client.tags()
+            if any(t in tags for t in ("input_fedid_label", "step_indicator", "btn_next")):
+                return True
+            time.sleep(0.5)
+        return False
+
+    # No test server (non-test build): fall back to text, but to text the CURRENT
+    # wizard actually renders. English-only by nature — see the docstring.
+    return bool(
+        ui.wait_for_text("federation ID", timeout=timeout)
+        or ui.wait_for_text("Welcome to CIRIS", timeout=3)
+    )
+
+
 def connect_test_server(
     adb: ADBHelper,
     config: dict,
@@ -739,9 +774,7 @@ def test_google_signin(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRep
         # After Google sign-in, app should navigate to Setup wizard
         # Look for setup-related UI elements
         setup_visible = (
-            ui.wait_for_text("Setup", timeout=10)  # Generic setup text
-            or ui.wait_for_text("LLM", timeout=5)  # LLM provider selection in setup
-            or ui.wait_for_text("Provider", timeout=5)
+            _wizard_entered(adb, config, ui)
         )
 
         if setup_visible:
@@ -817,7 +850,7 @@ def test_local_login(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRepor
         print(f"  [2/2] Verifying navigation to Setup screen...")
 
         # Should navigate directly to Setup
-        setup_visible = ui.wait_for_text("Setup", timeout=10) or ui.wait_for_text("LLM", timeout=5)
+        setup_visible = _wizard_entered(adb, config, ui)
 
         if setup_visible:
             return TestReport(
@@ -849,34 +882,41 @@ def test_setup_wizard(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRepo
     Test: Complete the NODE-CLIENT first-run setup wizard.
 
     Drives the app through the in-app test-automation HTTP server (Compose
-    testTags — UIAutomator does not reliably see them). Node-client first-run
-    order (SetupViewModel / SetupScreen, matches the desktop QA runner's
+    testTags — UIAutomator does not reliably see them). First-run order
+    (SetupState.nextSetupStep, matches the desktop QA runner's
     test_setup_wizard_flow):
 
-        WELCOME → ACCOUNT_AND_CONFIRMATION (username/password/confirm)
-        → FEDERATION_IDENTITY_SETUP → [LLM_CONFIGURATION] → AGE_RANGE → COMPLETE
+        YOU (fed-ID label + username/password/confirm + age band)
+        → JOIN_FEDERATION (consent) → [AI] → COMPLETE
 
-    LLM_CONFIGURATION appears only on AGENT builds (CIRISBuild.HAS_AGENT):
-    the step is probed for after the fed-ID step and handled when present —
-    prefer the CIRIS-hosted option if rendered (OAuth path), else BYOK with
-    the configured provider+key (llm_provider/llm_api_key), else the keyless
-    "local" (Ollama) provider so the wizard can proceed without a real key.
-    Node-client builds skip straight to AGE_RANGE. The federation-identity
-    step hosts the AnnounceDecisionCard:
-      - input_fedid_label          — REQUIRED, non-generic fed-ID name
-      - toggle_announce_ownership  — the pivotal announce switch
-      - toggle_trace_opt_in        — trace opt-in, GATED: composed ONLY while
-                                     announce is ON (asserted both ways below)
+    The AI screen appears only on AGENT builds (CIRISBuild.HAS_AGENT) and is
+    the final step there — prefer the CIRIS-hosted option if rendered (OAuth
+    path), else BYOK with the configured provider+key (llm_provider/
+    llm_api_key), else the keyless "local" (Ollama) provider so the wizard can
+    proceed without a real key. Node-client builds finish at JOIN_FEDERATION.
+
+    Screen 1 (YOU) carries what used to be four screens:
+      - input_fedid_label   — REQUIRED, non-generic fed-ID name
+      - input_username / input_password / input_password_confirm
+      - age_band_*          — optional; declining sets the protective default
+    Screen 2 (JOIN_FEDERATION) carries the consent toggles, REACHABLE on every
+    path (through 2.9.13 the trace checkbox lived on a step nothing routed to,
+    so no production node could express trace consent at all):
+      - toggle_announce_ownership  — announce, ON by default (floor for service)
+      - toggle_trace_opt_in        — send traces (consent:replication:v1)
+      - toggle_trace_analyze       — be scored (CC#46 analyze)
+      - toggle_share_location      — rough location, OFF by default
 
     Config options:
     - setup_username / setup_password: local account (default admin/qa_test_password_12345)
     - fed_label: federation-ID label (default: generated unique qa-node-<ts>)
-    - announce: flip the announce switch ON (default True)
-    - trace_opt_in: tick the trace checkbox after announcing (default True)
+    - announce: leave the announce switch ON (default True; both this and
+      trace_opt_in default ON in the wizard, so False means "click it off")
+    - trace_opt_in: leave the trace toggle ON (default True)
     - age_band: "adult" | "minor" (default "adult")
-    - llm_provider / llm_api_key: BYOK provider+key for the agent build's
-      LLM_CONFIGURATION step (default groq / key from ~/.groq_key when the
-      runner found one; keyless "local" fallback when no key)
+    - llm_provider / llm_api_key: BYOK provider+key for the agent build's AI
+      screen (default groq / key from ~/.groq_key when the runner found one;
+      keyless "local" fallback when no key)
     - clear_data: clear app data if the app must be (re)launched (default True)
 
     Standalone-safe: if the app/test server isn't up it launches the app
@@ -939,91 +979,128 @@ def test_setup_wizard(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRepo
                     )
                 return fail("login", f"did not reach Setup wizard (screen={client.screen()!r})")
 
-        # ── Step 1: WELCOME → Continue ────────────────────────────────────
-        print("  [3/7] WELCOME → btn_next")
-        if not client.wait_for_element("btn_next", timeout=15):
-            return fail("welcome", "btn_next not found on WELCOME step")
-        if not _click_or_tap(client, adb, "btn_next"):
-            return fail("welcome", "failed to click btn_next on WELCOME")
+        # ── Screen 1: YOU — fed-ID name + local account + age band ────────
+        print(f"  [3/6] YOU: fed-ID={fed_label!r}, user={username}, band={age_band}")
+        if not client.wait_for_element("input_fedid_label", timeout=15):
+            return fail("you", "input_fedid_label not found on screen 1 (YOU)")
+        if not client.input("input_fedid_label", fed_label):
+            return fail("you", "failed to input federation-ID label")
         time.sleep(0.5)
 
-        # ── Step 2: ACCOUNT_AND_CONFIRMATION ──────────────────────────────
-        # Two shapes of this step, gated on SetupScreen's `!state.isGoogleAuth`:
+        # Two shapes of the account section, gated on `showLocalUserFields()`:
         #  - LOCAL login → username/password/confirm inputs (input_username).
         #  - GOOGLE sign-in (full_flow's google_signin ran first) → the account
-        #    is the Google identity; the step is a CONFIRMATION SUMMARY with NO
-        #    local-account inputs, so just confirm. Probe for input_username to
-        #    tell them apart instead of assuming the local path.
+        #    IS the Google identity and there are no local inputs.
+        # Small settles between inputs: the Kotlin side consumes ONE pending
+        # TextInputRequest via a StateFlow slot — back-to-back requests can
+        # overwrite each other before recomposition applies them.
         if client.wait_for_element("input_username", timeout=10):
-            print(f"  [4/7] ACCOUNT (local): {username} / ******** (+ confirm)")
-            # Small settles between inputs: the Kotlin side consumes ONE pending
-            # TextInputRequest via a StateFlow slot — back-to-back requests can
-            # overwrite each other before recomposition applies them.
+            print(f"  [4/6] ACCOUNT (local): {username} / ******** (+ confirm)")
             if not client.input("input_username", username):
-                return fail("account", "failed to input username")
+                return fail("you", "failed to input username")
             time.sleep(0.5)
             if not client.input("input_password", password):
-                return fail("account", "failed to input password")
+                return fail("you", "failed to input password")
             time.sleep(0.5)
             if not client.input("input_password_confirm", password):
-                return fail("account", "failed to input password confirmation")
+                return fail("you", "failed to input password confirmation")
             time.sleep(0.5)
         else:
-            # Google-auth path: no local inputs — the step is the confirmation
-            # summary. btn_next confirms the Google-provisioned account.
-            print("  [4/7] ACCOUNT (google): confirmation summary — no local inputs, confirming")
-        if not _click_or_tap(client, adb, "btn_next"):
-            return fail("account", "failed to click btn_next on account step")
-        time.sleep(0.5)
+            print("  [4/6] ACCOUNT (google): no local inputs on this path")
 
-        # ── Step 3: FEDERATION_IDENTITY_SETUP + announce-gate assertions ──
-        print(f"  [5/7] FED-ID: label={fed_label!r}, announce={announce}, trace={trace_opt_in}")
-        if not client.wait_for_element("input_fedid_label", timeout=10):
-            return fail("fedid", "input_fedid_label not found on federation-identity step")
+        band_tag = f"age_band_{age_band}"
+        if client.is_visible(band_tag):
+            if not _click_or_tap(client, adb, band_tag):
+                return fail("you", f"failed to click {band_tag}")
+            time.sleep(0.3)
 
-        # GATING (OFF): trace opt-in must NOT be composed while announce is OFF.
-        if client.is_visible("toggle_trace_opt_in"):
-            return fail("fedid_gate_off", "toggle_trace_opt_in visible BEFORE announce is ON (gating broken)")
-        print("      gate check OK: toggle_trace_opt_in absent while announce OFF")
-
-        if not client.input("input_fedid_label", fed_label):
-            return fail("fedid", "failed to input federation-ID label")
-        time.sleep(0.3)
-
-        if announce:
-            if not _click_or_tap(client, adb, "toggle_announce_ownership"):
-                return fail("fedid", "failed to click toggle_announce_ownership")
-            # GATING (ON): trace opt-in must appear once announce is ON.
-            if not client.wait_for_element("toggle_trace_opt_in", timeout=5):
-                return fail("fedid_gate_on", "toggle_trace_opt_in did NOT appear after announce ON (gating broken)")
-            print("      gate check OK: toggle_trace_opt_in appeared after announce ON")
-
-            if trace_opt_in:
-                if not _click_or_tap(client, adb, "toggle_trace_opt_in"):
-                    return fail("fedid", "failed to click toggle_trace_opt_in")
-                time.sleep(0.3)
-
-        screenshot_path = f"/tmp/ciris_setup_fedid_{int(time.time())}.png"
+        screenshot_path = f"/tmp/ciris_setup_you_{int(time.time())}.png"
         adb.screenshot(screenshot_path)
         screenshots.append(screenshot_path)
 
         if not _click_or_tap(client, adb, "btn_next"):
-            return fail("fedid", "failed to click btn_next on federation-identity step")
+            return fail("you", "failed to click btn_next on screen 1 (YOU)")
         time.sleep(0.5)
 
-        # ── Step 3.5: LLM_CONFIGURATION (agent build only) ─────────────────
-        # Agent builds (CIRISBuild.HAS_AGENT) insert the LLM step after the
-        # fed-ID; node-client builds go straight to AGE_RANGE. Probe for the
-        # provider dropdown and handle the step only when it composed.
-        if client.wait_for_element("input_llm_provider", timeout=6):
-            print(f"  [6/7] LLM_CONFIGURATION: provider={llm_provider!r}, key={'set' if llm_api_key else 'none'}")
+        # ── Screen 2: JOIN_FEDERATION — the consent decision ──────────────
+        # The regression this guards: through 2.9.13 NO path reached a trace
+        # consent control, so `grant_trace_sharing` never fired from the wizard
+        # and no production node could ever ship a trace.
+        print(f"  [5/6] JOIN_FEDERATION: announce={announce}, traces={trace_opt_in}")
+        if not client.wait_for_element("toggle_announce_ownership", timeout=15):
+            return fail("consent", "toggle_announce_ownership not found on the consent screen")
+        if not client.is_visible("toggle_trace_opt_in"):
+            return fail(
+                "consent_reachable",
+                "toggle_trace_opt_in is NOT reachable on the consent screen — this is "
+                "the 2.9.13 sealed-consent regression (no node could ship a trace)",
+            )
+        print("      reachability OK: trace consent is on the path")
+
+        # Both default ON; click only to turn a choice OFF.
+        if not announce:
+            if not _click_or_tap(client, adb, "toggle_announce_ownership"):
+                return fail("consent", "failed to click toggle_announce_ownership")
+            time.sleep(0.3)
+        if not trace_opt_in:
+            if not _click_or_tap(client, adb, "toggle_trace_opt_in"):
+                return fail("consent", "failed to click toggle_trace_opt_in")
+            time.sleep(0.3)
+
+        screenshot_path = f"/tmp/ciris_setup_consent_{int(time.time())}.png"
+        adb.screenshot(screenshot_path)
+        screenshots.append(screenshot_path)
+
+        if not _click_or_tap(client, adb, "btn_next"):
+            return fail("consent", "failed to click btn_next on screen 2 (JOIN_FEDERATION)")
+        time.sleep(0.5)
+
+        # ── Screen 3: AI (agent build only; the FINAL step there) ─────────
+        #
+        # Detect the SCREEN, not one widget on it. This used to be gated on
+        # `input_llm_provider`, which exists only on the BYOK variant. On the
+        # Google/OAuth path the screen instead reads "Free AI Access Ready" and
+        # composes `toggle_run_without_ai` + `btn_switch_to_byok` — no provider
+        # field — so the whole block was skipped INCLUDING its `btn_next` click,
+        # and the run sat on a fully-ready "Finish Setup" button until the
+        # downstream wait timed out. The AI step is not optional on an agent
+        # build; only its CONTENTS vary:
+        #
+        #   free-AI ready (OAuth)  — nothing to enter, just finish
+        #   btn_use_free_ai        — offered as a choice, take it
+        #   BYOK                   — provider + key + model
+        #   node-client build      — no AI screen at all
+        on_ai_screen = client.wait_for_element("input_llm_provider", timeout=6) or client.is_visible(
+            "toggle_run_without_ai"
+        )
+        # Read once, up here: the Step-6 device-config verification below uses
+        # llm_model too, and binding it only inside the BYOK branch made it
+        # unbound on every path that does not enter that branch.
+        llm_model = config.get("llm_model") or ""
+        # Whether this run actually TYPED a provider/key/model into the wizard.
+        # The Step-6 device-config assertion below is only meaningful if it did:
+        # on the OAuth path the wizard provisions CIRIS-hosted AI and there are
+        # no fields, so --llm-provider/--llm-model describe a BYOK run that never
+        # happened. Asserting them there fails a correct device for having the
+        # right answer (llm01.ciris-services-1.ai) instead of the requested one.
+        byok_applied = False
+        if on_ai_screen:
+            has_byok_fields = client.is_visible("input_llm_provider")
+            print(f"  [6/6] AI: provider={llm_provider!r}, key={'set' if llm_api_key else 'none'}")
             if client.is_visible("btn_use_free_ai"):
                 # CIRIS-hosted proxy option (OAuth path) — no key entry needed.
                 if not _click_or_tap(client, adb, "btn_use_free_ai"):
-                    return fail("llm", "failed to click btn_use_free_ai on LLM step")
+                    return fail("llm", "failed to click btn_use_free_ai on the AI screen")
                 time.sleep(0.3)
+            elif not has_byok_fields:
+                # OAuth path with free access already provisioned: the screen is
+                # informational and Finish Setup is enabled on arrival. Entering
+                # LLM details here is not just unnecessary, it is impossible —
+                # there are no fields.
+                print("      free AI access already provisioned (OAuth) — nothing to enter")
             elif llm_api_key:
                 # BYOK: pick the configured provider from the dropdown, then key.
+                byok_applied = True
                 if not _click_or_tap(client, adb, "input_llm_provider"):
                     return fail("llm", "failed to open LLM provider dropdown")
                 menu_tag = f"menu_provider_{llm_provider}"
@@ -1041,7 +1118,6 @@ def test_setup_wizard(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRepo
                 # else a plain text field (input_llm_model_text) before/without
                 # validation. Set it via whichever composed; tolerate absence
                 # only when no model was requested (provider default).
-                llm_model = config.get("llm_model") or ""
                 if llm_model:
                     sanitized = llm_model.replace("/", "_").replace(":", "_")
                     menu_model_tag = f"menu_model_{sanitized}"
@@ -1069,21 +1145,24 @@ def test_setup_wizard(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRepo
                     return fail("llm", "failed to click menu_provider_local")
                 time.sleep(0.5)
             if not _click_or_tap(client, adb, "btn_next"):
-                return fail("llm", "failed to click btn_next on LLM step")
+                return fail("llm", "failed to click btn_next (finish) on the AI screen")
             time.sleep(0.5)
         else:
-            print("  [6/7] LLM_CONFIGURATION not present (node-client build) — continuing")
+            print("  [6/6] AI screen not present (node-client build) — finishing")
 
-        # ── Step 4: AGE_RANGE (final step → COMPLETE) ─────────────────────
-        band_tag = f"age_band_{age_band}"
-        print(f"  [7/7] AGE_RANGE: {band_tag} → finish")
-        if not client.wait_for_element(band_tag, timeout=10):
-            return fail("age_range", f"{band_tag} not found on age-range step")
-        if not _click_or_tap(client, adb, band_tag):
-            return fail("age_range", f"failed to click {band_tag}")
-        time.sleep(0.3)
-        if not _click_or_tap(client, adb, "btn_next"):
-            return fail("age_range", "failed to click btn_next (finish) on age-range step")
+        # The AI screen is the last one on an agent build, so leaving it is the
+        # observable proof the click landed. Staying put is the symptom this
+        # whole branch exists to prevent, and it is worth naming precisely
+        # rather than letting the generic COMPLETE wait report it as a timeout.
+        if on_ai_screen and client.is_visible("toggle_run_without_ai"):
+            time.sleep(2.0)
+            if client.is_visible("toggle_run_without_ai"):
+                return fail(
+                    "llm",
+                    "still on the AI screen after clicking Finish Setup — the wizard "
+                    "did not advance (check whether Finish is disabled by an "
+                    "incomplete field this run did not fill)",
+                )
 
         # ── Step 5: COMPLETE — leave the wizard or reach the terminal step ─
         # 150s: setup-complete now wires the persist engine (keyring genesis:
@@ -1118,7 +1197,13 @@ def test_setup_wizard(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRepo
         # nothing checked. The preflight validated a provider the agent never used.
         #
         # So: read the persisted .env back and refuse to continue on a mismatch.
-        if llm_api_key and llm_model:
+        #
+        # Gated on byok_applied, not just on the flags being present: on the OAuth
+        # path the wizard provisions CIRIS-hosted AI and offers no fields, so the
+        # flags describe a BYOK run that never happened and the device is
+        # CORRECTLY on llm01.ciris-services-1.ai. Asserting there failed a
+        # correct device and blamed uncleared app data for it.
+        if byok_applied and llm_api_key and llm_model:
             expected_base = PROVIDER_BASE_URLS.get(llm_provider.lower(), "")
             env = adb.shell(f"run-as {CIRISAppConfig.PACKAGE} cat files/ciris/.env") or ""
             got_base = _env_value(env, "OPENAI_API_BASE")
@@ -1137,15 +1222,15 @@ def test_setup_wizard(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRepo
                     f"device model mismatch: asked {llm_model!r}, device has {got_model!r}. "
                     f"The chat step would exercise a model this run never validated.",
                 )
-            print(f"  [7/7] verified device LLM config: {got_base} / {got_model}")
+            print(f"  [6/6] verified device LLM config: {got_base} / {got_model}")
 
         return TestReport(
             name="test_setup_wizard",
             result=TestResult.PASSED,
             duration=time.time() - start_time,
             message=(
-                "First-run wizard completed (WELCOME → ACCOUNT → FED-ID → [LLM] → AGE_RANGE); "
-                f"announce-gate verified both ways; {completed_via}"
+                "First-run wizard completed (YOU → JOIN_FEDERATION → [AI]); "
+                f"trace consent reachable on the path; {completed_via}"
             ),
             screenshots=screenshots,
         )
@@ -1332,6 +1417,79 @@ def test_catchup_add_fedid(adb: ADBHelper, ui: UIAutomator, config: dict) -> Tes
         )
 
 
+def _google_relogin_if_needed(adb: ADBHelper, ui: UIAutomator, config: dict) -> tuple:
+    """The OAuth twin of _local_login_if_needed.
+
+    Setup-complete restarts the runtime and invalidates the setup token on BOTH
+    login paths — the wizard's last act is always a bounce to Login. Only the
+    local path had a re-login, so an OAuth run finished the wizard correctly and
+    then sat on Login until the Interact wait timed out, reporting "never
+    reached Interact" as though the agent had failed to start.
+
+    There is no password to type: the account is already on the device, so this
+    is btn_google_signin followed by one tap on the account row in Google's
+    native chooser. Verified by hand against ciristest1@gmail.com — the app
+    reached Interact ~5s after the tap.
+
+    Returns (ok, detail).
+    """
+    account = config.get("google_account", "")
+
+    client = None
+    for _ in range(15):
+        client = connect_test_server(adb, config, launch_if_needed=False, clear_data=False)
+        if client is not None:
+            break
+        time.sleep(2)
+    if client is None:
+        return False, "test server unreachable for Google re-login (app not running?)"
+
+    # Wait for the app to SETTLE before deciding whether a re-login is needed.
+    # Checking once, immediately, saw "Setup" — the reconfigure hold is still up
+    # for several seconds after completeSetup returns — and concluded no
+    # re-login was needed. The bounce to Login then happened anyway and the run
+    # sat there until the Interact wait timed out.
+    settle = time.time() + 180
+    screen = client.screen()
+    while time.time() < settle and screen in ("Setup", None, "", "Startup"):
+        time.sleep(2)
+        screen = client.screen()
+
+    if screen != "Login":
+        return True, f"no re-login needed (settled on screen={screen!r})"
+
+    if not _click_or_tap(client, adb, "btn_google_signin"):
+        return False, "failed to click btn_google_signin on the post-setup Login screen"
+
+    # Google's chooser is a native overlay — outside Compose, so testTags cannot
+    # reach it and this is the one step that must go through UI Automator text.
+    deadline = time.time() + 60
+    tapped = False
+    while time.time() < deadline:
+        texts = ui.dump_screen_info().get("texts", [])
+        candidates = [t for t in texts if "@" in t and "." in t]
+        if account and account in texts:
+            tapped = ui.click_by_text(account)
+        elif candidates:
+            tapped = ui.click_by_text(candidates[0])
+            account = candidates[0]
+        if tapped:
+            break
+        time.sleep(2)
+
+    if not tapped:
+        return False, "Google account chooser never offered an account row to tap"
+
+    deadline = time.time() + 90
+    while time.time() < deadline:
+        screen = client.screen()
+        if screen and screen != "Login":
+            return True, f"signed back in as {account or 'the device account'} → {screen}"
+        time.sleep(2)
+
+    return False, f"still on Login 90s after choosing {account or 'the device account'}"
+
+
 def _local_login_if_needed(adb: ADBHelper, config: dict) -> tuple:
     """After the wizard, setup-complete restarts the runtime and invalidates the
     setup-time token — BY DESIGN. On local login the user must sign back in with
@@ -1494,7 +1652,26 @@ def _capture_speak_evidence(adb: ADBHelper, package: str = "ai.ciris.mobile.debu
             ev["llm_called"] = True
             keep.append(ln)
         # LLM failure signatures.
-        if any(k in ln for k in ("model_not_available", "401 ", "403 ", "404 ", "429 ", "invalid_request", "RateLimit", "APIError")):
+        #
+        # HTTP codes are matched with a lookbehind/lookahead that refuses digits
+        # and dots on either side, and only on non-INFO lines. Both guards are
+        # load-bearing, and this exact line is why:
+        #
+        #   2026-08-09 20:18:10.429 - …llm_service - INFO - [LLM_REQUEST]
+        #                          ^^^ the millisecond field
+        #
+        # The old check was `"429 " in ln`, so a TIMESTAMP ending in .429 read as
+        # an HTTP 429 rate-limit. That failed a run in which the agent called the
+        # LLM, produced a SPEAK, and sealed two traces — the harness reported "LLM
+        # call failed" about a conversation that completed. An instrument that
+        # reports failure for work that WAS performed is as damaging as one that
+        # reports success for work that was not; it sends you debugging a healthy
+        # system, and here it very nearly got a correct history fix reverted.
+        if _re.search(r"(?<![\d.])(401|403|404|429)(?![\d.])", ln) and "INFO" not in ln:
+            if "llm" in low or "openai" in low or "openrouter" in low or "completion" in low:
+                ev["llm_error"] = ln.strip()[:300]
+                keep.append(ln)
+        elif any(k in ln for k in ("model_not_available", "invalid_request", "RateLimit", "APIError")):
             if "llm" in low or "openai" in low or "openrouter" in low or "completion" in low:
                 ev["llm_error"] = ln.strip()[:300]
                 keep.append(ln)
@@ -1568,17 +1745,24 @@ def test_chat_interaction(adb: ADBHelper, ui: UIAutomator, config: dict) -> Test
     try:
         # [0/5] Post-setup re-login (local mode) — sign back in with the creds
         # created in the wizard so the chat runs on a live session.
+        # BOTH paths need this: setup-complete reloads the runtime and drops the
+        # session, so the wizard's last act is always a bounce to Login. Only
+        # local was handled, so OAuth runs sat there until the Interact wait
+        # timed out and blamed the agent.
         if config.get("login_mode", "google") == "local":
             print("  [0/5] Post-setup local re-login...")
             ok, detail = _local_login_if_needed(adb, config)
-            print(f"    {detail}")
-            if not ok:
-                return TestReport(
-                    name="test_chat_interaction",
-                    result=TestResult.FAILED,
-                    duration=time.time() - start_time,
-                    message=f"Post-setup re-login failed: {detail}",
-                )
+        else:
+            print("  [0/5] Post-setup Google re-login...")
+            ok, detail = _google_relogin_if_needed(adb, ui, config)
+        print(f"    {detail}")
+        if not ok:
+            return TestReport(
+                name="test_chat_interaction",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message=f"Post-setup re-login failed: {detail}",
+            )
 
         client = connect_test_server(adb, config, launch_if_needed=True, clear_data=False)
         if client is None:
@@ -1822,6 +2006,19 @@ def test_full_flow(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
                 time.sleep(1)
                 result = test_local_login(adb, ui, config)
                 results.append(result)
+                if result.result == TestResult.PASSED:
+                    # This run is now a LOCAL run, and later steps must know.
+                    # The wizard ends at Login by design — completing setup
+                    # reloads the runtime, which invalidates the setup token
+                    # ("Node back + CLAIMED after reconfigure → Login",
+                    # CIRISApp.kt) — so the chat step re-signs-in with the
+                    # account the wizard just created. That re-login is gated on
+                    # login_mode == "local"; without this the fallback kept the
+                    # mode at "google", the re-login was skipped, and the run sat
+                    # on the Login screen until the Interact wait timed out,
+                    # reporting "never reached Interact" as though the agent had
+                    # failed to start.
+                    config["login_mode"] = "local"
                 if result.result != TestResult.PASSED:
                     return TestReport(
                         name="test_full_flow",

@@ -1,0 +1,169 @@
+component_name: msaspdma
+description: "မှတ်သားရန်အတွက်ပြုလုပ်ချက်নির်ဆတ်ခြင်း — ဂရပ်ရေးသားမည့်လမ်းညွှန်မှုများ၊ အဆိုပြုထားသည့် MEMORIZE တစ်ခုအပေါ်သုံးစွဲသည်"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# SINGLE-CLASS BLOCKS.
+#
+# The guide was originally one `memory_guide` block. That block was MIXED — it
+# carried what the graph IS (ontological), how to address it (procedural) and
+# what must never be written (deontic) in one body — and the compose gate
+# refuses a mixed block with no per-block disposition (§10.2.1). Declaring a
+# disposition would have been the cheap fix; splitting is the honest one,
+# because a research regime that varies, say, the value ordering must be able to
+# move the axiotic content WITHOUT also moving the addressing rules it depends
+# on. A mixed block makes that impossible to do cleanly.
+#
+# Each block below is one class. Keep it that way when editing: if a sentence
+# does not belong to the block's class, it belongs in another block.
+# ---------------------------------------------------------------------------
+
+# ONTOLOGICAL — what memory IS. No instructions, no prohibitions.
+memory_model: |
+  === မှတ်ဥာဏ်ဆိုသည်မှာ အဘယ်နည်း ===
+
+  ဂရပ်တွင် NODE များနှင့် EDGE များ ပါဝင်သည်။
+
+  NODE သည် တစ်ခုခု ဖြစ်သည် — ပုဂ္ဂိုလ်တစ်ဦး၊ စာတိုက်စာလွှာ၊ သို့မဟုတ် အယူအဆ — ၎င်းအပေါ်
+  ရှိသည့် အချက်အလက်များသည် ၎င်း၏ အခြင်းအခြာများဖြစ်သည်။
+
+  EDGE သည် အရာနှစ်ခုအကြား ဆက်ဆံရှိမှု ဖြစ်သည်။ EDGE များကို DREAM
+  စုစည်းမှုအတွင်း ကွဲပြားသည့် မှတ်ဥာဏ်များမှ နည်းဗျူဟာများမှ ရေစုံစုံ ကျက်သုံးထားသည်။
+
+  MEMORIZE ပြုလုပ်ချက်သည် NODE တစ်ခုတည်းကို ရေးသည်။ ပြုလုပ်ချက်သည် `node` တစ်ခုတည်းပါဝင်သည်
+  နှင့် အခြားမည်သည်မျှမပါဝင်သည်၊ ထို့ကြောင့် memorize သည် edge ကို
+  ဖန်တီးနိုင်သည်မဟုတ်။
+
+  သင်ရေးသည့် attribute တစ်ခု သည် system ပိုင်ဆိုင်မှုမဟုတ်လျှင် သင်အား
+  အလိုအလျှောက် ပြန်ပေးသည်မှာ ထိုအသုံးပြုသူ၏ ကိုယ်ရေး အချက်အလက်တွင်
+  `memorized_attributes` အဖြစ်ဖြည့်စွက်သည်။ ဤပြန်ပေးမှု လမ်းကြောင်းသည် ရေးသည့်
+  အချက်အလက်ကို မှတ်သားထားသည့် အချက်အလက်အဖြစ်ပြောင်းလဲ စေသည်။
+
+# PROCEDURAL — how to construct and choose a node id.
+addressing_convention: |
+  === လိပ်စာ ===
+
+  Node id သည် `prefix/{identifier}` ကိုလိုက်နူတ်သည်:
+
+    user/{user_id}          ပုဂ္ဂိုလ်တစ်ဦးအကြောင်း အချက်အလက်
+    channel/{channel_id}    စကားလုံးကွင်းအကြောင်း အချက်အလက်
+    consent/{user_id}       သဘောတူညီမှု အခြေအနေ
+    preferences/{user_id}   အသုံးပြုသူ အစိတ်အပိုင်း မှတ်တမ်းများ
+
+  Prefix သည် system သည် node ကိုပြန်လည်သွားရောက်ရန် နည်းလမ်းဖြစ်သည်။ ရှာဖွေမှုများမှာ
+  တိကျသည့် id မှ ဖြစ်သည়: အသုံးပြုသူ context သည် `user/{user_id}` အား မေးမြန်းသည်အားဖြင့်
+  စုစည်းကြသည်၊ ထို့ကြောင့် ပုဂ္ဂိုလ်တစ်ဦးအကြောင်း အချက်အလက်သည် ၎င်းကို
+  အတိအကျ အဲဒီ node အပေါ်တွင် သီးခြားပေါ်လွင်သည့်အခါ သာ ဝင်ရောက်နိုင်သည်။
+
+  ဤစကားလုံးအတွက် ဖြစ်ပြီးသည့်ပြီးသည့် node များကို CANDIDATE NODES အဖြစ်
+  စာရင်းသွင်းထားသည်။ ယင်းတို့ထဲမှ တစ်ခုကို အလိုလို ရွေးချယ်နုတ်သည်;
+  မည်သည်မျှ မကိုက်ညီလျှင် အထက်ပါ ဇယားမှ id ကို တည်ဆောက်သည်။
+
+# PROCEDURAL — how to name what you store.
+attribute_convention: |
+  === အခြင်းအခြာ အမည်များ ===
+
+  သင်ပြန်လည်ရောက်ရှိသည့်အခါ သိအားပြုသည့် ရှင်းရှင်းလင်းလင်း၊ ပြည်ပြည်တည်တည်
+  အမည်များကိုအသုံးပြုသည်:
+
+    favorite_color: "chartreuse"        နောက်ပိုင်းတွင် အသိအမှတ်ပြုနိုင်သည်
+    fact_2026_08_09_1: "likes green"    နောက်ပိုင်းတွင် အသိအမှတ်ပြုနိုင်မည်မဟုတ်
+
+  သင်သည် ပြန်လည်ရေးသည့် node ကို ပြန်လည်ခေါ်ယူမှုအားより node အခြင်းအခြာများ
+  နှင့် သင့်လျင်းပွားဖြည့်စွက်နိုင်သည်; အဲခြင်းတို့သည် အောက်ဖေါ်ပြပါ context
+  တွင်စာရင်းသွင်းထားသည်။
+
+# PROCEDURAL — the scope table.
+scope_convention: |
+  === အဆင့်သတ် ===
+
+    local        အသုံးပြုသူ နှင့် စာတိုက်စာလွှာ အကြောင်း အချက်အလက်
+    identity     အေဂျင်တ၏ကိုယ်ပိုင်း တည်ဆောက်ခြင်း
+    environment  ထုတ်ဝေမှု အဆင့် အချက်အလက်
+    community    ဖိုးဝေ လူမှုအသိုင်းအဝန်း အသိတည်မြတ်
+
+# DEONTIC — what must not happen. Categorical, and safety-reviewable.
+memory_prohibitions: |
+  === မည်သည်မျှ ဖြစ်ပွားပေးမည်မဟုတ် ===
+
+  Node id ကို ဖန်တီးမုံ့တင်မည်မ ဖြစ်။ Node အဆိုပါ id သည် အကျင့်စဥ်ကို လုံးဝ
+  လိုက်နူတ်မှုမရှိလျှင် ရှာဖွေမည်မဟုတ်သည်၊ ထို့ကြောင့် ရေးသည် အောင်မြင်သည်
+  နှင့် အချက်အလက်သည် အစဥ်အတိုင်း ဝင်ရောက်နိုင်မည်မဟုတ် — သင်သည် ၎င်းကို
+  မှတ်ယူမည်မဟုတ် နှင့် သင်သည် ၎င်းကို မည်သည်ကလည်း မသင်ခန်းစာပြုခြင်းမဟုတ်ကြောင်း
+  ယုံကြည်လိမ့်မည်။ မှားသည့် node သို့ ရေးသည်သည် အနည်းငယ် မရေးသည်သည့် ကျေးဇူးသည်
+  ငြိမ်းခြင်းယုံကြည်ခြင်းမဟုတ်သည်။
+
+  System မြို့နယ်ခွဲ အခြင်းအခြာကို မရေးပေးမည်မဟုတ်။ ၎င်းတို့သည် ဝန်ဆောင်မှုများ
+  မှ ပြုစုကျေးဇူးပြုထားသည် နှင့် ရေးသည်သည် ငြင်းပယ်သည်။ တစ်ခုကို အဆင့်မြှင့်တင်ခြင်းသည်
+  သင့်လျင်းပွားဖြည့်စွက် အားလုံးကို အလိုလိုလုံးလုံး ဆုံးပါတ်သည်။
+
+  Wise Authority အမြတ်ခွင့်မှ `identity` သို့မဟုတ် `environment` အဆင့်သတ်ကို
+  ရေးမည်မဟုတ်။
+
+  သင်သည် ဆည်းဝေလိုသည့် အရာကို သိမ်းဆည်းမည်မဟုတ်။ အချက်အလက်သည်
+  သင်ပြုလုပ်ပြီးအခါ စကားလုံးတွင် ပြီးသည့်သို့ ရှိလျှင် အဲဒီတွင် ဖတ်သည်။
+  ထိုပုဂ္ဂိုလ်သည် ၎င်းကို ဆည်းဝေလိုသည် မဟုတ်လျှင်၊ ဆည်းဝေသည့်အခါ မေးသည်။
+
+# PROCEDURAL — what this step is.
+system_guidance_header: |
+  သင်သည် MEMORIZE ကိုရွေးချယ်ပြီးပါပြီ။ ၎င်းကို အဆင့်တစ်ခု တမ်းတည်ခြင်းမတိုင်မှီ
+  သင်သည် ဂရပ်ပုံသဏ္ဍာန်များ နှင့် မည်သည့် node တွေ ရှိသည်သည်ကို ကြည့်ရှုသည်
+  ထို့ကြောင့် ရေးသည်သည် တည်းဆင်သည် သည်ကို စုံစမ်းနိုင်သည်။
+
+  ၎င်းသည် ဒုတိယအကြည့် ဖြစ်သည်၊ မှားယွင်းခြင်းမဟုတ်သည်: သင့်အဘို့
+  မည်သည်မျှ မပြောင်းလဲပါ။ သင်ရွေးချယ်သည့် node သည် မှားလျှင်
+  ၎င်းသည် အဘယ်နည်း ဟူသည်ကို ပြောပြပါ။ သင်တွင်ယင်း ၎င်းအားလုံးကို
+  သိမ်းဆည်းမည်မဟုတ်ပါက၊ ပြုလုပ်ချက်ကို ပြောင်းလဲသည်။
+
+# PROCEDURAL — the method.
+evaluation_steps: |
+  အမှာစာခွင့်အတွက် ဤအရာများကို ပြုလုပ်သည်:
+
+  1. ၎င်းကို သိမ်းဆည်းပေးသင့်သလား?
+  2. မည သည့် NODE? မှာ သင်ကံစည်ကဲ့သို့ id အား ရေစုံစုံ NODE များနှင့်
+     လိပ်စာ ပုံသဏ္ဍာန်သည።
+  3. မည သည့် ATTRIBUTES? သင်နောက်ပိုင်းတွင် သိအားပြုသည့်အရာများကို
+     အမည်ပေးပါ။
+  4. အဆင့်သတ်။
+  5. ဆုံးဖြတ်သည်: MEMORIZE သည် node အဖြစ်သင်စုံစမ်းပြီးဖြင့်
+     SPEAK ကို မေးမြန်းရန် သို့မဟုတ် PONDER ကို ပြန်လည်စဉ်းစားမည်။
+
+# CONTINGENT — runtime values only. No guidance, no prohibitions.
+context_integration: |
+  မူလအတွေးအခေါ်:
+  {original_thought_content}
+
+  မှတ်သားရန်ခွင့်ခံပြုလုပ်ချက်ဆိုင်ရာ သင့်လျင်းပွားချက်:
+  {aspdma_reasoning}
+
+  === သင်အဆိုပြုထားသည် ===
+  node id:     {proposed_node_id}
+  node type:   {proposed_node_type}
+  scope:       {proposed_node_scope}
+  attributes:  {proposed_attributes}
+
+  === CANDIDATE NODES (ယင်းတို့သည် ပြီးသည့်သည့်သည်) ===
+  {candidate_nodes}
+
+  === SYSTEM-OWNED ATTRIBUTES (အဆိုပါ node တွင်အလယ်မှ ဝန်ဆောင်မှုများမှ ကျေးဇူးပြုထားသည်) ===
+  {system_owned_attributes}
+
+# PRAGMATIC — the wire contract.
+response_format: |
+  JSON အားဖြင့် အဆိုပြုသည်:
+
+  {{
+    "final_action": "MEMORIZE" | "SPEAK" | "PONDER",
+    "node_id": "node id ကို ရေးသည်ငြင်း (MEMORIZE နှင့်အတူ လိုအပ်သည်)",
+    "node_type": "node အမျိုးအစား (MEMORIZE နှင့်အတူ လိုအပ်သည်)",
+    "node_scope": "graph scope (MEMORIZE နှင့်အတူ လိုအပ်သည်)",
+    "attributes": {{"name": "value"}},
+    "message": "ဖော်ပြသည့် အရာ (SPEAK နှင့်အတူ လိုအပ်သည်)",
+    "questions": ["ပြန်လည်စဉ်းစားမည့် အရာ (PONDER နှင့်အတူ လိုအပ်သည်)"],
+    "reasoning": "ယင်ိုလိပ်စာ မှားသည့်အကြောင်း၊ သို့မဟုတ်အဘယ်ကြောင့်သင်ကူးပြောင်းလဲစေသည်"
+  }}
+
+# DEONTIC — the closing categorical.
+closing_reminder: |
+  အဆင့်တည်ဆောက်ခြင်း လိုက်နူတ်မှုသည် ဤအဆင့်အဆိုပါ အရာအားလုံးဖြစ်သည်။

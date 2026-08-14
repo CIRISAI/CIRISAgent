@@ -32,6 +32,38 @@ class BaseDMA(ABC, Generic[InputT, DMAResultT]):
     with backward compatibility for existing DMAs.
     """
 
+    def _get_prompt_value(self, key: str) -> Optional[str]:
+        """Read a prompt block from PromptCollection or dict overrides.
+
+        Lives HERE, not on individual evaluators. It was defined on DSASPDMA
+        alone, so MSASPDMA — written against the same `prompt_template_data`
+        contract, using the same blocks — type-checked clean locally and failed
+        CI with six "has no attribute" errors. Prompt access is a BaseDMA
+        concern: every evaluator with a template needs it, and the next one
+        should inherit it rather than rediscover the omission.
+        """
+        # getattr, not attribute access: `prompt_template_data` is supplied by
+        # subclasses that HAVE a template, and not every DMA does. Declaring it
+        # on the base would assert a property this class cannot provide.
+        template = getattr(self, "prompt_template_data", None)
+        if isinstance(template, PromptCollection):
+            return template.get_prompt(key)
+        if isinstance(template, dict):
+            value = template.get(key)
+            return str(value) if isinstance(value, str) else None
+        return None
+
+    def _require_prompt_value(self, key: str) -> str:
+        """Read a required prompt block, or fail loudly during construction.
+
+        Names the evaluator class in the error so a missing key points at the
+        template that lacks it, rather than at whichever base method read it.
+        """
+        value = self._get_prompt_value(key)
+        if value is None:
+            raise ValueError(f"{type(self).__name__} prompt template missing required key: {key}")
+        return value
+
     def __init__(
         self,
         service_registry: ServiceRegistry,

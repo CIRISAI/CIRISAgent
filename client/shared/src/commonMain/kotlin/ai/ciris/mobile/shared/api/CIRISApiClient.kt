@@ -1497,15 +1497,16 @@ class CIRISApiClient(
      */
     suspend fun selfLogin(
         request: SelfLoginRequest,
+        nodeUrl: String = LOCAL_NODE_URL,
     ): SelfLoginResponse {
         val method = "selfLogin"
-        logInfo(method, "POST $baseUrl/v1/self/login identityKey=${request.identityKeyId.take(16)}… occurrences=${request.occurrences.map { it.kind }}")
+        logInfo(method, "POST $nodeUrl/v1/self/login identityKey=${request.identityKeyId.take(16)}… occurrences=${request.occurrences.map { it.kind }}")
         val client = federationHttpClient()
         return try {
             // Plain unsigned POST to the LOCAL node. Any federation signing the
             // ceremony needs is performed by the node's substrate, not the app.
             val bodyText = jsonConfig.encodeToString(SelfLoginRequest.serializer(), request)
-            val response = client.post("$baseUrl/v1/self/login") {
+            val response = client.post("$nodeUrl/v1/self/login") {
                 contentType(ContentType.Application.Json)
                 setBody(bodyText)
             }
@@ -1516,7 +1517,7 @@ class CIRISApiClient(
             parsed.accessToken?.let { setAccessToken(it) }
             parsed
         } catch (e: Exception) {
-            logException(method, e, "url=$baseUrl")
+            logException(method, e, "url=$nodeUrl")
             throw e
         } finally {
             client.close()
@@ -1537,9 +1538,13 @@ class CIRISApiClient(
      * Fetch a node's own [SignedKeyRecord].
      *
      * Hits ``GET {nodeUrl}/v1/federation/self-key-record``.
+     *
+     * `/v1/federation` is a SUBSTRATE prefix — served natively by the NODE and
+     * never proxied from the brain — so [nodeUrl] defaults to [LOCAL_NODE_URL],
+     * not to this client's [baseUrl] (which addresses the Python brain).
      */
     suspend fun getSelfKeyRecord(
-        nodeUrl: String = baseUrl,
+        nodeUrl: String = LOCAL_NODE_URL,
         token: String? = accessToken,
     ): SignedKeyRecord {
         val method = "getSelfKeyRecord"
@@ -1585,6 +1590,57 @@ class CIRISApiClient(
      * returns false. Used by startup to degrade gracefully when richer endpoints
      * (e.g. /v1/setup/status) are unavailable on a node that is otherwise up.
      */
+    // ---- Desktop browser sign-in (ported from ciris-server 0.5.165) --------
+    // The node serves the browser flow because desktop has no native Google
+    // SDK; the app polls for the result. Ported rather than copied wholesale:
+    // the server's client tree does NOT carry the 2.9.14 three-step wizard, so
+    // replacing our tree with theirs would have deleted it.
+    /**
+     * **Desktop browser sign-in: start it, then collect the session.**
+     *
+     * Desktop has no native Google SDK, so the node serves the browser flow and
+     * the APP has to learn the result — two processes, one sign-in. The app
+     * generates a nonce, opens the browser at [oauthBrowserLoginUrl], and polls
+     * here until the node hands the bearer over. One-time: the first successful
+     * collection removes it, so a leaked nonce cannot be replayed afterwards.
+     *
+     * `null` means NOT YET (the node answers 204) — the human is still in the
+     * browser. That is deliberately distinct from a failure: a caller that
+     * treated "not yet" as "failed" would abandon a sign-in that is still going.
+     */
+    suspend fun collectOAuthHandoff(
+        appNonce: String,
+        localNodeUrl: String = LOCAL_NODE_URL,
+        /**
+         * Accept a sign-in that completed without OUR nonce — a stray browser
+         * tab opened at the plain `/login` URL. Off while we still expect our
+         * own flow to land; the caller turns it on only after waiting, so the
+         * bound path always wins when it exists.
+         */
+        allowUnbound: Boolean = false,
+    ): OAuthHandoff? {
+        val client = federationHttpClient()
+        return try {
+            val response = client.get(
+                "$localNodeUrl/v1/auth/oauth/handoff?app_nonce=$appNonce&allow_unbound=$allowUnbound"
+            )
+            if (response.status.value == 204) return null
+            if (!response.status.isSuccess()) return null
+            jsonConfig.decodeFromString(OAuthHandoff.serializer(), response.bodyAsText())
+        } catch (_: Exception) {
+            null
+        } finally {
+            client.close()
+        }
+    }
+
+    /** The browser URL that starts a desktop sign-in for [provider]. */
+    fun oauthBrowserLoginUrl(
+        provider: String,
+        appNonce: String,
+        localNodeUrl: String = LOCAL_NODE_URL,
+    ): String = "$localNodeUrl/v1/auth/oauth/$provider/login?app_nonce=$appNonce"
+
     suspend fun isLocalNodeUp(nodeUrl: String = baseUrl): Boolean {
         val client = federationHttpClient()
         return try {
@@ -3961,6 +4017,154 @@ class CIRISApiClient(
      * ceremony UI can show "YUBI DETECTED — FIPS COMPLIANT — 9C PROVISIONED — READY".
      * Never throws on a missing token — returns `detected=false` with a hint.
      */
+
+    /**
+     * **Propose a moderation-duty conferral (scrub #1)** —
+     * `POST {nodeUrl}/v1/accord/duty/propose`. The local accord holder confers
+     * [duty] (`slash` | `moderate` | `review`) on [subjectKeyId], stating whether the
+     * subject may pass the duty on ([subDelegation]) and how far
+     * ([subDelegationDepth]; null = bounded only by the global rail of 5).
+     *
+     * The returned `partial` does NOT yet confer the duty — hand it to the next
+     * holder's [cosignDutyConferral] unchanged. The app holds NO keys: the node
+     * opens the holder's YubiKey + USB ML-DSA and signs (a touch is the consent).
+     */
+    suspend fun proposeDutyConferral(
+        holderKeyId: String,
+        mldsaUsbPath: String,
+        subjectKeyId: String,
+        /** The duties to confer — a SET; the wire field is `duties`. */
+        duties: List<String>,
+        subDelegation: Boolean,
+        subDelegationDepth: Int? = null,
+        /** PIV user PIN — the holder's YubiKey cannot be opened without it. */
+        userPin: String? = null,
+        pivSlot: String? = null,
+        modulePath: String? = null,
+        pkcs11: JsonElement? = null,
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): ai.ciris.mobile.shared.models.federation.DutyConferralResponse {
+        val method = "proposeDutyConferral"
+        logInfo(
+            method,
+            "POST $nodeUrl/v1/accord/duty/propose holder=$holderKeyId subject=$subjectKeyId " +
+                "duties=${duties.joinToString("+")} sub_delegation=$subDelegation " +
+                    "depth=${subDelegationDepth ?: "(rail)"}",
+        )
+        logInfo(method, "needs a YubiKey touch for the scrub signature; waiting up to ${ceremonyTimeoutMillis / 1000}s")
+        val client = federationHttpClient(ceremonyTimeoutMillis)
+        return try {
+            val bodyText = jsonConfig.encodeToString(
+                ai.ciris.mobile.shared.models.federation.DutyProposeRequest.serializer(),
+                ai.ciris.mobile.shared.models.federation.DutyProposeRequest(
+                    holder = ai.ciris.mobile.shared.models.federation.DutyHolder(
+                        keyId = holderKeyId.trim(),
+                        mldsaUsbPath = mldsaUsbPath.trim(),
+                        pkcs11 = pkcs11 ?: buildJsonObject {
+                            userPin?.takeIf { it.isNotBlank() }
+                                ?.let { put("user_pin", JsonPrimitive(it)) }
+                            pivSlot?.takeIf { it.isNotBlank() }
+                                ?.let { put("piv_slot", JsonPrimitive(it)) }
+                            modulePath?.takeIf { it.isNotBlank() }
+                                ?.let { put("module_path", JsonPrimitive(it)) }
+                        },
+                    ),
+                    subjectKeyId = subjectKeyId.trim(),
+                    duties = duties.map { it.trim() }.filter { it.isNotEmpty() }.sorted(),
+                    subDelegation = subDelegation,
+                    subDelegationDepth = subDelegationDepth,
+                ),
+            )
+            val response = client.post("$nodeUrl/v1/accord/duty/propose") {
+                token?.let { header("Authorization", "Bearer $it") }
+                contentType(ContentType.Application.Json)
+                setBody(bodyText)
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("propose duty conferral failed: ${response.status}: ${raw.take(200)}")
+            }
+            decodeFederationEnvelope(
+                raw,
+                ai.ciris.mobile.shared.models.federation.DutyConferralResponse.serializer(),
+            )
+        } catch (e: Exception) {
+            logException(
+                method,
+                e,
+                "nodeUrl=$nodeUrl, subject=$subjectKeyId, duties=${duties.joinToString("+")}",
+            )
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
+     * **Cosign a moderation-duty conferral** —
+     * `POST {nodeUrl}/v1/accord/duty/cosign`. THIS holder appends their scrub to
+     * [partial] over the BYTE-IDENTICAL envelope. [partial] MUST be the verbatim
+     * blob a prior propose / cosign returned — it is submitted UNCHANGED. At the
+     * family m-of-n the conferral is adopted; otherwise the advanced partial comes
+     * back for the next holder.
+     */
+    suspend fun cosignDutyConferral(
+        holderKeyId: String,
+        mldsaUsbPath: String,
+        partial: JsonElement,
+        userPin: String? = null,
+        pivSlot: String? = null,
+        modulePath: String? = null,
+        pkcs11: JsonElement? = null,
+        nodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): ai.ciris.mobile.shared.models.federation.DutyConferralResponse {
+        val method = "cosignDutyConferral"
+        logInfo(method, "POST $nodeUrl/v1/accord/duty/cosign holder=$holderKeyId usb=$mldsaUsbPath")
+        logInfo(method, "needs a YubiKey touch for the scrub signature; waiting up to ${ceremonyTimeoutMillis / 1000}s")
+        val client = federationHttpClient(ceremonyTimeoutMillis)
+        return try {
+            val bodyText = jsonConfig.encodeToString(
+                ai.ciris.mobile.shared.models.federation.DutyCosignRequest.serializer(),
+                ai.ciris.mobile.shared.models.federation.DutyCosignRequest(
+                    holder = ai.ciris.mobile.shared.models.federation.DutyHolder(
+                        keyId = holderKeyId.trim(),
+                        mldsaUsbPath = mldsaUsbPath.trim(),
+                        pkcs11 = pkcs11 ?: buildJsonObject {
+                            userPin?.takeIf { it.isNotBlank() }
+                                ?.let { put("user_pin", JsonPrimitive(it)) }
+                            pivSlot?.takeIf { it.isNotBlank() }
+                                ?.let { put("piv_slot", JsonPrimitive(it)) }
+                            modulePath?.takeIf { it.isNotBlank() }
+                                ?.let { put("module_path", JsonPrimitive(it)) }
+                        },
+                    ),
+                    // Submit the partial VERBATIM — never re-encode the signed envelope.
+                    partial = partial,
+                ),
+            )
+            val response = client.post("$nodeUrl/v1/accord/duty/cosign") {
+                token?.let { header("Authorization", "Bearer $it") }
+                contentType(ContentType.Application.Json)
+                setBody(bodyText)
+            }
+            val raw = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("cosign duty conferral failed: ${response.status}: ${raw.take(200)}")
+            }
+            decodeFederationEnvelope(
+                raw,
+                ai.ciris.mobile.shared.models.federation.DutyConferralResponse.serializer(),
+            )
+        } catch (e: Exception) {
+            logException(method, e, "nodeUrl=$nodeUrl, holder=$holderKeyId")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
     suspend fun getYubiKeyStatus(
         nodeUrl: String = LOCAL_NODE_URL,
     ): ai.ciris.mobile.shared.models.federation.YubiKeyStatus {
@@ -4380,9 +4584,15 @@ class CIRISApiClient(
      * re-POST is a no-op.
      *
      * When [peerKeyId] is null, the method resolves the canonical the node is
-     * rooted to via `GET {localNodeUrl}/v1/accord/canonical-servers` (first
+     * rooted to via `GET {localNodeUrl}/v1/accord/canonical/servers` (first
      * entry). [attestationPrefixes] is the explicit scope the user consented
      * to (empty ⇒ the node 400s — pass what was actually consented).
+     *
+     * [analyze] is CC#46's be-scored dimension and is the OWNER'S ANSWER —
+     * pass what they chose. The substrate marks it `required: false` with named
+     * costs, so a caller that always sends true grants a dimension the user was
+     * never asked about. The default exists only for callers acting on a
+     * standing opt-in with no fresh answer to hand.
      *
      * @return the raw response body (carries `grant_attestation_id`).
      */
@@ -4397,12 +4607,25 @@ class CIRISApiClient(
         val client = federationHttpClient()
         return try {
             val peer = peerKeyId ?: run {
-                val resp = client.get("$localNodeUrl/v1/accord/canonical-servers") {
+                // `canonical/servers`, NOT `canonical-servers`. The route is
+                // `/v1/accord/canonical/servers` (accord_provision.rs:3458); the
+                // hyphenated spelling 404s and there is no redirect. Verified live:
+                //   :4243 /v1/accord/canonical-servers  -> 404
+                //   :4243 /v1/accord/canonical/servers  -> 200 {"servers":[...]}
+                //
+                // The cost of the typo was the whole trace plane. Consent WAS
+                // requested and the owner session WAS valid; this lookup threw, the
+                // catch is non-fatal by design, and setup completed reporting
+                // success while `consent:replication` was never authored — so
+                // sealed traces strand at (self, local) forever. A first-run wizard
+                // that says it consented and did not is exactly the failure the
+                // [ORDER] saga logging exists to make visible.
+                val resp = client.get("$localNodeUrl/v1/accord/canonical/servers") {
                     token?.let { header("Authorization", "Bearer $it") }
                 }
                 val raw = resp.bodyAsText()
                 if (!resp.status.isSuccess()) {
-                    throw RuntimeException("canonical-servers failed: ${resp.status}: ${raw.take(200)}")
+                    throw RuntimeException("canonical/servers failed: ${resp.status}: ${raw.take(200)}")
                 }
                 // Envelope-tolerant first-key extraction: [{"key_id": ...}] or {"data":[...]}
                 Regex("\"key_id\"\\s*:\\s*\"([^\"]+)\"").find(raw)?.groupValues?.get(1)
@@ -5086,10 +5309,15 @@ class CIRISApiClient(
      * the version-mismatch banner: the node `version`, its `role`
      * (`"fabric-node"` for a bare node), and the optional `cognitive_state` (present
      * only when an agent enriches the endpoint).
+     *
+     * `/v1/health` is a SUBSTRATE prefix — served natively by the NODE on :4243 and
+     * never proxied from the brain, and the Python brain on :8080 does not serve it
+     * at all. Callers must therefore pass the NODE base URL; the [baseUrl] default
+     * is kept only for clients already constructed against the node.
      */
-    suspend fun getNodeHealth(): NodeHealth {
+    suspend fun getNodeHealth(nodeUrl: String = baseUrl): NodeHealth {
         val method = "getNodeHealth"
-        logDebug(method, "Probing node health at $baseUrl/v1/health")
+        logDebug(method, "Probing node health at $nodeUrl/v1/health")
 
         val client = io.ktor.client.HttpClient {
             install(io.ktor.client.plugins.contentnegotiation.ContentNegotiation) { json(jsonConfig) }
@@ -5100,7 +5328,7 @@ class CIRISApiClient(
         }
 
         return try {
-            val response = client.get("$baseUrl/v1/health") {
+            val response = client.get("$nodeUrl/v1/health") {
                 authHeader()?.let { header("Authorization", it) }
             }
 
@@ -5202,8 +5430,9 @@ class CIRISApiClient(
         }
     }
 
-    override suspend fun getOwnerHint(): OwnerHint? {
+    override suspend fun getOwnerHint(nodeUrl: String?): OwnerHint? {
         val method = "getOwnerHint"
+        val hintUrl = nodeUrl ?: baseUrl
         // Personal-install-only endpoint shipped in 2.9.2. On a server
         // install the backend returns 404 and we render an empty hint —
         // never throw, never block the Login UI on a slow / offline
@@ -5218,7 +5447,7 @@ class CIRISApiClient(
                 }
             }
             try {
-                val response: HttpResponse = client.get("$baseUrl/v1/auth/owner-hint")
+                val response: HttpResponse = client.get("$hintUrl/v1/auth/owner-hint")
                 if (response.status.value == 404) {
                     logDebug(method, "owner-hint endpoint returned 404 (multi-tenant server or pre-2.9.2 backend)")
                     return null
@@ -5558,6 +5787,52 @@ class CIRISApiClient(
      * Not part of the generated SDK surface, so this uses a direct request in the
      * same idiom as getAgentMode().
      */
+    /**
+     * The substrate's OWN consent copy for the wizard's federation screen —
+     * `GET {apiBaseUrl}/v1/setup/consent-disclosure`, which serves
+     * `ciris_server.consent_disclosure()` unedited.
+     *
+     * THROWS rather than returning a default. There is no honest fallback: the
+     * screen exists to render the substrate's words, and inventing a substitute
+     * is exactly the drift the export was written to prevent.
+     */
+    suspend fun getConsentDisclosure(): ai.ciris.mobile.shared.models.ConsentDisclosure {
+        val method = "getConsentDisclosure"
+        logDebug(method, "Fetching consent disclosure from $baseUrl/v1/setup/consent-disclosure")
+        val client = io.ktor.client.HttpClient {
+            install(io.ktor.client.plugins.HttpTimeout) {
+                requestTimeoutMillis = 15000
+                connectTimeoutMillis = 5000
+            }
+        }
+        return try {
+            val response = client.get("$baseUrl/v1/setup/consent-disclosure") {
+                authHeader()?.let { header("Authorization", it) }
+            }
+            if (!response.status.isSuccess()) {
+                throw RuntimeException("Consent disclosure fetch failed: ${response.status}")
+            }
+            val root = Json.parseToJsonElement(response.bodyAsText()).jsonObject
+            val data = root["data"] ?: throw RuntimeException("Consent disclosure response has no data")
+            val disclosure = Json { ignoreUnknownKeys = true }.decodeFromJsonElement(
+                ai.ciris.mobile.shared.models.ConsentDisclosure.serializer(),
+                data,
+            )
+            logInfo(
+                method,
+                "Fetched consent disclosure: ${disclosure.grants.size} grants, " +
+                    "location max_resolution=${disclosure.location.maxResolution}, " +
+                    "locale=${disclosure.sourceLocale}",
+            )
+            disclosure
+        } catch (e: Exception) {
+            logException(method, e, "url=$baseUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
     suspend fun getSetupToolDisclosure(): ToolDisclosureReport {
         val method = "getSetupToolDisclosure"
         logDebug(method, "Fetching tool disclosure from $baseUrl/v1/setup/tool-disclosure")

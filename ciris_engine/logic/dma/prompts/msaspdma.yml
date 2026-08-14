@@ -1,0 +1,160 @@
+component_name: msaspdma
+description: "Memorize-specific action selection — the graph-writing guide, applied to one proposed MEMORIZE"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# SINGLE-CLASS BLOCKS.
+#
+# The guide was originally one `memory_guide` block. That block was MIXED — it
+# carried what the graph IS (ontological), how to address it (procedural) and
+# what must never be written (deontic) in one body — and the compose gate
+# refuses a mixed block with no per-block disposition (§10.2.1). Declaring a
+# disposition would have been the cheap fix; splitting is the honest one,
+# because a research regime that varies, say, the value ordering must be able to
+# move the axiotic content WITHOUT also moving the addressing rules it depends
+# on. A mixed block makes that impossible to do cleanly.
+#
+# Each block below is one class. Keep it that way when editing: if a sentence
+# does not belong to the block's class, it belongs in another block.
+# ---------------------------------------------------------------------------
+
+# ONTOLOGICAL — what memory IS. No instructions, no prohibitions.
+memory_model: |
+  === WHAT MEMORY IS ===
+
+  The graph holds NODES and EDGES.
+
+  A node is a thing — a person, a channel, a concept — and the facts about that
+  thing are attributes on it.
+
+  An edge is a relationship between two things. Edges are woven during DREAM
+  consolidation, from patterns across many memories.
+
+  A MEMORIZE action writes ONE NODE. The action carries a single `node` and
+  nothing else, so a memorize cannot create an edge.
+
+  An attribute you write that is not system-owned returns to you later in that
+  user's profile, as `memorized_attributes`. That return path is what makes a
+  written fact a remembered one.
+
+# PROCEDURAL — how to construct and choose a node id.
+addressing_convention: |
+  === ADDRESSING ===
+
+  Node ids follow `prefix/{identifier}`:
+
+    user/{user_id}          facts about a person
+    channel/{channel_id}    facts about a place of conversation
+    consent/{user_id}       consent state
+    preferences/{user_id}   user preference records
+
+  The prefix is how the system finds the node again. Lookups are by exact id:
+  user context is assembled by querying `user/{user_id}`, so a fact about a
+  person is reachable only if it sits on that exact node.
+
+  The nodes that already exist for this conversation are listed as CANDIDATE
+  NODES. Prefer one of them; construct an id from the table above only when none
+  fits.
+
+# PROCEDURAL — how to name what you store.
+attribute_convention: |
+  === ATTRIBUTE NAMES ===
+
+  Use plain, stable names you will recognise when they come back to you:
+
+    favorite_color: "chartreuse"        recognisable later
+    fact_2026_08_09_1: "likes green"    not recognisable later
+
+  When you are writing back a node a recall handed you, its system-owned
+  attributes may be carried through unchanged; they are listed in the context
+  below.
+
+# PROCEDURAL — the scope table.
+scope_convention: |
+  === SCOPE ===
+
+    local        facts about users and channels
+    identity     the agent's own identity
+    environment  deployment-level facts
+    community    shared community knowledge
+
+# DEONTIC — what must not happen. Categorical, and safety-reviewable.
+memory_prohibitions: |
+  === WHAT MUST NOT HAPPEN ===
+
+  Do not invent a node id. A node whose id does not follow the convention is
+  never queried, so the write succeeds and the information is unreachable
+  forever — you will not recall it, and you will believe you never learned it.
+  A write to the wrong node is worse than no write, because nothing tells you.
+
+  Do not write a system-owned attribute. They are maintained by services and the
+  write is refused. Changing one costs you the whole memorize.
+
+  Do not write to `identity` or `environment` scope without Wise Authority
+  approval.
+
+  Do not store what you were not asked to keep. If the information already lives
+  in the conversation you are having, read it there. If you are unsure the person
+  wants it retained, ask rather than store.
+
+# PROCEDURAL — what this step is.
+system_guidance_header: |
+  You have selected MEMORIZE. Before it executes you are shown the graph's
+  conventions and the nodes that already exist, so you can check the write is
+  addressed correctly.
+
+  This is a second look, not a correction: nothing has been changed for you. If
+  the node you chose is wrong, say what it should be. If you should not be
+  storing this at all, switch action.
+
+# PROCEDURAL — the method.
+evaluation_steps: |
+  Work through these in order:
+
+  1. SHOULD this be stored?
+  2. WHICH NODE? Compare your proposed id against CANDIDATE NODES and the
+     addressing convention.
+  3. WHICH ATTRIBUTES? Name them so you will recognise them later.
+  4. SCOPE.
+  5. Decide: MEMORIZE with the node you have checked, SPEAK to ask, or PONDER to
+     reconsider.
+
+# CONTINGENT — runtime values only. No guidance, no prohibitions.
+context_integration: |
+  Original thought:
+  {original_thought_content}
+
+  Your reasoning for memorizing:
+  {aspdma_reasoning}
+
+  === WHAT YOU PROPOSED ===
+  node id:     {proposed_node_id}
+  node type:   {proposed_node_type}
+  scope:       {proposed_node_scope}
+  attributes:  {proposed_attributes}
+
+  === CANDIDATE NODES (these already exist) ===
+  {candidate_nodes}
+
+  === SYSTEM-OWNED ATTRIBUTES (present on this node, maintained by services) ===
+  {system_owned_attributes}
+
+# PRAGMATIC — the wire contract.
+response_format: |
+  Respond with JSON:
+
+  {{
+    "final_action": "MEMORIZE" | "SPEAK" | "PONDER",
+    "node_id": "the node id to write to (required when MEMORIZE)",
+    "node_type": "node type (required when MEMORIZE)",
+    "node_scope": "graph scope (required when MEMORIZE)",
+    "attributes": {{"name": "value"}},
+    "message": "what to say (required when SPEAK)",
+    "questions": ["what to reconsider (required when PONDER)"],
+    "reasoning": "why this addressing is correct, or why you switched"
+  }}
+
+# DEONTIC — the closing categorical.
+closing_reminder: |
+  Getting the address right is the whole point of this step.

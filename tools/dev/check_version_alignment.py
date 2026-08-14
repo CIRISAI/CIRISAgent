@@ -61,6 +61,57 @@ def check_all() -> list[str]:
             if m and m.group(1) != expected:
                 errors.append(f"{rel_path}: {m.group(1)} != {expected}")
 
+    errors.extend(_check_substrate_client_version())
+
+    return errors
+
+
+def _check_substrate_client_version() -> list[str]:
+    """CLIENT_VERSION must equal the ciris-server wheel the app ships with.
+
+    The client shows a VERSION-MISMATCH banner whenever the node it talks to
+    reports a different version than `CLIENT_VERSION` (ClientMode.kt). On mobile
+    the node IS the bundled wheel, so these two must be the same number or the
+    app flags itself as out of date against its own runtime.
+
+    Upstream (CIRISServer) keeps CLIENT_VERSION in lockstep with Cargo.toml via
+    scripts/sync-client-version.sh + a CI --check. This repo has neither file, so
+    the constant simply drifted: it sat at 0.5.159 while the bundled node moved
+    to 0.5.163, and every 2.9.14 build showed the banner. Nothing failed — the
+    banner is non-blocking — which is exactly why it went unnoticed.
+    """
+    errors: list[str] = []
+
+    req = ROOT / "requirements.txt"
+    kt = ROOT / "client/shared/src/commonMain/kotlin/ai/ciris/mobile/shared/models/ClientMode.kt"
+    if not (req.exists() and kt.exists()):
+        return errors
+
+    pin = re.search(r"^ciris-server==([0-9][^\s#]*)", req.read_text(), re.M)
+    client = re.search(r'const val CLIENT_VERSION = "([^"]+)"', kt.read_text())
+    if not (pin and client):
+        return errors
+
+    if pin.group(1) != client.group(1):
+        errors.append(
+            f"ClientMode.kt CLIENT_VERSION: {client.group(1)} != {pin.group(1)} "
+            f"(the ciris-server pin in requirements.txt). The app would show a "
+            f"VERSION-MISMATCH banner against the node it bundles. Fix: set "
+            f"CLIENT_VERSION to {pin.group(1)}, and keep the Android gradle pin "
+            f"in lockstep too."
+        )
+
+    # The Android gradle pin installs the wheel; if it disagrees with
+    # requirements.txt the device runs a different substrate than CI tested.
+    gradle = ROOT / "client/androidApp/build.gradle"
+    if gradle.exists():
+        g = re.search(r'install "ciris-server==([^"]+)"', gradle.read_text())
+        if g and g.group(1) != pin.group(1):
+            errors.append(
+                f"androidApp/build.gradle ciris-server pin: {g.group(1)} != "
+                f"{pin.group(1)} (requirements.txt)"
+            )
+
     return errors
 
 

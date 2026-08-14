@@ -67,7 +67,7 @@ SAFE_FORMAT_PATCH_TARGETS = (
     "ciris_engine.logic.dma.tsaspdma.safe_format",
 )
 
-DMA_NAMES = ("pdma", "csdma", "idma", "dsdma", "aspdma", "dsaspdma")
+DMA_NAMES = ("pdma", "csdma", "idma", "dsdma", "aspdma", "dsaspdma", "msaspdma")
 
 #: The conscience-faculty steps (#986). Each composes the three-message list the
 #: conscience hands to ``call_llm_structured``; the four YAMLs behind them are
@@ -181,6 +181,7 @@ def prompt_content_environment(
     format_part: Callable[..., str] | None = None,
     aspdma_system_message: Callable[..., str] | None = None,
     dsaspdma_prompt_value: Callable[..., Any] | None = None,
+    msaspdma_prompt_value: Callable[..., Any] | None = None,
 ) -> Iterator[None]:
     """Pin language + prompt-content loaders for byte-reproducible composition.
 
@@ -284,6 +285,13 @@ def prompt_content_environment(
                     dsaspdma_prompt_value,
                 )
             )
+            if msaspdma_prompt_value is not None:
+                stack.enter_context(
+                    patch(
+                        "ciris_engine.logic.dma.msaspdma.MSASPDMAEvaluator._get_prompt_value",
+                        msaspdma_prompt_value,
+                    )
+                )
         yield
 
 
@@ -414,6 +422,53 @@ def make_defer_aspdma_result() -> ActionSelectionDMAResult:
         ),
         rationale="Golden fixture: deferring for classification.",
     )
+
+
+def make_memorize_aspdma_result() -> ActionSelectionDMAResult:
+    """A MEMORIZE addressed the way the incident addressed it (#1027).
+
+    A bare-UUID node id with type=user — unreadable, because user enrichment
+    only ever queries `user/{user_id}`. The golden fixture drives the block the
+    second pass exists to render, so a regime that varies the memory guide moves
+    the dump instead of passing unseen.
+    """
+    from ciris_engine.schemas.actions.parameters import MemorizeParams
+    from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
+
+    return ActionSelectionDMAResult(
+        selected_action=HandlerActionType.MEMORIZE,
+        action_parameters=MemorizeParams(
+            channel_id="golden_channel",
+            node=GraphNode(
+                id="c6482c1b-4654-49fe-a97a-e5e037e9d0b5",
+                type=NodeType.USER,
+                scope=GraphScope.LOCAL,
+                attributes={"favorite_color": "chartreuse"},
+            ),
+        ),
+        rationale="Golden fixture: storing a user fact.",
+    )
+
+
+async def capture_msaspdma() -> List[JSONDict]:
+    """Drive MSASPDMA's compose seam so its six blocks are gate-visible."""
+    from ciris_engine.logic.dma.msaspdma import MSASPDMAEvaluator, MSASPDMALLMResult
+
+    dma = MSASPDMAEvaluator(service_registry=Mock())
+    captured: Dict[str, Any] = {}
+    dma.call_llm_structured = _recording_llm(  # type: ignore[method-assign]
+        captured,
+        MSASPDMALLMResult(
+            final_action="MEMORIZE",
+            node_id="user/golden",
+            node_type="user",
+            node_scope="local",
+            attributes={"favorite_color": "chartreuse"},
+            reasoning="Golden fixture: addressed to the canonical user node.",
+        ),
+    )
+    await dma.evaluate(make_queue_item(), aspdma_result=make_memorize_aspdma_result(), context=None)
+    return captured["messages"]  # type: ignore[no-any-return]
 
 
 def pin_aspdma_context_builder(dma: Any) -> None:
@@ -1043,6 +1098,7 @@ _CAPTURE_FNS = {
     "dsdma": capture_dsdma,
     "aspdma": capture_aspdma,
     "dsaspdma": capture_dsaspdma,
+    "msaspdma": capture_msaspdma,
     "tsaspdma": capture_tsaspdma,
     "tsaspdma_correction": capture_tsaspdma_correction,
     "aspdma_retry": capture_aspdma_retry,

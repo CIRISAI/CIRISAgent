@@ -353,34 +353,32 @@ class DMAPromptLoader:
             logger.info(f"[DMA-PROMPT] Parsed template {template_name}: keys={list(template_data.keys())}")
 
             # Convert dict to PromptCollection
+            # Populate every string field the schema declares, DERIVED from the
+            # model rather than hand-enumerated.
+            #
+            # This used to list all 26 fields by name, which meant a NEW schema
+            # field was populated nowhere: the constructor did not set it, and the
+            # custom_prompts fallback below explicitly skips anything already in
+            # model_fields. So declaring a field for a working YAML key silently
+            # blanked that block — no error, no warning, the prompt just lost a
+            # section. Two lists that had to agree, nothing keeping them in sync,
+            # and silence when they drifted.
+            _special = {"component_name", "description", "version", "accord_mode",
+                        "supports_agent_modes", "agent_variations", "custom_prompts"}
+            declared_strings = {
+                key: value
+                for key, value in template_data.items()
+                if key in PromptCollection.model_fields
+                and key not in _special
+                and isinstance(value, str)
+            }
             prompt_collection = PromptCollection(
                 component_name=template_name,
                 description=template_data.get("description", f"Prompts for {template_name}"),
                 version=template_data.get("version", "1.0"),
-                system_header=template_data.get("system_header"),
-                system_guidance_header=template_data.get("system_guidance_header"),
-                domain_principles=template_data.get("domain_principles"),
-                evaluation_steps=template_data.get("evaluation_steps"),
-                evaluation_criteria=template_data.get("evaluation_criteria"),
-                response_format=template_data.get("response_format"),
-                response_guidance=template_data.get("response_guidance"),
-                decision_format=template_data.get("decision_format"),
-                action_parameter_schemas=template_data.get("action_parameter_schemas"),
-                csdma_ambiguity_guidance=template_data.get("csdma_ambiguity_guidance"),
-                action_params_speak_csdma_guidance=template_data.get("action_params_speak_csdma_guidance"),
-                action_params_ponder_guidance=template_data.get("action_params_ponder_guidance"),
-                action_params_observe_guidance=template_data.get("action_params_observe_guidance"),
-                action_params_defer_guidance=template_data.get("action_params_defer_guidance"),
-                reasoning_csdma_guidance=template_data.get("reasoning_csdma_guidance"),
-                final_ponder_advisory=template_data.get("final_ponder_advisory"),
-                closing_reminder=template_data.get("closing_reminder"),
-                tool_selection_guidance=template_data.get("tool_selection_guidance"),
-                csdma_ambiguity_alignment_example=template_data.get("csdma_ambiguity_alignment_example"),
-                taxonomy_text=template_data.get("taxonomy_text"),
-                tool_correction_section=template_data.get("tool_correction_section"),
-                context_integration=template_data.get("context_integration"),
                 accord_mode=self._normalize_accord_mode(template_data.get("accord_header", "full")),
                 supports_agent_modes=bool(template_data.get("supports_agent_modes", True)),
+                **declared_strings,
             )
 
             # Add any agent-specific variations

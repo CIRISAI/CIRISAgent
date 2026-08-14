@@ -136,7 +136,15 @@ jobs:
           # health check: listeners up, no incidents, owner silently gone. Identity
           # survival is the only thing that separates a real upgrade from a fresh
           # install wearing the old data directory's clothes.
-          python tools/release/check_longjump_state.py --home /tmp/fixture --baseline '${{ steps.baseline.outputs.baseline }}'
+          #
+          # --home /tmp/fixture/data, NOT /tmp/fixture. The boot step copies the
+          # bundle's DBs into data/ and the agent reads and writes THERE; the
+          # copies still sitting at the bundle root are the pristine pre-boot
+          # input, untouched by the upgrade. Pointing the assertion at the
+          # bundle root let it answer "the owner survived" out of a file the
+          # agent never opened — it would have passed even if the upgrade
+          # deleted every cert, which is the one outcome it exists to catch.
+          python tools/release/check_longjump_state.py --home /tmp/fixture/data --baseline '${{ steps.baseline.outputs.baseline }}'
 
       - name: Surface the boot log
         if: always()

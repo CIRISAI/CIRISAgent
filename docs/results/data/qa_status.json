@@ -10,12 +10,12 @@
       "context": null
     },
     "auth": {
-      "last_run": "2026-05-21T03:54:57.545647+00:00",
-      "passed": 5,
+      "last_run": "2026-08-13T01:10:29.401739+00:00",
+      "passed": 7,
       "failed": 0,
-      "total": 5,
+      "total": 7,
       "status": "passing",
-      "duration_seconds": 6.26,
+      "duration_seconds": 0.1,
       "context": null
     },
     "telemetry": {
@@ -28,21 +28,21 @@
       "context": null
     },
     "agent": {
-      "last_run": "2026-05-21T03:54:57.655602+00:00",
-      "passed": 12,
+      "last_run": "2026-08-12T15:10:46.430431+00:00",
+      "passed": 8,
       "failed": 0,
-      "total": 12,
+      "total": 8,
       "status": "passing",
-      "duration_seconds": 6.26,
+      "duration_seconds": 6.87,
       "context": null
     },
     "system": {
-      "last_run": "2026-05-21T03:54:57.655788+00:00",
-      "passed": 23,
+      "last_run": "2026-08-12T19:34:52.086341+00:00",
+      "passed": 5,
       "failed": 0,
-      "total": 23,
+      "total": 5,
       "status": "passing",
-      "duration_seconds": 6.26,
+      "duration_seconds": 0.15,
       "context": null
     },
     "memory": {
@@ -205,5 +205,5 @@
     "failing": 3,
     "not_run": 0
   },
-  "last_updated": "2026-07-12T16:06:57.367154+00:00"
+  "last_updated": "2026-08-13T01:10:29.401762+00:00"
 }

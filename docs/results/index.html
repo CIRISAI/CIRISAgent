@@ -101,18 +101,68 @@
 <body>
 <div class="wrap">
   <header>
-    <h1>CIRIS safety results</h1>
-    <p>Every adversarial safety battery this agent has run, per language and per criterion. Click any row for the questions asked, what the agent answered, how each criterion was judged, and the rubric it was judged against.</p>
+    <h1>How we test CIRIS on mental-health safety</h1>
+    <p class="lede">We ask the agent <strong>9 questions</strong> in a fixed order.
+    The first five walk one conversation from someone first saying they feel low, through
+    pressure to diagnose and to recommend treatment, to a crisis. The last four are
+    <strong>adversarial</strong> — deliberate attempts to push the agent over the line.
+    The arc and the pass/fail rules follow <strong>WHO mhGAP (2023)</strong>, the guidance
+    written for non-specialists. Every question and every rule is below, in
+    <strong>29 languages</strong>. Results are the last tab.</p>
   </header>
 
   <div class="tabs" role="tablist">
-    <button class="tab" role="tab" aria-selected="true"  aria-controls="p-runs">Battery runs</button>
+    <button class="tab" role="tab" aria-selected="true"  aria-controls="p-how">The questions &amp; rules</button>
     <button class="tab" role="tab" aria-selected="false" aria-controls="p-lang">By language</button>
     <button class="tab" role="tab" aria-selected="false" aria-controls="p-sweep">Adversarial sweeps</button>
     <button class="tab" role="tab" aria-selected="false" aria-controls="p-qa">QA modules</button>
+    <button class="tab" role="tab" aria-selected="false" aria-controls="p-runs">Results</button>
   </div>
 
-  <section class="panel" id="p-runs" role="tabpanel">
+    <section class="panel" id="p-how" role="tabpanel">
+    <div class="how-intro">
+      <p><strong>What happens.</strong> One simulated person, nine turns. The agent sees each
+      turn in order and answers. A separate judge model then reads each answer against a fixed
+      list of rules and records pass or fail, quoting the exact words it judged.</p>
+      <p><strong>Why an arc.</strong> Safety is not per-message. A reply that is fine at turn 1
+      can be wrong at turn 7 once someone has disclosed more. The order is the test.</p>
+      <p><strong>What we do not test here.</strong> Whether the agent is helpful, likeable, or
+      correct about the world. Only whether it stays inside the boundary a non-clinician must
+      stay inside.</p>
+    </div>
+
+    <div class="controls">
+      <label for="how-lang">Language</label>
+      <select id="how-lang"><option value="en">English</option></select>
+      <span class="note" id="how-meta"></span>
+    </div>
+
+    <h2 class="h2">The 9 questions</h2>
+    <p class="note">Shown in the order asked — 5 staged turns, then 4 adversarial probes. “Checks” is what that turn exists to find out.</p>
+    <div id="how-questions" class="qlist"><div class="empty">loading…</div></div>
+
+    <h2 class="h2">The rules every answer is judged against</h2>
+    <p class="note">These apply to all nine turns. A <span class="sev-hard">hard fail</span> is
+    a boundary the agent must never cross; the judge quotes the words that crossed it.</p>
+    <div id="how-criteria" class="clist"><div class="empty">loading…</div></div>
+
+    <h2 class="h2">How a verdict is reached</h2>
+    <ol class="how-steps">
+      <li>The agent answers all nine turns. Its answers are recorded verbatim.</li>
+      <li>A judge model reads one answer against one rule at a time — 9 × rules verdicts per run.</li>
+      <li>Each verdict is <b>pass</b>, <b>fail</b>, or <b>undetermined</b>. Undetermined means the
+        judge could not be reached, not that the agent did well; it is counted separately and never
+        as a pass.</li>
+      <li>A fail cites the exact span it is about, so a disputed verdict can be checked rather than
+        argued.</li>
+      <li>Everything is written to a signed manifest. The <b>Results</b> tab shows the runs.</li>
+    </ol>
+    <p class="note">Grounding: the arc and the boundary rules follow WHO mhGAP (2023) — the
+    guidance written for non-specialists, which is the right standard for a system that is not a
+    clinician and must not act like one.</p>
+  </section>
+
+  <section class="panel" id="p-runs" role="tabpanel" hidden>
     <div class="cards" id="c-runs"></div>
     <div class="controls">
       <input type="search" id="q" placeholder="filter language, rubric, judge, battery…" aria-label="Filter">
@@ -315,6 +365,53 @@ function qa(d){
       <td><span class="pill ${m.status==="passing"?"ok":m.status==="failing"?"bad":"warn"}">${esc(m.status||"?")}</span></td>
       <td class="num">${m.passed??0}</td><td class="num">${m.failed??0}</td><td class="num">${m.total??0}</td>
       <td class="mono" style="color:var(--muted)">${esc(String(m.last_run||"").slice(0,10))}</td></tr>`).join("");
+}
+
+/* ---- The questions & rules tab -------------------------------------------
+   Rubrics were already published; questions were not, so a reader could see how
+   an answer was judged and never see what was asked. Both load here, per
+   language, defaulting to English.                                          */
+const LANG_NAMES={am:"Amharic",ar:"Arabic",bn:"Bengali",de:"German",en:"English",es:"Spanish",
+  fa:"Persian",fr:"French",ha:"Hausa",hi:"Hindi",id:"Indonesian",it:"Italian",ja:"Japanese",
+  ko:"Korean",mr:"Marathi",my:"Burmese",pa:"Punjabi",pt:"Portuguese",ru:"Russian",sw:"Swahili",
+  ta:"Tamil",te:"Telugu",th:"Thai",tr:"Turkish",uk:"Ukrainian",ur:"Urdu",vi:"Vietnamese",
+  yo:"Yoruba",zh:"Chinese"};
+const RTL=new Set(["ar","fa","ur"]);
+const esc=t=>String(t==null?"":t).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+J("data/batteries/index.json").then(d=>{
+  const sel=$("#how-lang");
+  sel.innerHTML=(d.languages||["en"]).map(l=>
+    `<option value="${l}"${l==="en"?" selected":""}>${LANG_NAMES[l]||l} (${l})</option>`).join("");
+  sel.addEventListener("change",()=>howLoad(sel.value));
+  howLoad("en");
+}).catch(()=>{$("#how-questions").innerHTML='<div class="empty">battery data not built — run tools/build_results_index.py</div>';});
+
+function howLoad(lang){
+  const dir=RTL.has(lang)?' dir="rtl"':"";
+  J(`data/batteries/${lang}.json`).then(b=>{
+    $("#how-meta").textContent=`${b.battery_id} · battery v${b.battery_version} · ${(b.questions||[]).length} questions`;
+    $("#how-questions").innerHTML=(b.questions||[]).map((q,i)=>`
+      <article class="q"${dir}>
+        <div class="q-h"><span class="q-n">${i+1}</span><span class="q-stage">${esc(q.stage||"")}</span>
+          ${q.translated?"":'<span class="q-untr">shown in English — not yet translated</span>'}</div>
+        <p class="q-t">${esc(q.text)}</p>
+        ${q.evaluates?`<p class="q-e"><b>Checks:</b> ${esc(q.evaluates)}</p>`:""}
+      </article>`).join("")||'<div class="empty">no questions</div>';
+  }).catch(()=>{$("#how-questions").innerHTML='<div class="empty">no battery for this language yet</div>';});
+
+  const rid=`${lang}_mh_v4_canonical_universal`;
+  J(`data/rubrics/${rid}.json`).then(r=>{
+    const cs=Object.values(r.criteria||{});
+    $("#how-criteria").innerHTML=cs.map(c=>`
+      <article class="c">
+        <div class="c-h"><span class="c-id">${esc(c.id)}</span>
+          <span class="sev-${c.severity==="hard_fail"?"hard":"soft"}">${esc((c.severity||"").replace("_"," "))}</span></div>
+        <p class="c-s">${esc(c.summary)}</p>
+        ${c.rationale?`<p class="c-r"><b>Why:</b> ${esc(c.rationale)}</p>`:""}
+        ${c.query?`<p class="c-q"><b>The judge is asked:</b> ${esc(c.query)}</p>`:""}
+      </article>`).join("")||'<div class="empty">no criteria</div>';
+  }).catch(()=>{$("#how-criteria").innerHTML='<div class="empty">no rubric for this language yet</div>';});
 }
 </script>
 </body>

@@ -51,6 +51,8 @@ concurrency:
 permissions:
   contents: write
   actions: read               # listing + downloading artifacts
+  pull-requests: write        # main is ruleset-protected: evidence lands via PR,
+                              # not a direct push (see the delivery step)
 
 jobs:
   sync:
@@ -104,11 +106,33 @@ jobs:
             exit 1
           fi
 
-      - name: Commit
+      - name: Open/refresh the evidence PR
         if: steps.diff.outputs.changed != '0' && inputs.dry_run != true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # PUSHES TO A BRANCH, NOT TO MAIN.
+          #
+          # This step used to `git push origin main` and had been failing every
+          # day since 2026-08-08 — seven consecutive scheduled runs — with
+          #
+          #   remote: error: GH013: Repository rule violations found for refs/heads/main
+          #   remote: - Changes must be made through a pull request.
+          #
+          # A repository ruleset now requires PRs for main. Nothing about the
+          # harvest was broken; the delivery was illegal. Meanwhile the artifacts
+          # this job exists to outlive kept ticking toward their 90-day expiry,
+          # which is the exact loss the workflow was written to prevent, arriving
+          # by a different route than the one it guarded.
+          #
+          # A long-lived branch is durable storage in its own right: once these
+          # bundles are pushed to the remote they are off the artifact clock even
+          # before anyone merges. So the retention guarantee holds at push time,
+          # and the PR is how it reaches main.
+          BRANCH=evidence/safety-sync
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
           git add qa_reports/safety_battery qa_reports/safety_interpret
           git commit -m "evidence: sync safety-battery bundles from expiring artifacts
 
@@ -117,7 +141,27 @@ jobs:
           of the bytes and a separate retention question.
 
           bundles: ${{ steps.diff.outputs.bundles_battery }} battery, ${{ steps.diff.outputs.bundles_interpret }} interpret"
-          git push origin main
+
+          # Force-push: one accumulating branch rather than a new PR per day.
+          # Safe because nothing but this job writes it and its content is
+          # regenerated from artifacts each run.
+          git push -f origin "$BRANCH"
+
+          if gh pr view "$BRANCH" --json state --jq .state 2>/dev/null | grep -q OPEN; then
+            echo "PR already open for $BRANCH — refreshed it."
+          else
+            gh pr create --base main --head "$BRANCH" \
+              --title "evidence: safety-battery bundles harvested from expiring artifacts" \
+              --body "Automated by \`safety-evidence-sync\`. Copies battery evidence out of
+          GitHub Actions artifacts (90-day expiry) into the repo, which has none.
+
+          Holding ${{ steps.diff.outputs.bundles_battery }} battery and
+          ${{ steps.diff.outputs.bundles_interpret }} interpret bundles.
+
+          Data only — no code. Traces are excluded (99.9% of the bytes, separate
+          retention question). The branch is force-updated by each run, so this PR
+          stays current; merging it is safe at any time."
+          fi
 
       - name: Nothing to do
         if: steps.diff.outputs.changed == '0'

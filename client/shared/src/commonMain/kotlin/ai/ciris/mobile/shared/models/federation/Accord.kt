@@ -679,6 +679,18 @@ data class GenesisSeedResponse(
     val authorizationsNeeded: Int = 0,
     val complete: Boolean = false,
     /**
+     * Why this bundle is not complete, when the reason is NOT "it wants more
+     * signatures". Null while the ceremony is merely mid-flight.
+     *
+     * `complete` alone cannot carry this: a bundle that is INVALID and a bundle
+     * that is one holder short both read as `false`, and the card rendered both
+     * as "keep signing". During the 2026-08-14 ceremony that sent the operator
+     * to fetch a third YubiKey for a bundle no signature could ever repair
+     * (CIRISPersist#683). When this is present, MORE HOLDERS WILL NOT HELP.
+     */
+    @SerialName("blocked_by")
+    val blockedBy: String? = null,
+    /**
      * The chosen canonical carried no `infra:serve` (it predated the conferral),
      * so THIS ceremony blessed it as a trace server as part of minting the seed —
      * the same two holders, the same two taps. Surface it so the operator knows a
@@ -713,6 +725,12 @@ data class GenesisSeedState(
     val authorizedKeyIds: List<String> = emptyList(),
     /** Sticky once true across the ceremony: the canonical was blessed inline. */
     val serveNodeReblessed: Boolean = false,
+    /**
+     * Carried through from [GenesisSeedResponse.blockedBy]: why this bundle is
+     * not complete when the reason is NOT "it wants more signatures". Null while
+     * the ceremony is merely mid-flight. When set, MORE HOLDERS WILL NOT HELP.
+     */
+    val blockedBy: String? = null,
 )
 
 /**
@@ -794,4 +812,39 @@ data class YubiKeyStatus(
     // but the HOST library must be upgraded. Drives the "stale host" alert.
     @SerialName("pkcs11_ed25519_ok") val pkcs11Ed25519Ok: Boolean? = null,
     val hint: String? = null,
+)
+
+// ========== POST /v1/self/identity/inspect (CIRISServer#404) ==========
+
+/**
+ * Request: which folder to look in.
+ */
+@kotlinx.serialization.Serializable
+data class KeysetInspectRequest(val dir: String)
+
+/**
+ * What a folder holds, **as the importer itself sees it**.
+ *
+ * The node answers this, not the app. "Is there a keyset here" has exactly one
+ * correct answer — the one `install_portable_software_keyset` will act on — and a
+ * second implementation here (glob for `*.seed`, hope) would drift from it in the
+ * worst direction: a picker that says "looks fine" and an import that then
+ * refuses. So this is the importer's own discovery, run without importing.
+ */
+@kotlinx.serialization.Serializable
+data class KeysetInspection(
+    val dir: String = "",
+    /** `true` iff the import would accept this folder. */
+    val importable: Boolean = false,
+    /** The discovered alias, when exactly one keyset is present. */
+    val alias: String? = null,
+    /** Which conventional files are present, by NAME (no bytes, no sizes). */
+    val files_present: List<String> = emptyList(),
+    /** The files the importer wanted and did not find. */
+    val files_missing: List<String> = emptyList(),
+    /**
+     * A sentence for the operator — shown whether or not [importable], because
+     * "this folder is fine" is as useful to see as why it is not.
+     */
+    val detail: String = "",
 )

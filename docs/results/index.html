@@ -377,7 +377,6 @@ const LANG_NAMES={am:"Amharic",ar:"Arabic",bn:"Bengali",de:"German",en:"English"
   ta:"Tamil",te:"Telugu",th:"Thai",tr:"Turkish",uk:"Ukrainian",ur:"Urdu",vi:"Vietnamese",
   yo:"Yoruba",zh:"Chinese"};
 const RTL=new Set(["ar","fa","ur"]);
-const esc=t=>String(t==null?"":t).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
 J("data/batteries/index.json").then(d=>{
   const sel=$("#how-lang");

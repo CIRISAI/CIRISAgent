@@ -54,6 +54,49 @@ UK_ONLY = set("іїєґ")
 PLACEHOLDER = re.compile(r"\{\{?[a-zA-Z_][a-zA-Z0-9_]*\}?\}")
 
 
+#: Russian stems that survive a naive "add Ukrainian endings" pass. The corpus
+#: was already damaged that way once — "Получить баланс … і детали счёта" — so a
+#: batch that merely avoids ы/ъ/э/ё is NOT yet Ukrainian. Each entry is
+#: (russian_fragment, the ukrainian it should have been).
+RU_STEMS = [
+    ("ошибк", "помилк"), ("пользовател", "користувач"), ("настройк", "налаштуван"),
+    ("сообщени", "повідомлен"), ("создат", "створит"), ("удалит", "видалит"),
+    ("сохранит", "зберегт"), ("загрузк", "завантажен"), ("отключ", "вимкн"),
+    ("попробуйте", "спробуйте"), ("текущ", "поточн"),
+    ("значени", "значенн"), ("получит", "отримат"), ("отправит", "надіслат"),
+    ("подключени", "з'єднанн"), ("устройств", "пристро"),
+    ("количеств", "кількіст"), ("состояни", "стан"), ("выполн", "викон"),
+    ("измени", "змін"), ("добави", "додай"), ("найден", "знайден"),
+    ("сброс", "скидан"), ("аккаунт", "акаунт"), ("который", "який"),
+    # NOT in this list, and deliberately — each fires on CORRECT Ukrainian:
+    #   "недоступ"  `недоступна` is the same word in both languages
+    #   "включ"     `включно з` ("including") is Ukrainian; only `отключ` is
+    #               reliably Russian, since Ukrainian uses `вимкн`.
+    # Both were found by the linter rejecting good translations, which is the
+    # cheapest possible place to find them.
+    ("если", "якщо"), ("или", "або"), ("что", "що"), ("это", "це"),
+]
+
+
+def lint_translation(dst: str) -> list[str]:
+    """Russian stems left in a supposedly-Ukrainian string.
+
+    Structural checks (letters, placeholders) cannot see this: "Отключено" has no
+    ы/ъ/э/ё and is still Russian. This is the check that would have caught the
+    original damage, so it runs on every batch rather than on a sample.
+    """
+    # WORD-INITIAL ONLY. A bare substring test fires inside correct Ukrainian:
+    # `визначених` contains `значени`, `не знайдено` contains `найден`. Four of
+    # the first batch's translations were rejected for being right, which is the
+    # failure mode this whole file exists to avoid — a check that cannot pass.
+    low = dst.lower()
+    hits = []
+    for ru, uk in RU_STEMS:
+        if re.search(rf"(?<![а-яіїєґ']){re.escape(ru)}", low):
+            hits.append(f"{ru} (should be {uk})")
+    return hits
+
+
 def flat(d: dict, pre: str = "") -> dict:
     out = {}
     for k, v in d.items():
@@ -141,6 +184,10 @@ def cmd_apply(args) -> int:
             continue
         if sorted(PLACEHOLDER.findall(src)) != sorted(PLACEHOLDER.findall(dst)):
             rejected.append((src, "placeholders differ from source"))
+            continue
+        stems = lint_translation(dst)
+        if stems and src.strip() not in same_by_design:
+            rejected.append((src, f"still Russian: {stems[0]}"))
             continue
         accepted[src] = dst
 

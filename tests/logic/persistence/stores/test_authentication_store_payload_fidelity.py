@@ -345,7 +345,13 @@ class TestTokenType:
             store.update_wa_certificate(LEGACY_ID, {"token_type": TokenType.CHANNEL})
 
         assert wired.stored(LEGACY_ID, "token_type") == "standard"
-        assert "channel" in caplog.text
+        # Reported by CLASSIFICATION, not by echoing the value — and that loses
+        # nothing here: of the agent's three TokenType members (standard, channel,
+        # oauth) only `channel` is absent from persist's set, so it is the ONLY
+        # agent variant that can reach this branch. `known agent variant: True`
+        # therefore names it as precisely as the literal did, while a
+        # caller-supplied value can no longer reach the log at all.
+        assert "known agent variant: True" in caplog.text
         assert "not one of" in caplog.text
 
     def test_unknown_variant_never_reaches_persist(self, wired: FakePersistEngine) -> None:
@@ -394,7 +400,12 @@ class TestScopesToPersist:
         """Scopes drive authorization — a garbled value must not widen access."""
         with caplog.at_level("WARNING"):
             assert store._scopes_to_persist("not json at all") == []
-        assert "does not decode to a list" in caplog.text
+        assert "did not decode to a list" in caplog.text
+        # The warning must describe the SHAPE, never echo the bytes. A value that
+        # failed to decode came off a credential row and is the least trustworthy
+        # input we hold (py/clear-text-logging-sensitive-data).
+        assert "not json at all" not in caplog.text
+        assert "type=str" in caplog.text
 
     def test_non_list_json_fails_closed(self) -> None:
         assert store._scopes_to_persist('{"read": true}') == []

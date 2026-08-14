@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
 
 import psutil
 import requests
@@ -973,15 +974,27 @@ class APIServerManager:
             # Auto-detect provider from base_url if not explicitly set
             provider = self.config.live_provider
             if not provider and self.config.live_base_url:
-                base_url_lower = self.config.live_base_url.lower()
-                if "openrouter.ai" in base_url_lower:
-                    provider = "openrouter"
-                elif "groq.com" in base_url_lower:
-                    provider = "groq"
-                elif "together" in base_url_lower:
-                    provider = "together"
-                else:
-                    provider = "openai_compatible"
+                    # Match on the parsed HOSTNAME, not a substring of the whole
+                    # URL. `"groq.com" in url` also matches
+                    # `https://evil.example/groq.com/v1` and
+                    # `https://groq.com.attacker.net` — the live API key would go
+                    # to the wrong host while the log says "groq"
+                    # (CodeQL py/incomplete-url-substring-sanitization). Host
+                    # suffix matching, with the leading dot, cannot be spoofed by
+                    # a path segment or a longer registrable domain.
+                    host = (urlparse(self.config.live_base_url).hostname or "").lower()
+
+                    def _is_host(domain: str) -> bool:
+                        return host == domain or host.endswith("." + domain)
+
+                    if _is_host("openrouter.ai"):
+                        provider = "openrouter"
+                    elif _is_host("groq.com"):
+                        provider = "groq"
+                    elif _is_host("together.ai") or _is_host("together.xyz"):
+                        provider = "together"
+                    else:
+                        provider = "openai_compatible"
             provider = provider or "openai"
             env["CIRIS_LLM_PROVIDER"] = provider
 

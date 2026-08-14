@@ -1241,7 +1241,6 @@ class QARunner:
         """Create/verify OAuth test user in database for billing integration tests."""
         try:
             import base64
-            import hashlib
             import json
             import secrets
             import sqlite3
@@ -1270,10 +1269,21 @@ class QARunner:
             if not exists:
                 # Generate dummy pubkey and jwt_kid for OAuth user
                 # OAuth users don't use real Ed25519 keys - these are just placeholders
-                dummy_pubkey = base64.b64encode(
-                    hashlib.sha256(self.config.oauth_test_user_id.encode()).digest()
-                ).decode()
-                jwt_kid = f"oauth_{self.config.oauth_test_provider}_{hashlib.sha256(self.config.oauth_test_external_id.encode()).hexdigest()[:16]}"
+                # RANDOM placeholders, not hashes of the user's identifiers.
+                #
+                # These stand in for an Ed25519 keypair an OAuth user does not have.
+                # Deriving them from oauth_test_user_id / oauth_test_external_id bought
+                # nothing: the row is looked up by (provider, external_id), never by
+                # kid, and this branch only runs when the row does NOT exist, so
+                # nothing requires them to be reproducible.
+                #
+                # It cost two things. A value that LOOKS like a public key but is
+                # SHA-256 of a user identifier invites someone to treat it as
+                # derivable; and it is a fast unsalted digest of a user identifier
+                # sitting in a credential column (py/weak-sensitive-data-hashing).
+                # Random says 'placeholder' unambiguously and leaks nothing.
+                dummy_pubkey = base64.b64encode(secrets.token_bytes(32)).decode()
+                jwt_kid = f"oauth_{self.config.oauth_test_provider}_{secrets.token_hex(8)}"
 
                 # Observer scopes
                 scopes = json.dumps(

@@ -1415,7 +1415,11 @@ async def run_desktop_up(args: argparse.Namespace) -> int:
     if not _complete_setup(server.base_url, args.mock_llm):
         server.stop()
         return 1
-    print(f"  ✅ admin created: {TEST_ADMIN_USERNAME} / {TEST_ADMIN_PASSWORD}")
+    # Username only. The password is a fixed constant in this file
+    # (TEST_ADMIN_PASSWORD) and anyone who needs it reads it there. Echoing it
+    # puts a working credential into CI logs, terminal scrollback, and every
+    # transcript of a QA session, for no information the reader lacks.
+    print(f"  ✅ admin created: {TEST_ADMIN_USERNAME} (password: see TEST_ADMIN_PASSWORD)")
 
     # Restart backend without CIRIS_FORCE_FIRST_RUN so /v1/setup/status
     # returns is_first_run=false and the desktop goes to the Login screen,
@@ -1497,7 +1501,8 @@ async def run_desktop_up(args: argparse.Namespace) -> int:
 
     print()
     print(f"✅ Ready. Backend: {server.base_url}  Desktop test server: http://localhost:{args.desktop_port}")
-    print(f"   Admin: {TEST_ADMIN_USERNAME} / {TEST_ADMIN_PASSWORD}")
+    # Username only — see the note at the admin-created line above.
+    print(f"   Admin: {TEST_ADMIN_USERNAME} (password: see TEST_ADMIN_PASSWORD)")
     print("   Processes left running — kill with: pkill -9 -f 'CIRIS-macos|main.py --adapter api'")
     return 0
 

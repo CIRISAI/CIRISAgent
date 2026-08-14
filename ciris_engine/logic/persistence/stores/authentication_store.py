@@ -30,7 +30,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional, cast
 
-from ciris_engine.schemas.services.authority_core import OAuthIdentityLink, WACertificate
+from ciris_engine.schemas.services.authority_core import OAuthIdentityLink, TokenType, WACertificate
 
 logger = logging.getLogger(__name__)
 
@@ -147,11 +147,17 @@ def _scopes_to_persist(value: Any) -> List[str]:
         return [str(scope) for scope in decoded]
     if decoded is None:
         return []
-    # %r escapes newlines/CR in a value that came off disk or the wire
-    # (CWE-117 / Sonar S5145), matching the pattern used elsewhere here.
+    # Log the SHAPE, never the content. This value comes off the wa_cert row,
+    # which CodeQL correctly treats as carrying credential material
+    # (py/clear-text-logging-sensitive-data) — and a scopes column that failed to
+    # decode is exactly the case where its bytes are least trustworthy. Type and
+    # length identify the defect ("a dict arrived", "an 8KB blob arrived")
+    # without copying unknown row bytes into the log.
     logger.warning(
-        "wa_cert scopes %r does not decode to a list — storing an empty scope set",
-        str(value)[:200],
+        "wa_cert scopes did not decode to a list (type=%s, len=%d) — storing an "
+        "empty scope set",
+        type(value).__name__,
+        len(str(value)),
     )
     return []
 
@@ -212,11 +218,19 @@ def _coerce_token_type(value: Any) -> str:
     text = value.value if isinstance(value, Enum) else str(value)
     if text in _PERSIST_TOKEN_TYPES:
         return text
+    # Report WHICH known variant this is by comparison against a fixed set,
+    # rather than echoing the value. `agent_variant` is a bool derived from a
+    # constant comparison, so it carries no row bytes — and it answers the only
+    # question an operator actually has here: "is this our TokenType.CHANNEL
+    # (expected, handled) or something nobody recognises (worth investigating)?"
+    agent_variant = text in {member.value for member in TokenType}
     logger.warning(
-        "wa_cert token_type %r is not one of %s — storing %r instead. The "
-        "agent derives TokenType from adapter_id/oauth_provider at "
-        "verification time, so the stored column is advisory.",
-        text,
+        "wa_cert token_type rejected (known agent variant: %s, len=%d) — not one "
+        "of %s; storing %r instead. The agent derives TokenType from "
+        "adapter_id/oauth_provider at verification time, so the stored column "
+        "is advisory.",
+        agent_variant,
+        len(text),
         sorted(_PERSIST_TOKEN_TYPES),
         _DEFAULT_TOKEN_TYPE,
     )

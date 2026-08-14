@@ -9,6 +9,7 @@ Supports:
 """
 
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, Set
 
@@ -268,6 +269,12 @@ def _build_permissions_set(key_info: Any, user: Any) -> Set[Any]:
 #: OAuth callback all funnel through that single function.
 SUBSTRATE_SESSION_PREFIX = "sess:"
 
+#: Grammar of a node-minted session token: ``sess:<wa_id>:<mac>``. Used ONLY to
+#: report whether a rejected token was structurally plausible — never to accept
+#: one. Authentication is the substrate's call; this must not become a second,
+#: weaker opinion about validity.
+_SESSION_TOKEN_RE = re.compile(r"sess:wa-\d{4}-\d{2}-\d{2}-[A-Za-z0-9]{6}:[A-Za-z0-9_\-=]+")
+
 
 def _describe_token_family(token: str) -> str:
     """Name the token's minter, for logs only. Never a decision input.
@@ -330,17 +337,28 @@ def resolve_substrate_session(token: str) -> Dict[str, Any]:
         ) from None
 
     if resolved is None:
-        # Name the SUBJECT, not just the verdict. `wa_id` is not a secret —
-        # `/v1/auth/owner-hint` serves the owner's name unauthenticated, and it is
-        # the wa_id minus its prefix — but the MAC is, so only the id half is
-        # logged. Without this a 401 storm is 191 identical lines that cannot
-        # distinguish "one stale token replayed" from "every fresh token
-        # refused", which have nothing in common as diagnoses.
-        subject = token.split(":")[1] if token.count(":") >= 2 else "<unparseable>"
+        # Log the token's SHAPE, never a slice of it.
+        #
+        # This used to log `token.split(":")[1]`, reasoning that a wa_id is not a
+        # secret. The wa_id is not — but that expression does not extract a wa_id,
+        # it extracts whatever the caller put between the first two colons. Anyone
+        # may send `sess:<anything>:x` unauthenticated and have it written verbatim
+        # into our warning log, and on a malformed token that slice can land on
+        # credential material instead (py/clear-text-logging-sensitive-data). A
+        # REJECTED token is precisely the input least entitled to that trust.
+        #
+        # `well_formed` is a bool from a fullmatch against the token grammar and
+        # `segments` an int, so neither can carry caller bytes — and together they
+        # still separate the diagnoses that matter: junk arriving at the endpoint
+        # (well_formed=False) from real tokens being refused (well_formed=True).
+        # When the subject itself is needed, the node has it: it made the judgement.
+        well_formed = bool(_SESSION_TOKEN_RE.fullmatch(token))
         logger.warning(
-            "auth: substrate JUDGED this session token invalid (wa_id=%s). This is a "
-            "verdict, not an outage — the substrate looked and said no.",
-            subject,
+            "auth: substrate JUDGED this session token invalid "
+            "(well_formed=%s, segments=%d). This is a verdict, not an outage — "
+            "the substrate looked and said no; it logs the subject.",
+            well_formed,
+            token.count(":") + 1,
         )
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session token")
     return dict(resolved)

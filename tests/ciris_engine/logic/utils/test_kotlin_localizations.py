@@ -85,6 +85,32 @@ def find_kotlin_keys(kotlin_dir: Path) -> set[str]:
     return keys
 
 
+
+def _flat_values(path: Path) -> dict:
+    """Dotted-key -> string value, for comparing a copy's TEXT against source.
+
+    Separate from `load_localization_keys` (which returns a key set) rather than
+    reworking it: that function has other callers, and this test is being
+    tightened precisely because a silent behaviour change slipped through here
+    once already.
+    """
+    import json
+
+    def walk(obj, prefix=""):
+        out = {}
+        for k, v in obj.items():
+            if isinstance(v, dict):
+                out.update(walk(v, f"{prefix}{k}."))
+            elif isinstance(v, str):
+                out[f"{prefix}{k}"] = v
+        return out
+
+    try:
+        return walk(json.loads(path.read_text(encoding="utf-8")))
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
 class TestKotlinLocalizations:
     """Tests for Kotlin localization key coverage."""
 
@@ -137,7 +163,21 @@ class TestKotlinLocalizations:
             pytest.fail("\n".join(msg_lines))
 
     def test_localization_files_in_sync(self, project_root: Path) -> None:
-        """Verify ALL localization copies are byte-identical to source.
+        """Verify ALL localization copies match source — keys AND values.
+
+        The "AND values" half was missing until 2.9.14, while this docstring
+        already claimed "byte-identical". It compared key SETS only, so a mirror
+        carrying every correct key with entirely wrong text passed clean.
+
+        That is not hypothetical. The Ukrainian retranslation (#949) landed in
+        five of six copies; `client/iosApp/Resources/app/localization/uk.json`
+        kept 658 Russian values and this test stayed green, because the Russian
+        strings sat under the same keys. It is the copy iOS ships from, so the
+        release would have shown Ukrainian users Russian on the one platform
+        already reporting upgrade trouble.
+
+        Measured before tightening: zero value drift across all 29 locales × 5
+        copies, so equality is the real invariant here, not an aspiration.
 
         Source of truth: localization/*.json
         Copies that must stay in sync:
@@ -188,6 +228,20 @@ class TestKotlinLocalizations:
                 if missing:
                     errors.append(
                         f"{rel_dir}/{lang_file}: missing {len(missing)} keys " f"(e.g. {sorted(missing)[:3]})"
+                    )
+
+                # The half that was absent. A copy is a copy: same key, same
+                # text. Report the count AND a specimen — "12 values differ" sends
+                # someone diffing 3,676 strings, while showing the pair usually
+                # identifies the stale mirror on sight.
+                src_vals = _flat_values(source_file)
+                copy_vals = _flat_values(copy_file)
+                changed = sorted(k for k, v in src_vals.items() if k in copy_vals and copy_vals[k] != v)
+                if changed:
+                    k = changed[0]
+                    errors.append(
+                        f"{rel_dir}/{lang_file}: {len(changed)} values differ from source "
+                        f"(e.g. {k!r}: source={src_vals[k][:48]!r} copy={copy_vals[k][:48]!r})"
                     )
 
         if errors:

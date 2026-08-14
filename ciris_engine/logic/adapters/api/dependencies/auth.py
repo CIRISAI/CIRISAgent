@@ -313,13 +313,13 @@ def resolve_substrate_session(token: str) -> Dict[str, Any]:
 
         resolved = ciris_server.resolve_bearer(token)
     except ImportError:
-        logger.error("auth: substrate session token presented but ciris_server is not importable")
+        logger.exception("auth: substrate session token presented but ciris_server is not importable")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Identity verification unavailable",
         ) from None
     except Exception as exc:  # noqa: BLE001 — an outage is NOT a rejection
-        logger.error(
+        logger.exception(
             "auth: substrate COULD NOT judge this token (%s). Answering 503, not 401 — "
             "the credential may be perfectly valid and we simply could not check it.",
             exc,
@@ -347,7 +347,7 @@ def resolve_substrate_session(token: str) -> Dict[str, Any]:
 
 
 def _handle_substrate_session_auth(
-    request: Request, auth_service: APIAuthService, token: str
+    _request: Request, _auth_service: APIAuthService, token: str
 ) -> AuthContext:
     """Verify a node-minted `sess:` token by asking the SUBSTRATE, not ourselves.
 

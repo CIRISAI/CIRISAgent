@@ -187,7 +187,7 @@ async def proxy_auth_to_node(path: str, request: Request) -> Response:
         # CRLF in it forges log lines (Sonar S5145). The path is already validated
         # above, but a log statement should not depend on a check elsewhere staying
         # correct. The exception text is the diagnostic value here anyway.
-        logger.error("auth proxy could not reach the node at %s: %s", NODE_UPSTREAM, exc)
+        logger.exception("auth proxy could not reach the node at %s", NODE_UPSTREAM)
         return Response(
             content=b'{"detail":"identity service unavailable"}',
             status_code=502,

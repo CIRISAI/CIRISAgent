@@ -271,9 +271,14 @@ def test_auth_proxy_does_not_log_the_caller_supplied_path() -> None:
     # `_strip_docstring` round-trips through ast.unparse, which normalises quote
     # style — so assert on the ARGUMENTS, not on the source spelling.
     code = _strip_docstring(inspect.getsource(auth_proxy.proxy_auth_to_node))
-    assert "NODE_UPSTREAM, exc)" in code, (
+    assert "NODE_UPSTREAM" in code, (
         "the failure log must name the fixed upstream, never the caller's path"
     )
-    assert "url, exc)" not in code, (
-        "the constructed URL embeds the caller's path — logging it re-opens S5145"
+    # The constructed URL embeds the caller's path — logging it re-opens S5145.
+    # Asserted on the ARGUMENT, not the call spelling: this test previously pinned
+    # `NODE_UPSTREAM, exc)` and broke when the call became logger.exception(),
+    # which was a strictly better call. A test should hold the property, not the
+    # phrasing.
+    assert "url" not in code.split("logger.")[1][:120], (
+        "the failure log interpolates the constructed URL, which contains caller input"
     )

@@ -109,3 +109,164 @@ def test_absent_config_file_is_normal(monkeypatch, caplog) -> None:
     sync.sync_oauth_providers_to_node("http://node")
 
     assert not called
+
+
+# ---------------------------------------------------------------------------
+# The transport and the branches the tests above stub past.
+#
+# Everything above monkeypatches `_call`, which is right for asserting payload
+# shape but leaves the HTTP layer and several decision branches unexercised —
+# 53 uncovered lines, which is most of what this module is. These cover them
+# against a real local HTTP server, so the request actually goes over a socket.
+# ---------------------------------------------------------------------------
+
+import http.server
+import threading
+from typing import Optional
+
+
+class _Recorder(http.server.BaseHTTPRequestHandler):
+    """Captures method/path/body and replies with whatever the test queued."""
+
+    def _respond(self) -> None:
+        n = int(self.headers.get("Content-Length") or 0)
+        body = self.rfile.read(n) if n else b""
+        self.server.seen.append((self.command, self.path, body))  # type: ignore[attr-defined]
+        code, payload = self.server.reply  # type: ignore[attr-defined]
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(payload)
+
+    do_GET = do_PUT = do_POST = _respond  # noqa: N815
+
+    def log_message(self, *a: object) -> None:  # silence the test server
+        return
+
+
+@pytest.fixture
+def server():
+    srv = http.server.HTTPServer(("127.0.0.1", 0), _Recorder)
+    srv.seen = []            # type: ignore[attr-defined]
+    srv.reply = (200, b"{}")  # type: ignore[attr-defined]
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        yield srv
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+
+def _url(srv) -> str:
+    return f"http://127.0.0.1:{srv.server_address[1]}"
+
+
+def test_call_really_sends_json_over_the_wire(server) -> None:
+    """`_call` itself — stubbed out by every test above."""
+    status, _ = sync._call("POST", _url(server) + "/x", {"a": 1})
+    assert status == 200
+    method, path, body = server.seen[-1]
+    assert (method, path) == ("POST", "/x")
+    assert json.loads(body) == {"a": 1}
+
+
+def test_call_returns_the_status_on_an_http_error(server) -> None:
+    """A 4xx must come back as a status, not raise — callers branch on it."""
+    server.reply = (403, b'{"error":"no responsible party"}')  # type: ignore[attr-defined]
+    status, body = sync._call("PUT", _url(server) + "/x", {"value": "v"})
+    assert status == 403 and "responsible party" in body
+
+
+def test_call_survives_an_unreachable_host() -> None:
+    """Node down at boot must not raise — it is best-effort by contract."""
+    status, detail = sync._call("GET", "http://127.0.0.1:1/nope")
+    assert status == 0 and detail
+
+
+def test_callback_base_is_skipped_when_already_correct(server, monkeypatch) -> None:
+    """Idempotence: a matching GET means no write at all."""
+    monkeypatch.setenv("OAUTH_CALLBACK_BASE_URL", "https://agents.ciris.ai")
+    server.reply = (200, b'{"value":"https://agents.ciris.ai"}')  # type: ignore[attr-defined]
+
+    sync._sync_callback_base(_url(server))
+
+    assert not [c for c in server.seen if c[0] == "PUT"], "must not rewrite a correct value"
+
+
+def test_callback_base_write_succeeds(server, monkeypatch, caplog) -> None:
+    monkeypatch.setenv("OAUTH_CALLBACK_BASE_URL", "https://agents.ciris.ai/")
+    server.reply = (200, b"{}")  # type: ignore[attr-defined]
+
+    with caplog.at_level("INFO"):
+        sync._sync_callback_base(_url(server))
+
+    put = [c for c in server.seen if c[0] == "PUT"][-1]
+    assert put[1].endswith("/v1/config/auth.oauth_callback_base_url")
+    # Trailing slash stripped — the node concatenates the path onto this.
+    assert json.loads(put[2]) == {"value": "https://agents.ciris.ai"}
+
+
+def test_unexpected_status_on_the_config_write_is_reported(server, monkeypatch, caplog) -> None:
+    """Neither 200 nor 403 — say the status rather than swallowing it."""
+    monkeypatch.setenv("OAUTH_CALLBACK_BASE_URL", "https://agents.ciris.ai")
+    server.reply = (500, b"{}")  # type: ignore[attr-defined]
+
+    with caplog.at_level("WARNING"):
+        sync._sync_callback_base(_url(server))
+
+    assert "500" in caplog.text
+
+
+def test_provider_without_credentials_is_skipped_not_posted(monkeypatch, caplog) -> None:
+    """A malformed entry must not be sent as a half-configured provider."""
+    monkeypatch.setattr(sync, "_read_provider_config", lambda: {"google": {"client_id": "cid"}})
+    calls: List[Any] = []
+    monkeypatch.setattr(sync, "_call", lambda *a, **k: calls.append(a) or (200, ""))
+    monkeypatch.delenv("OAUTH_CALLBACK_BASE_URL", raising=False)
+
+    with caplog.at_level("WARNING"):
+        sync.sync_oauth_providers_to_node("http://node")
+
+    assert not calls
+    assert "client_id/client_secret" in caplog.text
+
+
+def test_non_dict_provider_entry_is_ignored(monkeypatch) -> None:
+    """Hand-edited config: a string where an object belongs must not crash boot."""
+    monkeypatch.setattr(sync, "_read_provider_config", lambda: {"google": "not-an-object"})
+    calls: List[Any] = []
+    monkeypatch.setattr(sync, "_call", lambda *a, **k: calls.append(a) or (200, ""))
+    monkeypatch.delenv("OAUTH_CALLBACK_BASE_URL", raising=False)
+
+    sync.sync_oauth_providers_to_node("http://node")
+    assert not calls
+
+
+def test_unreadable_config_file_reports_the_source_not_the_path(tmp_path, monkeypatch, caplog) -> None:
+    """The read-failure branch, and the CodeQL property that fixed it.
+
+    The log must name WHICH SOURCE was tried, never the path — a credential
+    file's location is not the harmless part of a secrets file.
+    """
+    bad = tmp_path / "oauth.json"
+    bad.write_text("{ this is not json", encoding="utf-8")
+    monkeypatch.setattr(sync, "_SHARED_OAUTH_CONFIG", bad)
+    monkeypatch.setattr(sync, "_LOCAL_OAUTH_CONFIG", tmp_path / "absent.json")
+
+    with caplog.at_level("WARNING"):
+        assert sync._read_provider_config() is None
+
+    assert "shared volume" in caplog.text
+    assert str(bad) not in caplog.text, "the path must never reach the log"
+
+
+def test_config_read_prefers_the_shared_volume(tmp_path, monkeypatch) -> None:
+    """Managed mode wins over the standalone fallback, as the old router did."""
+    shared = tmp_path / "shared.json"
+    local = tmp_path / "local.json"
+    shared.write_text(json.dumps({"google": {"client_id": "S", "client_secret": "s"}}), encoding="utf-8")
+    local.write_text(json.dumps({"google": {"client_id": "L", "client_secret": "l"}}), encoding="utf-8")
+    monkeypatch.setattr(sync, "_SHARED_OAUTH_CONFIG", shared)
+    monkeypatch.setattr(sync, "_LOCAL_OAUTH_CONFIG", local)
+
+    assert sync._read_provider_config()["google"]["client_id"] == "S"

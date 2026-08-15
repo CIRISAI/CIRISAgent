@@ -88,6 +88,21 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: iOS substrate currency — an Xcode build off this branch must ship the pinned substrate
+        run: |
+          # Resources.zip records no version of its own — the vendored
+          # ciris_server declares no __version__ and the .so embeds no version
+          # literal, which the updater reports when it probes and finds nothing.
+          # So nothing could tell whether iOS shipped the substrate everything
+          # else was pinned to, and it drifted a full release behind while
+          # requirements.txt, CLIENT_VERSION, the Android gradle pin and the
+          # Android wheels all moved to 0.5.173.
+          #
+          # substrate.lock.json is written by the updater on every iOS refresh,
+          # so this runs on any runner in milliseconds and answers the question
+          # the artifact cannot answer about itself.
+          python tools/dev/check_ios_substrate_current.py
+
       - name: Version alignment — the shipped client must match the shipped node
         run: |
           # WHY THIS RUNS IN CI AND NOT ONLY IN pre-commit.

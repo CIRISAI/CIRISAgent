@@ -19,6 +19,17 @@ name: Refresh iOS substrate binaries
 # carry the desired ciris-persist / ciris-edge / ciris-verify pins.
 
 on:
+  # AUTOMATIC: the moment a branch changes the substrate pin, iOS is stale by
+  # definition — and only this runner can fix it, because it is the only host
+  # with a materialised Resources tree. Waiting for someone to remember is how
+  # iOS ended up a full release behind every other platform.
+  #
+  # Refreshes IN PLACE on the PR's own branch, so the PR that moves the pin is
+  # the PR that carries the matching iOS bundle. compose-gate's currency check
+  # then passes on that same PR rather than blocking the release later.
+  pull_request:
+    paths:
+      - 'requirements.txt'
   workflow_dispatch:
     inputs:
       target_branch:
@@ -43,14 +54,14 @@ concurrency:
 
 jobs:
   refresh:
-    name: Refresh iOS substrate (${{ inputs.libs }}) on ${{ inputs.target_branch }}
+    name: Refresh iOS substrate (${{ inputs.libs || 'all' }}) on ${{ inputs.target_branch || github.head_ref }}
     runs-on: macos-latest
 
     steps:
       - name: Checkout ${{ inputs.target_branch }}
         uses: actions/checkout@v5
         with:
-          ref: ${{ inputs.target_branch }}
+          ref: ${{ inputs.target_branch || github.head_ref }}
           # Need full history so we can branch + push
           fetch-depth: 0
 
@@ -168,9 +179,19 @@ jobs:
         id: branch
         if: steps.diff.outputs.changed == 'true'
         run: |
-          branch="chore/ios-substrate-refresh-$(date -u +%Y%m%dT%H%M%S)"
+          # On a pull_request the refresh belongs ON THAT PR: the branch that moved
+          # the pin is the branch whose iOS bundle is now stale, and compose-gate's
+          # currency check runs on that same PR. Opening a SECOND PR would leave the
+          # first one red and rely on a human noticing the pairing.
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            branch="${{ github.head_ref }}"
+            echo "refreshing in place on PR branch $branch"
+            git checkout -B "$branch"
+          else
+            branch="chore/ios-substrate-refresh-$(date -u +%Y%m%dT%H%M%S)"
+            git checkout -b "$branch"
+          fi
           echo "branch=$branch" >> "$GITHUB_OUTPUT"
-          git checkout -b "$branch"
           # Stage only the iOS substrate paths — keeps incidental workspace
           # dirt out of the PR while covering the native .so, the .fwork
           # redirect frameworks, the Python bindings, and Resources.zip.
@@ -181,13 +202,14 @@ jobs:
             client/iosApp/app_packages_native \
             client/iosApp/Frameworks \
             client/iosApp/Resources/app_packages \
-            client/iosApp/Resources.zip
+            client/iosApp/Resources.zip \
+            client/iosApp/substrate.lock.json
           git status -s
           git commit -m "chore(ios): refresh iOS substrate binaries to ciris-server ${{ steps.pins.outputs.server }} (verify ${{ steps.pins.outputs.verify }})"
           git push origin "$branch"
 
       - name: Open PR
-        if: steps.diff.outputs.changed == 'true'
+        if: steps.diff.outputs.changed == 'true' && github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TARGET_BRANCH: ${{ inputs.target_branch }}

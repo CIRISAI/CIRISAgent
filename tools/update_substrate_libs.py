@@ -51,6 +51,7 @@ Version defaults to the per-library pin floor in requirements.txt.
 
 import argparse
 import hashlib
+import json
 import os
 import re
 import shutil
@@ -1134,6 +1135,49 @@ def update_python_bindings_ios(lib: SubstrateLib, version: str) -> bool:
 _ZIP_SHRINK_FLOOR = 0.75
 
 
+
+#: Records which substrate versions the iOS bundle was actually built from.
+#:
+#: `Resources.zip` carries no version information — `app_packages/ciris_server/`
+#: declares no `__version__`, and the `.so` embeds no version literal (the
+#: updater's own probe says so). So NOTHING outside a macOS host could tell which
+#: substrate iOS was shipping, and it drifted a full release behind while every
+#: other platform moved. This file is the answer to "what is in there", and it is
+#: tracked so any runner can check it against requirements.txt.
+IOS_SUBSTRATE_LOCK = IOS_APP_DIR / "substrate.lock.json"
+
+
+def write_ios_substrate_lock(lib: str, version: str) -> None:
+    """Record `lib` -> `version` for the iOS bundle, preserving other libs."""
+    import datetime as _dt
+
+    data = {}
+    if IOS_SUBSTRATE_LOCK.exists():
+        try:
+            data = json.loads(IOS_SUBSTRATE_LOCK.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            data = {}
+    libs = dict(data.get("libs") or {})
+    libs[lib] = version
+    IOS_SUBSTRATE_LOCK.write_text(
+        json.dumps(
+            {
+                "_comment": (
+                    "What the iOS Resources.zip was BUILT FROM. Written by "
+                    "tools/update_substrate_libs.py --platform ios. The bundle itself "
+                    "records no version, so this is the only thing a non-macOS runner "
+                    "can check against requirements.txt."
+                ),
+                "libs": dict(sorted(libs.items())),
+                "updated_at": _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds"),
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    print(f"  -> substrate.lock.json: {lib}={version}")
+
 def rebuild_resources_zip() -> None:
     """Rebuild Resources.zip from the Resources directory — refusing to gut it.
 
@@ -1374,6 +1418,12 @@ def main(argv: Optional[List[str]] = None) -> None:
 
     if ios_ok:
         rebuild_resources_zip()
+        # Record what went in, BEFORE the inconclusive binary probes below. The
+        # bundle carries no version of its own, so without this the only way to
+        # answer "which substrate is iOS shipping?" is to have been the machine
+        # that built it.
+        for name in ios_ok:
+            write_ios_substrate_lock(name, versions[name])
         print("\nVerifying bundled iOS binaries...")
         for name in ios_ok:
             if not verify_dylib_version(LIBS[name], versions[name]):

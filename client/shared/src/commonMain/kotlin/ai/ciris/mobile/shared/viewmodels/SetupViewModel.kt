@@ -2420,15 +2420,22 @@ class SetupViewModel(
             // For BYOK mode, we still need OAuth fields if user authenticated via OAuth
             // This allows OAuth users to use their own API keys while still using OAuth for login
             // HA addon mode is treated as external auth (SUPERVISOR_TOKEN) - no password needed
-            val isOAuthUser = currentState.isGoogleAuth && currentState.googleUserId != null
-            val isExternalAuthUser = isOAuthUser || currentState.isHAAddonMode
+            // ONE derivation, shared with the CIRIS-proxy branch — see
+            // SetupFormState.isExternalAuth. This used to read
+            // `isGoogleAuth && googleUserId != null`, a DIFFERENT question than
+            // the proxy branch asked: an OAuth sign-in whose provider returned no
+            // subject id fell through as a PASSWORD account, and
+            // /v1/setup/complete correctly refused it with "New user password
+            // must be at least 8 characters" — to someone who had just signed in
+            // with Google and never set a password.
+            //
+            // `googleUserId` is evidence about WHICH account, not about WHETHER
+            // OAuth happened, so it must not gate this.
+            val isOAuthUser = currentState.isGoogleAuth
+            val isExternalAuthUser = currentState.isExternalAuth
 
             // Determine the effective OAuth provider
-            val effectiveOAuthProvider = when {
-                currentState.isHAAddonMode -> "home_assistant"
-                isOAuthUser -> currentState.oauthProvider
-                else -> null
-            }
+            val effectiveOAuthProvider = currentState.effectiveOAuthProvider
 
             CompleteSetupRequest(
                 llm_provider = providerId,

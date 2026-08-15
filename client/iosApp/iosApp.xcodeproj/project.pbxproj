@@ -27,7 +27,6 @@
 		8F18BC76CCF0E61689FB9546 /* it.json in Resources */ = {isa = PBXBuildFile; fileRef = 187CA1BC456EC956C8DE7C3C /* it.json */; };
 		967D118D4C5509A7828AD513 /* de.json in Resources */ = {isa = PBXBuildFile; fileRef = 37019FD67F9DE2D57A74BA03 /* de.json */; };
 		9ACA1EFD1891DFA4F00AA866 /* vi.json in Resources */ = {isa = PBXBuildFile; fileRef = A8DF0B7821860AC538BB705A /* vi.json */; };
-		9ACDD4532FC3856800CB4C64 /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9ACDD4522FC3856800CB4C64 /* StoreKit.framework */; };
 		A5082A49E9C0871D19D9AE2D /* tr.json in Resources */ = {isa = PBXBuildFile; fileRef = F5AD539185FEAC35E1C4C4E4 /* tr.json */; };
 		A5B1F86E4B5F894AFD13616B /* th.json in Resources */ = {isa = PBXBuildFile; fileRef = C42EB6B05681EED15FB24274 /* th.json */; };
 		AA5FBF09EA586006E8064F7E /* DeviceCheck.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E8B29C709AD6D0538972B327 /* DeviceCheck.framework */; };
@@ -99,7 +98,6 @@
 		960264F5759B4678704E09D5 /* CIRISVerify.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = CIRISVerify.xcframework; path = Frameworks/CIRISVerify.xcframework; sourceTree = "<group>"; };
 		96F852ADB91AA4C228962FA7 /* te.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = te.json; sourceTree = "<group>"; };
 		9AAEED26AAA5DC3AE6A7199B /* uk.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = uk.json; sourceTree = "<group>"; };
-		9ACDD4522FC3856800CB4C64 /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = System/Library/Frameworks/StoreKit.framework; sourceTree = SDKROOT; };
 		A3BBFBA91E6B290B4005C668 /* AppleSignInHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSignInHelper.swift; sourceTree = "<group>"; };
 		A8DF0B7821860AC538BB705A /* vi.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = vi.json; sourceTree = "<group>"; };
 		B01B283DC417F03B7803D5E3 /* ko.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = ko.json; sourceTree = "<group>"; };
@@ -132,7 +130,6 @@
 				E0491F1A134023B2903DF517 /* Python.xcframework in Frameworks */,
 				F358EA2E70E0056A40821CA6 /* CIRISVerify.xcframework in Frameworks */,
 				4A23539E03B1795BF31CBF28 /* AuthenticationServices.framework in Frameworks */,
-				9ACDD4532FC3856800CB4C64 /* StoreKit.framework in Frameworks */,
 				CBE772C185B3AE8489CCE92F /* Security.framework in Frameworks */,
 				AA5FBF09EA586006E8064F7E /* DeviceCheck.framework in Frameworks */,
 			);
@@ -164,7 +161,6 @@
 		3666012298E772D226418813 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				9ACDD4522FC3856800CB4C64 /* StoreKit.framework */,
 				586A12FFC8277FCB5AAE67EA /* AuthenticationServices.framework */,
 				960264F5759B4678704E09D5 /* CIRISVerify.xcframework */,
 				E8B29C709AD6D0538972B327 /* DeviceCheck.framework */,
@@ -266,7 +262,7 @@
 				LastUpgradeCheck = 1500;
 				TargetAttributes = {
 					78B53CC79860CBFC2F5543C6 = {
-						DevelopmentTeam = MHX9MGJ62V;
+						DevelopmentTeam = "${DEVELOPMENT_TEAM}";
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -465,7 +461,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = MHX9MGJ62V;
+				DEVELOPMENT_TEAM = "${DEVELOPMENT_TEAM}";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -523,7 +519,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = MHX9MGJ62V;
+				DEVELOPMENT_TEAM = "${DEVELOPMENT_TEAM}";
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;

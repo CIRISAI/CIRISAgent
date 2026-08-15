@@ -29,6 +29,15 @@ Logging:
 import logging as _logging
 
 from .client import CIRISVerify, MockCIRISVerify
+from .exceptions import (
+    AttestationInProgressError,
+    BinaryNotFoundError,
+    BinaryTamperedError,
+    CIRISVerifyError,
+    CommunicationError,
+    TimeoutError,
+    VerificationFailedError,
+)
 
 # verify_tree() and DEFAULT_REGISTRY_URL are NOT re-exported through this
 # vendored ffi_bindings layer — it carries CIRISAgent-local FFI-loader
@@ -39,39 +48,30 @@ from .client import CIRISVerify, MockCIRISVerify
 # upstream `__init__.py` from re-introducing the broken import on each
 # `ciris-verify` bump (Codex P0 on PR #741, fix tracked in fe14c6c94).
 from .types import (
-    LicenseStatus,
-    LicenseTier,
-    LicenseDetails,
-    MandatoryDisclosure,
-    DisclosureSeverity,
-    LicenseStatusResponse,
-    CapabilityCheckResult,
-    FileIntegrityResult,
-    FileCheckStatus,
     BinaryIntegrityStatus,
-    HardwareType,
-    ValidationStatus,
-    PythonModuleHashes,
-    PythonIntegrityResult,
-    SecurityAdvisory,
-    HardwareLimitation,
-    HardwareInfo,
-    StorageDescriptor,
-    StorageKind,
-    KeyringScope,
-    TreeVerifyRequest,
-    TreeVerifyResult,
+    CapabilityCheckResult,
+    DisclosureSeverity,
     FailedFile,
     FailedFileKind,
-)
-from .exceptions import (
-    CIRISVerifyError,
-    BinaryNotFoundError,
-    BinaryTamperedError,
-    VerificationFailedError,
-    TimeoutError,
-    CommunicationError,
-    AttestationInProgressError,
+    FileCheckStatus,
+    FileIntegrityResult,
+    HardwareInfo,
+    HardwareLimitation,
+    HardwareType,
+    KeyringScope,
+    LicenseDetails,
+    LicenseStatus,
+    LicenseStatusResponse,
+    LicenseTier,
+    MandatoryDisclosure,
+    PythonIntegrityResult,
+    PythonModuleHashes,
+    SecurityAdvisory,
+    StorageDescriptor,
+    StorageKind,
+    TreeVerifyRequest,
+    TreeVerifyResult,
+    ValidationStatus,
 )
 
 
@@ -97,11 +97,11 @@ def setup_logging(verifier: CIRISVerify, level: str = "INFO", logger_name: str =
 
     # Map Rust levels to Python logging levels
     level_map = {
-        1: _logging.ERROR,    # ERROR
+        1: _logging.ERROR,  # ERROR
         2: _logging.WARNING,  # WARN
-        3: _logging.INFO,     # INFO
-        4: _logging.DEBUG,    # DEBUG
-        5: _logging.DEBUG,    # TRACE (Python has no TRACE, use DEBUG)
+        3: _logging.INFO,  # INFO
+        4: _logging.DEBUG,  # DEBUG
+        5: _logging.DEBUG,  # TRACE (Python has no TRACE, use DEBUG)
     }
 
     # Map level string to Rust level int
@@ -127,7 +127,7 @@ def get_library_version() -> str:
     return __version__
 
 
-__version__ = "5.1.3"
+__version__ = "10.3.0"
 __all__ = [
     "CIRISVerify",
     "MockCIRISVerify",

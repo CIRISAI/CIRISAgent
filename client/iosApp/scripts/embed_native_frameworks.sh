@@ -275,37 +275,123 @@ PLIST_EOF
     exit 0
 fi
 
-# For Debug/Simulator builds, embed frameworks for easier debugging
-echo "Debug/Simulator build - embedding Python extension frameworks..."
-
-if [ ! -d "$FRAMEWORKS_SRC" ]; then
-    echo "No Frameworks directory found at $FRAMEWORKS_SRC"
-    exit 0
-fi
+# ============================================================================
+# Debug/Simulator build: materialize Python native-module frameworks
+# ----------------------------------------------------------------------------
+# The simulator uses the SAME .fwork redirect scheme as device: Resources ships
+# *.cpython-310-iphonesimulator.fwork stubs that point at
+# Frameworks/<module>.framework/<module>. We must create those frameworks from
+# the simulator-arch .so files (the old approach copied prebuilt *.framework
+# bundles that are no longer staged in Frameworks/, so nothing got embedded and
+# Python failed to dlopen _struct et al. at the COMPAT_SHIMS phase):
+#   * stdlib      -> Python.xcframework/ios-arm64_x86_64-simulator/.../lib-dynload/*.so (committed)
+#   * third-party -> ios/CirisiOS/build/.../app_packages.iphonesimulator/**/*.so       (briefcase output)
+# Simulator frameworks are ad-hoc signed (no distribution identity / hardened runtime).
+# ============================================================================
+echo "Debug/Simulator build - converting Python extension .so files to frameworks..."
 
 mkdir -p "$FRAMEWORKS_DST"
 
-count=0
-for framework in "$FRAMEWORKS_SRC"/*.framework; do
-    if [ -d "$framework" ]; then
-        name=$(basename "$framework")
-        # Skip Python.xcframework slices and shared.framework (already handled)
-        if [[ "$name" != "Python.framework" && "$name" != "shared.framework" ]]; then
-            cp -R "$framework" "$FRAMEWORKS_DST/"
-            count=$((count + 1))
-        fi
-    fi
-done
-
-echo "Copied $count native module frameworks for simulator"
-
-# Code sign all frameworks for simulator
-if [ "$count" -gt 0 ]; then
-    echo "Code signing native frameworks..."
-    for framework in "$FRAMEWORKS_DST"/*.framework; do
-        if [ -d "$framework" ]; then
-            codesign --force --sign - --timestamp=none "$framework" 2>/dev/null || true
-        fi
-    done
-    echo "Code signing complete"
+# Shared Info.plist template for the generated frameworks
+DYLIB_PLIST="${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/dylib-Info-template.plist"
+if [ ! -f "$DYLIB_PLIST" ]; then
+    mkdir -p "$(dirname "$DYLIB_PLIST")"
+    cat > "$DYLIB_PLIST" << 'PLIST_EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleExecutable</key>
+    <string>EXECUTABLE_NAME</string>
+    <key>CFBundleIdentifier</key>
+    <string>BUNDLE_IDENTIFIER</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundlePackageType</key>
+    <string>FMWK</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>MinimumOSVersion</key>
+    <string>15.0</string>
+</dict>
+</plist>
+PLIST_EOF
 fi
+
+# Create an ad-hoc signed framework from an .so at a given fully-qualified module name.
+# The module name MUST match the .fwork redirect target (e.g. "pydantic_core._pydantic_core").
+sim_make_framework() {
+    local SO_FILE="$1"
+    local FRAMEWORK_NAME="$2"
+    local FRAMEWORK_DIR="$FRAMEWORKS_DST/${FRAMEWORK_NAME}.framework"
+    local BUNDLE_ID
+    BUNDLE_ID=$(echo "${PRODUCT_BUNDLE_IDENTIFIER}.${FRAMEWORK_NAME}" | tr '_' '-')
+    mkdir -p "$FRAMEWORK_DIR"
+    cp "$DYLIB_PLIST" "$FRAMEWORK_DIR/Info.plist"
+    plutil -replace CFBundleExecutable -string "$FRAMEWORK_NAME" "$FRAMEWORK_DIR/Info.plist"
+    plutil -replace CFBundleIdentifier -string "$BUNDLE_ID" "$FRAMEWORK_DIR/Info.plist"
+    cp "$SO_FILE" "$FRAMEWORK_DIR/$FRAMEWORK_NAME"
+    codesign --force --sign - --timestamp=none "$FRAMEWORK_DIR" 2>/dev/null || true
+}
+
+# --- 1. stdlib lib-dynload (simulator slice of Python.xcframework) ---
+SIM_LIB_DYNLOAD="${PROJECT_DIR}/Frameworks/Python.xcframework/ios-arm64_x86_64-simulator/lib/python3.10/lib-dynload"
+stdlib_n=0
+if [ -d "$SIM_LIB_DYNLOAD" ]; then
+    for so_file in "$SIM_LIB_DYNLOAD"/*.so; do
+        [ -f "$so_file" ] || continue
+        base=$(basename "$so_file")
+        name="${base%.cpython-*}"; name="${name%.so}"
+        sim_make_framework "$so_file" "$name"
+        stdlib_n=$((stdlib_n + 1))
+    done
+    echo "  Converted $stdlib_n stdlib frameworks (simulator)"
+else
+    echo "  WARNING: simulator lib-dynload not found at $SIM_LIB_DYNLOAD"
+fi
+
+# --- 2. third-party native modules (briefcase simulator build output) ---
+SIM_APP_PKGS="${PROJECT_DIR}/../../ios/CirisiOS/build/ciris_ios/ios/xcode/CirisiOS/app_packages.iphonesimulator"
+tp_n=0
+if [ -d "$SIM_APP_PKGS" ]; then
+    while IFS= read -r so_file; do
+        rel="${so_file#$SIM_APP_PKGS/}"
+        mod="${rel%.cpython-*}"; mod="${mod%.abi3.so}"; mod="${mod%.so}"
+        name=$(echo "$mod" | tr '/' '.')
+        sim_make_framework "$so_file" "$name"
+        tp_n=$((tp_n + 1))
+    done < <(find "$SIM_APP_PKGS" -name "*.so" -type f)
+    echo "  Converted $tp_n third-party frameworks (simulator)"
+else
+    echo "  WARNING: simulator app_packages not found at $SIM_APP_PKGS"
+    echo "           Third-party native modules (pydantic_core, cryptography, aiohttp, _cffi_backend)"
+    echo "           will be missing. Run 'cd ios/CirisiOS && briefcase build iOS' to generate them."
+fi
+
+# --- 3. substrate PyO3 modules, simulator slice (ciris_server one-wheel etc.) ---
+# Staged by tools/update_substrate_libs.py (--platform ios) into
+# app_packages_native_sim/, mirroring the device slice in app_packages_native/.
+# The one ciris_server._native carries the re-hosted persist/edge/lens surface,
+# so this single binary is what lets `import ciris_server` succeed on-simulator.
+SIM_SUBSTRATE="${PROJECT_DIR}/app_packages_native_sim"
+sub_n=0
+if [ -d "$SIM_SUBSTRATE" ]; then
+    while IFS= read -r so_file; do
+        rel="${so_file#$SIM_SUBSTRATE/}"
+        mod="${rel%.cpython-*}"; mod="${mod%.abi3.so}"; mod="${mod%.so}"
+        name=$(echo "$mod" | tr '/' '.')
+        sim_make_framework "$so_file" "$name"
+        sub_n=$((sub_n + 1))
+    done < <(find "$SIM_SUBSTRATE" -name "*.so" -type f)
+    echo "  Converted $sub_n substrate frameworks (simulator)"
+else
+    echo "  NOTE: no app_packages_native_sim/ — substrate (ciris_server) absent for simulator."
+    echo "        Run: python3 -m tools.update_substrate_libs --platform ios --lib server"
+fi
+
+total=$(find "$FRAMEWORKS_DST" -maxdepth 1 -name "*.framework" -type d | wc -l | tr -d ' ')
+echo "Simulator native module frameworks total: $total"

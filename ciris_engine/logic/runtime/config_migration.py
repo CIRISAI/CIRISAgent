@@ -309,22 +309,72 @@ async def migrate_founding_partnerships(runtime: Any) -> None:
     from ciris_engine.schemas.services.authority_core import WARole
     from ciris_engine.schemas.services.graph_core import GraphScope
 
-    root_was = [wa for wa in all_was if getattr(wa, "role", None) == WARole.ROOT]
-    if not root_was:
+    # (wa_id, name) pairs, because the two sources return different shapes.
+    roots: list[tuple[str, str]] = [
+        (wa.wa_id, wa.name) for wa in all_was if getattr(wa, "role", None) == WARole.ROOT
+    ]
+
+    # AND the node-owner roots, which `list_was()` cannot return.
+    #
+    # STEWARDSHIP AND PARTNERSHIP ARE CO-ESTABLISHED. Stewardship is over a
+    # NODE, partnership is with an AGENT, and claiming a node establishes both
+    # at the same moment by the same act. The substrate holds up its half — a
+    # claimed install carries `ownership:responsible_party:node:v1` — but the
+    # partnership half had no counterpart on that path, so it simply never
+    # happened.
+    #
+    # The cause is a filter that is correct in itself: `list_was()` ends with
+    # `if _is_brain_wa_row(r)`, excluding `wa-root-*` rows because they are
+    # substrate-owned federation identities rather than brain WACertificates
+    # (#922). An owner minted by node self-claim is therefore invisible here,
+    # `root_was` comes back empty, and a live install logs exactly this while
+    # holding a perfectly good root:
+    #
+    #     [PARTNERSHIP_MIGRATION] No ROOT WAs found - nothing to backfill
+    #
+    # That is the same filter behind the 2.9.15 setup-wizard lockout. Third
+    # consequence of one correct decision: nothing on the self-claim path does
+    # the work the brain's classic path does for a newly-minted owner.
+    #
+    # Read by ROLE from the substrate store, which persist already filters to
+    # active rows — the same primitive the setup probe uses, so the two agree
+    # about who the owner is rather than each deciding separately.
+    try:
+        from ciris_engine.logic.persistence.stores.authentication_store import (
+            _list_active_by_role,
+        )
+
+        known = {wa_id for wa_id, _ in roots}
+        for row in _list_active_by_role(WARole.ROOT.value):
+            node_wa_id = str(row.get("wa_id") or "")
+            if node_wa_id and node_wa_id not in known:
+                roots.append((node_wa_id, str(row.get("name") or node_wa_id)))
+                logger.info(
+                    "[PARTNERSHIP_MIGRATION] including node-owner root %s — invisible to "
+                    "list_was() by design (#922), but stewardship and partnership are "
+                    "established together",
+                    node_wa_id,
+                )
+    except Exception as e:  # pragma: no cover - substrate unreadable
+        # Not fatal: the brain-side roots above are still worth backfilling, and
+        # asserting "no node owner" from a failed read would be the same mistake
+        # in the other direction.
+        logger.warning("[PARTNERSHIP_MIGRATION] could not read node-owner roots: %s", e)
+
+    if not roots:
         logger.info("[PARTNERSHIP_MIGRATION] No ROOT WAs found - nothing to backfill")
         return
 
     backfilled = 0
-    for wa in root_was:
-        wa_id = wa.wa_id
+    for wa_id, wa_name in roots:
         # Check consent/{wa_id} (canonical) and consent/{name} (legacy)
         existing_by_waid = get_graph_node(f"consent/{wa_id}", GraphScope.LOCAL)
-        existing_by_name = get_graph_node(f"consent/{wa.name}", GraphScope.LOCAL)
+        existing_by_name = get_graph_node(f"consent/{wa_name}", GraphScope.LOCAL)
         if existing_by_waid is not None:
             logger.debug(f"[PARTNERSHIP_MIGRATION] consent/{wa_id} already exists - skipping")
             continue
         if existing_by_name is not None:
-            logger.debug(f"[PARTNERSHIP_MIGRATION] consent/{wa.name} (legacy) already exists - skipping")
+            logger.debug(f"[PARTNERSHIP_MIGRATION] consent/{wa_name} (legacy) already exists - skipping")
             continue
 
         try:

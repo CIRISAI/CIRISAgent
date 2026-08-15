@@ -639,6 +639,68 @@ def _detect_provider_from_env() -> LLMProvider:
     return LLMProvider.OPENAI
 
 
+#: Keys that are obviously not credentials — placeholders we or a setup flow
+#: wrote, never something a provider issued. Matched case-insensitively and
+#: exactly, so a real key that merely CONTAINS one of these is unaffected.
+_PLACEHOLDER_API_KEYS = frozenset(
+    {
+        "sk-test",
+        "test",
+        "sk-placeholder",
+        "placeholder",
+        "changeme",
+        "change-me",
+        "your-api-key",
+        "your-api-key-here",
+        "your_api_key_here",
+        "dummy",
+        "example",
+        "todo",
+        "none",
+        "null",
+        "xxx",
+    }
+)
+
+#: Hosts where a short/dummy key is definitely wrong. A LOCAL endpoint is the
+#: opposite case — Ollama and llama.cpp are routinely handed "ollama" or "none"
+#: as a key precisely because they ignore it, and refusing those would break
+#: local inference to fix a cloud typo.
+_REAL_OPENAI_HOSTS = ("api.openai.com",)
+
+
+def _is_placeholder_api_key(api_key: str, base_url: Optional[str]) -> bool:
+    """True if this key cannot possibly authenticate and we should not try.
+
+    Attempting anyway is not free. On a live install `OPENAI_API_KEY=sk-test`
+    (7 chars) produced a 401 from every DMA in the shutdown chain — the agent
+    deliberates about accepting shutdown, so simply STOPPING it emitted
+    `Incorrect API key provided: sk-test` three times over, plus tracebacks,
+    from a user who had asked nothing. Worse, health reported
+    `provider=openai` as ready, because readiness checked configuration rather
+    than whether the credential could work.
+
+    Scoped to keys bound for the real OpenAI endpoint. Anything with a custom
+    base_url is left alone: local runtimes are handed placeholder keys ON
+    PURPOSE (they ignore the value), and a check that broke `jetson.local`
+    Ollama to catch a cloud typo would be a bad trade.
+    """
+    key = (api_key or "").strip()
+    if not key:
+        return False  # the existing empty-key guard owns this case
+
+    host = (base_url or "").strip().lower()
+    if host and not any(h in host for h in _REAL_OPENAI_HOSTS):
+        return False
+
+    if key.lower() in _PLACEHOLDER_API_KEYS:
+        return True
+    # Real OpenAI keys are ~51 chars ("sk-" + 48); the project variants are
+    # longer still. 20 is far below any issued key and far above the
+    # placeholders above, so it catches truncation without judging format.
+    return key.startswith("sk-") and len(key) < 20
+
+
 def _get_api_key_for_provider(provider: LLMProvider) -> str:
     """Get the appropriate API key for the given provider.
 
@@ -760,6 +822,22 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             provider_name = provider.value if hasattr(provider, "value") else str(provider)
             raise RuntimeError(
                 f"No API key found for {provider_name}. Please set the appropriate API key environment variable."
+            )
+
+        # A placeholder key is treated exactly like NO key: refuse here rather
+        # than register a provider that can only 401. Same failure path, one
+        # honest line, instead of a wall of `Incorrect API key provided` from
+        # every DMA the next time anything needs the model — including the
+        # shutdown deliberation, which fires when the user merely stops the
+        # agent. NOT logging the key itself: it is a credential slot by
+        # contract, whatever happens to be sitting in it.
+        if _is_placeholder_api_key(api_key, base_url):
+            provider_name = provider.value if hasattr(provider, "value") else str(provider)
+            raise RuntimeError(
+                f"The {provider_name} API key is a placeholder, not a credential "
+                f"(length {len(api_key.strip())}). Refusing to connect — it can only "
+                f"return 401. Set a real key, or point base_url at a local runtime "
+                f"that does not need one."
             )
 
         # Initialize client based on provider

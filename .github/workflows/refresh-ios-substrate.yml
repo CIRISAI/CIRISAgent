@@ -108,7 +108,7 @@ jobs:
         # exist for each requested lib before we burn the rest of the job.
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          LIBS: ${{ inputs.libs }}
+          LIBS: ${{ inputs.libs || 'all' }}
           S: ${{ steps.pins.outputs.server }}
           V: ${{ steps.pins.outputs.verify }}
         run: |
@@ -138,7 +138,7 @@ jobs:
       - name: Refresh iOS substrate to pins
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          LIBS: ${{ inputs.libs }}
+          LIBS: ${{ inputs.libs || 'all' }}
           S: ${{ steps.pins.outputs.server }}
           V: ${{ steps.pins.outputs.verify }}
         run: |
@@ -152,6 +152,14 @@ jobs:
           # `tools.update_ios_libs` module predates the one-wheel move and knows
           # nothing about `server`, so it could never refresh the substrate that now
           # actually ships. Per-lib invocation so the run log says what changed.
+          # An EMPTY $LIBS makes want() false for everything, so the refresh runs
+          # nothing and the step still exits 0 — "success" over a no-op. That is
+          # exactly what happened on the first automatic run: LIBS was unset on the
+          # pull_request event, the updater printed not one line, and the job
+          # reported "No changes - iOS bundle already matches the pins" while the
+          # bundle was a full release behind. Refuse the ambiguous state instead.
+          [ -n "$LIBS" ] || { echo "::error::LIBS is empty — refusing to run a refresh that would silently do nothing"; exit 1; }
+          
           want server && python3 tools/update_substrate_libs.py --platform ios --lib server "$S"
           if want verify && [ -n "$V" ]; then
             python3 tools/update_substrate_libs.py --platform ios --lib verify "$V"
@@ -161,6 +169,13 @@ jobs:
       - name: Detect changes
         id: diff
         run: |
+          # "No changes" is only good news if the bundle is ACTUALLY current. Assert
+          # it against the lock rather than inferring currency from an empty git diff —
+          # a refresh that ran nothing also produces an empty diff, and that is how the
+          # first automatic run reported "already matches the pins" while iOS sat a
+          # release behind.
+          python3 tools/dev/check_ios_substrate_current.py
+          
           if git diff --quiet && git diff --cached --quiet; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "No changes — iOS bundle already matches the pins."
@@ -215,7 +230,7 @@ jobs:
           TARGET_BRANCH: ${{ inputs.target_branch }}
           BRANCH_NAME: ${{ steps.branch.outputs.branch }}
           TRIGGER_ACTOR: ${{ github.actor }}
-          LIBS: ${{ inputs.libs }}
+          LIBS: ${{ inputs.libs || 'all' }}
           S: ${{ steps.pins.outputs.server }}
           V: ${{ steps.pins.outputs.verify }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

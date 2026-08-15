@@ -111,6 +111,31 @@ def prompt_llm_configuration() -> tuple[str, str, str, str]:
         return ("other", api_key, base_url, model)
 
 
+
+def _env_quoted(value: str) -> str:
+    """Escape a value for a DOUBLE-QUOTED `.env` line.
+
+    python-dotenv applies POSIX escape processing inside double quotes, so a
+    Windows path is silently rewritten on read. This is not theoretical — it
+    took down a real install:
+
+        CIRIS_HOME: C:\\Users\\franc\\ciris          <- written correctly
+        OSError: [WinError 123] … 'C:\\Users\\x0cranc\\ciris\\data'
+
+    `\\f` + `ranc` became a FORM FEED. The agent then tried to mkdir a path
+    containing a control character and died before reaching the first service.
+
+    It hits any Windows user whose path has a backslash followed by one of
+    `a b f n r t v 0-7 x u U N` — franc, frank, nancy, nate, tom, tim, rachel,
+    rob, bob, ben, alice, adam, victor. That is a large share of Windows home
+    directories, and the failure is total: the agent cannot start at all.
+
+    Escaping backslashes (and any embedded quote) makes the value survive the
+    round-trip. Verified against dotenv both ways, since the whole defect is
+    that writing and reading disagreed about escapes.
+    """
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
 def create_env_file(
     llm_provider: str,
     llm_api_key: str,
@@ -146,7 +171,7 @@ def create_env_file(
     if is_android() or is_ios():
         # Use absolute path for mobile - tilde doesn't expand
         # Must match ios_main.py / android_main.py CIRIS_DATA_DIR setting
-        data_dir = str(get_ciris_home())
+        data_dir = _env_quoted(str(get_ciris_home()))
     else:
         # Desktop: honor CIRIS_HOME via get_data_dir() instead of
         # hardcoding ~/ciris/data. Previously this was literal
@@ -162,7 +187,7 @@ def create_env_file(
         # gives that, anchored at get_ciris_home().
         from ciris_engine.logic.utils.path_resolution import get_data_dir
 
-        data_dir = str(get_data_dir())
+        data_dir = _env_quoted(str(get_data_dir()))
 
     # Log what we received for debugging
     logger.info(f"[create_env_file] Received llm_provider='{llm_provider}', llm_base_url='{llm_base_url}'")

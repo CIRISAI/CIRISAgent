@@ -258,3 +258,5 @@ claim_pin
 # Run the updater to populate it:
 #   python -m tools.update_substrate_libs --platform ios --lib server <version>
 client/iosApp/app_packages_native/ciris_server/
+# Simulator slice of the same substrate (Debug/simulator builds only)
+client/iosApp/app_packages_native_sim/

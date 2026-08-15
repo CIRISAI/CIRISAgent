@@ -477,6 +477,19 @@ def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Opti
             f"(node-fails ⇒ agent-fails); compose phase at expiry: {_wedged or 'unknown (no compose_status — wheel <0.5.120?)'}"
         )
     logger.info("Node fold: node runtime started — substrate read-API LISTENING on 4243 ✅")
+    
+    # Hand the node the deployment's OAuth providers now that it is serving.
+    #
+    # 2.9.14 moved /v1/auth/* onto the node but did not carry across the provider
+    # credentials the deleted Python router read from oauth.json, so hosted Google
+    # sign-in fell back to the node's loopback callback and Google rejected it.
+    # Best-effort and idempotent: a desktop install has no oauth.json and needs none.
+    try:
+        from ciris_engine.logic.runtime.oauth_provider_sync import sync_oauth_providers_to_node
+    
+        sync_oauth_providers_to_node()
+    except Exception:  # pragma: no cover - never block the boot on OAuth config
+        logger.exception('Node fold: OAuth provider sync failed (agent continues)')
     _reprime_federation_delivery("post-bind")
     _author_federation_consent("post-bind")
     # Surface the one-time first-run CLAIM PIN (minted during compose, stashed

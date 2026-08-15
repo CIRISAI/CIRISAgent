@@ -1178,6 +1178,62 @@ def write_ios_substrate_lock(lib: str, version: str) -> None:
     )
     print(f"  -> substrate.lock.json: {lib}={version}")
 
+
+def materialize_resources_tree() -> None:
+    """Unpack Resources.zip into Resources/ so the refresh has something to edit.
+
+    THE BUG THIS FIXES. `Resources.zip` is a committed artifact, but the tree it
+    is built from is gitignored build output: of ~5,862 entries, `app_packages/`
+    (2,741) and `python/` (1,210) are not in git. A fresh checkout has ~50 files
+    there. This tool writes into `Resources/app_packages/...` and then zips the
+    whole directory — so on ANY clean checkout it edited a near-empty tree and
+    rebuilt a 66-entry shell over a 5,862-entry bundle.
+
+    That is not a local-environment quirk. The macOS CI runner does a plain
+    `git checkout` too, and hit it identically:
+
+        REFUSING to replace Resources.zip: the rebuild has 66 entries
+        against the existing 5862.
+
+    So the iOS refresh could not have worked on any runner, and would have
+    destroyed the bundle on each attempt if the shrink guard had not stopped it.
+
+    Extracting first makes the operation self-contained: unpack the committed
+    artifact, modify it, re-zip. Idempotent — if the tree is already fuller than
+    the archive (someone ran a real iOS build), leave it alone.
+    """
+    zip_path = IOS_APP_DIR / "Resources.zip"
+    if not zip_path.exists():
+        return
+
+    with zipfile.ZipFile(zip_path) as z:
+        archived = len(z.namelist())
+        present = sum(1 for _ in IOS_RESOURCES_DIR.rglob("*")) if IOS_RESOURCES_DIR.exists() else 0
+        if present >= archived:
+            print(f"  Resources/ already materialised ({present} entries) — not unpacking")
+            return
+        print(f"  Materialising Resources/ from Resources.zip ({archived} entries; tree had {present})...")
+        IOS_RESOURCES_DIR.mkdir(parents=True, exist_ok=True)
+        z.extractall(IOS_RESOURCES_DIR)
+
+    # TRACKED FILES WIN. The archive also contains copies of files that ARE in
+    # git — localization bundles, ffi_bindings — and those copies are as old as
+    # the last iOS refresh. Extracting over them silently reverts committed work:
+    # this reverted an en.json string added earlier the same day, which would
+    # then have been re-zipped and shipped as the current bundle.
+    #
+    # So restore anything git tracks under Resources/ after unpacking. The
+    # archive supplies only what git does not have.
+    tracked = subprocess.run(
+        ["git", "ls-files", str(IOS_RESOURCES_DIR.relative_to(REPO_ROOT))],
+        capture_output=True, text=True, cwd=REPO_ROOT,
+    ).stdout.split()
+    if tracked:
+        subprocess.run(["git", "checkout", "--", *tracked], cwd=REPO_ROOT, check=False)
+        print(f"  -> restored {len(tracked)} tracked file(s) over the unpacked copies")
+    print("  -> Resources/ ready")
+
+
 def rebuild_resources_zip() -> None:
     """Rebuild Resources.zip from the Resources directory — refusing to gut it.
 
@@ -1371,9 +1427,18 @@ def main(argv: Optional[List[str]] = None) -> None:
     # the caller doesn't think to ask. App Store error 90056 is hard to recover
     # from late in the upload flow.
     if do_ios:
+        # BEFORE anything touches the tree. Resources/ is gitignored build output,
+        # so a clean checkout has ~50 files where the archive has ~5,862 — and the
+        # refresh then edits an almost-empty tree and rebuilds a shell over the
+        # real bundle. Unpack the committed artifact first so there is something
+        # real to modify.
+        materialize_resources_tree()
         repair_xcframework_info_plists()
 
     if args.rebuild_zip_only:
+        # Same reason: rebuilding from an unmaterialised tree is how a 5,862-entry
+        # bundle became 66.
+        materialize_resources_tree()
         rebuild_resources_zip()
         return
 

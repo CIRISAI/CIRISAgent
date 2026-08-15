@@ -154,6 +154,55 @@ def _log_agent_side_cert_inventory() -> None:
         logger.debug("auth proxy: could not enumerate agent-side certs: %s", exc)
 
 
+@router.get("/system/verify-status", include_in_schema=False)
+async def proxy_verify_status_to_node(request: Request) -> Response:
+    """Relay `GET /v1/system/verify-status` to the node.
+
+    THE BUG THIS CLOSES. The client asks for CIRISVerify status every 30s. In
+    node mode it calls `GET /v1/system/verify-status`; in AGENT mode it calls
+    `GET /v1/auth/attestation`, which the Python router used to serve with a GET
+    handler. 2.9.14 deleted that router and proxied `/v1/auth/*` to the node —
+    whose attestation route is POST-only. So the agent-mode GET became a 405,
+    38 times in one session on a live install, and verify never loaded:
+
+        :8080 /v1/auth/attestation      GET=405   <- what the client calls
+        :4243 /v1/auth/attestation      GET=405   <- node: POST-only (the cause)
+        :4243 /v1/system/verify-status  GET=200   <- where the data actually is
+        :8080 /v1/system/verify-status  GET=404   <- but we exposed no route to it
+
+    The data was one hop away the whole time. Verify is substrate-owned now, so
+    the answer is to expose the node's read-only route through the agent's front
+    door rather than reinstate a Python attestation handler — which would be the
+    duplication #1028 exists to remove.
+
+    Deliberately NOT proxying `/v1/system/*` wholesale: that prefix is the
+    brain's (agent, telemetry, runtime control), and a catch-all here would
+    shadow those routes. One exact path, because exactly one moved.
+    """
+    url = f"{NODE_UPSTREAM}/v1/system/verify-status"
+    headers = {k: v for k, v in request.headers.items() if k.lower() not in _HOP_BY_HOP}
+
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT, follow_redirects=False) as client:
+            upstream = await client.get(url, params=request.query_params, headers=headers)
+    except httpx.RequestError:
+        # Same reasoning as the auth proxy: name the UPSTREAM, never the caller's
+        # path, and answer 502 — the node being unreachable is infrastructure,
+        # not a verdict about this request.
+        logger.exception("verify-status proxy could not reach the node at %s", NODE_UPSTREAM)
+        return Response(
+            content=b'{"detail":"verification service unavailable"}',
+            status_code=502,
+            media_type="application/json",
+        )
+
+    return Response(
+        content=upstream.content,
+        status_code=upstream.status_code,
+        headers={k: v for k, v in upstream.headers.items() if k.lower() not in _HOP_BY_HOP},
+    )
+
+
 @router.api_route(
     "/auth/{path:path}",
     methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],

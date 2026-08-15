@@ -68,6 +68,22 @@ class CIRISVerifyService:
         self._last_nonce: Optional[bytes] = None
         self._log_callback_enabled = False
 
+    async def is_healthy(self) -> bool:
+        """Whether verification can actually be performed.
+
+        Every registered service must be health-checkable. Without this the API
+        health check cannot ask, `check_provider_health` returns None, and the
+        provider counts as NOT healthy on every poll (#943) — four adapter
+        services lacking it held a working agent at 15/19 and reported
+        "critical" purely from missing methods.
+
+        Reports the real precondition: an initialized client. `_initialized`
+        alone is not enough — the client is what performs attestation, and a
+        None client with the flag set would report healthy while every call
+        fails.
+        """
+        return self._initialized and self._client is not None
+
     def _setup_log_callback(self) -> None:
         """Set up log callback to capture internal CIRISVerify diagnostics.
 

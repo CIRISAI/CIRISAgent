@@ -279,7 +279,7 @@ LIBS: Dict[str, SubstrateLib] = {
         pypi_package="ciris-server",
         tarball_prefix="ciris-server",
         bindings_package="ciris_server",
-        so_filename="",           # no jniLibs leg — the wheel carries its own .so
+        so_filename="",  # no jniLibs leg — the wheel carries its own .so
         has_android_wheels=True,
         android_wheels_from_pypi=True,
         has_jni_libs=False,
@@ -296,7 +296,7 @@ LIBS: Dict[str, SubstrateLib] = {
         dylib_filename="_native.abi3.so",
         device_dir="ios-device",
         simulator_dir="ios-simulator",
-        framework_name="",        # PyO3 module — no xcframework leg
+        framework_name="",  # PyO3 module — no xcframework leg
     ),
     # Future:
     # "nodecore": SubstrateLib(...),
@@ -314,16 +314,19 @@ def get_pinned_version(pypi_package: str) -> Optional[str]:
     if not req_file.exists():
         return None
     for line in req_file.read_text().splitlines():
-        if line.strip().startswith(pypi_package):
-            match = re.search(r">=(\d+\.\d+\.\d+)", line)
+        stripped = line.strip()
+        if stripped.startswith(pypi_package):
+            # Accept both floor pins (`ciris-verify>=10.3.0`) and exact pins
+            # (`ciris-server==0.5.172`). ciris-server uses `==` in lockstep with
+            # the Android build.gradle pin; without matching `==` this returned
+            # None and the tool silently SKIPPED the server leg.
+            match = re.match(rf"{re.escape(pypi_package)}\s*(?:==|>=)(\d+\.\d+\.\d+)", stripped)
             if match:
                 return match.group(1)
     return None
 
 
-def download_release_tarball(
-    lib: SubstrateLib, version: str, platform_suffix: str, dest_dir: Path
-) -> Optional[Path]:
+def download_release_tarball(lib: SubstrateLib, version: str, platform_suffix: str, dest_dir: Path) -> Optional[Path]:
     """Download a platform tarball from the GitHub Release.
 
     Tries both `{prefix}-v{version}-{platform}.tar.gz` and
@@ -339,10 +342,16 @@ def download_release_tarball(
         print(f"  Trying {pattern}...")
         run_cmd(
             [
-                "gh", "release", "download", tag,
-                "--repo", lib.github_repo,
-                "--pattern", pattern,
-                "--dir", str(dest_dir),
+                "gh",
+                "release",
+                "download",
+                tag,
+                "--repo",
+                lib.github_repo,
+                "--pattern",
+                pattern,
+                "--dir",
+                str(dest_dir),
             ],
             check=False,
         )
@@ -353,9 +362,7 @@ def download_release_tarball(
     return None
 
 
-def verify_tarball_checksum(
-    lib: SubstrateLib, version: str, tarball: Path, skip: bool = False
-) -> bool:
+def verify_tarball_checksum(lib: SubstrateLib, version: str, tarball: Path, skip: bool = False) -> bool:
     """Verify a downloaded tarball against the release's SHA256SUMS asset.
 
     Best-effort: releases that don't publish a SHA256SUMS asset (or whose
@@ -370,10 +377,16 @@ def verify_tarball_checksum(
         tmp_path = Path(tmp)
         run_cmd(
             [
-                "gh", "release", "download", tag,
-                "--repo", lib.github_repo,
-                "--pattern", "SHA256SUMS",
-                "--dir", str(tmp_path),
+                "gh",
+                "release",
+                "download",
+                tag,
+                "--repo",
+                lib.github_repo,
+                "--pattern",
+                "SHA256SUMS",
+                "--dir",
+                str(tmp_path),
             ],
             check=False,
         )
@@ -461,7 +474,6 @@ def install_jni_libs(lib: SubstrateLib, extract_dir: Path) -> bool:
     return True
 
 
-
 def _install_android_wheels_from_pypi(lib: SubstrateLib, version: str) -> bool:
     """Pull per-ABI `android_24_*` wheels for `lib` straight from PyPI.
 
@@ -541,10 +553,16 @@ def install_android_wheels(lib: SubstrateLib, version: str, skip_checksums: bool
         dl_dir = Path(tmp)
         run_cmd(
             [
-                "gh", "release", "download", tag,
-                "--repo", lib.github_repo,
-                "--pattern", pattern,
-                "--dir", str(dl_dir),
+                "gh",
+                "release",
+                "download",
+                tag,
+                "--repo",
+                lib.github_repo,
+                "--pattern",
+                pattern,
+                "--dir",
+                str(dl_dir),
             ],
             check=False,
         )
@@ -625,10 +643,7 @@ def update_gradle_pin(lib: SubstrateLib, version: str) -> None:
         anchor_re = re.compile(r'^[ \t]*(?://[ \t]*)?install "ciris-[^"]*"[^\n]*$', re.MULTILINE)
         anchors = list(anchor_re.finditer(text))
         if not anchors:
-            print(
-                f'  WARNING: no `install "ciris-*"` anchor in build.gradle; '
-                f"add `{pin_line}` manually"
-            )
+            print(f'  WARNING: no `install "ciris-*"` anchor in build.gradle; ' f"add `{pin_line}` manually")
             return
         last = anchors[-1]
         indent_match = re.match(r"[ \t]*", last.group(0))
@@ -666,10 +681,14 @@ def update_python_bindings_android(lib: SubstrateLib, version: str) -> bool:
         tmpdir = Path(tmp)
         run_cmd(
             [
-                sys.executable, "-m", "pip", "download",
+                sys.executable,
+                "-m",
+                "pip",
+                "download",
                 f"{lib.pypi_package}=={version}",
                 "--no-deps",
-                "-d", str(tmpdir),
+                "-d",
+                str(tmpdir),
             ],
             check=False,
         )
@@ -999,11 +1018,29 @@ def bundle_pyo3_module(lib: SubstrateLib, extract_dir: Path) -> bool:
     size_mb = device_so.stat().st_size / 1024 / 1024
     print(f"  Device .so: {size_mb:.1f}MB")
 
-    # 1. Copy to app_packages_native (embed script picks it up at build time)
+    # 1. Copy to app_packages_native (embed script picks it up at build time).
+    #    This is the DEVICE (iphoneos) slice — the App Store archive path.
     native_dir = IOS_APP_DIR / "app_packages_native" / lib.bindings_package
     native_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy2(device_so, native_dir / lib.dylib_filename)
     print(f"  -> app_packages_native/{lib.bindings_package}/{lib.dylib_filename}")
+
+    # 1b. Copy the SIMULATOR slice to app_packages_native_sim/ so the Debug
+    #     simulator build can boot the substrate too. embed_native_frameworks.sh's
+    #     simulator branch converts these into ad-hoc-signed frameworks the same
+    #     way it does the device slice for a Release build. Without this the
+    #     simulator has no ciris_server._native and `import ciris_server` fails
+    #     (falling back to a `ciris_persist` that is not bundled either).
+    sim_so = extract_dir / lib.simulator_dir / lib.dylib_filename
+    if sim_so.exists():
+        sim_dir = IOS_APP_DIR / "app_packages_native_sim" / lib.bindings_package
+        sim_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(sim_so, sim_dir / lib.dylib_filename)
+        sim_mb = sim_so.stat().st_size / 1024 / 1024
+        print(f"  Simulator .so: {sim_mb:.1f}MB")
+        print(f"  -> app_packages_native_sim/{lib.bindings_package}/{lib.dylib_filename}")
+    else:
+        print(f"  (no simulator slice at {lib.simulator_dir}/ — simulator boot will lack {lib.name})")
 
     # 2. Create .fwork redirect in Resources/app_packages
     # The framework name follows BeeWare convention: {package}.{module}.framework

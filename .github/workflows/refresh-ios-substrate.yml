@@ -1,7 +1,10 @@
 name: Refresh iOS substrate binaries
 
-# Refresh the iOS-bundled substrate Mach-O binaries (CIRISVerify + CIRISPersist
-# + CIRISEdge dylibs / xcframeworks / PyO3 modules) to the versions pinned in
+# Refresh the iOS-bundled substrate Mach-O binaries to the versions pinned in
+# requirements.txt. Since the ONE WHEEL move (#896) the substrate arrives as a
+# single `ciris-server` release asset — persist / edge / lens live inside it and
+# are no longer pinned or fetched separately. `ciris-verify` remains its own pin.
+# (Historically this refreshed CIRISVerify + CIRISPersist + CIRISEdge separately;
 # requirements.txt, from their published GitHub releases. Eliminates the
 # "needs a macOS dev box" bottleneck — runs on macos-latest which ships
 # otool + install_name_tool + the gh CLI out of the box.
@@ -11,7 +14,7 @@ name: Refresh iOS substrate binaries
 # branches. The PR review is the gate for the (large) Resources.zip diff.
 #
 # This is the iOS counterpart to the Android substrate refresh done by
-# `tools/update_android_libs.py`. It drives `tools/update_ios_libs.py`, which
+# `tools/update_android_libs.py`. It drives `tools/update_substrate_libs.py`, which
 # reads the pins from requirements.txt — so the branch you target MUST already
 # carry the desired ciris-persist / ciris-edge / ciris-verify pins.
 
@@ -23,7 +26,7 @@ on:
         required: true
         type: string
       libs:
-        description: "Which libs to refresh to their requirements.txt pins (space-separated subset of: verify persist edge), or 'all'."
+        description: "Which libs to refresh to their requirements.txt pins (space-separated subset of: server verify), or 'all'. NOTE: persist/edge/lens are no longer separate — they ship inside the ciris-server ONE WHEEL (#896)."
         required: false
         default: "all"
         type: string
@@ -72,12 +75,22 @@ jobs:
           # The tool drives off requirements.txt; surface the resolved pins so
           # the commit/PR title is accurate and so a typo'd target_branch
           # (one without the v4 pins) is obvious in the run log.
+          # ONE WHEEL (#896): persist / edge / lens are no longer pinned
+          # separately — they ship inside `ciris-server`. This step used to read
+          # `ciris-persist` and `ciris-edge`, which now resolve to the EMPTY
+          # STRING, so the release check below ran `gh release view "v"` against
+          # repos that no longer publish an iOS asset. verify is still its own pin.
           get_pin() { grep -oE "^$1[>=<!~ ]*[0-9]+\.[0-9]+\.[0-9]+" requirements.txt | grep -oE "[0-9]+\.[0-9]+\.[0-9]+" | head -1; }
-          P=$(get_pin ciris-persist); V=$(get_pin ciris-verify); E=$(get_pin ciris-edge)
-          echo "persist=$P" >> "$GITHUB_OUTPUT"
-          echo "verify=$V"  >> "$GITHUB_OUTPUT"
-          echo "edge=$E"    >> "$GITHUB_OUTPUT"
-          echo "Resolved pins → persist=$P / verify=$V / edge=$E"
+          S=$(get_pin ciris-server); V=$(get_pin ciris-verify)
+
+          # Fail LOUDLY on an unresolvable pin. An empty version silently became
+          # `v` in a release URL and produced a confusing 'release not found'
+          # far from the cause.
+          [ -n "$S" ] || { echo "::error::no ciris-server== pin in requirements.txt on this branch — target a branch that carries the pin you want"; exit 1; }
+
+          echo "server=$S" >> "$GITHUB_OUTPUT"
+          echo "verify=$V" >> "$GITHUB_OUTPUT"
+          echo "Resolved pins → server=$S / verify=${V:-<unpinned>}"
 
       - name: Verify gh CLI auth + releases exist
         # gh on macos-latest auto-uses GITHUB_TOKEN; assert the iOS tarballs
@@ -85,37 +98,53 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LIBS: ${{ inputs.libs }}
-          P: ${{ steps.pins.outputs.persist }}
+          S: ${{ steps.pins.outputs.server }}
           V: ${{ steps.pins.outputs.verify }}
-          E: ${{ steps.pins.outputs.edge }}
         run: |
           want() { [ "$LIBS" = "all" ] && return 0; echo " $LIBS " | grep -q " $1 "; }
-          check() { gh release view "v$2" --repo "CIRISAI/$3" --json tagName --jq '.tagName' \
-                      && gh release view "v$2" --repo "CIRISAI/$3" --json assets \
-                         --jq '.assets[].name' | grep -qiE "ios" \
-                      || { echo "::error::CIRISAI/$3 v$2 missing or has no iOS asset"; exit 1; }; }
-          want verify  && check verify  "$V" CIRISVerify
-          want persist && check persist "$P" CIRISPersist
-          want edge    && check edge    "$E" CIRISEdge
+          
+          # The iOS tarball comes from the RELEASE, not PyPI. v0.5.173 shipped its
+          # wheels to PyPI while the release was still missing the iOS triple, so
+          # "the version exists" is NOT the same question as "the iOS asset exists".
+          # Assert the asset itself.
+          check() {
+            name="$1"; ver="$2"; repo="$3"
+            [ -n "$ver" ] || { echo "::error::$name has no resolvable pin — cannot refresh it"; exit 1; }
+            gh release view "v$ver" --repo "CIRISAI/$repo" --json tagName --jq .tagName >/dev/null 2>&1 \
+              || { echo "::error::CIRISAI/$repo v$ver: release not found"; exit 1; }
+            gh release view "v$ver" --repo "CIRISAI/$repo" --json assets --jq '.assets[].name' 2>/dev/null \
+              | grep -qiE "ios" \
+              || { echo "::error::CIRISAI/$repo v$ver exists but carries NO iOS asset — the release is incomplete. Re-run the failing asset job upstream; do NOT re-tag."; exit 1; }
+            echo "  OK CIRISAI/$repo v$ver has an iOS asset"
+          }
+          
+          want server && check server "$S" CIRISServer
+          if want verify; then
+            if [ -n "$V" ]; then check verify "$V" CIRISVerify; else echo "  . verify unpinned - skipping"; fi
+          fi
           echo "All requested iOS release tarballs present."
 
       - name: Refresh iOS substrate to pins
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LIBS: ${{ inputs.libs }}
-          P: ${{ steps.pins.outputs.persist }}
+          S: ${{ steps.pins.outputs.server }}
           V: ${{ steps.pins.outputs.verify }}
-          E: ${{ steps.pins.outputs.edge }}
         run: |
-          # update_ios_libs.py downloads each iOS tarball, lays the PyO3 .so
+          # update_substrate_libs.py downloads the iOS tarball, lays the PyO3 .so
           # into app_packages_native/, wires the .fwork → Frameworks redirect
           # via otool/install_name_tool, refreshes the Python bindings, and
           # rebuilds Resources.zip. Run per requested lib so the run log is
           # explicit about what changed.
           want() { [ "$LIBS" = "all" ] && return 0; echo " $LIBS " | grep -q " $1 "; }
-          want verify  && python -m tools.update_ios_libs --lib verify  "$V"
-          want persist && python -m tools.update_ios_libs --lib persist "$P"
-          want edge    && python -m tools.update_ios_libs --lib edge    "$E"
+          # `tools/update_substrate_libs.py` is the current tool. The old
+          # `tools.update_ios_libs` module predates the one-wheel move and knows
+          # nothing about `server`, so it could never refresh the substrate that now
+          # actually ships. Per-lib invocation so the run log says what changed.
+          want server && python3 tools/update_substrate_libs.py --platform ios --lib server "$S"
+          if want verify && [ -n "$V" ]; then
+            python3 tools/update_substrate_libs.py --platform ios --lib verify "$V"
+          fi
           echo "done"
 
       - name: Detect changes
@@ -154,7 +183,7 @@ jobs:
             client/iosApp/Resources/app_packages \
             client/iosApp/Resources.zip
           git status -s
-          git commit -m "chore(ios): refresh substrate binaries (persist ${{ steps.pins.outputs.persist }} / verify ${{ steps.pins.outputs.verify }} / edge ${{ steps.pins.outputs.edge }})"
+          git commit -m "chore(ios): refresh iOS substrate binaries to ciris-server ${{ steps.pins.outputs.server }} (verify ${{ steps.pins.outputs.verify }})"
           git push origin "$branch"
 
       - name: Open PR
@@ -165,18 +194,17 @@ jobs:
           BRANCH_NAME: ${{ steps.branch.outputs.branch }}
           TRIGGER_ACTOR: ${{ github.actor }}
           LIBS: ${{ inputs.libs }}
-          P: ${{ steps.pins.outputs.persist }}
+          S: ${{ steps.pins.outputs.server }}
           V: ${{ steps.pins.outputs.verify }}
-          E: ${{ steps.pins.outputs.edge }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           body_file=$(mktemp)
           {
             printf '%s\n' "Automated iOS substrate refresh produced by [\`refresh-ios-substrate.yml\`](.github/workflows/refresh-ios-substrate.yml) running on \`macos-latest\`."
             printf '\n'
-            printf '%s\n' "Refreshes the iOS-bundled substrate Mach-O binaries to the requirements.txt pins on \`${TARGET_BRANCH}\`: **persist ${P} / verify ${V} / edge ${E}** (libs requested: \`${LIBS}\`). No agent-code changes."
+            printf '%s\n' "Refreshes the iOS-bundled substrate Mach-O binaries to the requirements.txt pins on \`${TARGET_BRANCH}\`: **ciris-server ${S} / verify ${V}**. Since the one-wheel move (#896), persist / edge / lens ship INSIDE ciris-server and are no longer fetched separately."
             printf '\n## Why this exists\n\n'
-            printf '%s\n' "\`tools/update_ios_libs.py\` rejects non-macOS hosts (it needs Apple's \`otool\` + \`install_name_tool\` to wire the \`.fwork\` → Frameworks redirect). Running it on a hosted \`macos-latest\` runner removes the macOS-dev-box bottleneck."
+            printf '%s\n' "\`tools/update_substrate_libs.py\` rejects non-macOS hosts (it needs Apple's \`otool\` + \`install_name_tool\` to wire the \`.fwork\` → Frameworks redirect). Running it on a hosted \`macos-latest\` runner removes the macOS-dev-box bottleneck."
             printf '\n## How to review\n\n'
             printf '%s\n' "- Diff is expected to be **binary only** — \`app_packages_native/*/.abi3.so\`, \`Frameworks/*\`, the Python bindings, and \`Resources.zip\`."
             printf '%s\n' "- ⚠️ **Check the \`Resources.zip\` size delta.** It should track the swapped native \`.so\` sizes, NOT balloon by 80MB+ — a large jump means the native binaries got bundled into the zip instead of riding in \`app_packages_native\` via the \`.fwork\` redirect."
@@ -196,7 +224,7 @@ jobs:
             --repo "${{ github.repository }}" \
             --base "${TARGET_BRANCH}" \
             --head "${BRANCH_NAME}" \
-            --title "chore(ios): refresh substrate to persist ${P} / verify ${V} / edge ${E}" \
+            --title "chore(ios): refresh iOS substrate to ciris-server ${S} / verify ${V}" \
             --body-file "$body_file"
 
       - name: No-change summary

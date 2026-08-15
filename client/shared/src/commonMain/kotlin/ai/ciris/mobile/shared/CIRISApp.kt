@@ -1846,7 +1846,17 @@ fun CIRISApp(
                     errorMessage = loginErrorMessage,
                     ownerHint = ownerHint,
                     observerBlocked = observerBlocked,
-                    showLocalLoginForm = (googleSignInCallback == null && isFirstRun == false),
+                    // Start the local form EXPANDED only where there is no sign-in
+                    // alternative. A null callback used to mean exactly that — but desktop
+                    // now has the node's browser flow (#1028), and forcing the form there
+                    // hides a Google button whose handler is already fully implemented.
+                    // That is what shipped in 2.9.14. wasmJs and anything else passing
+                    // null keeps the previous behaviour.
+                    showLocalLoginForm = (
+                        googleSignInCallback == null &&
+                            !ai.ciris.mobile.shared.platform.isDesktop() &&
+                            isFirstRun == false
+                    ),
                     isFirstRun = isFirstRun ?: true,
                     // NOTE: no fedID sign-in option here by design — the fedID is the
                     // founder's identity, minted in the first-run wizard and accessed

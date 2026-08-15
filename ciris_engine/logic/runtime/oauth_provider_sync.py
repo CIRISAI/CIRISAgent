@@ -69,17 +69,25 @@ _TIMEOUT = 10
 
 def _read_provider_config() -> Optional[Dict[str, Any]]:
     """`{provider: {client_id, client_secret, ...}}`, or None if unprovisioned."""
-    for path in (_SHARED_OAUTH_CONFIG, _LOCAL_OAUTH_CONFIG):
+    for path, source in ((_SHARED_OAUTH_CONFIG, "shared volume"), (_LOCAL_OAUTH_CONFIG, "local")):
         try:
             if not path.exists():
                 continue
             data = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as e:
-            # Name the PATH, never the contents — this file holds client secrets.
-            logger.warning("[OAUTH_SYNC] could not read %s: %s", path, type(e).__name__)
+            # Log WHICH SOURCE, never the path or the contents.
+            #
+            # My first version logged `path`, reasoning that a location is not a
+            # secret. CodeQL disagreed and it was right to: this file holds
+            # client secrets, so everything derived from it is tainted, and a
+            # log line does not get to decide that a credential file's location
+            # is the harmless part. `source` is a literal chosen by which branch
+            # we are in — it carries nothing from the file — and it answers the
+            # only question an operator has here: managed or standalone.
+            logger.warning("[OAUTH_SYNC] could not read the %s provider config: %s", source, type(e).__name__)
             continue
         if isinstance(data, dict) and data:
-            logger.info("[OAUTH_SYNC] provider config found at %s (%d provider(s))", path, len(data))
+            logger.info("[OAUTH_SYNC] provider config found (%s, %d provider(s))", source, len(data))
             return data
     return None
 

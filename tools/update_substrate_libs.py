@@ -1129,15 +1129,69 @@ def update_python_bindings_ios(lib: SubstrateLib, version: str) -> bool:
     return True
 
 
+#: A rebuild may legitimately shrink the bundle a little; losing most of it is
+#: never legitimate. Set well below any real change and well above the disaster.
+_ZIP_SHRINK_FLOOR = 0.75
+
+
 def rebuild_resources_zip() -> None:
-    """Rebuild Resources.zip from the Resources directory."""
+    """Rebuild Resources.zip from the Resources directory — refusing to gut it.
+
+    `Resources.zip` is a COMMITTED ARTIFACT, and most of what it contains is not
+    in git: of its ~5,862 entries, `app_packages/` (2,741) and `python/` (1,210)
+    are build outputs that exist only on a machine that has run iOS packaging.
+    A fresh checkout has ~50 tracked files under `Resources/`.
+
+    So `zip -r Resources.zip .` in a checkout without those outputs produces a
+    bundle missing 94% of the payload — and this function used to report
+    `SUCCESS` for it. Measured, on exactly that path:
+
+        committed   5,862 entries   94.6 MB uncompressed
+        rebuilt        66 entries   17.5 MB uncompressed
+
+    An iOS build shipped from that zip would be missing its Python runtime and
+    every vendored package. Nothing downstream would catch it: the file exists,
+    the version pin is right, and the updater's own `.so` version probe is
+    inconclusive by design.
+
+    Now the entry count is compared against the bundle being replaced and the
+    rebuild is REFUSED on a collapse, leaving the existing artifact untouched.
+    Run the iOS refresh on a host where the Resources tree is materialised.
+    """
     print("\nRebuilding Resources.zip...")
-    os.chdir(IOS_RESOURCES_DIR)
     zip_path = IOS_APP_DIR / "Resources.zip"
+
+    prior_entries = 0
+    if zip_path.exists():
+        try:
+            with zipfile.ZipFile(zip_path) as z:
+                prior_entries = len(z.namelist())
+        except zipfile.BadZipFile:
+            prior_entries = 0
+
+    os.chdir(IOS_RESOURCES_DIR)
+    staged = zip_path.with_suffix(".zip.rebuild")
+    staged.unlink(missing_ok=True)
+    run_cmd(["zip", "-q", "-r", str(staged), "."], check=True)
+
+    with zipfile.ZipFile(staged) as z:
+        new_entries = len(z.namelist())
+
+    if prior_entries and new_entries < prior_entries * _ZIP_SHRINK_FLOOR:
+        staged.unlink(missing_ok=True)
+        raise SystemExit(
+            f"\nREFUSING to replace Resources.zip: the rebuild has {new_entries} entries "
+            f"against the existing {prior_entries}.\n"
+            f"Most of this bundle is build output that is NOT in git "
+            f"(app_packages/, python/), so a checkout without it rebuilds an empty shell.\n"
+            f"The existing artifact has been left untouched. Run the iOS refresh on a host "
+            f"where the Resources tree is materialised."
+        )
+
     zip_path.unlink(missing_ok=True)
-    run_cmd(["zip", "-q", "-r", str(zip_path), "."], check=True)
+    staged.rename(zip_path)
     size_mb = zip_path.stat().st_size / 1024 / 1024
-    print(f"  -> Resources.zip ({size_mb:.1f}MB)")
+    print(f"  -> Resources.zip ({size_mb:.1f}MB, {new_entries} entries)")
 
 
 def verify_dylib_version(lib: SubstrateLib, version: str) -> bool:

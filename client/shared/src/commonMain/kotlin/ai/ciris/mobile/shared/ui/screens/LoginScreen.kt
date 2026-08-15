@@ -103,7 +103,13 @@ fun LoginScreen(
     var showResetConfirm by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
 
-    // For desktop, always show login form (not OAuth buttons)
+    // Desktop USED to mean "local login only", because there was no native
+    // Google SDK and nothing could complete a browser sign-in. ciris-server
+    // 0.5.165 changed that: the node serves the browser flow and the app polls
+    // /v1/auth/oauth/handoff for the session (CIRISAgent#1028). The handler
+    // behind `onGoogleSignIn` already implements it — see CIRISApp's desktop
+    // branch — so this flag no longer decides whether OAuth is POSSIBLE, only
+    // whether the local form starts expanded.
     val isDesktopMode = isDesktop()
 
     // Localized strings
@@ -210,8 +216,12 @@ fun LoginScreen(
                             modifier = Modifier.padding(top = 16.dp)
                         )
                     }
-                } else if (isDesktopMode || showLoginForm) {
-                    // Desktop mode or Local Login form - show username/password fields
+                } else if (showLoginForm) {
+                    // Local Login form - show username/password fields.
+                    // `isDesktopMode` deliberately NOT part of this condition: it
+                    // short-circuited desktop straight here, making the OAuth branch
+                    // below unreachable, so the Google button never rendered on
+                    // desktop even though its handler was fully implemented.
                     LocalLoginForm(
                         username = username,
                         onUsernameChange = { username = it },
@@ -222,7 +232,10 @@ fun LoginScreen(
                                 onLocalLoginSubmit(username, password)
                             }
                         },
-                        onBack = if (!isDesktopMode) {{ showLoginForm = false }} else null,
+                        // Back is available everywhere now. It was null on desktop
+                        // because the form was the only screen there and there was
+                        // nothing to go back TO; with OAuth buttons present there is.
+                        onBack = { showLoginForm = false },
                         errorMessage = errorMessage,
                         focusManager = focusManager
                     )

@@ -13,6 +13,72 @@ from ciris_engine.logic.setup.first_run import get_default_config_path, is_first
 logger = logging.getLogger(__name__)
 
 
+#: WA roles that constitute an OWNER. `observer` is excluded deliberately: the
+#: agent mints observer certificates for its adapters on every boot, so counting
+#: them would report "setup complete" on a genuinely empty install and defeat the
+#: #794 self-heal this sits alongside.
+_OWNER_ROLES = ("root", "authority")
+
+
+def _node_owner_present() -> Optional[bool]:
+    """True if the NODE holds an active human owner certificate.
+
+    2.9.14 moved identity to the substrate, and the brain's WA store now
+    deliberately SKIPS node-owner rows (`wa-root-*`) because they are
+    substrate-owned federation identities, not brain `WACertificate`s — see
+    `_is_brain_wa_row` (CIRISAgent#922, which fixed a completeSetup 500).
+
+    Two correct changes composing into a wrong answer. On an install whose
+    owner was created by node self-claim, the ONLY human row is `wa-root-…`;
+    the brain skips it, `has_system_admin_user()` reports "no admin", and
+    `is_setup_required()` takes the #794 bugged-install branch — bouncing a
+    healthy upgraded install into the setup wizard with its credentials sitting
+    intact on disk.
+
+    Reproduced on a real 2.9.14 upgrade:
+
+        cirislens_wa_cert:
+          wa-root-eric-moore-…  name=emoore  role=root  active=1
+          apiplatform_observer / wallet_observer / …   (minted every boot)
+
+        /v1/setup/status -> setup_required=true, first_run=false,
+                            config_exists=true          -> wizard
+
+    So ask the store that owns identity now, by ROLE — persist's
+    `wa_cert_list_by_role` already filters to active rows, and querying only
+    the owner roles keeps the minted observers out by construction rather than
+    by name-matching.
+
+    Returns None — never False — when the substrate cannot be read, so an
+    unreachable store falls back to the brain's answer instead of asserting
+    "no owner" and forcing the wizard on.
+    """
+    try:
+        from ciris_engine.logic.persistence.stores.authentication_store import (
+            _list_active_by_role,
+        )
+    except ImportError:  # pragma: no cover - defensive
+        return None
+
+    found = False
+    for role in _OWNER_ROLES:
+        try:
+            rows = _list_active_by_role(role)
+        except Exception as e:  # pragma: no cover - substrate unreadable
+            logger.debug("[SETUP] node-owner probe failed for role %s: %s", role, e)
+            return None
+        if rows:
+            logger.info(
+                "[SETUP] node holds %d active %r certificate(s) — setup is complete "
+                "even though the brain's user store reports no SYSTEM_ADMIN "
+                "(node-owner rows are skipped there by design).",
+                len(rows),
+                role,
+            )
+            found = True
+    return found
+
+
 async def has_system_admin_user(request: Request) -> Optional[bool]:
     """Return True if at least one SYSTEM_ADMIN user exists, False if not,
     None if we can't tell (auth service unavailable yet).
@@ -101,6 +167,13 @@ async def is_setup_required(request: Request) -> bool:
         return False
 
     has_admin = await has_system_admin_user(request)
+    if has_admin is False:
+        # The brain says "no admin". Before declaring a bugged install, ask the
+        # store that owns identity as of 2.9.14 — the brain skips node-owner
+        # rows by design, so its "no" is not evidence of absence on a
+        # node-claimed install.
+        if _node_owner_present() is True:
+            return False
     return has_admin is False
 
 

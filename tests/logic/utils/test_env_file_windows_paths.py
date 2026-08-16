@@ -181,3 +181,79 @@ def test_env_quoted_and_env_unquoted_are_exact_inverses() -> None:
 
     for value in WINDOWS_PATHS + [r'C:\a\b "quoted" \c', "", "plain", "/posix/path", "a\\\\b"]:
         assert env_unquoted(env_quoted(value)) == value, f"not an inverse for {value!r}"
+
+
+# ---------------------------------------------------------------------------
+# REPAIR ON READ. 2.9.19 fixed the writers, which stops NEW corruption and does
+# nothing for the .env files already on disk. A user installed 2.9.19 and hit
+# the IDENTICAL WinError 123, because his file was poisoned by an earlier
+# version. Fixing the writers and fixing the USERS are two different problems.
+# ---------------------------------------------------------------------------
+
+POISONED = {
+    "C:\\Users\x0cranc\\ciris\\data": r"C:\Users\franc\ciris\data",   # \f — reported
+    "C:\\Users\x0bictor\\ciris": r"C:\Users\victor\ciris",            # \v
+    "C:\\Users\tom\\ciris": r"C:\Users\tom\ciris",                    # \t
+    "C:\\Users\rachel\\ciris": r"C:\Users\rachel\ciris",              # \r
+    "C:\\Users\nancy\\ciris": r"C:\Users\nancy\ciris",                # \n
+    "C:\\Users\x08en\\ciris": r"C:\Users\ben\ciris",                  # \b
+    "C:\\Users\x07lice\\ciris": r"C:\Users\alice\ciris",              # \a
+}
+
+
+@pytest.mark.parametrize("poisoned,expected", sorted(POISONED.items()))
+def test_a_poisoned_value_is_repaired(poisoned: str, expected: str) -> None:
+    from ciris_engine.logic.utils.env_file import repair_dotenv_escapes
+
+    assert repair_dotenv_escapes(poisoned) == expected
+
+
+def test_repair_is_idempotent_and_leaves_clean_values_alone() -> None:
+    """Runs on every read, so it must never degrade an already-good value."""
+    from ciris_engine.logic.utils.env_file import repair_dotenv_escapes
+
+    for clean in (r"C:\Users\franc\ciris", "C:/Users/franc/ciris", "/home/e/ciris", ""):
+        assert repair_dotenv_escapes(clean) == clean
+    once = repair_dotenv_escapes("C:\\Users\x0cranc")
+    assert repair_dotenv_escapes(once) == once
+
+
+def test_get_env_var_repairs_path_keys(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The assertion that matters: the CALLER must get a usable path.
+
+    The standalone helper passing while `get_env_var` returned the corrupted
+    value is precisely the shape of this bug — a fix verified at the wrong layer.
+    """
+    import ciris_engine.logic.config.env_utils as eu
+
+    monkeypatch.setattr(eu, "_ENV_LOADED", True, raising=False)
+    monkeypatch.setenv("CIRIS_DB_PATH", "C:\\Users\x0cranc\\ciris\\data\\ciris_engine.db")
+
+    got = eu.get_env_var("CIRIS_DB_PATH")
+
+    assert got == r"C:\Users\franc\ciris\data\ciris_engine.db"
+    assert not [c for c in got if ord(c) < 32]
+
+
+def test_non_path_keys_are_left_untouched(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Only PATH values are repaired — elsewhere a control char may be deliberate."""
+    import ciris_engine.logic.config.env_utils as eu
+
+    monkeypatch.setattr(eu, "_ENV_LOADED", True, raising=False)
+    monkeypatch.setenv("SOME_OTHER_VALUE", "keep\x0cthis")
+
+    assert eu.get_env_var("SOME_OTHER_VALUE") == "keep\x0cthis"
+
+
+def test_the_repair_log_does_not_print_the_path(monkeypatch: pytest.MonkeyPatch, caplog) -> None:
+    """The value is user data, and the corrupted form has been through enough logs."""
+    import ciris_engine.logic.config.env_utils as eu
+
+    monkeypatch.setattr(eu, "_ENV_LOADED", True, raising=False)
+    monkeypatch.setenv("CIRIS_DB_PATH", "C:\\Users\x0cranc\\ciris\\data")
+
+    with caplog.at_level("WARNING"):
+        eu.get_env_var("CIRIS_DB_PATH")
+
+    assert "CIRIS_DB_PATH" in caplog.text
+    assert "franc" not in caplog.text

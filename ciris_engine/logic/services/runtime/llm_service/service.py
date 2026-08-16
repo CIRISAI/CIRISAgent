@@ -1143,8 +1143,13 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             logger.warning("[LLM_TOKEN] Attempted to update with empty API key - ignoring")
             return
 
-        old_key_preview = self.openai_config.api_key[:20] + "..." if self.openai_config.api_key else "None"
-        new_key_preview = new_api_key[:20] + "..."
+        # Describe the rotation without publishing either key. `[:20]` was 17
+        # characters of secret for an `sk-` key, twice — and this path runs on
+        # every hourly token refresh, so it wrote them repeatedly. Length plus
+        # "did it actually change" answers what this log is for: confirming the
+        # refresh took, and catching a refresh that handed back the same key.
+        old_key_preview = f"len={len(self.openai_config.api_key)}" if self.openai_config.api_key else "None"
+        new_key_preview = f"len={len(new_api_key)} (changed={new_api_key != self.openai_config.api_key})"
 
         # Update config
         self.openai_config.api_key = new_api_key

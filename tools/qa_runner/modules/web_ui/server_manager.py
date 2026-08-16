@@ -298,7 +298,26 @@ class ServerManager:
         # desktop stuck on Setup wizard → walk-test login cascades to
         # SKIP. Pinning CIRIS_HOME to project_root makes both runs land
         # on the same data dir deterministically.
-        env["CIRIS_HOME"] = self.config.project_root
+        #
+        # setdefault, NOT assignment. This used to overwrite unconditionally,
+        # which silently discarded an explicitly-set CIRIS_HOME -- and that made
+        # the Windows UI job prove nothing at all. That job pins
+        #
+        #     CIRIS_HOME=C:\Users\runneradmin\franc\ciris
+        #
+        # precisely because `\f` is the escape sequence that corrupted a real
+        # user's paths. The harness threw it away and substituted the repo
+        # checkout, so the path written into .env was
+        # D:\a\CIRISAgent\CIRISAgent\data\... -- which contains no escape
+        # trigger. Both boots then passed the control-character assertion
+        # trivially, because nothing dangerous was ever written, and the
+        # assertion failed only because it went looking for .env in the home it
+        # had asked for and found none.
+        #
+        # The determinism argument above is fully satisfied by setdefault: what
+        # it needs is that BOTH runs agree on one home, not that the harness
+        # chooses it. When nothing is set, behaviour is unchanged.
+        env.setdefault("CIRIS_HOME", self.config.project_root)
         # CIRIS_AGENT_ID stabilizes the signer_key_id across runs so
         # persist's process-singleton Engine guardrail (3.6.3+) doesn't
         # see EngineConfigMismatch on the restart.

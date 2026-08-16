@@ -119,6 +119,20 @@ interface PythonRuntimeProtocol {
         get() = EMPTY_CLAIM_PIN
 
     /**
+     * Read the node's one-time CLAIM PIN from its DURABLE `<CIRIS_HOME>/claim_pin`
+     * file (0600), ON DEMAND. This is the race-free, canonical source: unlike the
+     * [localClaimPin] stdout banner, the file persists until ownership is claimed,
+     * so reading it at claim time (well after boot) always sees it — whereas the
+     * banner/file-at-boot capture can miss it because the node writes `claim_pin`
+     * a few seconds AFTER the health endpoint answers (observed on iOS). Same-
+     * process file access is first-run operator-level access — the same secret the
+     * console banner shows — so this preserves the console-only-over-HTTP guarantee
+     * (setup/root still verifies the PIN before granting ownership). Returns `null`
+     * when the file is absent/empty or on platforms that do not drive a local node.
+     */
+    suspend fun readLocalClaimPin(): String? = null
+
+    /**
      * THIS node's own NodeCode, if the node printed it alongside the unclaimed
      * banner. May be `null` even when [localClaimPin] is set — in that case the
      * NodeCode is fetched at claim time via `GET /v1/federation/node-code`.

@@ -64,11 +64,23 @@ def get_config_paths() -> list[Path]:
         logger.info(f"iOS mode: checking {ciris_home / '.env'}")
         return paths
 
-    # User config directory — the single canonical location for config
-    # Per XDG best practices: use a fixed, predictable path, not CWD
-    # ~/ciris/ for config, ~/.ciris/ for secrets/keys only
+    # Honor CIRIS_HOME first so config + first-run detection resolve the SAME home
+    # the NODE uses. get_ciris_home() is the one canonical resolver (managed /app →
+    # $CIRIS_HOME → dev-mode → ~/ciris), and path_resolution exports CIRIS_HOME once
+    # resolved so every subprocess agrees. This branch previously hardcoded
+    # ~/ciris/ and ignored CIRIS_HOME: on any custom/dev home the node wrote its
+    # .env, identity, and the one-time `claim_pin` under CIRIS_HOME while first_run
+    # looked only at ~/ciris — a split home that left setup permanently "first run"
+    # and made the desktop self-claim unable to find the node's claim_pin.
+    ciris_home = get_ciris_home()
+    paths.append(ciris_home / ".env")
+
+    # Legacy/installed fallback: the fixed ~/ciris location. Kept so an existing
+    # ~/ciris/.env still resolves when CIRIS_HOME is unset (then it equals
+    # ciris_home and is de-duped below).
     user_ciris_dir = Path.home() / "ciris"
-    paths.append(user_ciris_dir / ".env")
+    if (user_ciris_dir / ".env") not in paths:
+        paths.append(user_ciris_dir / ".env")
 
     # Explicit override via CIRIS_CONFIG_DIR (for dev/testing)
     config_dir_override = os.environ.get("CIRIS_CONFIG_DIR")

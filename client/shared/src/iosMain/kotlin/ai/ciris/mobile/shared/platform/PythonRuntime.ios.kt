@@ -3,6 +3,9 @@
 package ai.ciris.mobile.shared.platform
 
 import kotlinx.cinterop.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 import platform.Foundation.*
 import kotlin.coroutines.resume
@@ -28,6 +31,17 @@ actual class PythonRuntime : PythonRuntimeProtocol {
     private var _lastReportedServiceCount = 0
 
     actual override val serverUrl: String = "http://127.0.0.1:8080"
+
+    // First-run ownership CLAIM PIN, captured from the node's DURABLE
+    // <home>/claim_pin file (0600). On iOS, Swift boots Python before Compose, so
+    // this Kotlin layer never owns the node's stdout — unlike desktop there is no
+    // banner to scrape, the file IS the source. The node writes the PIN during
+    // compose (early boot) and it persists until ownership is claimed, so reading
+    // it once the server is healthy is reliable. Mirrors PythonRuntime.desktop.kt's
+    // readClaimPinFromFileIfMissing(). Without this the setup self-claim never gets
+    // a PIN and the local node is left UNCLAIMED (CIRISServer#380-adjacent).
+    private val _localClaimPin = MutableStateFlow<String?>(null)
+    override val localClaimPin: StateFlow<String?> get() = _localClaimPin.asStateFlow()
 
     /**
      * On iOS, Python is initialized by Swift before Compose UI loads.
@@ -57,6 +71,7 @@ actual class PythonRuntime : PythonRuntimeProtocol {
             if (isHealthy) {
                 pollStartupStatus() // Final poll
                 _serverStarted = true
+                readClaimPinFromFileIfMissing()
                 println("[PythonRuntime.iOS] Server is healthy after $attempt attempts")
                 return Result.success(serverUrl)
             }
@@ -65,6 +80,33 @@ actual class PythonRuntime : PythonRuntimeProtocol {
 
         println("[PythonRuntime.iOS] Server did not become healthy after 60s")
         return Result.failure(Exception("Server not responding at $serverUrl after 60s"))
+    }
+
+    /**
+     * Race-free, on-demand read of the node's one-time CLAIM PIN from its durable
+     * `<home>/claim_pin` file (0600). On iOS the node home is `~/Documents/ciris`.
+     * The file persists until ownership is claimed, so reading it at claim time
+     * always sees it — see [PythonRuntimeProtocol.readLocalClaimPin]. Returns null
+     * if the file is absent/empty.
+     */
+    override suspend fun readLocalClaimPin(): String? {
+        val pinPath = "${NSHomeDirectory()}/Documents/ciris/claim_pin"
+        val pin = NSString.stringWithContentsOfFile(pinPath, NSUTF8StringEncoding, null)?.trim()
+        return pin?.takeIf { it.isNotEmpty() }
+    }
+
+    /**
+     * Best-effort boot-time latch of the CLAIM PIN into the StateFlow. May MISS the
+     * file: the node writes `claim_pin` during compose, a few seconds AFTER the
+     * health endpoint answers (observed: health ~T+3s, claim_pin ~T+6s). The setup
+     * flow therefore also calls the race-free [readLocalClaimPin] at claim time.
+     */
+    private suspend fun readClaimPinFromFileIfMissing() {
+        if (_localClaimPin.value != null) return
+        readLocalClaimPin()?.let {
+            _localClaimPin.value = it
+            println("[PythonRuntime.iOS] Captured CLAIM PIN from file (boot latch).")
+        }
     }
 
     /**

@@ -1,4 +1,5 @@
 package ai.ciris.mobile.shared
+import ai.ciris.mobile.shared.platform.isIOS
 import ai.ciris.mobile.shared.platform.openUrlInBrowser
 import ai.ciris.mobile.shared.platform.PlatformBackHandler
 import ai.ciris.mobile.shared.platform.PlatformLogger
@@ -1341,26 +1342,42 @@ fun CIRISApp(
             Screen.Login -> {
                 platformLog(TAG, "[DEBUG][Screen.Login] Rendering login screen, googleSignInCallback=${if (googleSignInCallback != null) "PRESENT" else "NULL"}, isFirstRun=$isFirstRun")
 
-                // During FIRST RUN, go to setup wizard
-                // Desktop: auto-trigger since no OAuth; iOS: show login first for auth
+                // FIRST RUN shows the Login screen on EVERY platform — including
+                // desktop. Desktop has no native Google SDK, but ciris-server 0.5.165+
+                // serves a browser sign-in the app collects over /v1/auth/oauth/handoff
+                // (CIRISAgent#1028), so `googleSignInCallback == null` no longer means
+                // "no OAuth possible" — it only means "use the browser flow." Auto-
+                // skipping desktop straight to Setup buried the Google option the user
+                // came for; now they land on Login and CHOOSE Google (browser) or local.
                 LaunchedEffect(googleSignInCallback, isFirstRun) {
-                    if (isFirstRun == true && googleSignInCallback == null) {
-                        // Desktop: no OAuth, go directly to setup
-                        platformLog(TAG, "[INFO][Screen.Login] Desktop first-run detected (no OAuth) - going to setup")
-                        setupViewModel.setGoogleAuthState(
-                            isAuth = false,
-                            idToken = null,
-                            email = null,
-                            userId = null
-                        )
-                        currentScreen = Screen.Setup
-                    } else if (isFirstRun == true && googleSignInCallback != null) {
-                        // iOS/Android: first run with OAuth - show login so user can sign in,
-                        // then auth flow will detect first user and redirect to setup
-                        platformLog(TAG, "[INFO][Screen.Login] Mobile first-run - showing login for OAuth sign-in")
-                    } else if (googleSignInCallback == null && isFirstRun == false) {
-                        platformLog(TAG, "[INFO][Screen.Login] Desktop existing user - showing local login form")
+                    when {
+                        isFirstRun == true && googleSignInCallback == null ->
+                            platformLog(TAG, "[INFO][Screen.Login] Desktop first-run - showing Login (Google via browser handoff, or local)")
+                        isFirstRun == true && googleSignInCallback != null ->
+                            platformLog(TAG, "[INFO][Screen.Login] Mobile first-run - showing login for OAuth sign-in")
+                        googleSignInCallback == null && isFirstRun == false ->
+                            platformLog(TAG, "[INFO][Screen.Login] Desktop existing user - showing local login form")
                     }
+                }
+
+                // Probe which OAuth providers this build actually has credentials for.
+                // A provider is present only when the node was provisioned with its
+                // client_id + client_secret (the PKCE secret CI bakes into oauth.json).
+                // Absent → grey the sign-in button rather than dangle a door that opens
+                // onto redirect_uri_mismatch. Native Apple sign-in (iOS) doesn't ride
+                // the node's browser-OAuth creds, so it stays live regardless.
+                var googleOAuthAvailable by remember { mutableStateOf(true) }
+                LaunchedEffect(Unit) {
+                    val providerId = if (isIOS()) "apple" else "google"
+                    runCatching { apiClient.getOAuthProviders(nodeBaseUrl) }
+                        .onSuccess { providers ->
+                            googleOAuthAvailable = isIOS() || providers.any { it.equals(providerId, ignoreCase = true) }
+                            platformLog(TAG, "[INFO][OAuthProviders] available=$providers gate=$providerId enabled=$googleOAuthAvailable")
+                        }
+                        .onFailure { e ->
+                            googleOAuthAvailable = isIOS()
+                            platformLog(TAG, "[DEBUG][OAuthProviders] probe failed: ${e.message?.take(60)} → enabled=$googleOAuthAvailable")
+                        }
                 }
 
                 // 2.9.2 — Fetch the personal-install owner hint each time
@@ -1858,6 +1875,9 @@ fun CIRISApp(
                             isFirstRun == false
                     ),
                     isFirstRun = isFirstRun ?: true,
+                    // Grey the sign-in button when this build has no OAuth creds wired
+                    // (probed above from the node's /v1/auth/oauth/providers).
+                    googleOAuthAvailable = googleOAuthAvailable,
                     // NOTE: no fedID sign-in option here by design — the fedID is the
                     // founder's identity, minted in the first-run wizard and accessed
                     // ONLY via the associated user-account session (log in below). It
@@ -1893,7 +1913,13 @@ fun CIRISApp(
                     // with a bounded timeout rather than snapshotting a value that
                     // may still be null at the instant COMPLETE runs.
                     claimPinProvider = {
+                        // 1) banner snapshot (if the boot-time latch caught it),
+                        // 2) DURABLE <home>/claim_pin file read on-demand — RACE-FREE: the node
+                        //    writes claim_pin a few seconds AFTER health answers, so a boot-time
+                        //    latch can miss it, but by claim time the file is present,
+                        // 3) last resort, await the banner flow with a bounded timeout.
                         pythonRuntimeProtocol.localClaimPin.value
+                            ?: pythonRuntimeProtocol.readLocalClaimPin()
                             ?: withTimeoutOrNull(20_000L) {
                                 pythonRuntimeProtocol.localClaimPin
                                     .filterNotNull()

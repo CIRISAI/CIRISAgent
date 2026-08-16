@@ -58,7 +58,7 @@ class VisionTests:
 
     async def run(self) -> List[Dict[str, Any]]:
         """Run all vision tests."""
-        self.console.print("\n[cyan]🖼️ Testing Native Vision/Multimodal Support[/cyan]")
+        self.console.print("\n[cyan] Testing Native Vision/Multimodal Support[/cyan]")
 
         # Start SSE monitoring for interact tests
         if self.token:
@@ -85,10 +85,10 @@ class VisionTests:
                 try:
                     await test_func()
                     self.results.append({"test": name, "status": "✅ PASS", "error": None})
-                    self.console.print(f"  ✅ {name}")
+                    self.console.print(f" [OK] {name}")
                 except Exception as e:
                     self.results.append({"test": name, "status": "❌ FAIL", "error": str(e)})
-                    self.console.print(f"  ❌ {name}: {str(e)[:100]}")
+                    self.console.print(f" [FAIL] {name}: {str(e)[:100]}")
                     if self.console.is_terminal:
                         self.console.print(f"     [dim]{traceback.format_exc()}[/dim]")
         finally:

@@ -24,7 +24,7 @@ def get_auth_token(host: str = "localhost", port: int = 8080) -> Optional[str]:
     """Get authentication token from the API."""
     password = os.environ.get("CIRIS_API_PASSWORD")
     if not password:
-        print("❌ CIRIS_API_PASSWORD not set. Use the password from setup wizard.")
+        print("[FAIL] CIRIS_API_PASSWORD not set. Use the password from setup wizard.")
         return None
     try:
         response = requests.post(
@@ -36,14 +36,14 @@ def get_auth_token(host: str = "localhost", port: int = 8080) -> Optional[str]:
         if response.status_code == 200:
             return response.json()["access_token"]
         else:
-            print(f"❌ Failed to authenticate: {response.status_code}")
+            print(f"[FAIL] Failed to authenticate: {response.status_code}")
             return None
     except requests.exceptions.ConnectionError:
-        print(f"❌ Cannot connect to API at {host}:{port}")
+        print(f"[FAIL] Cannot connect to API at {host}:{port}")
         print("   Make sure the server is running: python main.py --adapter api")
         return None
     except Exception as e:
-        print(f"❌ Error getting token: {e}")
+        print(f"[FAIL] Error getting token: {e}")
         return None
 
 
@@ -58,10 +58,10 @@ def get_prometheus_metrics(token: str, host: str = "localhost", port: int = 8080
         if response.status_code == 200:
             return response.text
         else:
-            print(f"❌ Failed to get metrics: {response.status_code}")
+            print(f"[FAIL] Failed to get metrics: {response.status_code}")
             return None
     except Exception as e:
-        print(f"❌ Error getting metrics: {e}")
+        print(f"[FAIL] Error getting metrics: {e}")
         return None
 
 
@@ -85,17 +85,17 @@ def print_summary(metrics: str, json_data: Optional[dict] = None):
     metric_lines = [l for l in lines if l and not l.startswith("#")]
 
     print("\n" + "=" * 60)
-    print("📊 CIRIS TELEMETRY SUMMARY")
+    print(" CIRIS TELEMETRY SUMMARY")
     print("=" * 60)
 
     if json_data:
-        print(f"\n🟢 System Health: {'✅ HEALTHY' if json_data.get('system_healthy') else '❌ UNHEALTHY'}")
-        print(f"📈 Services: {json_data.get('services_online', 0)}/{json_data.get('services_total', 0)} online")
-        print(f"⚡ Error Rate: {json_data.get('overall_error_rate', 0):.2%}")
-        print(f"⏱️  Uptime: {json_data.get('overall_uptime_seconds', 0):.0f} seconds")
-        print(f"📝 Total Requests: {json_data.get('total_requests', 0)}")
+        print(f"\n System Health: {'[OK] HEALTHY' if json_data.get('system_healthy') else '[FAIL] UNHEALTHY'}")
+        print(f" Services: {json_data.get('services_online', 0)}/{json_data.get('services_total', 0)} online")
+        print(f" Error Rate: {json_data.get('overall_error_rate', 0):.2%}")
+        print(f" Uptime: {json_data.get('overall_uptime_seconds', 0):.0f} seconds")
+        print(f" Total Requests: {json_data.get('total_requests', 0)}")
 
-    print(f"\n📊 Total Metrics: {len(metric_lines)}")
+    print(f"\n Total Metrics: {len(metric_lines)}")
 
     # Count metrics by category
     categories = {}
@@ -107,7 +107,7 @@ def print_summary(metrics: str, json_data: Optional[dict] = None):
                 categories[category] = categories.get(category, 0) + 1
 
     if categories:
-        print("\n📂 Metrics by Category:")
+        print("\n Metrics by Category:")
         for cat, count in sorted(categories.items()):
             print(f"   • {cat}: {count}")
 
@@ -124,7 +124,7 @@ def print_summary(metrics: str, json_data: Optional[dict] = None):
             key_metrics["error_rate"] = line.split()[-1]
 
     if key_metrics:
-        print("\n🎯 Key Metrics:")
+        print("\n Key Metrics:")
         for name, value in key_metrics.items():
             print(f"   • {name}: {value}")
 
@@ -152,13 +152,13 @@ def main():
 
     args = parser.parse_args()
 
-    print(f"🔐 Authenticating with {args.host}:{args.port}...")
+    print(f" Authenticating with {args.host}:{args.port}...")
     token = get_auth_token(args.host, args.port)
 
     if not token:
         sys.exit(1)
 
-    print("📡 Fetching metrics...")
+    print(" Fetching metrics...")
     metrics = get_prometheus_metrics(token, args.host, args.port)
 
     if not metrics:
@@ -172,18 +172,18 @@ def main():
     # Apply filter if specified
     if args.filter:
         metrics = filter_metrics(metrics, args.filter)
-        print(f"🔍 Filtered for: {args.filter}")
+        print(f" Filtered for: {args.filter}")
 
     # Handle different output modes
     if args.count:
         lines = [l for l in metrics.split("\n") if l and not l.startswith("#")]
-        print(f"\n📊 Total metrics: {len(lines)}")
+        print(f"\n Total metrics: {len(lines)}")
     elif args.summary:
         print_summary(metrics, json_data)
     else:
         # Print full metrics
         print("\n" + "=" * 60)
-        print("📊 PROMETHEUS METRICS")
+        print(" PROMETHEUS METRICS")
         print("=" * 60)
         print(metrics)
 
@@ -191,16 +191,16 @@ def main():
     if args.save:
         with open(args.save, "w") as f:
             f.write(metrics)
-        print(f"\n💾 Saved metrics to {args.save}")
+        print(f"\n Saved metrics to {args.save}")
 
         # Also save JSON if we have it
         if json_data:
             json_file = args.save.replace(".txt", ".json")
             with open(json_file, "w") as f:
                 json.dump(json_data, f, indent=2)
-            print(f"💾 Saved JSON telemetry to {json_file}")
+            print(f" Saved JSON telemetry to {json_file}")
 
-    print("\n✅ Done!")
+    print("\n[OK] Done!")
 
 
 if __name__ == "__main__":

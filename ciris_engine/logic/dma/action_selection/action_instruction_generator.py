@@ -255,7 +255,7 @@ class ActionInstructionGenerator:
                 logger.error(f"[TOOL_CACHE] {service_name}: FAILED to get tools: {e}")
 
         self._cached_tools = all_tools
-        logger.info(f"[TOOL_CACHE] ✓ Cached {len(all_tools)} total tools: {list(all_tools.keys())}")
+        logger.info(f"[TOOL_CACHE] [OK] Cached {len(all_tools)} total tools: {list(all_tools.keys())}")
         # Log individual tool names for debugging LLM tool selection
         for tool_key, tool_info in all_tools.items():
             tool_name = tool_info.get("name", tool_key) if isinstance(tool_info, dict) else tool_key

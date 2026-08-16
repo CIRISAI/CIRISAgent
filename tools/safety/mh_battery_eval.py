@@ -649,7 +649,7 @@ def _main_results_jsonl(args: argparse.Namespace) -> int:
     print(render_report(lang, results, prior_runs_for(ledger, lang, corpus_stem), suggested))
     if args.write_ledger:
         write_ledger_entry(suggested)
-        print(f"\n✅ Appended to {LEDGER}")
+        print(f"\n[OK] Appended to {LEDGER}")
     return 0
 
 
@@ -763,7 +763,7 @@ def main() -> int:
 
     if args.write_ledger:
         write_ledger_entry(suggested)
-        print(f"\n✅ Appended to {LEDGER}")
+        print(f"\n[OK] Appended to {LEDGER}")
 
     return 0
 

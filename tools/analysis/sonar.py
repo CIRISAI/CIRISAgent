@@ -621,7 +621,7 @@ def main():
                 client.add_comment(args.issue_key, f"Marking as false positive: {args.comment}")
 
             result = client.transition_issue(args.issue_key, "falsepositive")
-            print(f"✓ Marked {args.issue_key} as false positive")
+            print(f"[OK] Marked {args.issue_key} as false positive")
             print(f"  Status: {result['issue']['issueStatus']}")
 
         elif args.command == "mark-wontfix":
@@ -630,17 +630,17 @@ def main():
                 client.add_comment(args.issue_key, f"Marking as won't fix: {args.comment}")
 
             result = client.transition_issue(args.issue_key, "wontfix")
-            print(f"✓ Marked {args.issue_key} as won't fix")
+            print(f"[OK] Marked {args.issue_key} as won't fix")
             print(f"  Status: {result['issue']['issueStatus']}")
 
         elif args.command == "reopen":
             result = client.transition_issue(args.issue_key, "reopen")
-            print(f"✓ Reopened {args.issue_key}")
+            print(f"[OK] Reopened {args.issue_key}")
             print(f"  Status: {result['issue']['status']}")
 
         elif args.command == "comment":
             client.add_comment(args.issue_key, args.comment)
-            print(f"✓ Added comment to {args.issue_key}")
+            print(f"[OK] Added comment to {args.issue_key}")
 
         elif args.command == "stats":
             stats = client.get_stats()
@@ -679,9 +679,9 @@ def main():
                 sys.exit(1)
 
         elif args.command == "quality-gate":
-            print("\n🔍 SonarCloud Quality Gate Status")
+            print("\n SonarCloud Quality Gate Status")
             print("=" * 70)
-            print("\nℹ️  Note: SonarCloud analysis runs after successful CI (~15 minutes)")
+            print("\n[INFO] Note: SonarCloud analysis runs after successful CI (~15 minutes)")
             print("=" * 70)
 
             # Get main branch status
@@ -693,7 +693,7 @@ def main():
                     main_timestamp = main_analyses["analyses"][0]["date"]
                 print(f"\n{format_quality_gate_summary(main_qg, 'Main', main_timestamp)}")
             except Exception as e:
-                print(f"\n❌ Main: Could not retrieve status ({e})")
+                print(f"\n[FAIL] Main: Could not retrieve status ({e})")
 
             # Get recent PRs
             recent_prs = get_recent_prs(limit=2)
@@ -720,7 +720,7 @@ def main():
                                 f"{format_quality_gate_summary(branch_qg, f'PR #{pr_num} ({branch_name})', branch_timestamp)}"
                             )
                         except Exception as branch_error:
-                            print(f"❌ PR #{pr_num} ({branch_name}): No SonarCloud analysis yet")
+                            print(f"[FAIL] PR #{pr_num} ({branch_name}): No SonarCloud analysis yet")
             else:
                 print("\nNo recent open PRs found.")
 
@@ -753,7 +753,7 @@ def main():
             comment = args.comment or f"Reviewed and determined to be {resolution.lower()}"
 
             result = client.mark_hotspot_safe(args.hotspot_key, resolution=resolution, comment=comment)
-            print(f"✓ Marked {args.hotspot_key} as {resolution}")
+            print(f"[OK] Marked {args.hotspot_key} as {resolution}")
 
         elif args.command == "coverage":
             pr_number = getattr(args, "pr", None)
@@ -780,7 +780,7 @@ def main():
                 print(f"{scope} Coverage: {coverage:.1f}%")
 
                 if coverage < 80 and args.new_code:
-                    print("⚠️  New code coverage is below 80% threshold!")
+                    print("[WARN] New code coverage is below 80% threshold!")
 
             if f"{prefix}lines_to_cover" in measures:
                 lines_to_cover = int(float(measures.get(f"{prefix}lines_to_cover", 0)))
@@ -813,7 +813,7 @@ def main():
                 print(f"Error: Could not retrieve PR #{args.pr_number} from GitHub")
                 sys.exit(1)
 
-            print(f"\n🔍 Pull Request #{args.pr_number} ({branch_name}) Analysis")
+            print(f"\n Pull Request #{args.pr_number} ({branch_name}) Analysis")
             print("=" * 70)
 
             metric_labels = {
@@ -858,7 +858,7 @@ def main():
                     status_icon = "✅" if status == "OK" else "❌"
                     print(f"\nQuality Gate: {status_icon} {status} (branch fallback)")
                 except Exception:
-                    print(f"\n❌ Quality Gate: Could not retrieve status ({e})")
+                    print(f"\n[FAIL] Quality Gate: Could not retrieve status ({e})")
 
             # Coverage Metrics
             try:
@@ -871,12 +871,12 @@ def main():
                     elif "periods" in m and m["periods"]:
                         measures[m["metric"]] = m["periods"][0]["value"]
 
-                print("\n📊 Coverage on New Code:")
+                print("\n Coverage on New Code:")
                 if "new_coverage" in measures:
                     coverage = float(measures["new_coverage"])
                     print(f"  Coverage: {coverage:.1f}%")
                     if coverage < 80:
-                        print("  ⚠️  Below 80% threshold!")
+                        print(" [WARN] Below 80% threshold!")
 
                 if "new_lines_to_cover" in measures:
                     lines_to_cover = int(float(measures.get("new_lines_to_cover", 0)))
@@ -887,7 +887,7 @@ def main():
                     print(f"  Uncovered: {uncovered_lines}")
                     print(f"\n  Need {int(lines_to_cover * 0.8) - covered_lines} more lines covered for 80%")
             except Exception as e:
-                print(f"\n❌ Coverage: Could not retrieve metrics ({e})")
+                print(f"\n[FAIL] Coverage: Could not retrieve metrics ({e})")
 
             # Issues
             try:
@@ -902,7 +902,7 @@ def main():
                 issues_data = issues_response.json()
 
                 total_issues = issues_data["total"]
-                print(f"\n🐛 Issues: {total_issues}")
+                print(f"\n Issues: {total_issues}")
 
                 if total_issues > 0:
                     # Group by severity
@@ -917,7 +917,7 @@ def main():
                             print(f"    {sev}: {by_severity[sev]}")
 
                     # Show detailed issues for BLOCKER and CRITICAL
-                    print("\n📋 Critical Issues:")
+                    print("\n Critical Issues:")
                     for issue in issues_data["issues"]:
                         if issue["severity"] in ["BLOCKER", "CRITICAL"]:
                             severity = issue["severity"]
@@ -929,10 +929,10 @@ def main():
                             print(f"    {msg}")
                             print(f"    {file_path}:{line}")
             except Exception as e:
-                print(f"\n❌ Issues: Could not retrieve issues ({e})")
+                print(f"\n[FAIL] Issues: Could not retrieve issues ({e})")
 
         elif args.command == "uncovered":
-            print(f"\n📊 Uncovered Lines in PR #{args.pr_number}")
+            print(f"\n Uncovered Lines in PR #{args.pr_number}")
             print("=" * 70)
 
             try:
@@ -951,7 +951,7 @@ def main():
                             print(f"\n... and {remaining} more files (use --limit to show more)")
                             break
 
-                        print(f"\n📁 {f['path']}")
+                        print(f"\n {f['path']}")
                         print(f"   {f['uncovered']}/{f['to_cover']} uncovered ({f['coverage']:.0f}% covered)")
 
                         if args.lines:
@@ -986,7 +986,7 @@ def main():
                 traceback.print_exc()
 
         elif args.command == "tangles":
-            print(f"\n🔄 Architecture Analysis for {PROJECT_KEY}")
+            print(f"\n Architecture Analysis for {PROJECT_KEY}")
             print("=" * 70)
             print(f"Branch: {args.branch}")
 
@@ -999,7 +999,7 @@ def main():
                     component = measures_data.get("component", {})
                     measures = {m["metric"]: m.get("value", "N/A") for m in component.get("measures", [])}
 
-                    print("\n📊 Complexity Metrics:")
+                    print("\n Complexity Metrics:")
                     if "complexity" in measures:
                         print(f"  Cyclomatic Complexity: {measures['complexity']}")
                     if "cognitive_complexity" in measures:
@@ -1013,19 +1013,19 @@ def main():
                     if "sqale_debt_ratio" in measures:
                         print(f"  Technical Debt Ratio: {measures['sqale_debt_ratio']}%")
 
-                    print("\n💡 Note: SonarCloud's architecture tangle visualization")
+                    print("\n Note: SonarCloud's architecture tangle visualization")
                     print("   requires viewing in the web UI:")
                     print(f"   https://sonarcloud.io/project/architecture/tangles?id={PROJECT_KEY}")
                     print("\n   A 'tangle' is a group of files with cyclic dependencies")
                     print("   (A→B→C→A). These make code harder to maintain and test.")
 
                 elif arch_info.get("type") == "error":
-                    print(f"\n⚠️  Could not retrieve architecture data: {arch_info.get('error')}")
+                    print(f"\n[WARN] Could not retrieve architecture data: {arch_info.get('error')}")
                     print("\n   The tangle visualization may require viewing in the web UI:")
                     print(f"   https://sonarcloud.io/project/architecture/tangles?id={PROJECT_KEY}")
 
                 # Try to get high-complexity files as proxy for architecture issues
-                print("\n📁 High Complexity Files (potential tangle participants):")
+                print("\n High Complexity Files (potential tangle participants):")
                 try:
                     tree_data = client.get_measures_component_tree(
                         metrics=["complexity", "cognitive_complexity"], branch=args.branch, qualifier="FIL"

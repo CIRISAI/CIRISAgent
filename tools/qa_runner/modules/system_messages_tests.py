@@ -28,7 +28,7 @@ class SystemMessagesTests:
 
     async def run(self) -> List[Dict[str, Any]]:
         """Run all system messages tests."""
-        self.console.print("\n[cyan]📨 Testing System Messages Visibility[/cyan]")
+        self.console.print("\n[cyan] Testing System Messages Visibility[/cyan]")
 
         tests = [
             ("History Endpoint Available", self.test_history_endpoint),
@@ -43,10 +43,10 @@ class SystemMessagesTests:
             try:
                 await test_func()
                 self.results.append({"test": name, "status": "✅ PASS", "error": None})
-                self.console.print(f"  ✅ {name}")
+                self.console.print(f" [OK] {name}")
             except Exception as e:
                 self.results.append({"test": name, "status": "❌ FAIL", "error": str(e)})
-                self.console.print(f"  ❌ {name}: {str(e)[:100]}")
+                self.console.print(f" [FAIL] {name}: {str(e)[:100]}")
                 if self.console.is_terminal:
                     self.console.print(f"     [dim]{traceback.format_exc()[:500]}[/dim]")
 

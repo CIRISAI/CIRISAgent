@@ -385,11 +385,11 @@ class StreamingVerificationModule:
                                         if not first_snapshot_printed:
                                             first_snapshot_printed = True
                                             print("\n" + "=" * 80)
-                                            print("📊 FIRST SNAPSHOT_AND_CONTEXT EVENT - Field Validation")
+                                            print(" FIRST SNAPSHOT_AND_CONTEXT EVENT - Field Validation")
                                             print("=" * 80)
 
                                             # Print service_health
-                                            print(f"\n🔧 service_health ({len(service_health)} services):")
+                                            print(f"\n service_health ({len(service_health)} services):")
                                             if service_health:
                                                 for i, (service_name, is_healthy) in enumerate(
                                                     sorted(service_health.items()), 1
@@ -401,7 +401,7 @@ class StreamingVerificationModule:
 
                                             # Print continuity_summary
                                             continuity = snapshot.get("continuity_summary")
-                                            print(f"\n📈 continuity_summary:")
+                                            print(f"\n continuity_summary:")
                                             if continuity:
                                                 print(f"  Type: {type(continuity).__name__}")
                                                 if isinstance(continuity, dict):
@@ -412,23 +412,23 @@ class StreamingVerificationModule:
 
                                             # Print telemetry_summary
                                             telemetry = snapshot.get("telemetry_summary")
-                                            print(f"\n📊 telemetry_summary:")
+                                            print(f"\n telemetry_summary:")
                                             if telemetry:
                                                 print(f"  Type: {type(telemetry).__name__}")
                                                 if isinstance(telemetry, dict):
                                                     # Print circuit_breaker first (critical field) with CircuitBreakerState validation
                                                     if "circuit_breaker" in telemetry:
                                                         cb = telemetry["circuit_breaker"]
-                                                        print(f"\n  🔴 circuit_breaker (CircuitBreakerState schema):")
+                                                        print(f"\n circuit_breaker (CircuitBreakerState schema):")
                                                         if cb is None:
-                                                            print("     ❌ NULL (should be dict!)")
+                                                            print(" [FAIL] NULL (should be dict!)")
                                                         elif isinstance(cb, dict):
                                                             if not cb:
                                                                 print(
                                                                     "     ✓ Empty dict (no circuit breakers triggered)"
                                                                 )
                                                             else:
-                                                                print(f"     ✓ Type: dict with {len(cb)} service(s)")
+                                                                print(f" [OK] Type: dict with {len(cb)} service(s)")
                                                                 for service_name, cb_state in sorted(cb.items()):
                                                                     if isinstance(cb_state, dict):
                                                                         state = cb_state.get("state", "unknown")
@@ -442,9 +442,9 @@ class StreamingVerificationModule:
                                                                             f"     - {service_name}: ⚠️ Invalid (not CircuitBreakerState dict)"
                                                                         )
                                                         else:
-                                                            print(f"     ⚠️  Wrong type: {type(cb).__name__}")
+                                                            print(f" [WARN] Wrong type: {type(cb).__name__}")
                                                     else:
-                                                        print(f"\n  🔴 circuit_breaker: ❌ MISSING")
+                                                        print(f"\n circuit_breaker: [FAIL] MISSING")
 
                                                     print(f"\n  Other fields:")
                                                     for key, value in sorted(telemetry.items()):
@@ -460,17 +460,17 @@ class StreamingVerificationModule:
 
                                             # Print user_profiles
                                             user_profiles = snapshot.get("user_profiles")
-                                            print(f"\n👥 user_profiles:")
+                                            print(f"\n user_profiles:")
                                             if user_profiles is None:
-                                                print("  ❌ NULL (should be list with at least API user!)")
+                                                print(" [FAIL] NULL (should be list with at least API user!)")
                                             elif not isinstance(user_profiles, list):
                                                 print(
                                                     f"  ⚠️  Wrong type: {type(user_profiles).__name__} (should be list)"
                                                 )
                                             elif len(user_profiles) == 0:
-                                                print("  ℹ️  Empty list (valid for wakeup/system tasks)")
+                                                print(" [INFO] Empty list (valid for wakeup/system tasks)")
                                             else:
-                                                print(f"  ✓ Type: list with {len(user_profiles)} profile(s)")
+                                                print(f" [OK] Type: list with {len(user_profiles)} profile(s)")
                                                 for i, profile in enumerate(user_profiles, 1):
                                                     if isinstance(profile, dict):
                                                         user_id = profile.get("user_id", "MISSING")
@@ -578,12 +578,12 @@ class StreamingVerificationModule:
 
                                     # Print DMA prompts if present (for benchmark debugging)
                                     print("\n" + "=" * 80)
-                                    print("📝 DMA USER PROMPTS (from dma_results event)")
+                                    print(" DMA USER PROMPTS (from dma_results event)")
                                     print("=" * 80)
                                     for prompt_key in ["csdma_prompt", "dsdma_prompt", "pdma_prompt"]:
                                         prompt_value = event.get(prompt_key)
                                         if prompt_value:
-                                            print(f"\n🔹 {prompt_key.upper()}:")
+                                            print(f"\n {prompt_key.upper()}:")
                                             print("-" * 40)
                                             # Truncate very long prompts for readability
                                             if len(prompt_value) > 5000:
@@ -594,11 +594,11 @@ class StreamingVerificationModule:
                                             else:
                                                 print(prompt_value)
                                         else:
-                                            print(f"\n🔹 {prompt_key.upper()}: (not present)")
+                                            print(f"\n {prompt_key.upper()}: (not present)")
 
                                     # Print SYSTEM prompts (for debugging format instructions)
                                     print("\n" + "=" * 80)
-                                    print("📝 DMA SYSTEM PROMPTS (format instructions)")
+                                    print(" DMA SYSTEM PROMPTS (format instructions)")
                                     print("=" * 80)
                                     for prompt_key in [
                                         "csdma_system_prompt",
@@ -607,7 +607,7 @@ class StreamingVerificationModule:
                                     ]:
                                         prompt_value = event.get(prompt_key)
                                         if prompt_value:
-                                            print(f"\n🔹 {prompt_key.upper()}:")
+                                            print(f"\n {prompt_key.upper()}:")
                                             print("-" * 40)
                                             # Truncate very long prompts for readability
                                             if len(prompt_value) > 5000:
@@ -618,7 +618,7 @@ class StreamingVerificationModule:
                                             else:
                                                 print(prompt_value)
                                         else:
-                                            print(f"\n🔹 {prompt_key.upper()}: (not present)")
+                                            print(f"\n {prompt_key.upper()}: (not present)")
                                     print("=" * 80 + "\n")
 
                                 elif event_type == "idma_result":
@@ -692,7 +692,7 @@ class StreamingVerificationModule:
                                     aspdma_prompt = event.get("aspdma_prompt")
                                     if aspdma_prompt:
                                         print("\n" + "=" * 80)
-                                        print("📝 ASPDMA PROMPT (Action Selection)")
+                                        print(" ASPDMA PROMPT (Action Selection)")
                                         print("=" * 80)
                                         print(f"Selected Action: {event.get('selected_action')}")
                                         print("-" * 40)
@@ -752,12 +752,12 @@ class StreamingVerificationModule:
                                     has_prompts = any(event.get(f) for f in conscience_prompt_fields)
                                     if has_prompts:
                                         print("\n" + "=" * 80)
-                                        print("📝 CONSCIENCE PROMPTS (from conscience_result event)")
+                                        print(" CONSCIENCE PROMPTS (from conscience_result event)")
                                         print("=" * 80)
                                         for prompt_key in conscience_prompt_fields:
                                             prompt_value = event.get(prompt_key)
                                             if prompt_value:
-                                                print(f"\n🔹 {prompt_key.upper()}:")
+                                                print(f"\n {prompt_key.upper()}:")
                                                 print("-" * 40)
                                                 # Truncate very long prompts for readability
                                                 if len(prompt_value) > 3000:
@@ -768,7 +768,7 @@ class StreamingVerificationModule:
                                                 else:
                                                     print(prompt_value)
                                             else:
-                                                print(f"\n🔹 {prompt_key.upper()}: (not present)")
+                                                print(f"\n {prompt_key.upper()}: (not present)")
                                         print("=" * 80 + "\n")
 
                                 elif event_type == "action_result":
@@ -1204,11 +1204,11 @@ class StreamingVerificationModule:
                     queue_size = queue_data.get("queue_size", 0)
                     if initial_queue_size is None:
                         initial_queue_size = queue_size
-                        logger.info(f"🔍 Initial queue size before streaming test: {queue_size}")
-                        print(f"\n🔍 Queue state before streaming test: {queue_size} tasks pending")
+                        logger.info(f" Initial queue size before streaming test: {queue_size}")
+                        print(f"\n Queue state before streaming test: {queue_size} tasks pending")
                     if queue_size == 0:
-                        logger.info(f"✅ Queue drained after {drain_elapsed:.1f}s")
-                        print(f"✅ Queue drained after {drain_elapsed:.1f}s")
+                        logger.info(f"[OK] Queue drained after {drain_elapsed:.1f}s")
+                        print(f"[OK] Queue drained after {drain_elapsed:.1f}s")
                         break  # Queue is empty, ready to submit test message
                     elif drain_elapsed > 0 and drain_elapsed % 5 == 0:
                         logger.info(
@@ -1222,7 +1222,7 @@ class StreamingVerificationModule:
                 final_queue_size = queue_size if "queue_size" in locals() else "unknown"
                 error_msg = f"Queue did not drain within {drain_timeout}s (started: {initial_queue_size}, current: {final_queue_size})"
                 logger.warning(error_msg)
-                print(f"\n⚠️  {error_msg}")
+                print(f"\n[WARN] {error_msg}")
                 errors.append(error_msg)
         except Exception as e:
             logger.error(f"Failed to check queue drain status: {e}")
@@ -1468,7 +1468,7 @@ class StreamingVerificationModule:
 
         # Step 1: Update user language
         print(f"\n{'='*80}")
-        print(f"🌍 LOCALIZATION CHANGE TEST - Setting language to '{target_language}'")
+        print(f" LOCALIZATION CHANGE TEST - Setting language to '{target_language}'")
         print(f"{'='*80}")
 
         update_result = StreamingVerificationModule.update_user_language(base_url, token, target_language)
@@ -1476,7 +1476,7 @@ class StreamingVerificationModule:
 
         if not update_result["success"]:
             errors.append(f"Failed to update language: {update_result.get('message')}")
-            print(f"❌ {update_result.get('message')}")
+            print(f"[FAIL] {update_result.get('message')}")
             return {
                 "success": False,
                 "language_update": language_update,
@@ -1486,7 +1486,7 @@ class StreamingVerificationModule:
                 "errors": errors,
             }
 
-        print(f"✅ Language preference updated to '{target_language}'")
+        print(f"[OK] Language preference updated to '{target_language}'")
 
         # Step 2: Verify the user profile has the new language
         try:
@@ -1495,7 +1495,7 @@ class StreamingVerificationModule:
             if profile_response.status_code == 200:
                 profile_data = profile_response.json().get("data", {})
                 stored_lang = profile_data.get("preferred_language")
-                print(f"📋 User profile preferred_language: {stored_lang}")
+                print(f" User profile preferred_language: {stored_lang}")
                 if stored_lang != target_language:
                     errors.append(f"Language not persisted: expected '{target_language}', got '{stored_lang}'")
                 else:
@@ -1511,7 +1511,7 @@ class StreamingVerificationModule:
 
         # Step 3: Run streaming verification with extended event collection
         # We need to capture the raw events to analyze DMA prompts
-        print(f"\n📡 Running streaming verification with language '{target_language}'...")
+        print(f"\n Running streaming verification with language '{target_language}'...")
         print(f"   Capturing DMA prompts for localization analysis...")
 
         streaming_events_result = StreamingVerificationModule.verify_streaming_events_with_prompts(
@@ -1525,7 +1525,7 @@ class StreamingVerificationModule:
 
         # Step 4: Analyze DMA prompts for localization
         print(f"\n{'='*80}")
-        print(f"📝 DMA PROMPT LOCALIZATION ANALYSIS")
+        print(f" DMA PROMPT LOCALIZATION ANALYSIS")
         print(f"{'='*80}")
 
         dma_prompts_list: List[Dict[str, Any]] = streaming_events_result.get("dma_prompts", [])
@@ -1577,19 +1577,19 @@ class StreamingVerificationModule:
             print(f"\n  {status} DMA: {dma_type}")
             print(f"     Prompt length: {analysis['prompt_length']} chars")
             if analysis["english_markers_found"]:
-                print(f"     ⚠️  English markers found: {analysis['english_markers_found']}")
+                print(f" [WARN] English markers found: {analysis['english_markers_found']}")
             if analysis["target_markers_found"]:
-                print(f"     ✅ {target_language.upper()} markers found: {analysis['target_markers_found']}")
+                print(f" [OK] {target_language.upper()} markers found: {analysis['target_markers_found']}")
             if not analysis["is_localized"]:
                 if target_language != "en":
-                    print(f"     ❌ Prompt is NOT localized to {target_language}!")
+                    print(f" [FAIL] Prompt is NOT localized to {target_language}!")
                     # Show snippet of prompt for debugging
                     snippet = prompt_text[:200] + "..." if len(prompt_text) > 200 else prompt_text
                     print(f"     Snippet: {snippet}")
 
         # Step 4b: Analyze CONSCIENCE prompts for localization (v2.5+ streaming)
         print(f"\n{'='*80}")
-        print(f"📝 CONSCIENCE PROMPT LOCALIZATION ANALYSIS (v2.5+)")
+        print(f" CONSCIENCE PROMPT LOCALIZATION ANALYSIS (v2.5+)")
         print(f"{'='*80}")
 
         conscience_prompts_list: List[Dict[str, Any]] = streaming_events_result.get("conscience_prompts", [])
@@ -1601,7 +1601,7 @@ class StreamingVerificationModule:
         conscience_prompt_analysis: List[Dict[str, Any]] = []
 
         if not conscience_prompts_list:
-            print(f"  ⚠️  No conscience prompts captured (may be using legacy single field)")
+            print(f" [WARN] No conscience prompts captured (may be using legacy single field)")
         else:
             for prompt_data in conscience_prompts_list:
                 prompt_text = prompt_data.get("prompt", "")
@@ -1644,11 +1644,11 @@ class StreamingVerificationModule:
                 print(f"\n  {status} CONSCIENCE: {conscience_type} ({field_name})")
                 print(f"     Prompt length: {analysis['prompt_length']} chars")
                 if analysis["english_markers_found"]:
-                    print(f"     ⚠️  English markers found: {analysis['english_markers_found']}")
+                    print(f" [WARN] English markers found: {analysis['english_markers_found']}")
                 if analysis["target_markers_found"]:
-                    print(f"     ✅ {target_language.upper()} markers found: {analysis['target_markers_found']}")
+                    print(f" [OK] {target_language.upper()} markers found: {analysis['target_markers_found']}")
                 if not analysis["is_localized"] and target_language != "en":
-                    print(f"     ❌ Prompt is NOT localized to {target_language}!")
+                    print(f" [FAIL] Prompt is NOT localized to {target_language}!")
                     snippet = prompt_text[:200] + "..." if len(prompt_text) > 200 else prompt_text
                     print(f"     Snippet: {snippet}")
 
@@ -1666,7 +1666,7 @@ class StreamingVerificationModule:
         }
 
         if expected.issubset(received):
-            print(f"\n  ✅ All 7 reasoning event types received")
+            print(f"\n [OK] All 7 reasoning event types received")
             localization_evidence.append(
                 {
                     "source": "streaming_events",
@@ -1676,7 +1676,7 @@ class StreamingVerificationModule:
             )
         else:
             missing = expected - received
-            print(f"\n  ⚠️  Missing events: {missing}")
+            print(f"\n [WARN] Missing events: {missing}")
 
         # Step 6: Determine overall localization success
         if target_language != "en":
@@ -1727,24 +1727,24 @@ class StreamingVerificationModule:
 
         # Step 7: Summary
         print(f"\n{'='*80}")
-        print(f"📝 LOCALIZATION TEST RESULTS")
+        print(f" LOCALIZATION TEST RESULTS")
         print(f"{'='*80}")
         print(f"  Target language: {target_language}")
-        print(f"  Language stored in profile: ✅")
+        print(f" Language stored in profile: [OK]")
         streaming_success = streaming_result.get("success", False) if streaming_result else False
         streaming_total = streaming_result.get("total_events", 0) if streaming_result else 0
-        print(f"  Streaming test passed: {'✅' if streaming_success else '❌'}")
+        print(f" Streaming test passed: {'[OK]' if streaming_success else '[FAIL]'}")
         print(f"  Events received: {streaming_total}")
         print(f"  DMA prompts captured: {len(dma_prompts_list)}")
         print(f"  Conscience prompts captured: {len(conscience_prompts_list)}")
-        print(f"  Overall localization: {'✅ PASSED' if localization_passed else '❌ FAILED'}")
+        print(f" Overall localization: {'[OK] PASSED' if localization_passed else '[FAIL] FAILED'}")
         print(f"  Localization evidence: {len(localization_evidence)} items")
 
         for evidence in localization_evidence:
             print(f"    - {evidence['source']}.{evidence['field']}: {evidence['value']}")
 
         if errors:
-            print(f"\n❌ Errors:")
+            print(f"\n[FAIL] Errors:")
             for error in errors:
                 print(f"   - {error}")
 
@@ -1752,13 +1752,13 @@ class StreamingVerificationModule:
         success = len(localization_evidence) > 0 and streaming_success and localization_passed and len(errors) == 0
 
         if success:
-            print(f"\n✅ LOCALIZATION TEST PASSED")
+            print(f"\n[OK] LOCALIZATION TEST PASSED")
             print(f"   Language preference '{target_language}' is stored and propagated through reasoning pipeline")
             print(f"   DMA prompts are properly localized to {target_language}")
             if conscience_prompts_list:
                 print(f"   Conscience prompts are properly localized to {target_language}")
         else:
-            print(f"\n❌ LOCALIZATION TEST FAILED")
+            print(f"\n[FAIL] LOCALIZATION TEST FAILED")
             if not localization_passed:
                 print(f"   Prompts are NOT properly localized to {target_language}")
 

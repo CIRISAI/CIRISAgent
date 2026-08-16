@@ -2,6 +2,17 @@
 Main QA Runner implementation.
 """
 
+# Windows cp1252 consoles raise UnicodeEncodeError on any non-ASCII glyph, which
+# takes the whole process down. main.py / cli.py / desktop_launcher already call
+# this; the QA runner never did, so it crashed on Windows CI before reaching a
+# single test — which is why this harness had never run there.
+try:
+    from ciris_engine.logic.utils import win_console as _win_console
+
+    _win_console.setup()
+except Exception:  # pragma: no cover - never let the shim stop the runner
+    pass
+
 import asyncio
 import json
 import logging
@@ -380,14 +391,14 @@ class QARunner:
                     billing_api_key = key_file.read_text().strip()
                     self.console.print(f"[dim]Loaded billing API key from {key_file}[/dim]")
                 except Exception as e:
-                    self.console.print(f"[yellow]⚠️  Failed to read {key_file}: {e}[/yellow]")
+                    self.console.print(f"[yellow][WARN] Failed to read {key_file}: {e}[/yellow]")
 
             # Fall back to environment variable
             if not billing_api_key:
                 billing_api_key = os.getenv("CIRIS_BILLING_API_KEY")
 
             if not billing_api_key:
-                self.console.print("[red]❌ Billing API key required for billing integration tests[/red]")
+                self.console.print("[red][FAIL] Billing API key required for billing integration tests[/red]")
                 self.console.print("[red]   Place key in ~/.ciris/qa_billing_key or set CIRIS_BILLING_API_KEY[/red]")
                 return False
 
@@ -395,10 +406,10 @@ class QARunner:
             self.config.billing_api_key = billing_api_key
             self.config.billing_api_url = os.getenv("CIRIS_BILLING_API_URL", "https://billing.ciris.ai")
 
-            self.console.print(f"[cyan]💳 Billing integration enabled: {self.config.billing_api_url}[/cyan]")
+            self.console.print(f"[cyan] Billing integration enabled: {self.config.billing_api_url}[/cyan]")
 
             if not self._setup_oauth_test_user():
-                self.console.print("[red]❌ Failed to setup OAuth test user[/red]")
+                self.console.print("[red][FAIL] Failed to setup OAuth test user[/red]")
                 return False
 
         # Configure SQL external data service if needed - MUST BE BEFORE SERVER STARTS
@@ -416,13 +427,13 @@ class QARunner:
                 self.server_manager._sql_config_path = temp_test.sql_config_path
                 self.console.print("[dim]SQL external data test database configured[/dim]")
             else:
-                self.console.print(f"[red]❌ Failed to setup SQL test database: {setup_result.get('error')}[/red]")
+                self.console.print(f"[red][FAIL] Failed to setup SQL test database: {setup_result.get('error')}[/red]")
                 return False
 
         # Start API server if needed
         if self.config.auto_start_server:
             if not self.server_manager.start():
-                self.console.print("[red]❌ Failed to start API server[/red]")
+                self.console.print("[red][FAIL] Failed to start API server[/red]")
                 return False
 
         # Baseline the incidents log now that the server is up — only agent
@@ -438,7 +449,7 @@ class QARunner:
             )
         elif QAModule.SETUP not in modules:
             if not self._authenticate():
-                self.console.print("[red]❌ Authentication failed[/red]")
+                self.console.print("[red][FAIL] Authentication failed[/red]")
                 if self.config.auto_start_server:
                     self.server_manager.stop()
                 return False
@@ -546,7 +557,7 @@ class QARunner:
 
         # Phase 1: SETUP wizard (first-run, no token) — creates the admin user.
         if setup_tests:
-            self.console.print(f"\n📋 Running {len(setup_tests)} SETUP test cases...")
+            self.console.print(f"\n Running {len(setup_tests)} SETUP test cases...")
             if self.config.parallel_tests:
                 success = self._run_parallel(setup_tests)
             else:
@@ -563,7 +574,7 @@ class QARunner:
 
         # Phase 2: remaining HTTP test modules (now token-wired).
         if all_tests:
-            self.console.print(f"\n📋 Running {len(all_tests)} HTTP test cases...")
+            self.console.print(f"\n Running {len(all_tests)} HTTP test cases...")
             if self.config.parallel_tests:
                 success = self._run_parallel(all_tests) and success
             else:
@@ -574,7 +585,7 @@ class QARunner:
             from .modules.multi_occurrence_tests import MultiOccurrenceTestModule
 
             self.console.print("\n" + "=" * 80)
-            self.console.print("[bold cyan]🔄 RUNNING TRUE MULTI-OCCURRENCE INTEGRATION TEST[/bold cyan]")
+            self.console.print("[bold cyan] RUNNING TRUE MULTI-OCCURRENCE INTEGRATION TEST[/bold cyan]")
             self.console.print("=" * 80)
 
             # This test spawns 2 separate runtimes and tests coordination
@@ -590,16 +601,16 @@ class QARunner:
 
             if not mo_result["success"]:
                 success = False
-                self.console.print(f"[red]❌ Multi-occurrence integration test failed: {mo_result.get('errors')}[/red]")
+                self.console.print(f"[red][FAIL] Multi-occurrence integration test failed: {mo_result.get('errors')}[/red]")
             else:
-                self.console.print("[green]✅ Multi-occurrence integration test passed![/green]")
+                self.console.print("[green][OK] Multi-occurrence integration test passed![/green]")
 
         # Run ACCORD tests if requested (standalone - no server needed)
         if QAModule.ACCORD in modules:
             from .modules.accord_tests import AccordTestModule
 
             self.console.print("\n" + "=" * 80)
-            self.console.print("[bold cyan]🔐 RUNNING ACCORD INVOCATION SYSTEM TESTS[/bold cyan]")
+            self.console.print("[bold cyan] RUNNING ACCORD INVOCATION SYSTEM TESTS[/bold cyan]")
             self.console.print("=" * 80)
 
             accord_module = AccordTestModule()
@@ -658,7 +669,7 @@ class QARunner:
         # Stop filter helper if running
         if self._filter_helper:
             self._filter_helper.stop_monitoring()
-            self.console.print("[cyan]⏹️  SSE monitoring stopped[/cyan]")
+            self.console.print("[cyan]⏹ SSE monitoring stopped[/cyan]")
 
         # Verify CEG trace delivery to canonical-server-1 BEFORE stopping the
         # server (needs the live edge + API). Only when --federation-delivery.
@@ -683,29 +694,29 @@ class QARunner:
                 # NOT the same failure as "incidents found". This one means the gate
                 # could not look at all — which used to silently PASS, making every
                 # green run only as trustworthy as the log file having existed.
-                self.console.print("[bold red]🚨 RUN NOT CERTIFIED: THE INCIDENTS GATE COULD NOT RUN 🚨[/bold red]")
+                self.console.print("[bold red][ALERT] RUN NOT CERTIFIED: THE INCIDENTS GATE COULD NOT RUN [ALERT][/bold red]")
                 self.console.print(
                     "[bold red]No incidents were found because none could be looked for. "
                     "See the CANNOT CERTIFY block above for the expected path.[/bold red]"
                 )
             else:
-                self.console.print("[bold red]🚨 CRITICAL: INCIDENTS DETECTED DURING TESTING! 🚨[/bold red]")
+                self.console.print("[bold red][ALERT] CRITICAL: INCIDENTS DETECTED DURING TESTING! [ALERT][/bold red]")
                 self.console.print("[bold red]REVIEW THE INCIDENTS LOG ABOVE IMMEDIATELY![/bold red]")
             self.console.print("=" * 60)
             return False  # Force failure if incidents occurred
         else:
-            self.console.print("\n[bold green]✅ No critical incidents - tests completed cleanly![/bold green]")
+            self.console.print("\n[bold green][OK] No critical incidents - tests completed cleanly![/bold green]")
 
         # ALWAYS print log location reminders - helpful for debugging
         log_dir = f"logs/{self.server_manager.database_backend}"
-        self.console.print("\n[cyan]📋 Log Locations:[/cyan]")
+        self.console.print("\n[cyan] Log Locations:[/cyan]")
         self.console.print(f"[dim]   • Console (early startup): {log_dir}/console.log[/dim]")
         self.console.print(f"[dim]   • Full logs: {log_dir}/latest.log[/dim]")
         self.console.print(f"[dim]   • Incidents: {log_dir}/incidents_latest.log[/dim]")
 
         # Billing-specific reminder for billing integration tests
         if QAModule.BILLING_INTEGRATION in modules:
-            self.console.print("\n[yellow]💳 Billing Integration Note:[/yellow]")
+            self.console.print("\n[yellow] Billing Integration Note:[/yellow]")
             self.console.print("[dim]   • Credit replenishment takes 5 minutes for QA user[/dim]")
             self.console.print("[dim]   • If tests fail due to no credits, wait 5 minutes and retry[/dim]")
 
@@ -806,7 +817,7 @@ class QARunner:
         except Exception as e:
             # Don't fail the test run if we can't check logs
             if self.config.verbose:
-                self.console.print(f"[yellow]⚠️  Error checking main log for task appending: {e}[/yellow]")
+                self.console.print(f"[yellow][WARN] Error checking main log for task appending: {e}[/yellow]")
 
         return warnings
 
@@ -814,19 +825,19 @@ class QARunner:
         """ALWAYS show incidents log status - prominent and mandatory."""
         incidents_log = self._incidents_log_path()
 
-        self.console.print(f"\n[bold cyan]📋 INCIDENTS LOG STATUS ({phase}):[/bold cyan]")
+        self.console.print(f"\n[bold cyan] INCIDENTS LOG STATUS ({phase}):[/bold cyan]")
 
         if not incidents_log.exists():
-            self.console.print("[bold red]❌ NO INCIDENTS LOG FOUND[/bold red]")
+            self.console.print("[bold red][FAIL] NO INCIDENTS LOG FOUND[/bold red]")
             return
 
         # Show log file info
         try:
             log_size = incidents_log.stat().st_size
-            self.console.print(f"   📁 Log: {incidents_log.resolve()}")
-            self.console.print(f"   📊 Size: {log_size:,} bytes")
+            self.console.print(f" Log: {incidents_log.resolve()}")
+            self.console.print(f" Size: {log_size:,} bytes")
         except Exception as e:
-            self.console.print(f"[red]❌ Cannot read log file: {e}[/red]")
+            self.console.print(f"[red][FAIL] Cannot read log file: {e}[/red]")
             return
 
         # Patterns to ignore (non-critical)
@@ -872,18 +883,18 @@ class QARunner:
                                         critical_errors.append(error_msg)
 
         except Exception as e:
-            self.console.print(f"[red]❌ Could not read incidents log: {e}[/red]")
+            self.console.print(f"[red][FAIL] Could not read incidents log: {e}[/red]")
             return
 
         # ALWAYS show counts - even if zero
-        self.console.print(f"   ⚠️  Warnings: {warning_count}")
-        self.console.print(f"   🚫 Errors: {error_count}")
-        self.console.print(f"   💥 Critical: {critical_count}")
+        self.console.print(f" [WARN] Warnings: {warning_count}")
+        self.console.print(f" Errors: {error_count}")
+        self.console.print(f" [CRIT] Critical: {critical_count}")
 
         # Report critical errors prominently
         if critical_errors:
             unique_errors = list(dict.fromkeys(critical_errors))
-            self.console.print(f"\n[bold red]🚨 CRITICAL ISSUES FOUND ({len(unique_errors)}):[/bold red]")
+            self.console.print(f"\n[bold red][ALERT] CRITICAL ISSUES FOUND ({len(unique_errors)}):[/bold red]")
             for i, error in enumerate(unique_errors[:10], 1):  # Show more errors
                 self.console.print(f"   {i:2d}. {error[:250]}")  # Show more of each error
 
@@ -891,9 +902,9 @@ class QARunner:
                 self.console.print(f"   ... and {len(unique_errors) - 10} more critical errors")
 
             # Make it impossible to miss
-            self.console.print(f"\n[bold red]🚨 {len(unique_errors)} CRITICAL ISSUES REQUIRE ATTENTION! 🚨[/bold red]")
+            self.console.print(f"\n[bold red][ALERT] {len(unique_errors)} CRITICAL ISSUES REQUIRE ATTENTION! [ALERT][/bold red]")
         else:
-            self.console.print("[bold green]✅ No critical issues found[/bold green]")
+            self.console.print("[bold green][OK] No critical issues found[/bold green]")
 
         self.console.print()  # Extra spacing
 
@@ -1041,7 +1052,7 @@ class QARunner:
                 timeout=10,
             )
         except Exception as e:
-            self.console.print(f"[yellow]🔑 [AUTH GATE] could not validate token after '{after_label}': {e}[/yellow]")
+            self.console.print(f"[yellow] [AUTH GATE] could not validate token after '{after_label}': {e}[/yellow]")
             return True
         if resp.status_code == 200:
             return True
@@ -1070,7 +1081,7 @@ class QARunner:
 
             if response.status_code == 200:
                 self.token = response.json()["access_token"]
-                self.console.print("[green]✅ Authentication successful[/green]")
+                self.console.print("[green][OK] Authentication successful[/green]")
                 # Diagnostic: which URL this _authenticate() hit and the
                 # token suffix it yielded — to catch a base_url cross under
                 # --parallel-backends (a child authenticating against the
@@ -1108,7 +1119,7 @@ class QARunner:
         KEX poll verdict. Best-effort + non-fatal — reports, never crashes the run.
         """
         self.console.print("\n" + "=" * 60)
-        self.console.print("[bold cyan]🛰️  Federation delivery verification (canonical-server-1)[/bold cyan]")
+        self.console.print("[bold cyan] Federation delivery verification (canonical-server-1)[/bold cyan]")
         self.console.print("=" * 60)
 
         # Transport rooting + KEX from the [DELIVERY-PROBE] line the server logs
@@ -1277,7 +1288,7 @@ class QARunner:
             # Find database - MUST use auth database where authentication service stores users
             db_path = Path("data/ciris_engine_auth.db")
             if not db_path.exists():
-                self.console.print(f"[red]❌ Auth database not found: {db_path}[/red]")
+                self.console.print(f"[red][FAIL] Auth database not found: {db_path}[/red]")
                 return False
 
             conn = sqlite3.connect(db_path)
@@ -1382,13 +1393,13 @@ class QARunner:
                     ),
                 )
                 conn.commit()
-                self.console.print(f"[green]✅ Created OAuth test user: {proper_wa_id}[/green]")
+                self.console.print(f"[green][OK] Created OAuth test user: {proper_wa_id}[/green]")
                 self.console.print(f"[dim]   Username: qa_oauth_user[/dim]")
                 self.console.print(f"[dim]   Provider: {self.config.oauth_test_provider}[/dim]")
                 self.console.print(f"[dim]   External ID: {self.config.oauth_test_external_id}[/dim]")
             else:
                 existing_wa_id = exists[0]
-                self.console.print(f"[cyan]ℹ️  OAuth test user exists: {existing_wa_id}[/cyan]")
+                self.console.print(f"[cyan][INFO] OAuth test user exists: {existing_wa_id}[/cyan]")
 
                 # Update the name and password if needed to ensure login works
                 user_name = exists[1]
@@ -1437,7 +1448,7 @@ class QARunner:
             return True
 
         except Exception as e:
-            self.console.print(f"[red]❌ Failed to setup OAuth user: {e}[/red]")
+            self.console.print(f"[red][FAIL] Failed to setup OAuth user: {e}[/red]")
             import traceback
 
             if self.config.verbose:
@@ -1458,16 +1469,16 @@ class QARunner:
             if response.status_code == 200:
                 api_key = response.json()["access_token"]
                 user_id = response.json()["user_id"]
-                self.console.print(f"[green]✅ Logged in as OAuth user (user_id: {user_id})[/green]")
+                self.console.print(f"[green][OK] Logged in as OAuth user (user_id: {user_id})[/green]")
                 return api_key
             else:
-                self.console.print(f"[yellow]⚠️  Failed to login as OAuth user: {response.status_code}[/yellow]")
+                self.console.print(f"[yellow][WARN] Failed to login as OAuth user: {response.status_code}[/yellow]")
                 if self.config.verbose:
                     self.console.print(f"[dim]Response: {response.text[:200]}[/dim]")
                 return None
 
         except Exception as e:
-            self.console.print(f"[red]❌ Error logging in as OAuth user: {e}[/red]")
+            self.console.print(f"[red][FAIL] Error logging in as OAuth user: {e}[/red]")
             import traceback
 
             if self.config.verbose:
@@ -1580,7 +1591,7 @@ class QARunner:
             """Run a single SDK module with optional custom auth token."""
             test_class = module_map.get(module)
             if not test_class:
-                self.console.print(f"[red]❌ Unknown SDK module: {module.value}[/red]")
+                self.console.print(f"[red][FAIL] Unknown SDK module: {module.value}[/red]")
                 return False
 
             # Use custom token if provided, otherwise use admin token
@@ -1770,7 +1781,7 @@ class QARunner:
 
         # Run all SDK modules sequentially (they use async internally)
         for module in modules:
-            self.console.print(f"\n📋 Running {module.value} SDK tests...")
+            self.console.print(f"\n Running {module.value} SDK tests...")
             try:
                 # Special handling for BILLING_INTEGRATION - uses OAuth user token
                 if module == QAModule.BILLING_INTEGRATION:
@@ -1778,7 +1789,7 @@ class QARunner:
                     # Get fresh API key for OAuth user
                     oauth_token = self._get_oauth_user_token()
                     if not oauth_token:
-                        self.console.print(f"[red]❌ Failed to get OAuth token for {module.value}[/red]")
+                        self.console.print(f"[red][FAIL] Failed to get OAuth token for {module.value}[/red]")
                         all_passed = False
                         continue
 
@@ -1822,7 +1833,7 @@ class QARunner:
                 if not module_passed:
                     all_passed = False
             except Exception as e:
-                self.console.print(f"[red]❌ Error running {module.value}: {e}[/red]")
+                self.console.print(f"[red][FAIL] Error running {module.value}: {e}[/red]")
                 import traceback
 
                 if self.config.verbose:
@@ -1853,7 +1864,7 @@ class QARunner:
                 for test_name_pattern, endpoint_pattern in token_invalidating_tests:
                     if test_name_pattern.lower() in test.name.lower() and endpoint_pattern in test.endpoint:
                         if self.config.verbose:
-                            self.console.print(f"[yellow]🔄 Re-authenticating after {test.name}...[/yellow]")
+                            self.console.print(f"[yellow] Re-authenticating after {test.name}...[/yellow]")
                         # Re-authenticate to restore token for subsequent tests
                         if not self._authenticate():
                                 # `/v1/auth/logout` is the NODE's now, and the node's
@@ -1890,7 +1901,7 @@ class QARunner:
                 if incidents:
                     result["incidents"] = incidents
                     if self.config.verbose:
-                        self.console.print(f"[yellow]⚠️  Found {len(incidents)} incidents during {test.name}[/yellow]")
+                        self.console.print(f"[yellow][WARN] Found {len(incidents)} incidents during {test.name}[/yellow]")
 
                 # Check for task appending warnings (messages appended to existing active tasks)
                 task_warnings = self._check_task_appending_warnings(test.name)
@@ -2069,7 +2080,7 @@ class QARunner:
 
                         # WebSocket connected successfully (101 Switching Protocols)
                         if self.config.verbose:
-                            self.console.print(f"[green]✅ {test.name} - Connected![/green]")
+                            self.console.print(f"[green][OK] {test.name} - Connected![/green]")
 
                         result = {
                             "success": True,
@@ -2089,7 +2100,7 @@ class QARunner:
                         if any(code in error_msg for code in ["401", "403", "Handshake status"]):
                             # This is expected - endpoint exists but requires proper auth
                             if self.config.verbose:
-                                self.console.print(f"[green]✅ {test.name} (endpoint verified)[/green]")
+                                self.console.print(f"[green][OK] {test.name} (endpoint verified)[/green]")
 
                             result = {
                                 "success": True,
@@ -2104,7 +2115,7 @@ class QARunner:
                             if attempt == max_attempts - 1:
                                 # Last attempt, fail the test
                                 if self.config.verbose:
-                                    self.console.print(f"[red]❌ {test.name}: {error_msg[:100]}[/red]")
+                                    self.console.print(f"[red][FAIL] {test.name}: {error_msg[:100]}[/red]")
 
                                 return False, {
                                     "success": False,
@@ -2221,10 +2232,10 @@ class QARunner:
                             if new_token:
                                 self.token = new_token
                                 if self.config.verbose:
-                                    self.console.print(f"[yellow]🔄 Updated auth token after refresh[/yellow]")
+                                    self.console.print(f"[yellow] Updated auth token after refresh[/yellow]")
                         except Exception as e:
                             if self.config.verbose:
-                                self.console.print(f"[yellow]⚠️ Failed to update token: {e}[/yellow]")
+                                self.console.print(f"[yellow][WARN] Failed to update token: {e}[/yellow]")
 
                     # Enhanced validation support
                     validation_passed, validation_result = self._validate_response(test, response)
@@ -2233,11 +2244,11 @@ class QARunner:
                     if not validation_passed:
                         result["success"] = False
                         if self.config.verbose:
-                            self.console.print(f"[red]❌ {test.name}: Validation failed[/red]")
+                            self.console.print(f"[red][FAIL] {test.name}: Validation failed[/red]")
                         return False, result
 
                     if self.config.verbose:
-                        self.console.print(f"[green]✅ {test.name}[/green]")
+                        self.console.print(f"[green][OK] {test.name}[/green]")
 
                     return True, result
                 else:
@@ -2255,7 +2266,7 @@ class QARunner:
                     }
 
                     if self.config.verbose:
-                        self.console.print(f"[red]❌ {test.name}: {response.status_code}[/red]")
+                        self.console.print(f"[red][FAIL] {test.name}: {response.status_code}[/red]")
 
                     return False, result
 
@@ -2272,7 +2283,7 @@ class QARunner:
                 }
 
                 if self.config.verbose:
-                    self.console.print(f"[red]❌ {test.name}: {e}[/red]")
+                    self.console.print(f"[red][FAIL] {test.name}: {e}[/red]")
 
                 return False, result
 
@@ -2358,13 +2369,13 @@ class QARunner:
             with open(json_file, "w") as f:
                 json.dump(report_data, f, indent=2)
 
-            self.console.print(f"📄 JSON report: {json_file}")
+            self.console.print(f" JSON report: {json_file}")
 
         # HTML report
         if self.config.html_report:
             html_file = self.config.report_dir / f"qa_report_{timestamp}.html"
             self._generate_html_report(html_file)
-            self.console.print(f"📄 HTML report: {html_file}")
+            self.console.print(f" HTML report: {html_file}")
 
     def _generate_html_report(self, file_path: Path):
         """Generate HTML report."""
@@ -2511,9 +2522,9 @@ class QARunner:
 
         # Overall result
         if summary["failed"] == 0:
-            self.console.print("\n[bold green]✅ All tests passed![/bold green]")
+            self.console.print("\n[bold green][OK] All tests passed![/bold green]")
         else:
-            self.console.print(f"\n[bold red]❌ {summary['failed']} test(s) failed[/bold red]")
+            self.console.print(f"\n[bold red][FAIL] {summary['failed']} test(s) failed[/bold red]")
 
     def _update_status_tracker(self, duration_seconds: float):
         """Update the QA status tracker file with results from this run."""
@@ -2559,7 +2570,7 @@ class QARunner:
                 logger.warning(f"Failed to update status for module {module_name}: {e}")
 
         if module_results:
-            self.console.print(f"[dim]📊 Updated QA status for {len(module_results)} module(s)[/dim]")
+            self.console.print(f"[dim] Updated QA status for {len(module_results)} module(s)[/dim]")
 
     def _run_multiple_backends(self, modules: List[QAModule]) -> bool:
         """Run QA tests against multiple database backends sequentially."""
@@ -2580,7 +2591,7 @@ class QARunner:
         # Run tests for each backend sequentially
         for backend in self.database_backends:
             self.console.print(f"\n{'=' * 80}")
-            self.console.print(f"[bold cyan]🔄 Testing {backend.upper()} Backend[/bold cyan]")
+            self.console.print(f"[bold cyan] Testing {backend.upper()} Backend[/bold cyan]")
             self.console.print(f"{'=' * 80}\n")
 
             # Create a new runner instance for this backend with the correct server manager
@@ -2604,7 +2615,7 @@ class QARunner:
         # Print combined summary
         elapsed = time.time() - start_time
         self.console.print(f"\n\n{'=' * 80}")
-        self.console.print("[bold cyan]📊 MULTI-BACKEND TEST SUMMARY[/bold cyan]")
+        self.console.print("[bold cyan] MULTI-BACKEND TEST SUMMARY[/bold cyan]")
         self.console.print(f"{'=' * 80}\n")
 
         # Create comparison table
@@ -2629,16 +2640,16 @@ class QARunner:
         self.console.print(f"\n[dim]Total Duration: {elapsed:.2f}s[/dim]")
 
         # Print log locations for each backend
-        self.console.print("\n[cyan]📋 Log Locations:[/cyan]")
+        self.console.print("\n[cyan] Log Locations:[/cyan]")
         for backend in self.database_backends:
             self.console.print(f"[dim]   • {backend}: logs/{backend}/latest.log[/dim]")
             self.console.print(f"[dim]   • {backend} incidents: logs/{backend}/incidents_latest.log[/dim]")
 
         if all_success:
-            self.console.print("\n[bold green]✅ All backends passed all tests![/bold green]")
+            self.console.print("\n[bold green][OK] All backends passed all tests![/bold green]")
         else:
             failed_backends = [b for b, d in backend_results.items() if not d["success"]]
-            self.console.print(f"\n[bold red]❌ Some backends failed: {', '.join(failed_backends)}[/bold red]")
+            self.console.print(f"\n[bold red][FAIL] Some backends failed: {', '.join(failed_backends)}[/bold red]")
 
         return all_success
 
@@ -2752,12 +2763,12 @@ class QARunner:
             except subprocess.TimeoutExpired:
                 proc.kill()
                 backend_results[backend] = {"success": False, "detail": f"timeout >{leg_timeout}s"}
-                self.console.print(f"[red]❌ {backend.upper()} backend subprocess timed out after {leg_timeout}s[/red]")
+                self.console.print(f"[red][FAIL] {backend.upper()} backend subprocess timed out after {leg_timeout}s[/red]")
 
         procs = {}
         for backend in self.database_backends:
             child = [sys.executable, "-m", "tools.qa_runner", *_child_argv(backend)]
-            self.console.print(f"[cyan]🔄 Starting {backend.upper()} backend tests (isolated subprocess)...[/cyan]")
+            self.console.print(f"[cyan] Starting {backend.upper()} backend tests (isolated subprocess)...[/cyan]")
             self.console.print(f"[dim]   $ {' '.join(child)}[/dim]")
             proc = subprocess.Popen(child, env=child_env)
             if sequential:
@@ -2776,7 +2787,7 @@ class QARunner:
 
         elapsed = time.time() - start_time
         self.console.print(f"\n\n{'=' * 80}")
-        self.console.print("[bold cyan]📊 MULTI-BACKEND TEST SUMMARY[/bold cyan]")
+        self.console.print("[bold cyan] MULTI-BACKEND TEST SUMMARY[/bold cyan]")
         self.console.print(f"{'=' * 80}\n")
 
         table = Table(title="Backend Comparison (isolated subprocesses)")
@@ -2793,16 +2804,16 @@ class QARunner:
             "[dim]Per-backend test counts + incidents are in each subprocess's own summary above.[/dim]"
         )
 
-        self.console.print("\n[cyan]📋 Log Locations:[/cyan]")
+        self.console.print("\n[cyan] Log Locations:[/cyan]")
         for backend in self.database_backends:
             self.console.print(f"[dim]   • {backend}: logs/{backend}/latest.log[/dim]")
             self.console.print(f"[dim]   • {backend} incidents: logs/{backend}/incidents_latest.log[/dim]")
 
         if all_success:
-            self.console.print("\n[bold green]✅ All backends passed all tests![/bold green]")
+            self.console.print("\n[bold green][OK] All backends passed all tests![/bold green]")
         else:
             failed_backends = [b for b, d in backend_results.items() if not d["success"]]
-            self.console.print(f"\n[bold red]❌ Some backends failed: {', '.join(failed_backends)}[/bold red]")
+            self.console.print(f"\n[bold red][FAIL] Some backends failed: {', '.join(failed_backends)}[/bold red]")
 
         return all_success
 

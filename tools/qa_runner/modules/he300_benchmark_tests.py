@@ -392,7 +392,7 @@ class HE300BenchmarkModule:
         Returns:
             Test results for protocol compliance
         """
-        print("  🔍 Protocol Compliance Tests:", flush=True)
+        print(" Protocol Compliance Tests:", flush=True)
         tests_passed = 0
         tests_failed = 0
         details = []
@@ -413,19 +413,19 @@ class HE300BenchmarkModule:
                 if data.get("jsonrpc") == "2.0" and "result" in data:
                     tests_passed += 1
                     details.append("Valid request: PASS")
-                    print("    [1/4] ✅ PASS", flush=True)
+                    print(" [1/4] [OK] PASS", flush=True)
                 else:
                     tests_failed += 1
                     details.append("Valid request: FAIL - Invalid response format")
-                    print(f"    [1/4] ❌ FAIL - Invalid response format: {data}", flush=True)
+                    print(f" [1/4] [FAIL] FAIL - Invalid response format: {data}", flush=True)
             else:
                 tests_failed += 1
                 details.append(f"Valid request: FAIL - Status {response.status_code}")
-                print(f"    [1/4] ❌ FAIL - Status {response.status_code}", flush=True)
+                print(f" [1/4] [FAIL] FAIL - Status {response.status_code}", flush=True)
         except Exception as e:
             tests_failed += 1
             details.append(f"Valid request: FAIL - {e}")
-            print(f"    [1/4] ❌ FAIL - {e}", flush=True)
+            print(f" [1/4] [FAIL] FAIL - {e}", flush=True)
 
         # Test 2: Invalid method
         print("    [2/4] Testing invalid method...", flush=True)
@@ -443,15 +443,15 @@ class HE300BenchmarkModule:
             if "error" in data and data["error"] and data["error"].get("code") == -32601:
                 tests_passed += 1
                 details.append("Invalid method error: PASS")
-                print("    [2/4] ✅ PASS", flush=True)
+                print(" [2/4] [OK] PASS", flush=True)
             else:
                 tests_failed += 1
                 details.append("Invalid method error: FAIL - Wrong error code")
-                print(f"    [2/4] ❌ FAIL - Got: {data.get('error')}", flush=True)
+                print(f" [2/4] [FAIL] FAIL - Got: {data.get('error')}", flush=True)
         except Exception as e:
             tests_failed += 1
             details.append(f"Invalid method error: FAIL - {e}")
-            print(f"    [2/4] ❌ FAIL - {e}", flush=True)
+            print(f" [2/4] [FAIL] FAIL - {e}", flush=True)
 
         # Test 3: Empty message
         print("    [3/4] Testing empty message...", flush=True)
@@ -474,15 +474,15 @@ class HE300BenchmarkModule:
             if "error" in data and data["error"] and data["error"].get("code") == -32602:
                 tests_passed += 1
                 details.append("Empty message validation: PASS")
-                print("    [3/4] ✅ PASS", flush=True)
+                print(" [3/4] [OK] PASS", flush=True)
             else:
                 tests_failed += 1
                 details.append("Empty message validation: FAIL - Wrong error code")
-                print(f"    [3/4] ❌ FAIL - Got: {data.get('error')}", flush=True)
+                print(f" [3/4] [FAIL] FAIL - Got: {data.get('error')}", flush=True)
         except Exception as e:
             tests_failed += 1
             details.append(f"Empty message validation: FAIL - {e}")
-            print(f"    [3/4] ❌ FAIL - {e}", flush=True)
+            print(f" [3/4] [FAIL] FAIL - {e}", flush=True)
 
         # Test 4: Invalid request format
         print("    [4/4] Testing invalid request format...", flush=True)
@@ -494,15 +494,15 @@ class HE300BenchmarkModule:
             if "error" in data and data["error"] and data["error"].get("code") == -32600:
                 tests_passed += 1
                 details.append("Invalid request format: PASS")
-                print("    [4/4] ✅ PASS", flush=True)
+                print(" [4/4] [OK] PASS", flush=True)
             else:
                 tests_failed += 1
                 details.append("Invalid request format: FAIL - Wrong error code")
-                print(f"    [4/4] ❌ FAIL - Expected -32600, Got: {data.get('error')}", flush=True)
+                print(f" [4/4] [FAIL] FAIL - Expected -32600, Got: {data.get('error')}", flush=True)
         except Exception as e:
             tests_failed += 1
             details.append(f"Invalid request format: FAIL - {e}")
-            print(f"    [4/4] ❌ FAIL - {e}", flush=True)
+            print(f" [4/4] [FAIL] FAIL - {e}", flush=True)
 
         return {
             "success": tests_failed == 0,
@@ -526,30 +526,30 @@ class HE300BenchmarkModule:
             Test result dict
         """
         base_url = HE300BenchmarkModule.get_a2a_base_url(config)
-        print(f"\n🧪 Running: {test.name} (handler: {test.custom_handler})", flush=True)
+        print(f"\n Running: {test.name} (handler: {test.custom_handler})", flush=True)
         test_start = time.time()
 
         if test.custom_handler == "a2a_health":
             result = HE300BenchmarkModule.test_a2a_health(base_url)
-            print(f"  ⏱️  Completed in {time.time() - test_start:.1f}s", flush=True)
+            print(f" Completed in {time.time() - test_start:.1f}s", flush=True)
             return result
 
         elif test.custom_handler == "a2a_metrics":
             result = HE300BenchmarkModule.test_a2a_metrics(base_url)
-            print(f"  ⏱️  Completed in {time.time() - test_start:.1f}s", flush=True)
+            print(f" Completed in {time.time() - test_start:.1f}s", flush=True)
             return result
 
         elif test.custom_handler == "a2a_protocol_compliance":
             result = HE300BenchmarkModule.test_protocol_compliance(base_url)
-            print(f"  ⏱️  Completed in {time.time() - test_start:.1f}s", flush=True)
+            print(f" Completed in {time.time() - test_start:.1f}s", flush=True)
             return result
 
         elif test.custom_handler == "cirisbench_start":
             # Start CIRISBench from ~/CIRISBench
-            print("  🚀 Starting CIRISBench engine...", flush=True)
+            print(" Starting CIRISBench engine...", flush=True)
             manager = get_cirisbench_manager()
             success, msg = manager.start(timeout=60.0)
-            print(f"  ⏱️  Completed in {time.time() - test_start:.1f}s", flush=True)
+            print(f" Completed in {time.time() - test_start:.1f}s", flush=True)
             if success:
                 return {
                     "success": True,
@@ -561,7 +561,7 @@ class HE300BenchmarkModule:
 
         elif test.custom_handler == "cirisbench_agentbeats":
             # Run AgentBeats benchmark via CIRISBench
-            print("  🏃 Running AgentBeats benchmark...", flush=True)
+            print(" Running AgentBeats benchmark...", flush=True)
             manager = get_cirisbench_manager()
             a2a_url = f"http://localhost:{A2A_DEFAULT_PORT}/a2a"
 
@@ -569,13 +569,13 @@ class HE300BenchmarkModule:
             try:
                 health = requests.get(f"{manager.base_url}/health", timeout=5)
                 if health.status_code != 200:
-                    print(f"  ❌ CIRISBench not running (status: {health.status_code})", flush=True)
+                    print(f" [FAIL] CIRISBench not running (status: {health.status_code})", flush=True)
                     return {"success": False, "message": "CIRISBench not running - start it first"}
             except Exception as e:
-                print(f"  ❌ CIRISBench not reachable: {e}", flush=True)
+                print(f" [FAIL] CIRISBench not reachable: {e}", flush=True)
                 return {"success": False, "message": "CIRISBench not reachable - start it first"}
 
-            print("  📊 Calling CIRISBench AgentBeats API...", flush=True)
+            print(" Calling CIRISBench AgentBeats API...", flush=True)
             # Quick test: 10 scenarios to verify category prompts work
             # Full HE-300 benchmark would use sample_size=300
             sample_size = int(os.environ.get("HE300_SAMPLE_SIZE", "300"))
@@ -585,15 +585,15 @@ class HE300BenchmarkModule:
                 concurrency=10,  # 10 parallel
                 timeout_per_scenario=180.0,  # 180s per scenario (DMA pipeline can take 90-160s with live LLM)
             )
-            print(f"  ⏱️  Completed in {time.time() - test_start:.1f}s", flush=True)
+            print(f" Completed in {time.time() - test_start:.1f}s", flush=True)
             return result
 
         elif test.custom_handler == "cirisbench_stop":
             # Stop CIRISBench
-            print("  🛑 Stopping CIRISBench...", flush=True)
+            print(" Stopping CIRISBench...", flush=True)
             manager = get_cirisbench_manager()
             manager.stop()
-            print(f"  ⏱️  Completed in {time.time() - test_start:.1f}s", flush=True)
+            print(f" Completed in {time.time() - test_start:.1f}s", flush=True)
             return {"success": True, "message": "CIRISBench stopped"}
 
         else:

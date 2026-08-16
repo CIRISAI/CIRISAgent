@@ -313,7 +313,7 @@ class WakeupProcessor(BaseProcessor):
                     current_root = persistence.get_task_by_id(root_task.task_id, root_task.agent_occurrence_id)
                     if current_root and current_root.status == TaskStatus.COMPLETED:
                         self.wakeup_complete = True
-                        logger.info("✓ Shared wakeup task completed by claiming occurrence")
+                        logger.info("[OK] Shared wakeup task completed by claiming occurrence")
                         return {
                             "status": "completed",
                             "wakeup_complete": True,
@@ -324,7 +324,7 @@ class WakeupProcessor(BaseProcessor):
                         }
                     elif current_root and current_root.status == TaskStatus.FAILED:
                         self.wakeup_complete = False
-                        logger.error("✗ Shared wakeup task failed")
+                        logger.error("[FAIL] Shared wakeup task failed")
                         return {
                             "status": "failed",
                             "wakeup_complete": False,
@@ -364,7 +364,7 @@ class WakeupProcessor(BaseProcessor):
                         for s in steps_status
                         if s["status"] in ("failed", "missing")
                     )
-                    logger.error(f"✗ Wakeup sequence failed - steps failed or missing: {broken_steps}")
+                    logger.error(f"[FAIL] Wakeup sequence failed - steps failed or missing: {broken_steps}")
                     return {
                         "status": "failed",
                         "wakeup_complete": False,
@@ -377,7 +377,7 @@ class WakeupProcessor(BaseProcessor):
                 elif all_complete:
                     self.wakeup_complete = True
                     self._mark_root_task_complete()
-                    logger.info("✓ Wakeup sequence completed successfully!")
+                    logger.info("[OK] Wakeup sequence completed successfully!")
 
                 return {
                     "status": "completed" if all_complete else "in_progress",

@@ -102,9 +102,9 @@ def main():
     # Verify it matches expected public key
     expected_public_key = "7Bp-e4M4M-eLzwiwuoMLb4aoKZJuXDsQ8NamVJzveAk"
     if public_key_b64.replace("+", "-").replace("/", "_").rstrip("=") == expected_public_key:
-        print("✓ Public key matches seed/root_pub.json")
+        print("[OK] Public key matches seed/root_pub.json")
     else:
-        print("✗ WARNING: Public key does not match seed/root_pub.json!")
+        print("[FAIL] WARNING: Public key does not match seed/root_pub.json!")
         print(f"  Expected: {expected_public_key}")
         print(f"  Got: {public_key_b64.replace('+', '-').replace('/', '_').rstrip('=')}")
 

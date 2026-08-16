@@ -119,7 +119,7 @@ class ServerManager:
         Returns:
             True if successful
         """
-        print("🗑️  Wiping data for clean slate...")
+        print(" Wiping data for clean slate...")
 
         # Wipe BOTH potential data-dir locations. CIRIS_HOME is pinned to
         # project_root via start_env (avoids the drift that left admin
@@ -155,7 +155,7 @@ class ServerManager:
                         os.remove(path)
                         print(f"   Removed file: {path}")
                 except Exception as e:
-                    print(f"   ⚠️  Could not remove {path}: {e}")
+                    print(f" [WARN] Could not remove {path}: {e}")
 
         # Clear logs but keep directory
         log_dir = os.path.join(self.config.project_root, self.config.log_dir)
@@ -169,7 +169,7 @@ class ServerManager:
                     pass
             print(f"   Cleared logs in: {log_dir}")
 
-        print("✅ Data wiped successfully")
+        print("[OK] Data wiped successfully")
         return True
 
     def build_wheel(self) -> bool:
@@ -179,7 +179,7 @@ class ServerManager:
         Returns:
             True if successful
         """
-        print("📦 Building wheel...")
+        print(" Building wheel...")
 
         try:
             # Build wheel
@@ -191,7 +191,7 @@ class ServerManager:
             )
 
             if result.returncode != 0:
-                print(f"   ⚠️  Wheel build failed: {result.stderr}")
+                print(f" [WARN] Wheel build failed: {result.stderr}")
                 return False
 
             # Find and install the wheel
@@ -199,7 +199,7 @@ class ServerManager:
             wheels = sorted(Path(dist_dir).glob("ciris_engine-*.whl"), reverse=True)
 
             if not wheels:
-                print("   ⚠️  No wheel found after build")
+                print(" [WARN] No wheel found after build")
                 return False
 
             wheel_path = str(wheels[0])
@@ -212,14 +212,14 @@ class ServerManager:
             )
 
             if result.returncode != 0:
-                print(f"   ⚠️  Wheel install failed: {result.stderr}")
+                print(f" [WARN] Wheel install failed: {result.stderr}")
                 return False
 
-            print("✅ Wheel built and installed")
+            print("[OK] Wheel built and installed")
             return True
 
         except Exception as e:
-            print(f"   ⚠️  Build error: {e}")
+            print(f" [WARN] Build error: {e}")
             return False
 
     def start(self) -> ServerStatus:
@@ -233,7 +233,7 @@ class ServerManager:
 
         # Check if already running
         if self.is_running():
-            print("⚠️  Server already running, stopping first...")
+            print("[WARN] Server already running, stopping first...")
             self.stop()
             time.sleep(2)
 
@@ -247,7 +247,7 @@ class ServerManager:
                 status.error = "Failed to build/install wheel"
                 return status
 
-        print(f"🚀 Starting CIRIS API server on port {self.config.port}...")
+        print(f" Starting CIRIS API server on port {self.config.port}...")
 
         # Build command
         cmd = [
@@ -373,7 +373,7 @@ class ServerManager:
                         status.healthy = True
                         status.agent_state = agent_state or "first-run"
                         state_msg = agent_state or "first-run (setup required)"
-                        print(f"✅ Server ready (state: {state_msg})")
+                        print(f"[OK] Server ready (state: {state_msg})")
                         return status
                     else:
                         print(f"   Agent state: {agent_state}, healthy: {is_healthy}")
@@ -396,7 +396,7 @@ class ServerManager:
         if not self._process:
             return True
 
-        print("🛑 Stopping CIRIS API server...")
+        print(" Stopping CIRIS API server...")
 
         try:
             # Try graceful shutdown first
@@ -415,7 +415,7 @@ class ServerManager:
             self._process = None
 
         except Exception as e:
-            print(f"   ⚠️  Error stopping server: {e}")
+            print(f" [WARN] Error stopping server: {e}")
             return False
 
         finally:

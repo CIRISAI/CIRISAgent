@@ -30,7 +30,7 @@ async def run_qa_tests():
     try:
         # Connect and authenticate
         await client.connect()
-        print("✓ Authentication successful")
+        print("[OK] Authentication successful")
         print(f"  Token: {client.token[:20]}...")
         print(f"  Role: {client.user_role}")
 
@@ -40,20 +40,20 @@ async def run_qa_tests():
 
         # Unified telemetry
         telemetry = await client.telemetry.get_unified()
-        print(f"✓ Unified Telemetry:")
+        print(f"[OK] Unified Telemetry:")
         print(f"  Services: {telemetry.get('services_online', 0)}/{telemetry.get('services_total', 0)} online")
         print(f"  Memory Usage: {telemetry.get('memory_usage_mb', 0):.2f} MB")
         print(f"  Uptime: {telemetry.get('uptime_seconds', 0):.0f} seconds")
 
         # Service health
         health = await client.services.get_health()
-        print(f"✓ Service Health:")
+        print(f"[OK] Service Health:")
         healthy_count = sum(1 for s in health.get("services", {}).values() if s.get("healthy"))
         print(f"  Healthy Services: {healthy_count}/{len(health.get('services', {}))}")
 
         # Memory telemetry
         memory_tel = await client.telemetry.get_memory()
-        print(f"✓ Memory Telemetry:")
+        print(f"[OK] Memory Telemetry:")
         print(f"  Total Nodes: {memory_tel.get('total_nodes', 0)}")
         print(f"  Total Edges: {memory_tel.get('total_edges', 0)}")
 
@@ -63,7 +63,7 @@ async def run_qa_tests():
 
         # Get consent status
         consent_status = await client.consent.get_status()
-        print(f"✓ Consent Status:")
+        print(f"[OK] Consent Status:")
         print(f"  Active Consents: {len(consent_status.get('active_consents', []))}")
         print(f"  Default Mode: {consent_status.get('default_mode', 'unknown')}")
 
@@ -71,7 +71,7 @@ async def run_qa_tests():
         consent_request = await client.consent.request(
             action="data_processing", context="qa_testing", duration_minutes=30, purpose="API QA Testing"
         )
-        print(f"✓ Consent Requested:")
+        print(f"[OK] Consent Requested:")
         print(f"  Consent ID: {consent_request.get('consent_id', 'N/A')}")
         print(f"  Status: {consent_request.get('status', 'unknown')}")
 
@@ -85,18 +85,18 @@ async def run_qa_tests():
             node_type="CONCEPT",
             metadata={"test": True, "timestamp": datetime.now().isoformat()},
         )
-        print(f"✓ Memory Stored:")
+        print(f"[OK] Memory Stored:")
         print(f"  Node ID: {memory_node.get('node_id', 'N/A')}")
         print(f"  Type: {memory_node.get('node_type', 'unknown')}")
 
         # Search memories
         search_results = await client.memory.search(query="QA Test", node_type="CONCEPT", limit=5)
-        print(f"✓ Memory Search:")
+        print(f"[OK] Memory Search:")
         print(f"  Results Found: {len(search_results.get('nodes', []))}")
 
         # Get memory stats
         memory_stats = await client.memory.get_stats()
-        print(f"✓ Memory Statistics:")
+        print(f"[OK] Memory Statistics:")
         print(f"  Total Nodes: {memory_stats.get('total_nodes', 0)}")
         print(f"  Node Types: {', '.join(memory_stats.get('node_types', {}).keys())}")
 
@@ -106,13 +106,13 @@ async def run_qa_tests():
 
         # Get graph structure
         graph = await client.memory.get_graph()
-        print(f"✓ Memory Graph:")
+        print(f"[OK] Memory Graph:")
         print(f"  Nodes: {len(graph.get('nodes', []))}")
         print(f"  Edges: {len(graph.get('edges', []))}")
 
         # Get clusters
         clusters = await client.memory.get_clusters()
-        print(f"✓ Memory Clusters:")
+        print(f"[OK] Memory Clusters:")
         print(f"  Total Clusters: {len(clusters.get('clusters', []))}")
 
         # 5. Test Agent Interaction
@@ -121,13 +121,13 @@ async def run_qa_tests():
 
         # Send message
         response = await client.agent.interact("Hello, this is a QA test message")
-        print(f"✓ Agent Response:")
+        print(f"[OK] Agent Response:")
         print(f"  Message: {response.get('response', 'No response')[:100]}...")
         print(f"  Thought ID: {response.get('thought_id', 'N/A')}")
 
         # Get agent state
         state = await client.agent.get_state()
-        print(f"✓ Agent State:")
+        print(f"[OK] Agent State:")
         print(f"  Current State: {state.get('cognitive_state', 'unknown')}")
         print(f"  Processing: {state.get('is_processing', False)}")
 
@@ -137,13 +137,13 @@ async def run_qa_tests():
 
         # Get queue status
         queue = await client.runtime.get_queue()
-        print(f"✓ Processing Queue:")
+        print(f"[OK] Processing Queue:")
         print(f"  Queue Length: {len(queue.get('items', []))}")
         print(f"  Processing: {queue.get('is_processing', False)}")
 
         # Get processor state
         processor = await client.runtime.get_processor()
-        print(f"✓ Processor State:")
+        print(f"[OK] Processor State:")
         print(f"  State: {processor.get('state', 'unknown')}")
         print(f"  Mode: {processor.get('mode', 'unknown')}")
 
@@ -153,12 +153,12 @@ async def run_qa_tests():
 
         # Get audit logs
         audit_logs = await client.audit.get_logs(limit=5)
-        print(f"✓ Audit Logs:")
+        print(f"[OK] Audit Logs:")
         print(f"  Total Entries: {len(audit_logs.get('entries', []))}")
 
         # Get verification report
         verification = await client.audit.verify()
-        print(f"✓ Audit Verification:")
+        print(f"[OK] Audit Verification:")
         print(f"  Chain Valid: {verification.get('chain_valid', False)}")
         print(f"  Signatures Valid: {verification.get('signatures_valid', False)}")
 
@@ -168,12 +168,12 @@ async def run_qa_tests():
 
         # Get metrics
         metrics = await client.telemetry.get_metrics()
-        print(f"✓ OTEL Metrics:")
+        print(f"[OK] OTEL Metrics:")
         print(f"  Total Metrics: {len(metrics.get('metrics', []))}")
 
         # Get traces
         traces = await client.telemetry.get_traces()
-        print(f"✓ OTEL Traces:")
+        print(f"[OK] OTEL Traces:")
         print(f"  Active Traces: {len(traces.get('active_traces', []))}")
 
         # 9. Test Circuit Breakers
@@ -181,7 +181,7 @@ async def run_qa_tests():
         print("-" * 40)
 
         circuit_breakers = await client.services.get_circuit_breakers()
-        print(f"✓ Circuit Breakers:")
+        print(f"[OK] Circuit Breakers:")
         open_breakers = [name for name, status in circuit_breakers.items() if status.get("state") == "OPEN"]
         print(f"  Total: {len(circuit_breakers)}")
         print(f"  Open: {len(open_breakers)}")
@@ -194,14 +194,14 @@ async def run_qa_tests():
 
         # Test empty search
         empty_search = await client.memory.search(query="xyz123_nonexistent")
-        print(f"✓ Empty Search: {len(empty_search.get('nodes', []))} results")
+        print(f"[OK] Empty Search: {len(empty_search.get('nodes', []))} results")
 
         # Test invalid node recall
         try:
             invalid_node = await client.memory.recall("invalid-node-id")
-            print(f"✗ Invalid Recall: Should have failed but got {invalid_node}")
+            print(f"[FAIL] Invalid Recall: Should have failed but got {invalid_node}")
         except Exception as e:
-            print(f"✓ Invalid Recall: Properly handled ({str(e)[:50]}...)")
+            print(f"[OK] Invalid Recall: Properly handled ({str(e)[:50]}...)")
 
         # Test large metadata
         large_metadata = {f"key_{i}": f"value_{i}" for i in range(100)}
@@ -209,16 +209,16 @@ async def run_qa_tests():
             large_node = await client.memory.store(
                 content="Large metadata test", node_type="CONCEPT", metadata=large_metadata
             )
-            print(f"✓ Large Metadata: Stored successfully")
+            print(f"[OK] Large Metadata: Stored successfully")
         except Exception as e:
-            print(f"✗ Large Metadata Failed: {str(e)[:50]}...")
+            print(f"[FAIL] Large Metadata Failed: {str(e)[:50]}...")
 
         print("\n" + "=" * 60)
         print("QA TEST SUITE COMPLETED SUCCESSFULLY")
         print("=" * 60)
 
     except Exception as e:
-        print(f"\n✗ Test Suite Failed: {e}")
+        print(f"\n[FAIL] Test Suite Failed: {e}")
         import traceback
 
         traceback.print_exc()
@@ -239,22 +239,22 @@ async def test_websocket():
     try:
         # Connect to WebSocket
         ws = await client.websocket.connect()
-        print("✓ WebSocket Connected")
+        print("[OK] WebSocket Connected")
 
         # Subscribe to telemetry
         await ws.subscribe("telemetry")
-        print("✓ Subscribed to telemetry channel")
+        print("[OK] Subscribed to telemetry channel")
 
         # Receive a few updates
         for i in range(3):
             update = await ws.receive()
-            print(f"✓ Update {i+1}: {update.get('type', 'unknown')}")
+            print(f"[OK] Update {i+1}: {update.get('type', 'unknown')}")
 
         await ws.close()
-        print("✓ WebSocket Closed")
+        print("[OK] WebSocket Closed")
 
     except Exception as e:
-        print(f"✗ WebSocket Test Failed: {e}")
+        print(f"[FAIL] WebSocket Test Failed: {e}")
     finally:
         await client.disconnect()
 

@@ -260,7 +260,7 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
                 return
 
             # New config reload signal detected!
-            logger.info(f"🔄 Config reload signal detected from Android (timestamp: {signal_mtime})")
+            logger.info(f" Config reload signal detected from Android (timestamp: {signal_mtime})")
 
             # Verify .env exists
             if not env_file.exists():
@@ -272,24 +272,24 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
                 from dotenv import load_dotenv
 
                 load_dotenv(env_file, override=True)
-                logger.info(f"✓ Reloaded environment from {env_file}")
+                logger.info(f"[OK] Reloaded environment from {env_file}")
             except Exception as e:
                 logger.error(f"Failed to reload .env: {e}")
                 return
 
             # 2. Emit token_refreshed signal (LLM service will reset circuit breaker)
             await self.signal_bus.emit("token_refreshed", "openai_api_key")
-            logger.info("✓ Emitted token_refreshed signal")
+            logger.info("[OK] Emitted token_refreshed signal")
 
             # 3. Mark signal as processed and clean up
             self._token_refresh_signal_mtime = signal_mtime
             try:
                 config_reload_file.unlink()
-                logger.info("✓ Cleaned up config reload signal file")
+                logger.info("[OK] Cleaned up config reload signal file")
             except Exception as e:
                 logger.warning(f"Failed to clean up signal file: {e}")
 
-            logger.info("🎉 Token refresh cycle complete!")
+            logger.info(" Token refresh cycle complete!")
 
         except Exception as e:
             logger.debug(f"Token refresh signal check error: {e}")

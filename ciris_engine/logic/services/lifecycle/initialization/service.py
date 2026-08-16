@@ -204,13 +204,13 @@ class InitializationService(BaseInfrastructureService, InitializationServiceProt
             duration = (self.time_service.now() - self._start_time).total_seconds()
 
             logger.info("=" * 60)
-            logger.info(f"✓ CIRIS Agent Initialization Complete ({duration:.1f}s)")
+            logger.info(f"[OK] CIRIS Agent Initialization Complete ({duration:.1f}s)")
             logger.info("=" * 60)
 
         except Exception as e:
             duration = (self.time_service.now() - self._start_time).total_seconds()
             logger.error("=" * 60)
-            logger.error(f"✗ CIRIS Agent Initialization Failed ({duration:.1f}s)")
+            logger.error(f"[FAIL] CIRIS Agent Initialization Failed ({duration:.1f}s)")
             logger.error(f"Error: {e}")
             logger.error("=" * 60)
             self._error = e
@@ -300,7 +300,7 @@ class InitializationService(BaseInfrastructureService, InitializationServiceProt
 
         phase_duration = (self.time_service.now() - phase_start).total_seconds()
         self._phase_status[phase] = "completed"
-        logger.info(f"✓ Phase {phase.value} completed successfully ({phase_duration:.1f}s)")
+        logger.info(f"[OK] Phase {phase.value} completed successfully ({phase_duration:.1f}s)")
 
     async def _execute_step(self, step: InitializationStep) -> None:
         """Execute a single initialization step with timeout and verification."""
@@ -320,18 +320,18 @@ class InitializationService(BaseInfrastructureService, InitializationServiceProt
                     raise Exception(f"Verification failed for {step.name}")
 
             self._completed_steps.append(step_name)
-            logger.info(f"  ✓ {step.name} initialized")
+            logger.info(f" [OK] {step.name} initialized")
 
         except asyncio.TimeoutError:
             error_msg = f"{step.name} timed out after {step.timeout}s"
-            logger.error(f"  ✗ {error_msg}")
+            logger.error(f" [FAIL] {error_msg}")
 
             if step.critical:
                 self._error = Exception(error_msg)
                 raise self._error
 
         except Exception as e:
-            logger.error(f"  ✗ {step.name} failed: {e}")
+            logger.error(f" [FAIL] {step.name} failed: {e}")
 
             if step.critical:
                 self._error = e

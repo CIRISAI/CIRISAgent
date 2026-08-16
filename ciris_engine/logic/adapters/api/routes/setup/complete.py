@@ -64,7 +64,7 @@ async def _link_oauth_identity_to_wa(auth_service: Any, setup: SetupCompleteRequ
                 name=setup.admin_username,
                 role=WARole.ROOT,
             )
-            logger.info(f"CIRIS_SETUP_DEBUG ✅ Updated existing WA {existing_wa.wa_id} to ROOT role")
+            logger.info(f"CIRIS_SETUP_DEBUG [OK] Updated existing WA {existing_wa.wa_id} to ROOT role")
             return existing_wa
 
         # No existing link or same WA - safe to link
@@ -80,7 +80,7 @@ async def _link_oauth_identity_to_wa(auth_service: Any, setup: SetupCompleteRequ
             f"CIRIS_SETUP_DEBUG ✅ SUCCESS: Linked OAuth {setup.oauth_provider}:{setup.oauth_external_id} to WA {wa_cert.wa_id}"
         )
     except Exception as e:
-        logger.error(f"CIRIS_SETUP_DEBUG ❌ FAILED to link OAuth identity: {e}", exc_info=True)
+        logger.error(f"CIRIS_SETUP_DEBUG [FAIL] FAILED to link OAuth identity: {e}", exc_info=True)
         # Don't fail setup if OAuth linking fails - user can still use password
 
     return wa_cert
@@ -98,9 +98,9 @@ async def _update_system_admin_password(auth_service: Any, setup: SetupCompleteR
     if admin_wa:
         admin_password_hash = auth_service.hash_password(setup.system_admin_password)
         await auth_service.update_wa(wa_id=admin_wa.wa_id, password_hash=admin_password_hash)
-        logger.info("✅ Updated admin password")
+        logger.info("[OK] Updated admin password")
     else:
-        logger.warning("⚠️  Default admin WA not found")
+        logger.warning("[WARN] Default admin WA not found")
 
 
 async def _check_existing_oauth_wa(auth_service: Any, setup: SetupCompleteRequest) -> tuple[Optional[Any], bool]:
@@ -124,7 +124,7 @@ async def _check_existing_oauth_wa(auth_service: Any, setup: SetupCompleteReques
         logger.info("CIRIS_USER_CREATE: No existing WA found for OAuth user - will create new")
         return None, False
 
-    logger.info(f"CIRIS_USER_CREATE: ✓ Found existing WA for OAuth user: {existing_wa.wa_id}")
+    logger.info(f"CIRIS_USER_CREATE: [OK] Found existing WA for OAuth user: {existing_wa.wa_id}")
     logger.info(f"CIRIS_USER_CREATE:   Current role: {existing_wa.role}")
     logger.info(f"CIRIS_USER_CREATE:   Current name: {existing_wa.name}")
 
@@ -133,7 +133,7 @@ async def _check_existing_oauth_wa(auth_service: Any, setup: SetupCompleteReques
         f"CIRIS_USER_CREATE: Updating existing WA {existing_wa.wa_id} to ROOT role (keeping name: {existing_wa.name})"
     )
     await auth_service.update_wa(wa_id=existing_wa.wa_id, role=WARole.ROOT)
-    logger.info(f"CIRIS_USER_CREATE: ✅ Updated existing OAuth WA to ROOT: {existing_wa.wa_id}")
+    logger.info(f"CIRIS_USER_CREATE: [OK] Updated existing OAuth WA to ROOT: {existing_wa.wa_id}")
 
     return existing_wa, True
 
@@ -284,7 +284,7 @@ async def _create_new_wa(auth_service: Any, setup: SetupCompleteRequest) -> Any:
         scopes=["read:any", "write:any"],  # ROOT gets full scopes
         role=WARole.ROOT,
     )
-    logger.info(f"CIRIS_USER_CREATE: ✅ Created NEW WA: {wa_cert.wa_id}")
+    logger.info(f"CIRIS_USER_CREATE: [OK] Created NEW WA: {wa_cert.wa_id}")
 
     return wa_cert
 
@@ -324,9 +324,9 @@ async def _ensure_system_wa(auth_service: Any) -> None:
     """Ensure system WA exists for signing system tasks."""
     system_wa_id = await auth_service.ensure_system_wa_exists()
     if system_wa_id:
-        logger.info(f"✅ System WA ready: {system_wa_id}")
+        logger.info(f"[OK] System WA ready: {system_wa_id}")
     else:
-        logger.warning("⚠️ Could not create system WA - deferral handling may not work")
+        logger.warning("[WARN] Could not create system WA - deferral handling may not work")
 
 
 def _create_founding_partnership(wa_id: str, oauth_user_id: Optional[str] = None) -> None:
@@ -408,8 +408,8 @@ def _create_founding_partnership(wa_id: str, oauth_user_id: Optional[str] = None
 
     time_service = TimeService()
     add_graph_node(node, time_service)
-    print(f"[SETUP_COMPLETE] ✅ Founding partnership created: {node_id} (PARTNERED)")
-    logger.info(f"✅ Founding partnership created for setup user: {node_id}")
+    print(f"[SETUP_COMPLETE] [OK] Founding partnership created: {node_id} (PARTNERED)")
+    logger.info(f"[OK] Founding partnership created for setup user: {node_id}")
 
 
 def _store_user_preferences(user_id: str, setup: SetupCompleteRequest) -> None:
@@ -565,7 +565,7 @@ async def _create_setup_users(
                     scopes=["read:any", "write:any"],  # ROOT gets full scopes
                     role=WARole.ROOT,
                 )
-                logger.info(f"CIRIS_USER_CREATE: ✅ Auto-minted WA: {wa_cert.wa_id} (name={wa_name}, role=ROOT)")
+                logger.info(f"CIRIS_USER_CREATE: [OK] Auto-minted WA: {wa_cert.wa_id} (name={wa_name}, role=ROOT)")
 
                 # Link ingress identity to WA so lookups by provider:external_id work
                 # ingress_user_id format: "provider:external_id" (e.g., "home_assistant:abc123")
@@ -585,7 +585,7 @@ async def _create_setup_users(
                         )
                     except Exception as link_err:
                         # Non-fatal - log but continue (founding partnership is more important)
-                        logger.warning(f"CIRIS_USER_CREATE: ⚠️ Failed to link ingress identity: {link_err}")
+                        logger.warning(f"CIRIS_USER_CREATE: [WARN] Failed to link ingress identity: {link_err}")
 
                 # Create founding partnership for the ingress user
                 logger.info(
@@ -1331,7 +1331,7 @@ async def complete_setup(setup: SetupCompleteRequest, request: Request) -> Succe
         if auth_service:
             logger.info("Reloading user cache after setup user creation...")
             await auth_service.reload_users_from_db()
-            logger.info("✅ User cache reloaded - new users now visible to authentication")
+            logger.info("[OK] User cache reloaded - new users now visible to authentication")
 
         # Build next steps message
         next_steps = "Configuration completed. The agent is now starting. You can log in immediately."

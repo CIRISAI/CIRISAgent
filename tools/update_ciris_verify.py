@@ -1050,7 +1050,7 @@ def verify_mobile_bundles(version: str, android: bool, ios: bool) -> None:
         for arch in ANDROID_ARCHS:
             so = JNI_LIBS_DIR / arch / "libciris_verify_ffi.so"
             assert_bundle_contains_version(so, version)
-            print(f"  ✓ android/{arch}: {so.relative_to(REPO_ROOT)}")
+            print(f" [OK] android/{arch}: {so.relative_to(REPO_ROOT)}")
             checked += 1
     if ios:
         # iOS runtime loads from app_packages/ (via Briefcase), and the
@@ -1065,7 +1065,7 @@ def verify_mobile_bundles(version: str, android: bool, ios: bool) -> None:
                 f"update_ios_dylib() should have placed it here."
             )
         assert_bundle_contains_version(ios_dylib, version)
-        print(f"  ✓ ios: {ios_dylib.relative_to(REPO_ROOT)}")
+        print(f" [OK] ios: {ios_dylib.relative_to(REPO_ROOT)}")
         checked += 1
     if checked == 0:
         raise RuntimeError("No bundles checked — refusing to claim success.")

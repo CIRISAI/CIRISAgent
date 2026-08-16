@@ -349,7 +349,7 @@ class ModelEvalTests:
 
     async def run(self) -> List[Dict]:
         total_questions = len(self.questions) * len(self.languages)
-        self.console.print("\n[bold cyan]🧠 Multilingual Model Evaluation[/bold cyan]")
+        self.console.print("\n[bold cyan] Multilingual Model Evaluation[/bold cyan]")
         self.console.print("=" * 70)
         self.console.print("[yellow]NOTE: This module requires --live mode with a real LLM.[/yellow]")
         self.console.print(
@@ -739,7 +739,7 @@ class ModelEvalTests:
 
     def _print_summary(self) -> None:
         self.console.print("\n" + "=" * 70)
-        self.console.print("[bold cyan]📊 Multilingual Model Evaluation Summary[/bold cyan]")
+        self.console.print("[bold cyan] Multilingual Model Evaluation Summary[/bold cyan]")
         self.console.print("=" * 70)
 
         table = Table(show_header=True, header_style="bold cyan")

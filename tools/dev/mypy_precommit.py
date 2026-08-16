@@ -54,11 +54,11 @@ def main() -> int:
 
             if error_count > 0:
                 print("\n" + "=" * 60)
-                print(f"⚠️  MYPY: {error_count} type error(s) found (informational)")
+                print(f"[WARN] MYPY: {error_count} type error(s) found (informational)")
                 print("=" * 60)
                 print(result.stdout)
                 print("=" * 60)
-                print("💡 Tip: Fix these before pushing to avoid CI failures")
+                print(" Tip: Fix these before pushing to avoid CI failures")
                 print("=" * 60 + "\n")
 
         # Also print any stderr (warnings, etc.)
@@ -69,11 +69,11 @@ def main() -> int:
                 print("\n".join(stderr_lines))
 
     except subprocess.TimeoutExpired:
-        print("⚠️  MYPY: Timed out (skipping)")
+        print("[WARN] MYPY: Timed out (skipping)")
     except FileNotFoundError:
-        print("⚠️  MYPY: Not installed (skipping)")
+        print("[WARN] MYPY: Not installed (skipping)")
     except Exception as e:
-        print(f"⚠️  MYPY: Error running mypy: {e}")
+        print(f"[WARN] MYPY: Error running mypy: {e}")
 
     # Always return 0 to not block commits
     return 0

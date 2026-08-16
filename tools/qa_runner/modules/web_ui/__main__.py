@@ -41,6 +41,17 @@ Examples:
     python -m tools.qa_runner.modules.web_ui e2e --mock-llm
 """
 
+# Windows cp1252 consoles raise UnicodeEncodeError on any non-ASCII glyph, which
+# takes the whole process down. main.py / cli.py / desktop_launcher already call
+# this; the QA runner never did, so it crashed on Windows CI before reaching a
+# single test — which is why this harness had never run there.
+try:
+    from ciris_engine.logic.utils import win_console as _win_console
+
+    _win_console.setup()
+except Exception:  # pragma: no cover - never let the shim stop the runner
+    pass
+
 import argparse
 import asyncio
 import glob
@@ -118,7 +129,7 @@ class DesktopAppTestRunner:
                 duration_ms=duration,
                 screen=screen,
             )
-            print(f"  ✅ {name} ({duration:.0f}ms)")
+            print(f" [OK] {name} ({duration:.0f}ms)")
         except Exception as e:
             duration = (datetime.now() - start).total_seconds() * 1000
             screen = await self.helper.get_screen() if self.helper else None
@@ -129,14 +140,14 @@ class DesktopAppTestRunner:
                 error=str(e),
                 screen=screen,
             )
-            print(f"  ❌ {name}: {e}")
+            print(f" [FAIL] {name}: {e}")
 
         self.results.append(result)
         return result
 
     async def test_login_flow(self, username: str = "admin", password: str = "qa_test_password_12345") -> bool:
         """Test the login flow on the desktop app."""
-        print("\n🔐 Testing Login Flow")
+        print("\n Testing Login Flow")
 
         if not self.helper:
             raise RuntimeError("Test runner not started")
@@ -201,7 +212,7 @@ class DesktopAppTestRunner:
 
     async def test_chat_flow(self, message: str = "Hello, can you hear me?") -> bool:
         """Test the chat interaction flow on the desktop app."""
-        print("\n💬 Testing Chat Flow")
+        print("\n Testing Chat Flow")
 
         if not self.helper:
             raise RuntimeError("Test runner not started")
@@ -280,7 +291,7 @@ class DesktopAppTestRunner:
         Requires the desktop app to be sitting on the Setup wizard (backend
         in first-run mode). Use `desktop-setup --launch` to bring that up.
         """
-        print("\n🧭 Testing Setup Wizard Flow (first-run, 3 screens)")
+        print("\n Testing Setup Wizard Flow (first-run, 3 screens)")
 
         if not self.helper:
             raise RuntimeError("Test runner not started")
@@ -421,7 +432,7 @@ class DesktopAppTestRunner:
         rather than failing, mirroring the federation walker's tolerated-SKIP
         semantics for state-dependent preconditions.
         """
-        print("\n➕ Testing Catch-up Add-Federation-ID Flow")
+        print("\n Testing Catch-up Add-Federation-ID Flow")
 
         if not self.helper:
             raise RuntimeError("Test runner not started")
@@ -551,7 +562,7 @@ class DesktopAppTestRunner:
 
     async def test_element_tree(self) -> bool:
         """Debug test - print current element tree."""
-        print("\n🌳 Element Tree")
+        print("\n Element Tree")
 
         if not self.helper:
             raise RuntimeError("Test runner not started")
@@ -573,10 +584,10 @@ class DesktopAppTestRunner:
         total = len(self.results)
 
         print(f"\n{'=' * 50}")
-        print(f"📊 Test Summary: {passed}/{total} passed")
+        print(f" Test Summary: {passed}/{total} passed")
 
         if failed > 0:
-            print(f"\n❌ Failed tests:")
+            print(f"\n[FAIL] Failed tests:")
             for r in self.results:
                 if not r.success:
                     print(f"   • {r.name}: {r.error}")
@@ -865,7 +876,7 @@ def _apply_platform_defaults(args: argparse.Namespace) -> None:
 
 def list_tests() -> None:
     """List available tests."""
-    print("\n📋 Available Tests:\n")
+    print("\n Available Tests:\n")
 
     # Legacy browser-based (Playwright) steps — agent/web-UI flow only.
     browser_info = {
@@ -908,7 +919,7 @@ def list_tests() -> None:
     for name, desc in catchup_info.items():
         print(f"    • {name:24s} - {desc}")
 
-    print("\n🔄 Test Groups:\n")
+    print("\n Test Groups:\n")
     print("  Desktop (native Compose, test server :8091):")
     print("    • desktop-setup    - Node-client first-run wizard (announce/trace/fed-ID/age)")
     print("    • desktop-catchup  - Catch-up Add-Federation-ID flow")
@@ -921,7 +932,7 @@ def list_tests() -> None:
     print("    • models         - Browser model listing tests")
     print("    • licensed_agent - First-time licensed agent flow (Portal device auth)")
 
-    print("\n💡 Examples:\n")
+    print("\n Examples:\n")
     print("  # Node-client wizard against a freshly-launched first-run desktop app")
     print("  python -m tools.qa_runner.modules.web_ui desktop-setup --launch")
     print("  # Catch-up Add-Federation-ID against a logged-in desktop app")
@@ -1010,7 +1021,7 @@ def _wipe_dev_data() -> None:
     for data_dir in [home_ciris / "data", repo_root / "data"]:
         if data_dir.exists():
             shutil.rmtree(data_dir, ignore_errors=True)
-            print(f"  🧹 wiped {data_dir}")
+            print(f" wiped {data_dir}")
         data_dir.mkdir(parents=True, exist_ok=True)
 
     # Restore signing key
@@ -1055,10 +1066,10 @@ def _complete_setup(base_url: str, mock_llm: bool) -> bool:
         r = requests.post(f"{base_url}/v1/setup/complete", json=payload, timeout=30)
         if r.status_code == 200:
             return True
-        print(f"  ❌ /v1/setup/complete: {r.status_code} {r.text[:200]}")
+        print(f" [FAIL] /v1/setup/complete: {r.status_code} {r.text[:200]}")
         return False
     except Exception as e:
-        print(f"  ❌ /v1/setup/complete error: {e}")
+        print(f" [FAIL] /v1/setup/complete error: {e}")
         return False
 
 
@@ -1129,7 +1140,7 @@ def _start_emulator(avd: str) -> Optional[subprocess.Popen]:
     """Start the named AVD as a background process. Returns the Popen handle."""
     paths = _android_sdk_paths()
     if not paths["emulator"].exists():
-        print(f"  ❌ emulator binary not found at {paths['emulator']}")
+        print(f" [FAIL] emulator binary not found at {paths['emulator']}")
         return None
     cmd = [
         str(paths["emulator"]),
@@ -1158,11 +1169,11 @@ def _ensure_emulator(args: argparse.Namespace) -> Optional[str]:
     list_out = subprocess.run([str(paths["emulator"]), "-list-avds"], capture_output=True, text=True, timeout=10).stdout
     avds = [a.strip() for a in list_out.splitlines() if a.strip()]
     if not avds:
-        print("  ❌ no AVDs configured — create one with `avdmanager create avd ...`")
+        print(" [FAIL] no AVDs configured — create one with `avdmanager create avd ...`")
         return None
     avd = args.android_avd if args.android_avd in avds else avds[0]
     if avd != args.android_avd:
-        print(f"  ⚠️  AVD '{args.android_avd}' not found, using '{avd}'")
+        print(f" [WARN] AVD '{args.android_avd}' not found, using '{avd}'")
 
     if _start_emulator(avd) is None:
         return None
@@ -1175,12 +1186,12 @@ def _ensure_emulator(args: argparse.Namespace) -> Optional[str]:
             break
         time.sleep(2)
     else:
-        print("  ❌ emulator did not appear in adb within 90s")
+        print(" [FAIL] emulator did not appear in adb within 90s")
         return None
 
     print(f"  emulator: {serial} attached, waiting for boot…")
     if not _wait_for_boot(serial, timeout=180):
-        print("  ❌ emulator never finished booting")
+        print(" [FAIL] emulator never finished booting")
         return None
     print(f"  emulator: {serial} booted")
     return serial
@@ -1204,7 +1215,7 @@ def _build_debug_apk() -> bool:
         timeout=600,
     )
     if r.returncode != 0:
-        print(f"  ❌ gradle build failed:\n{r.stdout[-2000:]}\n{r.stderr[-2000:]}")
+        print(f" [FAIL] gradle build failed:\n{r.stdout[-2000:]}\n{r.stderr[-2000:]}")
         return False
     return True
 
@@ -1232,7 +1243,7 @@ async def run_android_up(args: argparse.Namespace) -> int:
          `adb forward tcp:8080 tcp:8080` — embedded backend (best-effort).
       5. Poll http://localhost:8091/health for {"status":"ok"}.
     """
-    print("🤖 CIRIS android-up")
+    print(" CIRIS android-up")
 
     # 1. Emulator.
     print("[1/5] Discovering / booting Android emulator…")
@@ -1260,7 +1271,7 @@ async def run_android_up(args: argparse.Namespace) -> int:
             return 1
         apk = _find_debug_apk()
     if not apk:
-        print("  ❌ debug APK still missing after build")
+        print(" [FAIL] debug APK still missing after build")
         return 1
     print(f"  apk: {apk} ({apk.stat().st_size // (1024 * 1024)} MB)")
 
@@ -1269,7 +1280,7 @@ async def run_android_up(args: argparse.Namespace) -> int:
     _adb(["shell", "am", "force-stop", ANDROID_PACKAGE], serial=serial, timeout=15)
     install = _adb(["install", "-r", str(apk)], serial=serial, timeout=300)
     if "Success" not in install.stdout:
-        print(f"  ❌ install failed:\n{install.stdout}\n{install.stderr}")
+        print(f" [FAIL] install failed:\n{install.stdout}\n{install.stderr}")
         return 1
     print("  install: ok")
 
@@ -1283,7 +1294,7 @@ async def run_android_up(args: argparse.Namespace) -> int:
         timeout=15,
     )
     if launch.returncode != 0:
-        print(f"  ❌ launch failed: {launch.stderr}")
+        print(f" [FAIL] launch failed: {launch.stderr}")
         return 1
     print("  launch: ok")
 
@@ -1292,7 +1303,7 @@ async def run_android_up(args: argparse.Namespace) -> int:
     print("[3/5] Configuring adb port-forwards…")
     forward = _adb(["forward", f"tcp:{args.desktop_port}", "tcp:9091"], serial=serial, timeout=10)
     if forward.returncode != 0:
-        print(f"  ❌ adb forward {args.desktop_port}→9091 failed: {forward.stderr}")
+        print(f" [FAIL] adb forward {args.desktop_port}→9091 failed: {forward.stderr}")
         return 1
     print(f"  forward: host:{args.desktop_port} → {serial}:9091 (test server)")
 
@@ -1326,7 +1337,7 @@ async def run_android_up(args: argparse.Namespace) -> int:
             "       crashed during init. Inspect with: adb logcat -d *:E"
         )
         return 1
-    print(f"  ✅ AndroidTestAutomationServer reachable at {server_url}")
+    print(f" [OK] AndroidTestAutomationServer reachable at {server_url}")
 
     # Best-effort: wait for the device's embedded Python backend too. The
     # mode-change flow in the walk-test depends on it; if it's still booting,
@@ -1344,7 +1355,7 @@ async def run_android_up(args: argparse.Namespace) -> int:
             pass
         time.sleep(2)
     if backend_ok:
-        print(f"  ✅ embedded backend reachable at http://localhost:{args.port}")
+        print(f" [OK] embedded backend reachable at http://localhost:{args.port}")
     else:
         print(
             f"  ⚠️  embedded backend not yet ready at http://localhost:{args.port};\n"
@@ -1382,7 +1393,7 @@ async def run_desktop_up(args: argparse.Namespace) -> int:
     """
     from .server_manager import ServerConfig, ServerManager
 
-    print("🚀 CIRIS desktop-up")
+    print(" CIRIS desktop-up")
 
     # 1. Clean slate
     print("[1/5] Stopping anything on 8080/8091 and wiping dev data...")
@@ -1407,7 +1418,7 @@ async def run_desktop_up(args: argparse.Namespace) -> int:
     server = ServerManager(cfg)
     status = server.start()
     if not status.running:
-        print(f"  ❌ backend failed: {status.error}")
+        print(f" [FAIL] backend failed: {status.error}")
         return 1
 
     # 3. Complete setup
@@ -1419,12 +1430,12 @@ async def run_desktop_up(args: argparse.Namespace) -> int:
     # (TEST_ADMIN_PASSWORD) and anyone who needs it reads it there. Echoing it
     # puts a working credential into CI logs, terminal scrollback, and every
     # transcript of a QA session, for no information the reader lacks.
-    print(f"  ✅ admin created: {TEST_ADMIN_USERNAME} (password: see TEST_ADMIN_PASSWORD)")
+    print(f" [OK] admin created: {TEST_ADMIN_USERNAME} (password: see TEST_ADMIN_PASSWORD)")
 
     # Restart backend without CIRIS_FORCE_FIRST_RUN so /v1/setup/status
     # returns is_first_run=false and the desktop goes to the Login screen,
     # not the Setup wizard.
-    print("  🔄 restarting backend in configured mode...")
+    print(" restarting backend in configured mode...")
     server.stop()
     cfg2 = ServerConfig(
         port=args.port,
@@ -1436,7 +1447,7 @@ async def run_desktop_up(args: argparse.Namespace) -> int:
     server = ServerManager(cfg2)
     status = server.start()
     if not status.running:
-        print(f"  ❌ backend restart failed: {status.error}")
+        print(f" [FAIL] backend restart failed: {status.error}")
         return 1
 
     # 4. Launch desktop app
@@ -1444,7 +1455,7 @@ async def run_desktop_up(args: argparse.Namespace) -> int:
         print("[4/5] Launching desktop app (CIRIS_TEST_MODE=true)...")
         jar = _find_desktop_jar()
         if not jar:
-            print("  ❌ No desktop jar found — run: cd client && ./gradlew :desktopApp:packageUberJarForCurrentOS")
+            print(" [FAIL] No desktop jar found — run: cd client && ./gradlew :desktopApp:packageUberJarForCurrentOS")
             server.stop()
             return 1
         env = os.environ.copy()
@@ -1473,7 +1484,7 @@ async def run_desktop_up(args: argparse.Namespace) -> int:
                 pass
             time.sleep(1)
         else:
-            print("  ⚠️  desktop test server didn't come up; continuing anyway")
+            print(" [WARN] desktop test server didn't come up; continuing anyway")
 
         # 5. Log in via the UI
         print("[5/5] Logging in via UI...")
@@ -1489,18 +1500,18 @@ async def run_desktop_up(args: argparse.Namespace) -> int:
             while time.time() < deadline:
                 s = await helper.get_screen()
                 if s and s != "Login":
-                    print(f"  ✅ logged in → {s}")
+                    print(f" [OK] logged in → {s}")
                     break
                 await asyncio.sleep(0.5)
             else:
-                print("  ⚠️  still on Login after 30s")
+                print(" [WARN] still on Login after 30s")
         finally:
             await helper.stop()
     else:
         print("[4/5] Skipping desktop launch (--no-desktop)")
 
     print()
-    print(f"✅ Ready. Backend: {server.base_url}  Desktop test server: http://localhost:{args.desktop_port}")
+    print(f"[OK] Ready. Backend: {server.base_url} Desktop test server: http://localhost:{args.desktop_port}")
     # Username only — see the note at the admin-created line above.
     print(f"   Admin: {TEST_ADMIN_USERNAME} (password: see TEST_ADMIN_PASSWORD)")
     print("   Processes left running — kill with: pkill -9 -f 'CIRIS-macos|main.py --adapter api'")
@@ -1518,7 +1529,7 @@ async def run_desktop_first_run_up(args: argparse.Namespace) -> int:
     """
     from .server_manager import ServerConfig, ServerManager
 
-    print("🚀 CIRIS desktop first-run bring-up (setup wizard)")
+    print(" CIRIS desktop first-run bring-up (setup wizard)")
 
     # 1. Clean slate
     print("[1/3] Stopping anything on 8080/8091 and wiping dev data...")
@@ -1550,14 +1561,14 @@ async def run_desktop_first_run_up(args: argparse.Namespace) -> int:
     server = ServerManager(cfg)
     status = server.start()
     if not status.running:
-        print(f"  ❌ backend failed: {status.error}")
+        print(f" [FAIL] backend failed: {status.error}")
         return 1
 
     # 3. Launch desktop app with the test-automation server enabled.
     print("[3/3] Launching desktop app (CIRIS_TEST_MODE=true)...")
     jar = _find_desktop_jar()
     if not jar:
-        print("  ❌ No desktop jar found — run: cd client && ./gradlew :desktopApp:packageUberJarForCurrentOS")
+        print(" [FAIL] No desktop jar found — run: cd client && ./gradlew :desktopApp:packageUberJarForCurrentOS")
         server.stop()
         return 1
     env = os.environ.copy()
@@ -1581,17 +1592,17 @@ async def run_desktop_first_run_up(args: argparse.Namespace) -> int:
     while time.time() < deadline:
         try:
             if requests.get(f"{server_url}/health", timeout=2).status_code == 200:
-                print(f"  ✅ desktop test server up at {server_url}")
+                print(f" [OK] desktop test server up at {server_url}")
                 break
         except Exception:
             pass
         time.sleep(1)
     else:
-        print("  ❌ desktop test server didn't come up within 60s")
+        print(" [FAIL] desktop test server didn't come up within 60s")
         print(f"     inspect: {log_path}")
         return 1
 
-    print(f"✅ First-run stack ready. Backend: {server.base_url} (first-run)  Desktop: {server_url}")
+    print(f"[OK] First-run stack ready. Backend: {server.base_url} (first-run) Desktop: {server_url}")
     return 0
 
 
@@ -1633,7 +1644,7 @@ async def run_ios_up(args: argparse.Namespace) -> int:
 
     from ..mobile.ios.idevice_helper import IDeviceHelper
 
-    print("📱 CIRIS ios-up")
+    print(" CIRIS ios-up")
 
     # 1. Resolve device
     # iOS has TWO UDIDs per device, depending on which tool is asking:
@@ -1643,11 +1654,11 @@ async def run_ios_up(args: argparse.Namespace) -> int:
     try:
         ios = IDeviceHelper(device_id=args.ios_device_id)
     except RuntimeError as e:
-        print(f"  ❌ {e}")
+        print(f" [FAIL] {e}")
         return 1
     devices = ios.get_devices()
     if not devices:
-        print("  ❌ No physical iOS device connected. Plug in + trust, then retry.")
+        print(" [FAIL] No physical iOS device connected. Plug in + trust, then retry.")
         return 1
     # CoreDevice UUID for devicectl
     devicectl_udid = args.ios_device_id or devices[0].identifier
@@ -1693,12 +1704,12 @@ async def run_ios_up(args: argparse.Namespace) -> int:
             timeout=60,
         )
     except subprocess.TimeoutExpired:
-        print("  ❌ devicectl process launch timed out after 60s")
+        print(" [FAIL] devicectl process launch timed out after 60s")
         return 1
     if result.returncode != 0:
-        print(f"  ❌ devicectl process launch failed: {result.stderr.strip() or result.stdout.strip()}")
+        print(f" [FAIL] devicectl process launch failed: {result.stderr.strip() or result.stdout.strip()}")
         return 1
-    print("  ✅ app launched")
+    print(" [OK] app launched")
 
     # 3. iproxy forwards — test-automation server + backend
     # iOS POSIX test server runs on device :9091 (matches Android emulator port,
@@ -1721,11 +1732,11 @@ async def run_ios_up(args: argparse.Namespace) -> int:
                 stderr=subprocess.DEVNULL,
             )
         except FileNotFoundError:
-            print("  ❌ iproxy not found. Install libimobiledevice (brew install libimobiledevice).")
+            print(" [FAIL] iproxy not found. Install libimobiledevice (brew install libimobiledevice).")
             _kill_iproxy_children()
             return 1
         _IOS_IPROXY_PROCS.append(proc)
-        print(f"  ✅ iproxy {local_port}->{remote_port} ({label}) pid={proc.pid}")
+        print(f" [OK] iproxy {local_port}->{remote_port} ({label}) pid={proc.pid}")
         # Brief settle — iproxy needs a moment before the first connect
         await asyncio.sleep(0.4)
 
@@ -1740,7 +1751,7 @@ async def run_ios_up(args: argparse.Namespace) -> int:
             try:
                 if requests.get(test_url, timeout=2).status_code == 200:
                     test_ok = True
-                    print(f"  ✅ test-automation up at {test_url}")
+                    print(f" [OK] test-automation up at {test_url}")
             except Exception:
                 pass
         if not api_ok:
@@ -1750,7 +1761,7 @@ async def run_ios_up(args: argparse.Namespace) -> int:
                 # health from its own state assertions.
                 if requests.get(api_url, timeout=2).status_code in (200, 503):
                     api_ok = True
-                    print(f"  ✅ backend api up at {api_url}")
+                    print(f" [OK] backend api up at {api_url}")
             except Exception:
                 pass
         if test_ok and api_ok:
@@ -1758,11 +1769,11 @@ async def run_ios_up(args: argparse.Namespace) -> int:
         await asyncio.sleep(1)
 
     if not test_ok:
-        print(f"  ❌ test-automation did not respond at {test_url} within 60s")
+        print(f" [FAIL] test-automation did not respond at {test_url} within 60s")
         _kill_iproxy_children()
         return 1
     if not api_ok:
-        print(f"  ⚠️  backend api did not respond at {api_url} within 60s — walk will still try")
+        print(f" [WARN] backend api did not respond at {api_url} within 60s — walk will still try")
 
     # 5. First-run detection + auto-setup. If the device is at the Setup wizard,
     # the walk-test's login step will fail (no input_username on a Setup screen).
@@ -1809,19 +1820,19 @@ async def _ios_complete_setup_if_needed(
     try:
         r = requests.get(f"{api_base}/v1/setup/status", timeout=5)
     except Exception as e:  # noqa: BLE001
-        print(f"  ⚠️  /v1/setup/status probe failed: {e} — assuming configured, walk may fail at login")
+        print(f" [WARN] /v1/setup/status probe failed: {e} — assuming configured, walk may fail at login")
         return True
     if r.status_code != 200:
-        print(f"  ⚠️  /v1/setup/status returned {r.status_code} — assuming configured, walk may fail at login")
+        print(f" [WARN] /v1/setup/status returned {r.status_code} — assuming configured, walk may fail at login")
         return True
     data = r.json().get("data", r.json())  # tolerate either envelope
     first_run = bool(data.get("first_run") or data.get("firstRun") or data.get("is_first_run"))
     if not first_run:
-        print(f"  ℹ️  device already configured (first_run=false) — skipping setup")
+        print(f" [INFO] device already configured (first_run=false) — skipping setup")
         return True
 
     # Device needs setup. POST /v1/setup/complete with QA creds.
-    print(f"  🛠  device is first-run — completing setup via {api_base}/v1/setup/complete")
+    print(f" device is first-run — completing setup via {api_base}/v1/setup/complete")
     payload = {
         # On iOS the embedded backend runs without mock-llm — use a placeholder
         # OpenAI config; the walk-test doesn't exercise the LLM path.
@@ -1840,17 +1851,17 @@ async def _ios_complete_setup_if_needed(
     try:
         r = requests.post(f"{api_base}/v1/setup/complete", json=payload, timeout=30)
     except Exception as e:  # noqa: BLE001
-        print(f"  ❌ /v1/setup/complete error: {e}")
+        print(f" [FAIL] /v1/setup/complete error: {e}")
         return False
     if r.status_code != 200:
-        print(f"  ❌ /v1/setup/complete returned {r.status_code}: {r.text[:300]}")
+        print(f" [FAIL] /v1/setup/complete returned {r.status_code}: {r.text[:300]}")
         return False
-    print(f"  ✅ setup completed — admin user '{TEST_ADMIN_USERNAME}' created")
+    print(f" [OK] setup completed — admin user '{TEST_ADMIN_USERNAME}' created")
 
     # Re-launch the app so the StartupViewModel re-checks setup status.
     # iproxy children stay running — the kernel-level forward survives the
     # app restart, the iOS-side socket gets rebound when the app comes back.
-    print(f"  🔄 re-launching {bundle_id} so the UI routes to Login...")
+    print(f" re-launching {bundle_id} so the UI routes to Login...")
     relaunch_cmd = [
         "xcrun",
         "devicectl",
@@ -1870,10 +1881,10 @@ async def _ios_complete_setup_if_needed(
     try:
         result = subprocess.run(relaunch_cmd, capture_output=True, text=True, timeout=60)
     except subprocess.TimeoutExpired:
-        print("  ❌ devicectl re-launch timed out after 60s")
+        print(" [FAIL] devicectl re-launch timed out after 60s")
         return False
     if result.returncode != 0:
-        print(f"  ❌ re-launch failed: {result.stderr.strip() or result.stdout.strip()}")
+        print(f" [FAIL] re-launch failed: {result.stderr.strip() or result.stdout.strip()}")
         return False
 
     # Wait for both endpoints to come back. Same loop shape as the initial poll
@@ -1888,20 +1899,20 @@ async def _ios_complete_setup_if_needed(
             try:
                 if requests.get(test_url, timeout=2).status_code == 200:
                     test_ok = True
-                    print("  ✅ test-automation back up after re-launch")
+                    print(" [OK] test-automation back up after re-launch")
             except Exception:
                 pass
         if not api_ok:
             try:
                 if requests.get(api_url, timeout=2).status_code in (200, 503):
                     api_ok = True
-                    print("  ✅ backend api back up after re-launch")
+                    print(" [OK] backend api back up after re-launch")
             except Exception:
                 pass
         if test_ok and api_ok:
             return True
         await asyncio.sleep(1)
-    print(f"  ❌ post-setup re-launch did not come back healthy (test_ok={test_ok}, api_ok={api_ok})")
+    print(f" [FAIL] post-setup re-launch did not come back healthy (test_ok={test_ok}, api_ok={api_ok})")
     return False
 
 
@@ -2010,17 +2021,17 @@ async def run_federation_walk(args: argparse.Namespace) -> int:
 async def run_desktop_tests(args: argparse.Namespace) -> int:
     """Run desktop app tests."""
     # Check if desktop app is running
-    print("🔍 Checking CIRIS Desktop app...")
+    print(" Checking CIRIS Desktop app...")
     server_url = f"http://localhost:{args.desktop_port}"
 
     if not await check_desktop_app_running(server_url):
-        print(f"\n❌ CIRIS Desktop app is not running with test mode enabled.")
+        print(f"\n[FAIL] CIRIS Desktop app is not running with test mode enabled.")
         print(f"\nTo start the desktop app with test mode:")
         print(f"  export CIRIS_TEST_MODE=true")
         print(f"  cd client && ./gradlew :desktopApp:run")
         return 1
 
-    print("✅ Desktop app running with test mode")
+    print("[OK] Desktop app running with test mode")
 
     # Create and start runner
     config = DesktopAppConfig(
@@ -2124,12 +2135,12 @@ async def main() -> int:
 
     # Legacy browser-based testing
     # Ensure Playwright is installed
-    print("🔍 Checking Playwright installation...")
+    print(" Checking Playwright installation...")
     try:
         ensure_playwright_installed()
-        print("✅ Playwright ready")
+        print("[OK] Playwright ready")
     except Exception as e:
-        print(f"❌ Playwright setup failed: {e}")
+        print(f"[FAIL] Playwright setup failed: {e}")
         print("   Run: pip install playwright && playwright install firefox")
         return 1
 
@@ -2176,7 +2187,7 @@ async def main() -> int:
     # Print summary and save report
     runner.print_summary(suite)
     report_path = runner.save_report(suite)
-    print(f"📄 Report saved: {report_path}")
+    print(f" Report saved: {report_path}")
 
     return 0 if suite.success else 1
 
@@ -2186,7 +2197,7 @@ def run() -> None:
     try:
         sys.exit(asyncio.run(main()))
     except KeyboardInterrupt:
-        print("\n⚠️  Test interrupted by user")
+        print("\n[WARN] Test interrupted by user")
         sys.exit(130)
 
 

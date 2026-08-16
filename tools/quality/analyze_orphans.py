@@ -33,7 +33,7 @@ class OrphanAnalyzer:
 
     def analyze(self):
         """Run comprehensive orphan analysis."""
-        print("🔍 Analyzing Orphaned Classes...\n")
+        print(" Analyzing Orphaned Classes...\n")
 
         # Get orphaned classes
         self._identify_orphans()
@@ -60,11 +60,11 @@ class OrphanAnalyzer:
         """Identify orphaned classes from audit."""
         for finding in self.audit_data.get("findings", {}).get("orphaned_code", []):
             self.orphaned_classes.add(finding["class"])
-        print(f"📊 Found {len(self.orphaned_classes)} potentially orphaned classes")
+        print(f" Found {len(self.orphaned_classes)} potentially orphaned classes")
 
     def _find_dynamic_imports(self):
         """Find dynamic imports that might use orphaned classes."""
-        print("\n🔎 Searching for dynamic imports...")
+        print("\n Searching for dynamic imports...")
 
         patterns = [
             r'importlib\.import_module\(["\']([^"\']+)["\']\)',
@@ -85,11 +85,11 @@ class OrphanAnalyzer:
             except Exception:
                 pass
 
-        print(f"  ✓ Found {len(self.dynamic_imports)} dynamic imports")
+        print(f" [OK] Found {len(self.dynamic_imports)} dynamic imports")
 
     def _find_string_references(self):
         """Find string-based class references."""
-        print("\n🔤 Searching for string references...")
+        print("\n Searching for string references...")
 
         for class_name in self.orphaned_classes:
             # Search for the class name as a string
@@ -112,7 +112,7 @@ class OrphanAnalyzer:
                     pass
 
         found_count = sum(len(refs) for refs in self.string_references.values())
-        print(f"  ✓ Found {found_count} string references to orphaned classes")
+        print(f" [OK] Found {found_count} string references to orphaned classes")
 
     def _determine_usage_type(self, line: str) -> str:
         """Determine how a string reference is used."""
@@ -131,7 +131,7 @@ class OrphanAnalyzer:
 
     def _check_config_files(self):
         """Check YAML/JSON config files for class references."""
-        print("\n📄 Checking configuration files...")
+        print("\n Checking configuration files...")
 
         config_patterns = ["*.yaml", "*.yml", "*.json", "*.toml"]
         config_refs = 0
@@ -152,11 +152,11 @@ class OrphanAnalyzer:
                 except Exception:
                     pass
 
-        print(f"  ✓ Found {config_refs} config file references")
+        print(f" [OK] Found {config_refs} config file references")
 
     def _check_entry_points(self):
         """Check main entry points and runtime initialization."""
-        print("\n🚀 Checking entry points...")
+        print("\n Checking entry points...")
 
         entry_files = [
             "main.py",
@@ -242,11 +242,11 @@ class OrphanAnalyzer:
     def _generate_report(self):
         """Generate detailed orphan analysis report."""
         print("\n" + "=" * 60)
-        print("📊 Orphan Analysis Report")
+        print(" Orphan Analysis Report")
         print("=" * 60)
 
         # Summary
-        print("\n📈 Summary:")
+        print("\n Summary:")
         print(f"   Total Orphaned Classes: {len(self.orphaned_classes)}")
         print(f"   Actually Used (hidden): {len(self.orphan_categories['actually_used'])}")
         print(f"   Test Related: {len(self.orphan_categories['test_related'])}")
@@ -256,7 +256,7 @@ class OrphanAnalyzer:
 
         # Actually used details
         if self.orphan_categories["actually_used"]:
-            print(f"\n✅ Actually Used Classes ({len(self.orphan_categories['actually_used'])}):")
+            print(f"\n[OK] Actually Used Classes ({len(self.orphan_categories['actually_used'])}):")
             for class_name in self.orphan_categories["actually_used"][:10]:
                 print(f"\n   • {class_name}")
                 if class_name in self.string_references:
@@ -267,7 +267,7 @@ class OrphanAnalyzer:
                         print(f"     - {usage['type']}: {usage['file']}")
 
         # Recommendations
-        print("\n🎯 Recommendations:")
+        print("\n Recommendations:")
         print(f"\n1. **Keep These** ({len(self.orphan_categories['actually_used'])}):")
         print("   These classes are used via dynamic imports or configuration")
 
@@ -299,7 +299,7 @@ class OrphanAnalyzer:
 
         with open("orphan_analysis_results.json", "w") as f:
             json.dump(results, f, indent=2)
-        print("\n💾 Detailed results saved to orphan_analysis_results.json")
+        print("\n Detailed results saved to orphan_analysis_results.json")
 
 
 if __name__ == "__main__":

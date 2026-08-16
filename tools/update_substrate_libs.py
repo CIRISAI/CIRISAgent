@@ -411,7 +411,7 @@ def verify_tarball_checksum(lib: SubstrateLib, version: str, tarball: Path, skip
             print(f"    expected {expected}")
             print(f"    actual   {actual}")
             return False
-        print(f"  ✓ SHA256 verified: {tarball.name}")
+        print(f" [OK] SHA256 verified: {tarball.name}")
         return True
 
 
@@ -773,12 +773,12 @@ def verify_so_version(lib: SubstrateLib, version: str) -> bool:
     for abi in lib.abis:
         so = JNI_LIBS_DIR / abi / lib.so_filename
         if not so.exists():
-            print(f"  ✗ {lib.name}/{abi}: {lib.so_filename} missing")
+            print(f" [FAIL] {lib.name}/{abi}: {lib.so_filename} missing")
             all_ok = False
             continue
         result = subprocess.run(["strings", str(so)], capture_output=True, text=True)
         if any(line.strip() == version for line in result.stdout.splitlines()):
-            print(f"  ✓ {lib.name}/{abi}: {lib.so_filename} embeds v{version}")
+            print(f" [OK] {lib.name}/{abi}: {lib.so_filename} embeds v{version}")
         else:
             # Some libs don't include a literal version string in the .so —
             # don't fail solely on that. Report it and move on.
@@ -1441,7 +1441,7 @@ def verify_dylib_version(lib: SubstrateLib, version: str) -> bool:
     else:
         dylib = IOS_RESOURCES_DIR / "app_packages" / lib.bindings_package / lib.dylib_filename
     if not dylib.exists():
-        print(f"  ✗ Native library missing: {dylib.name}")
+        print(f" [FAIL] Native library missing: {dylib.name}")
         return False
 
     result = subprocess.run(["strings", str(dylib)], capture_output=True, text=True)
@@ -1450,7 +1450,7 @@ def verify_dylib_version(lib: SubstrateLib, version: str) -> bool:
         # "X.Y.Z" line, but PyO3 crates (persist/edge) may embed it only as
         # part of a larger token (e.g. "CIRISPersist/4.0.1") or not at all.
         if version in line:
-            print(f"  ✓ {lib.name}: {dylib.name} embeds v{version}")
+            print(f" [OK] {lib.name}: {dylib.name} embeds v{version}")
             return True
 
     # Not embedding the literal version is ADVISORY, not fatal — provenance is

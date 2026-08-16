@@ -47,7 +47,7 @@ def main():
     config = QAConfig(**config_kwargs)
 
     print("\n" + "=" * 80)
-    print("🔬 HE-300 BENCHMARK STREAMING DEBUG")
+    print(" HE-300 BENCHMARK STREAMING DEBUG")
     print("=" * 80)
     print(f"Mode: {'LIVE LLM' if args.live else 'MOCK LLM'}")
     print(f"Template: he-300-benchmark")

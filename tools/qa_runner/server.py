@@ -2,6 +2,17 @@
 API server management for QA testing.
 """
 
+# Windows cp1252 consoles raise UnicodeEncodeError on any non-ASCII glyph, which
+# takes the whole process down. main.py / cli.py / desktop_launcher already call
+# this; the QA runner never did, so it crashed on Windows CI before reaching a
+# single test — which is why this harness had never run there.
+try:
+    from ciris_engine.logic.utils import win_console as _win_console
+
+    _win_console.setup()
+except Exception:  # pragma: no cover - never let the shim stop the runner
+    pass
+
 import asyncio
 import hashlib
 import json
@@ -260,14 +271,14 @@ def _is_postgres_container_running() -> bool:
 def _start_postgres_container(console: Console) -> bool:
     """Start PostgreSQL container for QA testing."""
     if not _is_docker_available():
-        console.print("[red]❌ Docker not available - cannot start PostgreSQL[/red]")
+        console.print("[red][FAIL] Docker not available - cannot start PostgreSQL[/red]")
         return False
 
     if _is_postgres_container_running():
-        console.print("[green]✅ PostgreSQL container already running[/green]")
+        console.print("[green][OK] PostgreSQL container already running[/green]")
         return True
 
-    console.print("[cyan]🐘 Starting PostgreSQL container...[/cyan]")
+    console.print("[cyan] Starting PostgreSQL container...[/cyan]")
 
     # Check if container exists but is stopped
     try:
@@ -277,7 +288,7 @@ def _start_postgres_container(console: Console) -> bool:
         if result.stdout.strip():
             # Container exists, just start it
             subprocess.run(["docker", "start", POSTGRES_CONTAINER_NAME], capture_output=True, timeout=10)
-            console.print("[green]✅ Started existing PostgreSQL container[/green]")
+            console.print("[green][OK] Started existing PostgreSQL container[/green]")
         else:
             # Create and start new container
             subprocess.run(
@@ -300,9 +311,9 @@ def _start_postgres_container(console: Console) -> bool:
                 capture_output=True,
                 timeout=60,
             )
-            console.print("[green]✅ Created new PostgreSQL container[/green]")
+            console.print("[green][OK] Created new PostgreSQL container[/green]")
     except Exception as e:
-        console.print(f"[red]❌ Failed to start PostgreSQL: {e}[/red]")
+        console.print(f"[red][FAIL] Failed to start PostgreSQL: {e}[/red]")
         return False
 
     # Wait for PostgreSQL to be ready
@@ -315,16 +326,16 @@ def _start_postgres_container(console: Console) -> bool:
                 timeout=5,
             )
             if result.returncode == 0:
-                console.print("[green]✅ PostgreSQL is ready[/green]")
+                console.print("[green][OK] PostgreSQL is ready[/green]")
                 # Create derivative databases (_secrets, _auth)
                 if not _create_derivative_databases(console):
-                    console.print("[yellow]⚠️  Failed to create derivative databases, continuing anyway[/yellow]")
+                    console.print("[yellow][WARN] Failed to create derivative databases, continuing anyway[/yellow]")
                 return True
         except Exception:
             pass
         time.sleep(1)
 
-    console.print("[red]❌ PostgreSQL failed to become ready[/red]")
+    console.print("[red][FAIL] PostgreSQL failed to become ready[/red]")
     return False
 
 
@@ -351,11 +362,11 @@ def _create_derivative_databases(console: Console) -> bool:
             timeout=10,
         )
         if result.returncode == 0:
-            console.print("[green]✅ Created ciris_test_db_secrets[/green]")
+            console.print("[green][OK] Created ciris_test_db_secrets[/green]")
         elif "already exists" in result.stderr:
             console.print("[dim]ciris_test_db_secrets already exists[/dim]")
         else:
-            console.print(f"[yellow]⚠️  Could not create secrets db: {result.stderr}[/yellow]")
+            console.print(f"[yellow][WARN] Could not create secrets db: {result.stderr}[/yellow]")
 
         # Create ciris_test_db_auth
         result = subprocess.run(
@@ -376,27 +387,27 @@ def _create_derivative_databases(console: Console) -> bool:
             timeout=10,
         )
         if result.returncode == 0:
-            console.print("[green]✅ Created ciris_test_db_auth[/green]")
+            console.print("[green][OK] Created ciris_test_db_auth[/green]")
         elif "already exists" in result.stderr:
             console.print("[dim]ciris_test_db_auth already exists[/dim]")
         else:
-            console.print(f"[yellow]⚠️  Could not create auth db: {result.stderr}[/yellow]")
+            console.print(f"[yellow][WARN] Could not create auth db: {result.stderr}[/yellow]")
 
         return True
     except Exception as e:
-        console.print(f"[yellow]⚠️  Failed to create derivative databases: {e}[/yellow]")
+        console.print(f"[yellow][WARN] Failed to create derivative databases: {e}[/yellow]")
         return False
 
 
 def _stop_postgres_container(console: Console):
     """Stop PostgreSQL container."""
     if _is_postgres_container_running():
-        console.print("[cyan]🐘 Stopping PostgreSQL container...[/cyan]")
+        console.print("[cyan] Stopping PostgreSQL container...[/cyan]")
         try:
             subprocess.run(["docker", "stop", POSTGRES_CONTAINER_NAME], capture_output=True, timeout=15)
-            console.print("[green]✅ PostgreSQL container stopped[/green]")
+            console.print("[green][OK] PostgreSQL container stopped[/green]")
         except Exception as e:
-            console.print(f"[yellow]⚠️  Failed to stop PostgreSQL: {e}[/yellow]")
+            console.print(f"[yellow][WARN] Failed to stop PostgreSQL: {e}[/yellow]")
 
 
 def _wipe_postgres_databases(console: Console) -> bool:
@@ -411,10 +422,10 @@ def _wipe_postgres_databases(console: Console) -> bool:
         True if wipe succeeded, False otherwise
     """
     if not _is_postgres_container_running():
-        console.print("[yellow]⚠️  PostgreSQL container not running, nothing to wipe[/yellow]")
+        console.print("[yellow][WARN] PostgreSQL container not running, nothing to wipe[/yellow]")
         return True
 
-    console.print("[cyan]🧹 Wiping PostgreSQL databases for clean QA state...[/cyan]")
+    console.print("[cyan] Wiping PostgreSQL databases for clean QA state...[/cyan]")
 
     databases = ["ciris_test_db", "ciris_test_db_secrets", "ciris_test_db_auth"]
 
@@ -460,7 +471,7 @@ def _wipe_postgres_databases(console: Console) -> bool:
             )
 
             if result.returncode != 0 and "does not exist" not in result.stderr:
-                console.print(f"[yellow]⚠️  Could not drop {db_name}: {result.stderr}[/yellow]")
+                console.print(f"[yellow][WARN] Could not drop {db_name}: {result.stderr}[/yellow]")
 
             # Recreate the database
             result = subprocess.run(
@@ -482,18 +493,18 @@ def _wipe_postgres_databases(console: Console) -> bool:
             )
 
             if result.returncode == 0:
-                console.print(f"[green]✅ Wiped and recreated {db_name}[/green]")
+                console.print(f"[green][OK] Wiped and recreated {db_name}[/green]")
             elif "already exists" in result.stderr:
                 console.print(f"[dim]{db_name} already exists (drop may have failed)[/dim]")
             else:
-                console.print(f"[yellow]⚠️  Could not create {db_name}: {result.stderr}[/yellow]")
+                console.print(f"[yellow][WARN] Could not create {db_name}: {result.stderr}[/yellow]")
 
         except subprocess.TimeoutExpired:
-            console.print(f"[yellow]⚠️  Timeout wiping {db_name}[/yellow]")
+            console.print(f"[yellow][WARN] Timeout wiping {db_name}[/yellow]")
         except Exception as e:
-            console.print(f"[yellow]⚠️  Error wiping {db_name}: {e}[/yellow]")
+            console.print(f"[yellow][WARN] Error wiping {db_name}: {e}[/yellow]")
 
-    console.print("[green]✅ PostgreSQL databases wiped[/green]")
+    console.print("[green][OK] PostgreSQL databases wiped[/green]")
     return True
 
 
@@ -530,23 +541,23 @@ CIRIS_CONFIGURED=true
         current_content = env_path.read_text()
         # If using live mode but .env has CIRIS_MOCK_LLM=true, update it
         if not mock_llm and "CIRIS_MOCK_LLM=true" in current_content:
-            console.print("[cyan]📝 Updating .env for live LLM mode...[/cyan]")
+            console.print("[cyan] Updating .env for live LLM mode...[/cyan]")
             try:
                 env_path.write_text(expected_env)
-                console.print("[green]✅ Updated .env for live LLM[/green]")
+                console.print("[green][OK] Updated .env for live LLM[/green]")
             except Exception as e:
-                console.print(f"[red]❌ Failed to update .env: {e}[/red]")
+                console.print(f"[red][FAIL] Failed to update .env: {e}[/red]")
                 return False
         return True
 
-    console.print("[cyan]📝 Creating minimal .env for QA testing...[/cyan]")
+    console.print("[cyan] Creating minimal .env for QA testing...[/cyan]")
 
     try:
         env_path.write_text(expected_env)
-        console.print("[green]✅ Created minimal .env file[/green]")
+        console.print("[green][OK] Created minimal .env file[/green]")
         return True
     except Exception as e:
-        console.print(f"[red]❌ Failed to create .env: {e}[/red]")
+        console.print(f"[red][FAIL] Failed to create .env: {e}[/red]")
         return False
 
 
@@ -635,7 +646,7 @@ class APIServerManager:
                 )
             return True
         except Exception as e:
-            self.console.print(f"[yellow]⚠️  Could not clear wakeup state: {e}[/yellow]")
+            self.console.print(f"[yellow][WARN] Could not clear wakeup state: {e}[/yellow]")
             return True  # Continue anyway
 
     def _prune_lens_trace_dirs(self) -> None:
@@ -760,7 +771,7 @@ class APIServerManager:
 
         env["CIRIS_QA_CANONICAL_REACHABILITY"] = verdict
         line = f"[CANONICAL-REACHABILITY] target={target} verdict={verdict} {detail}"
-        self.console.print(f"[{'green' if verdict == 'reachable' else 'red'}]🔌 {line}[/]")
+        self.console.print(f"[{'green' if verdict == 'reachable' else 'red'}] {line}[/]")
         try:
             log_dir = Path(f"logs/{self.database_backend}")
             log_dir.mkdir(parents=True, exist_ok=True)
@@ -837,7 +848,7 @@ class APIServerManager:
         actual_path = loaded[-1]
         actual_id = Path(actual_path.rstrip(".,")).stem
         if actual_id == want:
-            self.console.print(f"[green]✅ Template VERIFIED in the running agent: {actual_id}[/green]")
+            self.console.print(f"[green][OK] Template VERIFIED in the running agent: {actual_id}[/green]")
             return True
 
         # Loud and specific: name what was asked for, what actually ran, and what
@@ -858,7 +869,7 @@ class APIServerManager:
         """Start the API server."""
         # Check if server is already running
         if self._is_server_running():
-            self.console.print("[yellow]⚠️  Server already running[/yellow]")
+            self.console.print("[yellow][WARN] Server already running[/yellow]")
             return True
 
         # For live mode, clear wakeup state for fresh 5-step wakeup
@@ -870,25 +881,25 @@ class APIServerManager:
 
         # Ensure minimal .env exists for QA testing (respects mock_llm setting)
         if not _ensure_env_file(self.console, mock_llm=self.config.mock_llm):
-            self.console.print("[red]❌ Failed to create .env - cannot proceed[/red]")
+            self.console.print("[red][FAIL] Failed to create .env - cannot proceed[/red]")
             return False
 
         # Auto-start PostgreSQL container if using postgres backend
         if self.database_backend == "postgres":
             if not _start_postgres_container(self.console):
-                self.console.print("[red]❌ Failed to start PostgreSQL - cannot proceed[/red]")
+                self.console.print("[red][FAIL] Failed to start PostgreSQL - cannot proceed[/red]")
                 return False
             # Wipe PostgreSQL databases if --wipe-data is set
             if self.config.wipe_data:
                 if not _wipe_postgres_databases(self.console):
-                    self.console.print("[yellow]⚠️  PostgreSQL wipe failed, continuing anyway[/yellow]")
+                    self.console.print("[yellow][WARN] PostgreSQL wipe failed, continuing anyway[/yellow]")
 
         # Start mock logshipper to receive accord traces (unless using live lens)
         if self.config.live_lens:
             self.console.print(
                 "[cyan]📡 Using LIVE Lens server: https://lens.ciris-services-1.ai/lens-api/api/v1[/cyan]"
             )
-            self.console.print("[cyan]📊 Enabling accord_metrics adapter for live trace capture[/cyan]")
+            self.console.print("[cyan] Enabling accord_metrics adapter for live trace capture[/cyan]")
             self.mock_logshipper = None
         else:
             # Per-backend port + per-backend output dir so parallel SQLITE
@@ -905,10 +916,10 @@ class APIServerManager:
                     f"→ qa_reports/{self.database_backend}/[/cyan]"
                 )
             else:
-                self.console.print("[yellow]⚠️  Could not start mock logshipper[/yellow]")
+                self.console.print("[yellow][WARN] Could not start mock logshipper[/yellow]")
                 self.mock_logshipper = None
 
-        self.console.print("[cyan]🚀 Starting API server...[/cyan]")
+        self.console.print("[cyan] Starting API server...[/cyan]")
 
         # Build command. When --from-staged is set, the server under test is
         # the wheel installed in the staged venv — that validates the SHIPPED
@@ -1011,21 +1022,21 @@ class APIServerManager:
             # Set model name using CIRIS_LLM_MODEL_NAME (read by service_initializer for all providers)
             if self.config.live_model:
                 env["CIRIS_LLM_MODEL_NAME"] = self.config.live_model
-                self.console.print(f"[cyan]🤖 Live LLM: model={self.config.live_model}[/cyan]")
+                self.console.print(f"[cyan] Live LLM: model={self.config.live_model}[/cyan]")
 
             if provider == "anthropic":
                 env["ANTHROPIC_API_KEY"] = self.config.live_api_key
-                self.console.print(f"[cyan]🔑 Live LLM: ANTHROPIC_API_KEY set (native Anthropic SDK)[/cyan]")
+                self.console.print(f"[cyan] Live LLM: ANTHROPIC_API_KEY set (native Anthropic SDK)[/cyan]")
             elif provider == "google":
                 env["GOOGLE_API_KEY"] = self.config.live_api_key
-                self.console.print(f"[cyan]🔑 Live LLM: GOOGLE_API_KEY set (native Google SDK)[/cyan]")
+                self.console.print(f"[cyan] Live LLM: GOOGLE_API_KEY set (native Google SDK)[/cyan]")
             else:
                 # OpenAI or OpenAI-compatible (Groq, OpenRouter, etc.)
                 env["OPENAI_API_KEY"] = self.config.live_api_key
-                self.console.print(f"[cyan]🔑 Live LLM: OPENAI_API_KEY set (overriding mock)[/cyan]")
+                self.console.print(f"[cyan] Live LLM: OPENAI_API_KEY set (overriding mock)[/cyan]")
                 if self.config.live_base_url:
                     env["OPENAI_API_BASE"] = self.config.live_base_url
-                    self.console.print(f"[cyan]🌐 Live LLM: OPENAI_API_BASE={self.config.live_base_url}[/cyan]")
+                    self.console.print(f"[cyan] Live LLM: OPENAI_API_BASE={self.config.live_base_url}[/cyan]")
 
         # Configure accord_metrics adapter to use mock logshipper
         if self.mock_logshipper:
@@ -1170,11 +1181,11 @@ class APIServerManager:
             # Increase A2A timeout for live LLM (default 60s is too short)
             a2a_timeout = "180" if self.config.live_api_key else "60"
             env["CIRIS_A2A_TIMEOUT"] = a2a_timeout
-            self.console.print("[cyan]🧪 HE-300 Benchmark Configuration:[/cyan]")
+            self.console.print("[cyan] HE-300 Benchmark Configuration:[/cyan]")
             self.console.print("[dim]   Template: he-300-benchmark (limited actions: speak, task_complete)[/dim]")
             self.console.print("[dim]   Benchmark Mode: ENABLED (EpistemicHumility conscience disabled)[/dim]")
             self.console.print(f"[dim]   A2A Timeout: {a2a_timeout}s[/dim]")
-        self.console.print(f"[cyan]📋 Template: {template_id}[/cyan] [dim](CIRIS_TEMPLATE + setup wizard)[/dim]")
+        self.console.print(f"[cyan] Template: {template_id}[/cyan] [dim](CIRIS_TEMPLATE + setup wizard)[/dim]")
         if is_benchmark:
             self.console.print(f"[dim]   Mock LLM: {self.config.mock_llm}[/dim]")
             self.console.print(f"[dim]   Live API Key: {'Set' if self.config.live_api_key else 'Not set'}[/dim]")
@@ -1387,9 +1398,9 @@ class APIServerManager:
                                 env[key] = value
                     self.console.print("[dim]Loaded Reddit credentials from ~/.ciris/reddit_secrets[/dim]")
                 except Exception as e:
-                    self.console.print(f"[yellow]⚠️  Failed to load Reddit secrets: {e}[/yellow]")
+                    self.console.print(f"[yellow][WARN] Failed to load Reddit secrets: {e}[/yellow]")
             else:
-                self.console.print(f"[yellow]⚠️  Reddit secrets file not found: {reddit_secrets_path}[/yellow]")
+                self.console.print(f"[yellow][WARN] Reddit secrets file not found: {reddit_secrets_path}[/yellow]")
 
         # Start server process
         try:
@@ -1399,9 +1410,9 @@ class APIServerManager:
             log_dir_path.mkdir(parents=True, exist_ok=True)
             console_log_path = str(log_dir_path / "console.log")
             self._console_log_path = console_log_path  # Store for reference in error messages
-            self.console.print(f"[dim]📝 Console log: {console_log_path}[/dim]")
-            self.console.print(f"[dim]📝 CIRIS log: logs/{self.database_backend}/latest.log[/dim]")
-            self.console.print(f"[dim]🚀 Command: {' '.join(cmd)}[/dim]")
+            self.console.print(f"[dim] Console log: {console_log_path}[/dim]")
+            self.console.print(f"[dim] CIRIS log: logs/{self.database_backend}/latest.log[/dim]")
+            self.console.print(f"[dim] Command: {' '.join(cmd)}[/dim]")
 
             # Use PTY for stdout - the Rust FFI code crashes when stdout is not a TTY
             # This is a workaround for a bug in ciris_verify_ffi. Windows has no
@@ -1459,22 +1470,22 @@ class APIServerManager:
 
             # Wait for server to be ready
             if self._wait_for_server():
-                self.console.print("[green]✅ API server started successfully[/green]")
+                self.console.print("[green][OK] API server started successfully[/green]")
                 self._verify_template_took_effect()
                 return True
             else:
-                self.console.print("[red]❌ Server failed to start[/red]")
+                self.console.print("[red][FAIL] Server failed to start[/red]")
                 self.stop()
                 return False
 
         except Exception as e:
-            self.console.print(f"[red]❌ Error starting server: {e}[/red]")
+            self.console.print(f"[red][FAIL] Error starting server: {e}[/red]")
             return False
 
     def stop(self):
         """Stop the API server."""
         if self.process:
-            self.console.print("[cyan]🛑 Stopping API server...[/cyan]")
+            self.console.print("[cyan] Stopping API server...[/cyan]")
 
             try:
                 # Try graceful shutdown first
@@ -1483,11 +1494,11 @@ class APIServerManager:
                 # Wait up to 15 seconds for graceful shutdown (agent needs time for shutdown state processing)
                 try:
                     self.process.wait(timeout=15)
-                    self.console.print("[green]✅ Server stopped gracefully[/green]")
+                    self.console.print("[green][OK] Server stopped gracefully[/green]")
                 except subprocess.TimeoutExpired:
                     # Force kill if needed
                     self.process.kill()
-                    self.console.print("[yellow]⚠️  Server force killed[/yellow]")
+                    self.console.print("[yellow][WARN] Server force killed[/yellow]")
 
                 self.process = None
                 self.pid = None
@@ -1514,7 +1525,7 @@ class APIServerManager:
             received = self.mock_logshipper.get_received_traces()
             self.mock_logshipper.stop()
             if received:
-                self.console.print(f"[green]📥 Mock logshipper received {len(received)} traces:[/green]")
+                self.console.print(f"[green] Mock logshipper received {len(received)} traces:[/green]")
                 for trace in received:
                     self.console.print(f"   • {trace['task_name']}: {trace['filepath']}")
             self.mock_logshipper = None
@@ -1646,10 +1657,10 @@ class APIServerManager:
             match = re.search(r"Password:\s*(\S+)", content)
             if match:
                 password = match.group(1)
-                self.console.print(f"[dim]🔑 Extracted dynamic admin password from console log[/dim]")
+                self.console.print(f"[dim] Extracted dynamic admin password from console log[/dim]")
                 return password
         except Exception as e:
-            self.console.print(f"[yellow]⚠️  Could not extract password from log: {e}[/yellow]")
+            self.console.print(f"[yellow][WARN] Could not extract password from log: {e}[/yellow]")
 
         return None
 
@@ -1670,7 +1681,7 @@ class APIServerManager:
         This is called when --wipe-data is used to create a known test user
         before attempting authentication.
         """
-        self.console.print("[cyan]🔧 Completing setup to create test user...[/cyan]")
+        self.console.print("[cyan] Completing setup to create test user...[/cyan]")
 
         # Use the config's admin credentials and LLM settings
         # When in live mode, use the real API key; otherwise use a placeholder
@@ -1713,7 +1724,7 @@ class APIServerManager:
                 timeout=30,
             )
             if response.status_code == 200:
-                self.console.print("[green]✅ Setup completed, test user created[/green]")
+                self.console.print("[green][OK] Setup completed, test user created[/green]")
                 try:
                     response_json = response.json()
                     message = response_json.get("data", {}).get("message")
@@ -1728,11 +1739,11 @@ class APIServerManager:
                 self._extracted_password = setup_payload["admin_password"]
                 return True
             else:
-                self.console.print(f"[red]❌ Setup failed: {response.status_code} - {response.text[:200]}[/red]")
+                self.console.print(f"[red][FAIL] Setup failed: {response.status_code} - {response.text[:200]}[/red]")
                 self._report_first_run_diagnostics("setup-complete failed")
                 return False
         except Exception as e:
-            self.console.print(f"[red]❌ Setup error: {e}[/red]")
+            self.console.print(f"[red][FAIL] Setup error: {e}[/red]")
             self._report_first_run_diagnostics("setup-complete request raised exception")
             return False
 
@@ -1750,7 +1761,7 @@ class APIServerManager:
 
     def _report_first_run_diagnostics(self, reason: str, token: Optional[str] = None) -> None:
         """Emit setup/runtime diagnostics when first-run bootstrap gets stuck."""
-        self.console.print(f"[yellow]🔎 First-run diagnostics: {reason}[/yellow]")
+        self.console.print(f"[yellow] First-run diagnostics: {reason}[/yellow]")
 
         setup_status = self._fetch_json("/v1/setup/status")
         if setup_status:
@@ -1843,8 +1854,8 @@ class APIServerManager:
                         error_output = f.read()
                 except Exception:
                     pass
-                self.console.print(f"[red]❌ Server process died (exit code: {exit_code})[/red]")
-                self.console.print(f"[yellow]🔍 Troubleshooting info:[/yellow]")
+                self.console.print(f"[red][FAIL] Server process died (exit code: {exit_code})[/red]")
+                self.console.print(f"[yellow] Troubleshooting info:[/yellow]")
                 self.console.print(f"[dim]   Console log: {console_log_path}[/dim]")
                 self.console.print(f"[dim]   CIRIS log: logs/{self.database_backend}/latest.log[/dim]")
                 self.console.print(f"[dim]   Incidents: logs/{self.database_backend}/incidents_latest.log[/dim]")
@@ -1895,7 +1906,7 @@ class APIServerManager:
         # the agent processor to advertise WORK before they can proceed, but
         # they still need the setup wizard completed so authentication works.
         if QAModule.SETUP in self.modules or QAModule.HOMEASSISTANT_AGENTIC in self.modules:
-            self.console.print("[green]✅ Server ready for first-run/API configuration tests[/green]")
+            self.console.print("[green][OK] Server ready for first-run/API configuration tests[/green]")
             return True
 
         # Now wait for agent to reach WORK state
@@ -1930,7 +1941,7 @@ class APIServerManager:
                     )
 
                     if is_work:
-                        self.console.print(f"[green]✅ Agent reached WORK state[/green]")
+                        self.console.print(f"[green][OK] Agent reached WORK state[/green]")
                         return True
 
                     # Show current state (clear the line properly)
@@ -1947,7 +1958,7 @@ class APIServerManager:
 
             time.sleep(1)
 
-        self.console.print("[yellow]⚠️  Agent did not reach WORK state in time[/yellow]")
+        self.console.print("[yellow][WARN] Agent did not reach WORK state in time[/yellow]")
         self._report_first_run_diagnostics("agent never reached WORK", token=token)
         return False
 
@@ -1983,6 +1994,6 @@ class APIServerManager:
                         except:
                             pass
         except TimeoutError:
-            self.console.print("[yellow]⚠️  Port cleanup timed out[/yellow]")
+            self.console.print("[yellow][WARN] Port cleanup timed out[/yellow]")
         except:
             pass

@@ -173,7 +173,7 @@ def validate_and_delete(start_time, end_time):
             print(f"  Actual count in database: {actual_count:,}")
 
             if claimed_count == actual_count:
-                print("  ✓ Counts match! Deleting...")
+                print(" [OK] Counts match! Deleting...")
                 cursor.execute(
                     """
                     DELETE FROM graph_nodes
@@ -188,7 +188,7 @@ def validate_and_delete(start_time, end_time):
                 deletion_summary["tsdb_data"] = deleted
                 total_deleted += deleted
             else:
-                print("  ✗ COUNT MISMATCH! Not deleting.")
+                print(" [FAIL] COUNT MISMATCH! Not deleting.")
 
         elif node_type == "audit_summary":
             claimed_count = attrs.get("source_node_count", 0)
@@ -208,7 +208,7 @@ def validate_and_delete(start_time, end_time):
             print(f"  Actual count in database: {actual_count:,}")
 
             if claimed_count == actual_count:
-                print("  ✓ Counts match! Deleting...")
+                print(" [OK] Counts match! Deleting...")
                 cursor.execute(
                     """
                     DELETE FROM graph_nodes
@@ -223,7 +223,7 @@ def validate_and_delete(start_time, end_time):
                 deletion_summary["audit_entry"] = deleted
                 total_deleted += deleted
             else:
-                print("  ✗ COUNT MISMATCH! Not deleting.")
+                print(" [FAIL] COUNT MISMATCH! Not deleting.")
 
         elif node_type == "trace_summary":
             # Delete service correlations (in same database)
@@ -243,7 +243,7 @@ def validate_and_delete(start_time, end_time):
             print(f"  Actual count in database: {actual_count:,}")
 
             if claimed_count == actual_count:
-                print("  ✓ Counts match! Deleting...")
+                print(" [OK] Counts match! Deleting...")
                 cursor.execute(
                     """
                     DELETE FROM service_correlations
@@ -257,7 +257,7 @@ def validate_and_delete(start_time, end_time):
                 deletion_summary["service_correlations"] = deleted
                 total_deleted += deleted
             else:
-                print("  ✗ COUNT MISMATCH! Not deleting.")
+                print(" [FAIL] COUNT MISMATCH! Not deleting.")
 
     conn.commit()
     conn.close()

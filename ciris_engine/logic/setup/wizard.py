@@ -55,7 +55,7 @@ def prompt_llm_configuration() -> tuple[str, str, str, str]:
         print()
         api_key = input("Enter your OpenAI API key (or press Enter to skip): ").strip()
         if not api_key:
-            print("⚠️  No API key provided. You'll need to add it to .env later.")
+            print("[WARN] No API key provided. You'll need to add it to .env later.")
             api_key = "your_openai_api_key_here"
         return ("openai", api_key, "", "")
 
@@ -95,17 +95,17 @@ def prompt_llm_configuration() -> tuple[str, str, str, str]:
 
         base_url = input("Enter API base URL: ").strip()
         if not base_url:
-            print("❌ Base URL required for custom providers")
+            print("[FAIL] Base URL required for custom providers")
             sys.exit(1)
 
         model = input("Enter model name: ").strip()
         if not model:
-            print("❌ Model name required")
+            print("[FAIL] Model name required")
             sys.exit(1)
 
         api_key = input("Enter API key: ").strip()
         if not api_key:
-            print("❌ API key required for commercial providers")
+            print("[FAIL] API key required for commercial providers")
             sys.exit(1)
 
         return ("other", api_key, base_url, model)
@@ -464,7 +464,7 @@ def run_setup_wizard() -> Path:
 
     # Check if config already exists
     if config_path.exists():
-        print(f"⚠️  Configuration already exists at: {config_path}")
+        print(f"[WARN] Configuration already exists at: {config_path}")
         overwrite = input("Overwrite? [y/N] ").strip().lower()
         if overwrite not in ("y", "yes"):
             print("Setup cancelled. Using existing configuration.")
@@ -500,22 +500,22 @@ def run_setup_wizard() -> Path:
 
     print()
     print("=" * 70)
-    print("✅ SETUP COMPLETE")
+    print("[OK] SETUP COMPLETE")
     print("=" * 70)
     print()
     print(f"Configuration saved to: {save_path}")
     print()
 
     if llm_api_key in ("your_openai_api_key_here", ""):
-        print("⚠️  Remember to add your LLM API key to the .env file!")
+        print("[WARN] Remember to add your LLM API key to the .env file!")
         print()
 
     print("Starting CIRIS Agent...")
     print()
     print("Once started, you can access:")
-    print("  🌐 Web Interface: http://localhost:8080")
-    print("  📡 API Endpoint:  http://localhost:8080/v1/")
-    print("  📚 API Docs:      http://localhost:8080/docs")
+    print(" Web Interface: http://localhost:8080")
+    print(" API Endpoint: http://localhost:8080/v1/")
+    print(" API Docs: http://localhost:8080/docs")
     print()
     print("Log in with the credentials you set during setup.")
     print()

@@ -34,6 +34,17 @@ Examples:
     python -m tools.qa_runner.modules.mobile build --platform ios --simulator
 """
 
+# Windows cp1252 consoles raise UnicodeEncodeError on any non-ASCII glyph, which
+# takes the whole process down. main.py / cli.py / desktop_launcher already call
+# this; the QA runner never did, so it crashed on Windows CI before reaching a
+# single test — which is why this harness had never run there.
+try:
+    from ciris_engine.logic.utils import win_console as _win_console
+
+    _win_console.setup()
+except Exception:  # pragma: no cover - never let the shim stop the runner
+    pass
+
 import os
 import sys
 import time

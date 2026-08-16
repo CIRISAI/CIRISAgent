@@ -48,7 +48,7 @@ class TestRunner:
         """
         # Check if already running
         if self.is_running():
-            print("⚠️  Tests already running. Use 'status' to check or 'stop' to cancel.")
+            print("[WARN] Tests already running. Use 'status' to check or 'stop' to cancel.")
             return ""
 
         # Docker manager
@@ -58,9 +58,9 @@ class TestRunner:
         if rebuild:
             success, message = docker.rebuild_container()
             if not success:
-                print(f"❌ {message}")
+                print(f"[FAIL] {message}")
                 return ""
-            print(f"✅ {message}")
+            print(f"[OK] {message}")
 
         # Generate run ID
         run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -95,7 +95,7 @@ class TestRunner:
         with open(STATUS_FILE, "w") as f:
             json.dump(status, f, indent=2)
 
-        print(f"✅ Test run started: {run_id}")
+        print(f"[OK] Test run started: {run_id}")
         print(f"   Output: {output_file}")
         print(f"   Command: {pytest_cmd}")
         if test_path:
@@ -129,7 +129,7 @@ class TestRunner:
     def show_status(self):
         """Show current test run status."""
         if not STATUS_FILE.exists():
-            print("❌ No test run found")
+            print("[FAIL] No test run found")
             return
 
         with open(STATUS_FILE, "r") as f:
@@ -142,7 +142,7 @@ class TestRunner:
         print(f"Started: {status['start_time']}")
 
         if self.is_running():
-            print("Status: 🟢 Running")
+            print("Status: Running")
         else:
             # Parse log file to determine success/failure
             if output_file.exists():
@@ -150,11 +150,11 @@ class TestRunner:
                 results = parser.parse_test_results()
                 failed = len([r for r in results if r.status in ("FAILED", "ERROR")])
                 if failed > 0:
-                    print("Status: 🔴 Completed - FAILED")
+                    print("Status: Completed - FAILED")
                 else:
-                    print("Status: ✅ Completed - SUCCESS")
+                    print("Status: [OK] Completed - SUCCESS")
             else:
-                print("Status: ⚠️ Completed - UNKNOWN")
+                print("Status: [WARN] Completed - UNKNOWN")
 
         # Parse log file for test counts
         if output_file.exists():
@@ -182,7 +182,7 @@ class TestRunner:
             errors_only: Only show failures and errors with context
         """
         if not STATUS_FILE.exists():
-            print("❌ No test run found")
+            print("[FAIL] No test run found")
             return
 
         with open(STATUS_FILE, "r") as f:
@@ -190,7 +190,7 @@ class TestRunner:
 
         output_file = Path(status["output_file"])
         if not output_file.exists():
-            print("❌ Output file not found")
+            print("[FAIL] Output file not found")
             return
 
         parser = LogParser(output_file)
@@ -198,7 +198,7 @@ class TestRunner:
         if errors_only:
             errors = parser.parse_errors()
             if not errors:
-                print("✅ No errors found!")
+                print("[OK] No errors found!")
                 return
 
             print(f"Found {len(errors)} errors:\n")
@@ -229,19 +229,19 @@ class TestRunner:
     def stop(self):
         """Stop the current test run."""
         if not self.is_running():
-            print("❌ No test running")
+            print("[FAIL] No test running")
             return
 
         docker = DockerManager()
         if docker.stop_container(CONTAINER_NAME):
-            print("✅ Test run stopped")
+            print("[OK] Test run stopped")
         else:
-            print("❌ Failed to stop test run")
+            print("[FAIL] Failed to stop test run")
 
     def results(self):
         """Show test results summary."""
         if not STATUS_FILE.exists():
-            print("❌ No test run found")
+            print("[FAIL] No test run found")
             return
 
         with open(STATUS_FILE, "r") as f:
@@ -249,7 +249,7 @@ class TestRunner:
 
         output_file = Path(status["output_file"])
         if not output_file.exists():
-            print("❌ Output file not found")
+            print("[FAIL] Output file not found")
             return
 
         parser = LogParser(output_file)
@@ -259,9 +259,9 @@ class TestRunner:
         print(f"Command: {status['command']}")
         print("=" * 70)
         print(f"Total Tests: {summary['total']}")
-        print(f"Passed: {summary['passed']} ✅")
-        print(f"Failed: {summary['failed']} ❌")
-        print(f"Skipped: {summary['skipped']} ⏭️")
+        print(f"Passed: {summary['passed']} [OK]")
+        print(f"Failed: {summary['failed']} [FAIL]")
+        print(f"Skipped: {summary['skipped']} ⏭")
 
         if summary["coverage"] is not None:
             print(f"\nCoverage: {summary['coverage']}%")
@@ -269,7 +269,7 @@ class TestRunner:
         if summary["failed_tests"]:
             print("\nFailed Tests:")
             for test in summary["failed_tests"]:
-                print(f"  ❌ {test}")
+                print(f" [FAIL] {test}")
 
     def run_single_test(
         self, test_path: str, coverage: bool = False, coverage_path: Optional[str] = None, rebuild: bool = True

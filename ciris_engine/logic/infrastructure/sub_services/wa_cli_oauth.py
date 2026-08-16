@@ -74,18 +74,18 @@ class WACLIOAuthService:
             self.oauth_config_file.write_text(json.dumps(config, indent=2))
             self.oauth_config_file.chmod(0o600)
 
-            self.console.print(f"✅ OAuth provider '{provider}' configured!")
-            self.console.print(f"📁 Config saved to: [bold]{self.oauth_config_file}[/bold]")
+            self.console.print(f"[OK] OAuth provider '{provider}' configured!")
+            self.console.print(f" Config saved to: [bold]{self.oauth_config_file}[/bold]")
 
             # Show callback URL
             callback_url = f"http://localhost:8080/v1/auth/oauth/{provider}/callback"
-            self.console.print(f"🔗 Callback URL: [bold]{callback_url}[/bold]")
+            self.console.print(f" Callback URL: [bold]{callback_url}[/bold]")
             self.console.print(f"\nRun [bold]ciris wa oauth-login {provider}[/bold] to authenticate.")
 
             return OAuthOperationResult(status="success", provider=provider, callback_url=callback_url)
 
         except Exception as e:
-            self.console.print(f"❌ Error configuring OAuth: {e}")
+            self.console.print(f"[FAIL] Error configuring OAuth: {e}")
             return OAuthOperationResult(status="error", error=str(e))
 
     async def oauth_login(self, provider: str) -> OAuthLoginResult:
@@ -122,7 +122,7 @@ class WACLIOAuthService:
             await self._start_oauth_callback_server(8080)
 
             # Open browser
-            self.console.print(f"🌐 Opening browser for {provider} authentication...")
+            self.console.print(f" Opening browser for {provider} authentication...")
             webbrowser.open(auth_url)
 
             # Wait for callback
@@ -143,12 +143,12 @@ class WACLIOAuthService:
             # Exchange code for token and create WA
             result = await self._exchange_oauth_code(provider, callback_data, provider_config)
 
-            self.console.print("✅ OAuth login successful!")
+            self.console.print("[OK] OAuth login successful!")
 
             return result
 
         except Exception as e:
-            self.console.print(f"❌ OAuth login error: {e}")
+            self.console.print(f"[FAIL] OAuth login error: {e}")
             return OAuthLoginResult(status="error", provider=provider, error=str(e))
 
     async def _exchange_oauth_code(

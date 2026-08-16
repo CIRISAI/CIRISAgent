@@ -186,10 +186,10 @@ def setup_basic_logging(
     # Print to stdout regardless of console_output setting
     if log_to_file and not console_output:
         print("\n" + "=" * 80)
-        print(f"🔍 LOGGING INITIALIZED - SEE DETAILED LOGS AT: {log_filename}")
-        print(f"🔗 Symlinked to: {latest_link}")
+        print(f" LOGGING INITIALIZED - SEE DETAILED LOGS AT: {log_filename}")
+        print(f" Symlinked to: {latest_link}")
         if enable_incident_capture:
-            print(f"⚠️  Incident capture: {log_dir}/incidents_latest.log (WARNING/ERROR messages captured as incidents)")
+            print(f"[WARN] Incident capture: {log_dir}/incidents_latest.log (WARNING/ERROR messages captured as incidents)")
         print("=" * 80 + "\n")
         sys.stdout.flush()
 

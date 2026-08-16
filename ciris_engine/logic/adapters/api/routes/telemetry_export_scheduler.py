@@ -80,7 +80,7 @@ class TelemetryExportScheduler:
             return
 
         logger.info("=" * 60)
-        logger.info("🚀 TELEMETRY EXPORT SCHEDULER STARTING")
+        logger.info(" TELEMETRY EXPORT SCHEDULER STARTING")
         logger.info(f"   Check interval: {self._check_interval}s")
         logger.info("=" * 60)
 
@@ -90,7 +90,7 @@ class TelemetryExportScheduler:
 
     async def stop(self) -> None:
         """Stop the export scheduler."""
-        logger.info("🛑 TELEMETRY EXPORT SCHEDULER STOPPING")
+        logger.info(" TELEMETRY EXPORT SCHEDULER STOPPING")
 
         self._running = False
 
@@ -107,7 +107,7 @@ class TelemetryExportScheduler:
             await self._client.aclose()
             self._client = None
 
-        logger.info(f"📊 Export stats: {self._pushes_success}/{self._pushes_total} successful")
+        logger.info(f" Export stats: {self._pushes_success}/{self._pushes_total} successful")
 
     async def _scheduler_loop(self) -> None:
         """Main scheduler loop - checks destinations and pushes when due."""
@@ -170,7 +170,7 @@ class TelemetryExportScheduler:
             logger.warning(f"Destination {dest_name} has no endpoint configured")
             return
 
-        logger.info(f"📤 Pushing to {dest_name} ({format_type}): {signals}")
+        logger.info(f" Pushing to {dest_name} ({format_type}): {signals}")
         self._pushes_total += 1
 
         try:
@@ -182,11 +182,11 @@ class TelemetryExportScheduler:
                 await self._push_signal(dest, signal, format_type, headers, endpoint)
 
             self._pushes_success += 1
-            logger.info(f"✅ Push to {dest_name} successful")
+            logger.info(f"[OK] Push to {dest_name} successful")
 
         except Exception as e:
             self._pushes_failed += 1
-            logger.error(f"❌ Push to {dest_name} failed: {e}")
+            logger.error(f"[FAIL] Push to {dest_name} failed: {e}")
 
     def _build_headers(self, dest: Dict[str, Any]) -> Dict[str, str]:
         """Build HTTP headers including authentication."""

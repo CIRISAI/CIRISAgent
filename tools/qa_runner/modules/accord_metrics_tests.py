@@ -388,7 +388,7 @@ class AccordMetricsTests:
                         "error": str(e),
                     }
                 )
-                self.console.print(f"  [red]❌ FAIL[/red] {name}: {e}")
+                self.console.print(f" [red][FAIL] FAIL[/red] {name}: {e}")
 
         return self.results
 

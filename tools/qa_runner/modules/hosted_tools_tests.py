@@ -478,7 +478,7 @@ class HostedToolsTests:
             except Exception as e:
                 self.console.print(f"     [yellow]Warning: Failed to unload adapter: {e}[/yellow]")
 
-            self.console.print("[green]✅ Cleanup complete[/green]")
+            self.console.print("[green][OK] Cleanup complete[/green]")
 
         except Exception as e:
-            self.console.print(f"[yellow]⚠️  Cleanup warning: {e}[/yellow]")
+            self.console.print(f"[yellow][WARN] Cleanup warning: {e}[/yellow]")

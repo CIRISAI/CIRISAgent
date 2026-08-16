@@ -248,12 +248,12 @@ class SimpleTelemetryAnalyzer:
         total = self.analyze()
 
         print("\n" + "=" * 80)
-        print("📊 CIRIS v1.4.3 METRIC SOURCE TYPES - RIGOROUS COUNT")
+        print(" CIRIS v1.4.3 METRIC SOURCE TYPES - RIGOROUS COUNT")
         print("=" * 80)
         print(f"Generated: {datetime.now().isoformat()}\n")
 
         # CRITICAL CLARIFICATION
-        print("⚠️  CRITICAL UNDERSTANDING:")
+        print("[WARN] CRITICAL UNDERSTANDING:")
         print("-" * 60)
         print("• This counts SOURCE TYPES, not instances")
         print("• Adapters can have MULTIPLE runtime instances:")
@@ -296,7 +296,7 @@ class SimpleTelemetryAnalyzer:
             "Other",
         ]
 
-        print("\n🔍 DETAILED BREAKDOWN BY CATEGORY:")
+        print("\n DETAILED BREAKDOWN BY CATEGORY:")
         print("=" * 80)
 
         # Track which are real sources
@@ -338,7 +338,7 @@ class SimpleTelemetryAnalyzer:
                 print(f"  • {source['name']:35} [{methods}]")
 
         # Identify duplicates or confusion
-        print("\n\n🔄 DUPLICATE/CONFUSION ANALYSIS:")
+        print("\n\n DUPLICATE/CONFUSION ANALYSIS:")
         print("=" * 80)
 
         # Check for TimeService duplication
@@ -349,7 +349,7 @@ class SimpleTelemetryAnalyzer:
                     time_service_locations.append((category, source["path"]))
 
         if len(time_service_locations) > 1:
-            print("⚠️  TimeService found in multiple categories:")
+            print("[WARN] TimeService found in multiple categories:")
             for cat, path in time_service_locations:
                 print(f"   - {cat}: {path}")
 
@@ -361,20 +361,20 @@ class SimpleTelemetryAnalyzer:
                     secrets_services.append((source["name"], category))
 
         if len(secrets_services) > 1:
-            print("\n⚠️  Multiple Secrets-related services:")
+            print("\n[WARN] Multiple Secrets-related services:")
             for name, cat in secrets_services:
                 print(f"   - {name} in {cat}")
 
         # Print adapter instance notes
         if self.instance_vs_type_notes:
-            print("\n\n📝 ADAPTER INSTANCE VS TYPE NOTES:")
+            print("\n\n ADAPTER INSTANCE VS TYPE NOTES:")
             print("=" * 80)
             for note in set(self.instance_vs_type_notes):
                 print(f"• {note}")
 
         # Print final summary
         print("\n\n" + "=" * 80)
-        print("🎯 THE DEFINITIVE ANSWER:")
+        print(" THE DEFINITIVE ANSWER:")
         print("-" * 60)
         print(f"  Total Files Analyzed:        {sum(category_totals.values())}")
         print(f"  All Unique Class Names:      {len(all_sources)}")
@@ -390,11 +390,11 @@ class SimpleTelemetryAnalyzer:
         print("\n  Excluded from count:")
         for category in category_order:
             if category not in real_source_categories and category in category_totals:
-                print(f"    ❌ {category:25} {category_totals[category]:2} files")
+                print(f" [FAIL] {category:25} {category_totals[category]:2} files")
 
         print("\n" + "=" * 80)
-        print(f"  ✅ CIRIS v1.4.3 has {len(true_sources)} unique metric SOURCE TYPES")
-        print("  📌 These TYPES can spawn multiple INSTANCES at runtime")
+        print(f" [OK] CIRIS v1.4.3 has {len(true_sources)} unique metric SOURCE TYPES")
+        print(" These TYPES can spawn multiple INSTANCES at runtime")
         print("=" * 80)
 
 

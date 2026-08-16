@@ -716,7 +716,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
             old_configs = await self.config_service.list_configs(prefix="adapter.ciris_covenant_metrics.")
             if old_configs:
                 logger.warning("=" * 70)
-                logger.warning("⚠️  LEGACY CONFIG DETECTED: ciris_covenant_metrics")
+                logger.warning("[WARN] LEGACY CONFIG DETECTED: ciris_covenant_metrics")
                 logger.warning("   This adapter was renamed to ciris_accord_metrics in CIRIS 2.0.2")
                 logger.warning("   Please reconfigure the adapter through the setup wizard or update")
                 logger.warning("   your .env file to use CIRIS_ACCORD_METRICS_* environment variables.")

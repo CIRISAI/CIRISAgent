@@ -133,11 +133,11 @@ class LicensedAgentTests:
                     }
                 )
                 if success:
-                    self.console.print(f"  [green]✅ PASS[/green] {name}")
+                    self.console.print(f" [green][OK] PASS[/green] {name}")
                     if message:
                         self.console.print(f"     [dim]{message}[/dim]")
                 else:
-                    self.console.print(f"  [red]❌ FAIL[/red] {name}: {message}")
+                    self.console.print(f" [red][FAIL] FAIL[/red] {name}: {message}")
             except Exception as e:
                 logger.error(f"Error in {name}: {e}")
                 self.results.append(
@@ -147,7 +147,7 @@ class LicensedAgentTests:
                         "error": str(e),
                     }
                 )
-                self.console.print(f"  [red]❌ FAIL[/red] {name}: {e}")
+                self.console.print(f" [red][FAIL] FAIL[/red] {name}: {e}")
 
         return self.results
 

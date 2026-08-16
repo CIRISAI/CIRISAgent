@@ -27,12 +27,12 @@ class SchemaAlignmentFixer:
 
     def propose_schema_fixes(self) -> Dict[str, Any]:
         """Propose schema alignment fixes for agent review."""
-        logger.info("🔍 Analyzing schema alignment issues for agent review...")
+        logger.info(" Analyzing schema alignment issues for agent review...")
         return {"total_proposed": 0, "changes": []}  # Stub for now
 
     def apply_approved_fixes(self, approved_changes: Dict[str, Any]) -> int:
         """Apply agent-approved schema fixes."""
-        logger.info("🎯 Applying agent-approved schema fixes...")
+        logger.info(" Applying agent-approved schema fixes...")
         return 0  # Stub for now
 
     def _fix_schema_imports(self) -> int:

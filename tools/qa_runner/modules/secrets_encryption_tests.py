@@ -36,7 +36,7 @@ class SecretsEncryptionTests:
 
     async def run(self) -> List[Dict[str, Any]]:
         """Run all secrets encryption tests."""
-        self.console.print("\n[cyan]🔐 Testing Secrets Encryption (CIRISVerify v1.6.0+)[/cyan]")
+        self.console.print("\n[cyan] Testing Secrets Encryption (CIRISVerify v1.6.0+)[/cyan]")
 
         tests = [
             ("Get CIRISVerify Status", self.test_verify_status),
@@ -51,10 +51,10 @@ class SecretsEncryptionTests:
             try:
                 await test_func()
                 self.results.append({"test": name, "status": "PASS", "error": None})
-                self.console.print(f"  [green]✓[/green] {name}")
+                self.console.print(f" [green][OK][/green] {name}")
             except Exception as e:
                 self.results.append({"test": name, "status": "FAIL", "error": str(e)})
-                self.console.print(f"  [red]✗[/red] {name}: {str(e)[:100]}")
+                self.console.print(f" [red][FAIL][/red] {name}: {str(e)[:100]}")
                 if self.console.is_terminal:
                     self.console.print(f"     [dim]{traceback.format_exc()[:500]}[/dim]")
 

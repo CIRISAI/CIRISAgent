@@ -36,7 +36,7 @@ def create_databases(main_db, db_user, superuser, superuser_password, host="loca
         conn.autocommit = True
         cursor = conn.cursor()
 
-        print("✓ Connected to PostgreSQL")
+        print("[OK] Connected to PostgreSQL")
 
         # Check if databases exist
         cursor.execute("SELECT datname FROM pg_database WHERE datname IN (%s, %s, %s)", (main_db, secrets_db, auth_db))
@@ -48,9 +48,9 @@ def create_databases(main_db, db_user, superuser, superuser_password, host="loca
             cursor.execute(
                 sql.SQL("CREATE DATABASE {} OWNER {}").format(sql.Identifier(main_db), sql.Identifier(db_user))
             )
-            print(f"✓ Created {main_db}")
+            print(f"[OK] Created {main_db}")
         else:
-            print(f"✓ Main database {main_db} already exists")
+            print(f"[OK] Main database {main_db} already exists")
 
         # Create secrets database
         if secrets_db not in existing:
@@ -58,9 +58,9 @@ def create_databases(main_db, db_user, superuser, superuser_password, host="loca
             cursor.execute(
                 sql.SQL("CREATE DATABASE {} OWNER {}").format(sql.Identifier(secrets_db), sql.Identifier(db_user))
             )
-            print(f"✓ Created {secrets_db}")
+            print(f"[OK] Created {secrets_db}")
         else:
-            print(f"✓ Secrets database {secrets_db} already exists")
+            print(f"[OK] Secrets database {secrets_db} already exists")
 
         # Create auth database
         if auth_db not in existing:
@@ -68,15 +68,15 @@ def create_databases(main_db, db_user, superuser, superuser_password, host="loca
             cursor.execute(
                 sql.SQL("CREATE DATABASE {} OWNER {}").format(sql.Identifier(auth_db), sql.Identifier(db_user))
             )
-            print(f"✓ Created {auth_db}")
+            print(f"[OK] Created {auth_db}")
         else:
-            print(f"✓ Auth database {auth_db} already exists")
+            print(f"[OK] Auth database {auth_db} already exists")
 
         cursor.close()
         conn.close()
 
         print()
-        print("✓ All databases ready!")
+        print("[OK] All databases ready!")
         print()
         print(f"Connection string: postgresql://{db_user}:<password>@{host}:{port}/{main_db}")
         print()
@@ -84,7 +84,7 @@ def create_databases(main_db, db_user, superuser, superuser_password, host="loca
         return True
 
     except psycopg2.Error as e:
-        print(f"✗ Error: {e}")
+        print(f"[FAIL] Error: {e}")
         return False
 
 

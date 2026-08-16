@@ -37,7 +37,7 @@ class TypeAnnotationFixer:
 
     def propose_type_fixes(self) -> Dict[str, Any]:
         """AGGRESSIVE mode: Analyze ALL type annotation issues with comprehensive fixes."""
-        logger.info("🔍 AGGRESSIVE ANALYSIS: Comprehensive type annotation fixes for 100% cleanliness...")
+        logger.info(" AGGRESSIVE ANALYSIS: Comprehensive type annotation fixes for 100% cleanliness...")
 
         proposals = []
 
@@ -67,7 +67,7 @@ class TypeAnnotationFixer:
             else:
                 error_categories["other"].append(error)
 
-        logger.info(f"📊 Error breakdown: {[(k, len(v)) for k, v in error_categories.items() if v]}")
+        logger.info(f" Error breakdown: {[(k, len(v)) for k, v in error_categories.items() if v]}")
 
         # AGGRESSIVE FIX 1: Missing return types (no-untyped-def)
         for error in error_categories["no-untyped-def"]:
@@ -155,7 +155,7 @@ class TypeAnnotationFixer:
 
     def apply_approved_fixes(self, approved_changes: Dict[str, Any]) -> int:
         """LOCKED-DOWN SYSTEM: Apply comprehensive fixes using schema/protocol patterns."""
-        logger.info("🔒 LOCKED-DOWN MODE: Applying systematic fixes for 100% compliance...")
+        logger.info(" LOCKED-DOWN MODE: Applying systematic fixes for 100% compliance...")
 
         # Get fresh error list for systematic processing
         from ..core import CIRISMypyToolkit
@@ -196,13 +196,13 @@ class TypeAnnotationFixer:
         total_fixes += self._fix_type_mismatches(current_errors)
 
         self.fixes_applied += total_fixes
-        logger.info(f"🔒 Applied {total_fixes} systematic fixes")
+        logger.info(f" Applied {total_fixes} systematic fixes")
 
         return total_fixes
 
     def _purge_commented_code(self) -> int:
         """Remove only true dead code comments, not docstrings or documentation."""
-        logger.info("🗑️ PURGING dead code comments only (no code in comments)...")
+        logger.info(" PURGING dead code comments only (no code in comments)...")
         fixes = 0
         for py_file in self.target_dir.rglob("*.py"):
             if "__pycache__" in str(py_file):
@@ -241,14 +241,14 @@ class TypeAnnotationFixer:
                         f.writelines(cleaned_lines)
                     removed = len(lines) - len(cleaned_lines)
                     if removed > 0:
-                        logger.debug(f"✅ PURGED {removed} dead code comment lines from {py_file}")
+                        logger.debug(f"[OK] PURGED {removed} dead code comment lines from {py_file}")
             except Exception as e:
-                logger.error(f"❌ Error purging comments from {py_file}: {e}")
+                logger.error(f"[FAIL] Error purging comments from {py_file}: {e}")
         return fixes
 
     def _fix_unused_ignore_comments(self, errors: List[Dict[str, Any]]) -> int:
         """Remove all unused type: ignore comments for clean codebase."""
-        logger.info("🧹 Removing unused type: ignore comments...")
+        logger.info(" Removing unused type: ignore comments...")
 
         unused_ignore_errors = [e for e in errors if e["code"] == "unused-ignore"]
         fixes = 0
@@ -277,16 +277,16 @@ class TypeAnnotationFixer:
                 with open(file_path, "w") as f:
                     f.writelines(lines)
 
-                logger.debug(f"✅ Removed {len(line_numbers)} unused ignores in {file_path}")
+                logger.debug(f"[OK] Removed {len(line_numbers)} unused ignores in {file_path}")
 
             except Exception as e:
-                logger.error(f"❌ Error cleaning {file_path}: {e}")
+                logger.error(f"[FAIL] Error cleaning {file_path}: {e}")
 
         return fixes
 
     def fix_syntax_errors(self) -> int:
         """Detect and auto-fix common syntax errors (unterminated strings, missing indents)."""
-        logger.info("🛠️ Auto-fixing syntax errors before type annotation fixes...")
+        logger.info(" Auto-fixing syntax errors before type annotation fixes...")
         fixes = 0
         for py_file in self.target_dir.rglob("*.py"):
             if "__pycache__" in str(py_file):
@@ -312,7 +312,7 @@ class TypeAnnotationFixer:
                     with open(py_file, "w") as f:
                         f.writelines(fixed_lines)
             except Exception as e:
-                logger.error(f"❌ Error fixing syntax in {py_file}: {e}")
+                logger.error(f"[FAIL] Error fixing syntax in {py_file}: {e}")
         return fixes
 
     def _allowed_type(self, type_str: str) -> bool:
@@ -366,7 +366,7 @@ class TypeAnnotationFixer:
 
     def _fix_missing_return_types_systematic(self, errors: List[Dict[str, Any]]) -> int:
         """Add missing return type annotations for schema compliance (protocol/schema only)."""
-        logger.info("🔧 Adding missing return type annotations (protocol/schema only)...")
+        logger.info(" Adding missing return type annotations (protocol/schema only)...")
         untyped_def_errors = [e for e in errors if e["code"] == "no-untyped-def"]
         fixes = 0
         for error in untyped_def_errors:
@@ -386,14 +386,14 @@ class TypeAnnotationFixer:
                             fixes += 1
                             with open(file_path, "w") as f:
                                 f.writelines(lines)
-                            logger.debug(f"✅ Added return type ({allowed_type}) to {file_path}:{line_num}")
+                            logger.debug(f"[OK] Added return type ({allowed_type}) to {file_path}:{line_num}")
                 except Exception as e:
-                    logger.error(f"❌ Error fixing {error['file']}:{error['line']}: {e}")
+                    logger.error(f"[FAIL] Error fixing {error['file']}:{error['line']}: {e}")
         return fixes
 
     def _fix_variable_annotations(self, errors: List[Dict[str, Any]]) -> int:
         """Add variable type annotations with protocol/schema types only."""
-        logger.info("🔧 Adding variable type annotations (protocol/schema only)...")
+        logger.info(" Adding variable type annotations (protocol/schema only)...")
         var_annot_errors = [e for e in errors if e["code"] == "var-annotated"]
         fixes = 0
         for error in var_annot_errors:
@@ -424,19 +424,19 @@ class TypeAnnotationFixer:
                         fixes += 1
                         with open(file_path, "w") as f:
                             f.writelines(lines)
-                        logger.debug(f"✅ Added variable annotation ({annotation}) to {file_path}:{line_num}")
+                        logger.debug(f"[OK] Added variable annotation ({annotation}) to {file_path}:{line_num}")
             except Exception as e:
-                logger.error(f"❌ Error fixing variable annotation in {error['file']}:{error['line']}: {e}")
+                logger.error(f"[FAIL] Error fixing variable annotation in {error['file']}:{error['line']}: {e}")
         return fixes
 
     def _fix_union_attr(self, errors: List[Dict[str, Any]]) -> int:
         """Refactor union attribute access to use isinstance checks instead of type: ignore."""
-        logger.info("🔧 Refactoring union attribute access for type safety...")
+        logger.info(" Refactoring union attribute access for type safety...")
         # ...existing code...
 
     def _fix_missing_imports(self, errors: List[Dict[str, Any]]) -> int:
         """Add missing imports for protocol/schema types required by type annotations."""
-        logger.info("🔧 Adding missing imports for protocol/schema types...")
+        logger.info(" Adding missing imports for protocol/schema types...")
         fixes = 0
         # Only handle errors that indicate missing imports for allowed types
         missing_import_errors = [
@@ -480,14 +480,14 @@ class TypeAnnotationFixer:
                 with open(file_path, "w") as f:
                     f.writelines(lines)
                 fixes += 1
-                logger.debug(f"✅ Added import for {missing_name} in {file_path}")
+                logger.debug(f"[OK] Added import for {missing_name} in {file_path}")
             except Exception as e:
-                logger.error(f"❌ Error adding import to {file_path}: {e}")
+                logger.error(f"[FAIL] Error adding import to {file_path}: {e}")
         return fixes
 
     def _fix_unreachable_code(self, errors: List[Dict[str, Any]]) -> int:
         """Comment out or add type: ignore to unreachable code statements."""
-        logger.info("🚮 Handling unreachable code statements...")
+        logger.info(" Handling unreachable code statements...")
         unreachable_errors = [e for e in errors if e.get("code") == "unreachable"]
         fixes = 0
         for error in unreachable_errors:
@@ -504,14 +504,14 @@ class TypeAnnotationFixer:
                         fixes += 1
                         with open(file_path, "w") as f:
                             f.writelines(lines)
-                        logger.debug(f"✅ Marked unreachable code in {file_path}:{line_num}")
+                        logger.debug(f"[OK] Marked unreachable code in {file_path}:{line_num}")
             except Exception as e:
-                logger.error(f"❌ Error fixing unreachable code in {file_path}:{line_num}: {e}")
+                logger.error(f"[FAIL] Error fixing unreachable code in {file_path}:{line_num}: {e}")
         return fixes
 
     def _fix_attr_defined_errors(self, errors: List[Dict[str, Any]]) -> int:
         """Add type: ignore to lines with attr-defined errors (protocol/schema only)."""
-        logger.info("🔧 Handling attr-defined errors for protocol/schema compliance...")
+        logger.info(" Handling attr-defined errors for protocol/schema compliance...")
         attr_errors = [e for e in errors if e.get("code") == "attr-defined"]
         fixes = 0
         for error in attr_errors:
@@ -528,9 +528,9 @@ class TypeAnnotationFixer:
                         fixes += 1
                         with open(file_path, "w") as f:
                             f.writelines(lines)
-                        logger.debug(f"✅ Marked attr-defined error in {file_path}:{line_num}")
+                        logger.debug(f"[OK] Marked attr-defined error in {file_path}:{line_num}")
             except Exception as e:
-                logger.error(f"❌ Error fixing attr-defined in {file_path}:{line_num}: {e}")
+                logger.error(f"[FAIL] Error fixing attr-defined in {file_path}:{line_num}: {e}")
         return fixes
 
     def _get_allowed_types_for_module(self, file_path: str) -> set:
@@ -542,7 +542,7 @@ class TypeAnnotationFixer:
 
     def _fix_type_mismatches(self, errors: List[Dict[str, Any]]) -> int:
         """Fix type mismatch errors by updating type annotations to protocol/schema types only, using the hot/cold path map."""
-        logger.info("🔧 Fixing type mismatches (protocol/schema only, hot/cold map)...")
+        logger.info(" Fixing type mismatches (protocol/schema only, hot/cold map)...")
         mismatch_errors = [
             e
             for e in errors
@@ -574,7 +574,7 @@ class TypeAnnotationFixer:
                         fixes += 1
                         with open(file_path, "w") as f:
                             f.writelines(lines)
-                        logger.debug(f"✅ Fixed Optional type mismatch in {file_path}:{line_num}")
+                        logger.debug(f"[OK] Fixed Optional type mismatch in {file_path}:{line_num}")
                         continue
                     # Try to fix assignment to Any if type is ambiguous
                     if ": Any =" in line:
@@ -587,7 +587,7 @@ class TypeAnnotationFixer:
                         fixes += 1
                         with open(file_path, "w") as f:
                             f.writelines(lines)
-                        logger.debug(f"✅ Fixed Any type mismatch in {file_path}:{line_num}")
+                        logger.debug(f"[OK] Fixed Any type mismatch in {file_path}:{line_num}")
             except Exception as e:
-                logger.error(f"❌ Error fixing type mismatch in {file_path}:{line_num}: {e}")
+                logger.error(f"[FAIL] Error fixing type mismatch in {file_path}:{line_num}: {e}")
         return fixes

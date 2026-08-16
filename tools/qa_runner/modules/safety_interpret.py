@@ -609,7 +609,7 @@ class SafetyInterpretTests:
         self._openrouter_key: Optional[str] = None
 
     async def run(self) -> List[Dict[str, Any]]:
-        self.console.print("\n[bold cyan]🔍 Safety Interpret[/bold cyan]")
+        self.console.print("\n[bold cyan] Safety Interpret[/bold cyan]")
         self.console.print("=" * 70)
         self._captured_at_start = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 

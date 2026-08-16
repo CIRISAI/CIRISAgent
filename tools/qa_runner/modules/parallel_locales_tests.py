@@ -169,7 +169,7 @@ class ParallelLocalesTests:
         self._locale_results: List[LocaleResult] = []
 
     async def run(self) -> List[Dict[str, Any]]:
-        self.console.print("\n[bold cyan]🌐 Parallel Locales Question Fan-Out[/bold cyan]")
+        self.console.print("\n[bold cyan] Parallel Locales Question Fan-Out[/bold cyan]")
         self.console.print("=" * 70)
         n_locales = len(LOCALE_USERS)
         # Each user-visible message fans out ~12 LLM calls through the agent's

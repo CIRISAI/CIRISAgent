@@ -514,11 +514,11 @@ Examples:
             print(f"  WA ID Hash: {payload.wa_id_hash.hex()}")
             print(f"  Signature Valid: {valid}")
             if valid and payload.is_timestamp_valid():
-                print("\n  ✅ ACCORD IS VALID AND AUTHORIZED")
+                print("\n [OK] ACCORD IS VALID AND AUTHORIZED")
             elif valid:
-                print("\n  ⚠️  SIGNATURE VALID BUT TIMESTAMP EXPIRED")
+                print("\n [WARN] SIGNATURE VALID BUT TIMESTAMP EXPIRED")
             else:
-                print("\n  ❌ ACCORD SIGNATURE INVALID")
+                print("\n [FAIL] ACCORD SIGNATURE INVALID")
             print("=" * 70 + "\n")
 
             sys.exit(0 if valid else 1)

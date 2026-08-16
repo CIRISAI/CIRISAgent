@@ -29,7 +29,7 @@ class WACLIBootstrapService:
     ) -> JSONDict:
         """Bootstrap a new root WA."""
         try:
-            self.console.print(f"🌱 Creating new root WA: [bold]{name}[/bold]")
+            self.console.print(f" Creating new root WA: [bold]{name}[/bold]")
 
             # Generate Ed25519 keypair
             private_key, public_key = self.auth_service.generate_keypair()
@@ -68,14 +68,14 @@ class WACLIBootstrapService:
             # Store WA certificate
             await self.auth_service._store_wa_certificate(root_wa)
 
-            self.console.print("✅ Root WA created successfully!")
-            self.console.print(f"📋 WA ID: [bold]{wa_id}[/bold]")
-            self.console.print(f"🔑 Private key saved to: [bold]{key_file}[/bold]")
+            self.console.print("[OK] Root WA created successfully!")
+            self.console.print(f" WA ID: [bold]{wa_id}[/bold]")
+            self.console.print(f" Private key saved to: [bold]{key_file}[/bold]")
 
             return {"wa_id": wa_id, "name": name, "role": "root", "key_file": str(key_file), "status": "success"}
 
         except Exception as e:
-            self.console.print(f"❌ Error creating root WA: {e}")
+            self.console.print(f"[FAIL] Error creating root WA: {e}")
             return {"status": "error", "error": str(e)}
 
     async def mint_wa(
@@ -89,8 +89,8 @@ class WACLIBootstrapService:
     ) -> JSONDict:
         """Mint a new WA as a child of an existing WA."""
         try:
-            self.console.print(f"🪙 Minting new WA: [bold]{name}[/bold]")
-            self.console.print(f"👤 Parent: [bold]{parent_wa_id}[/bold]")
+            self.console.print(f" Minting new WA: [bold]{name}[/bold]")
+            self.console.print(f" Parent: [bold]{parent_wa_id}[/bold]")
 
             # Verify parent exists and load key
             parent_wa = await self.auth_service.get_wa(parent_wa_id)
@@ -154,11 +154,11 @@ class WACLIBootstrapService:
             # Store WA certificate
             await self.auth_service._store_wa_certificate(child_wa)
 
-            self.console.print("✅ WA minted successfully!")
-            self.console.print(f"📋 WA ID: [bold]{wa_id}[/bold]")
-            self.console.print(f"🔑 Private key saved to: [bold]{key_file}[/bold]")
-            self.console.print(f"👥 Role: [bold]{role}[/bold]")
-            self.console.print(f"🔓 Scopes: {', '.join(scopes)}")
+            self.console.print("[OK] WA minted successfully!")
+            self.console.print(f" WA ID: [bold]{wa_id}[/bold]")
+            self.console.print(f" Private key saved to: [bold]{key_file}[/bold]")
+            self.console.print(f" Role: [bold]{role}[/bold]")
+            self.console.print(f" Scopes: {', '.join(scopes)}")
 
             return {
                 "wa_id": wa_id,
@@ -171,7 +171,7 @@ class WACLIBootstrapService:
             }
 
         except Exception as e:
-            self.console.print(f"❌ Error minting WA: {e}")
+            self.console.print(f"[FAIL] Error minting WA: {e}")
             return {"status": "error", "error": str(e)}
 
     def generate_mint_request(
@@ -201,8 +201,8 @@ class WACLIBootstrapService:
             temp_key_file.write_bytes(private_key)
             temp_key_file.chmod(0o600)
 
-            self.console.print("📋 Mint request generated!")
-            self.console.print(f"🔑 One-time code: [bold yellow]{code}[/bold yellow]")
+            self.console.print(" Mint request generated!")
+            self.console.print(f" One-time code: [bold yellow]{code}[/bold yellow]")
             self.console.print("⏰ Expires in 10 minutes")
             self.console.print("\nShare this code with an existing WA holder.")
             self.console.print("They should run: [bold]ciris wa approve-code[/bold]")
@@ -210,7 +210,7 @@ class WACLIBootstrapService:
             return {"status": "success", "code": code, "request": request_data}
 
         except Exception as e:
-            self.console.print(f"❌ Error generating mint request: {e}")
+            self.console.print(f"[FAIL] Error generating mint request: {e}")
             return {"status": "error", "error": str(e)}
 
     def approve_mint_request(self, code: str, approver_wa_id: str, _approver_key_file: str) -> JSONDict:
@@ -218,12 +218,12 @@ class WACLIBootstrapService:
         try:
             # In production, would fetch from DB
             # For now, mock the approval
-            self.console.print("✅ Mint request approved!")
-            self.console.print(f"📋 Code: [bold]{code}[/bold]")
-            self.console.print(f"👤 Approver: [bold]{approver_wa_id}[/bold]")
+            self.console.print("[OK] Mint request approved!")
+            self.console.print(f" Code: [bold]{code}[/bold]")
+            self.console.print(f" Approver: [bold]{approver_wa_id}[/bold]")
 
             return {"status": "success", "message": "Mint request approved (mock implementation)"}
 
         except Exception as e:
-            self.console.print(f"❌ Error approving mint request: {e}")
+            self.console.print(f"[FAIL] Error approving mint request: {e}")
             return {"status": "error", "error": str(e)}

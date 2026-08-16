@@ -28,22 +28,22 @@ class Colors:
 
 def print_success(msg: str) -> None:
     """Print success message in green."""
-    print(f"{Colors.GREEN}✅ {msg}{Colors.NC}")
+    print(f"{Colors.GREEN}[OK] {msg}{Colors.NC}")
 
 
 def print_warning(msg: str) -> None:
     """Print warning message in yellow."""
-    print(f"{Colors.YELLOW}⚠️  {msg}{Colors.NC}")
+    print(f"{Colors.YELLOW}[WARN] {msg}{Colors.NC}")
 
 
 def print_error(msg: str) -> None:
     """Print error message in red."""
-    print(f"{Colors.RED}❌ {msg}{Colors.NC}")
+    print(f"{Colors.RED}[FAIL] {msg}{Colors.NC}")
 
 
 def print_info(msg: str) -> None:
     """Print info message."""
-    print(f"ℹ️  {msg}")
+    print(f"[INFO] {msg}")
 
 
 def run_command(cmd: list[str], cwd: Path | None = None, check: bool = True) -> subprocess.CompletedProcess:

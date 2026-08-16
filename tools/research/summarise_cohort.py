@@ -66,7 +66,7 @@ def main(root: str) -> int:
     print(f"- documents: **{len(files)}** · PQC-signed rows: **{signed}**")
     print(f"- carrying `condition_attestation`: **{with_attestation}/{len(files)}**")
     if with_attestation == 0:
-        print("  - ⚠️ none carry it — this capture predates the attestation, so a")
+        print(" - [WARN] none carry it — this capture predates the attestation, so a")
         print("    consistency gate over it would return zero contradictions and read as a pass.")
         print("    **An absent gate is not a satisfied gate.**")
 
@@ -76,7 +76,7 @@ def main(root: str) -> int:
         if not vals:
             continue
         if len(vals) == 1:
-            print(f"- `{key}`: {vals} ⚠️ **CONSTANT** — no variance, dropped at the retention gate")
+            print(f"- `{key}`: {vals} [WARN] **CONSTANT** — no variance, dropped at the retention gate")
         else:
             print(f"- `{key}`: {vals}")
 

@@ -34,10 +34,10 @@ class CIRISClient:
             data = response.json()
             self.token = data.get("access_token")
             self.session.headers.update({"Authorization": f"Bearer {self.token}"})
-            print("✓ Authenticated successfully")
+            print("[OK] Authenticated successfully")
             return True
         except Exception as e:
-            print(f"✗ Authentication failed: {e}")
+            print(f"[FAIL] Authentication failed: {e}")
             return False
 
     def interact(self, message: str, channel_id: Optional[str] = None) -> Dict[str, Any]:
@@ -55,7 +55,7 @@ class CIRISClient:
             response.raise_for_status()
             return response.json()
         except Exception as e:
-            print(f"✗ Interaction failed: {e}")
+            print(f"[FAIL] Interaction failed: {e}")
             if hasattr(e, "response") and e.response is not None:
                 print(f"Response: {e.response.text}")
             return {}
@@ -92,7 +92,7 @@ class CIRISClient:
                 return filtered
             return entries
         except Exception as e:
-            print(f"✗ Failed to get audit entries: {e}")
+            print(f"[FAIL] Failed to get audit entries: {e}")
             return []
 
     def health_check(self) -> Dict[str, Any]:
@@ -102,7 +102,7 @@ class CIRISClient:
             response.raise_for_status()
             return response.json()
         except Exception as e:
-            print(f"✗ Health check failed: {e}")
+            print(f"[FAIL] Health check failed: {e}")
             return {}
 
     def wait_for_handler(self, handler: str, timeout: int = 10) -> bool:
@@ -113,11 +113,11 @@ class CIRISClient:
         while time.time() - start_time < timeout:
             entries = self.get_audit_entries(limit=50, handler=handler)
             if entries:
-                print(f"✓ Found {handler} handler entry")
+                print(f"[OK] Found {handler} handler entry")
                 return True
             time.sleep(0.5)
 
-        print(f"✗ Timeout waiting for {handler} handler")
+        print(f"[FAIL] Timeout waiting for {handler} handler")
         return False
 
 

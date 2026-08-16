@@ -16,12 +16,12 @@ def get_token() -> str:
         f"{BASE_URL}/v1/auth/login", json={"username": "admin", "password": "qa_test_password_12345"}
     )
     if response.status_code != 200:
-        print(f"❌ Failed to get token: {response.status_code}")
+        print(f"[FAIL] Failed to get token: {response.status_code}")
         print(response.text)
         sys.exit(1)
 
     token = response.json()["access_token"]
-    print(f"✅ Got auth token: {token[:20]}...")
+    print(f"[OK] Got auth token: {token[:20]}...")
     return token
 
 
@@ -30,14 +30,14 @@ def check_telemetry(token: str) -> dict:
     response = requests.get(f"{BASE_URL}/v1/telemetry/unified", headers={"Authorization": f"Bearer {token}"})
 
     if response.status_code != 200:
-        print(f"❌ Telemetry request failed: {response.status_code}")
+        print(f"[FAIL] Telemetry request failed: {response.status_code}")
         return {}
 
     data = response.json()
     online = data.get("services_online", 0)
     total = data.get("services_total", 0)
 
-    print(f"\n📊 Service Health: {online}/{total} services healthy")
+    print(f"\n Service Health: {online}/{total} services healthy")
 
     # List unhealthy services
     unhealthy = []
@@ -46,16 +46,16 @@ def check_telemetry(token: str) -> dict:
             unhealthy.append(service)
 
     if unhealthy:
-        print(f"⚠️  Unhealthy services: {', '.join(unhealthy)}")
+        print(f"[WARN] Unhealthy services: {', '.join(unhealthy)}")
     else:
-        print("✅ All services healthy!")
+        print("[OK] All services healthy!")
 
     return data
 
 
 def test_interact(token: str) -> None:
     """Test the interactive agent endpoint."""
-    print("\n🤖 Testing interactive agent...")
+    print("\n Testing interactive agent...")
 
     response = requests.post(
         f"{BASE_URL}/v1/agent/interact",
@@ -64,22 +64,22 @@ def test_interact(token: str) -> None:
     )
 
     if response.status_code != 200:
-        print(f"❌ Interact failed: {response.status_code}")
+        print(f"[FAIL] Interact failed: {response.status_code}")
         print(response.text)
         return
 
     data = response.json()
-    print(f"✅ Agent responded: {data.get('response', 'No response')[:100]}...")
+    print(f"[OK] Agent responded: {data.get('response', 'No response')[:100]}...")
 
 
 def test_consent_status(token: str) -> Optional[dict]:
     """Test consent status endpoint."""
-    print("\n📝 Testing consent status...")
+    print("\n Testing consent status...")
 
     response = requests.get(f"{BASE_URL}/v1/consent/status", headers={"Authorization": f"Bearer {token}"})
 
     if response.status_code != 200:
-        print(f"❌ Consent status failed: {response.status_code}")
+        print(f"[FAIL] Consent status failed: {response.status_code}")
         print(response.text)
         return None
 
@@ -87,12 +87,12 @@ def test_consent_status(token: str) -> Optional[dict]:
     has_consent = data.get("has_consent", False)
 
     if has_consent:
-        print(f"✅ User has consent: {data.get('stream', 'unknown')} stream")
+        print(f"[OK] User has consent: {data.get('stream', 'unknown')} stream")
         print(f"   User ID: {data.get('user_id', 'unknown')}")
         if data.get("expires_at"):
             print(f"   Expires: {data.get('expires_at')}")
     else:
-        print(f"ℹ️  No consent found for user: {data.get('user_id', 'unknown')}")
+        print(f"[INFO] No consent found for user: {data.get('user_id', 'unknown')}")
         print(f"   Message: {data.get('message', '')}")
 
     return data
@@ -100,47 +100,47 @@ def test_consent_status(token: str) -> Optional[dict]:
 
 def test_memory_recall(token: str) -> None:
     """Test memory recall endpoint."""
-    print("\n🧠 Testing memory recall...")
+    print("\n Testing memory recall...")
 
     response = requests.get(f"{BASE_URL}/v1/memory/recall/test_node", headers={"Authorization": f"Bearer {token}"})
 
     if response.status_code == 404:
-        print("ℹ️  Node not found (expected for test node)")
+        print("[INFO] Node not found (expected for test node)")
     elif response.status_code == 200:
         data = response.json()
-        print(f"✅ Memory recall successful")
+        print(f"[OK] Memory recall successful")
         if "data" in data and data["data"]:
             print(f"   Found node: {data['data'].get('id', 'unknown')}")
     else:
-        print(f"❌ Memory recall failed: {response.status_code}")
+        print(f"[FAIL] Memory recall failed: {response.status_code}")
 
 
 def test_memory_forget(token: str) -> None:
     """Test memory forget endpoint."""
-    print("\n🗑️  Testing memory forget...")
+    print("\n Testing memory forget...")
 
     response = requests.delete(
         f"{BASE_URL}/v1/memory/test_node_to_delete", headers={"Authorization": f"Bearer {token}"}
     )
 
     if response.status_code == 200:
-        print("✅ Memory forget endpoint working")
+        print("[OK] Memory forget endpoint working")
         data = response.json()
         if "data" in data:
             print(f"   Status: {data['data'].get('status', 'unknown')}")
     else:
-        print(f"❌ Memory forget failed: {response.status_code}")
+        print(f"[FAIL] Memory forget failed: {response.status_code}")
         print(response.text)
 
 
 def test_consent_query(token: str) -> None:
     """Test consent query endpoint."""
-    print("\n🔍 Testing consent query...")
+    print("\n Testing consent query...")
 
     response = requests.get(f"{BASE_URL}/v1/consent/query", headers={"Authorization": f"Bearer {token}"})
 
     if response.status_code != 200:
-        print(f"❌ Consent query failed: {response.status_code}")
+        print(f"[FAIL] Consent query failed: {response.status_code}")
         print(response.text)
         return
 
@@ -148,7 +148,7 @@ def test_consent_query(token: str) -> None:
     consents = data.get("consents", [])
     total = data.get("total", 0)
 
-    print(f"✅ Found {total} consent records")
+    print(f"[OK] Found {total} consent records")
     if consents:
         for consent in consents[:3]:  # Show first 3
             print(f"   - User: {consent.get('user_id', 'unknown')}, Stream: {consent.get('stream', 'unknown')}")
@@ -177,27 +177,27 @@ def main():
     print("=" * 60)
 
     # Check critical fixes
-    print("\n🔧 Checking recent fixes:")
+    print("\n Checking recent fixes:")
 
     # 1. Memory forget endpoint
-    print("✅ Memory forget endpoint uses correct import")
+    print("[OK] Memory forget endpoint uses correct import")
 
     # 2. Consent creation
     if consent_status:
         if consent_status.get("has_consent"):
-            print("✅ User has consent (TEMPORARY created with user node)")
+            print("[OK] User has consent (TEMPORARY created with user node)")
         else:
-            print("⚠️  No consent yet (will be created on first interaction)")
+            print("[WARN] No consent yet (will be created on first interaction)")
 
     # 3. Service health
     online = telemetry.get("services_online", 0)
     total = telemetry.get("services_total", 0)
     if online == total and total > 20:
-        print(f"✅ All {total} services are healthy")
+        print(f"[OK] All {total} services are healthy")
     else:
-        print(f"⚠️  Only {online}/{total} services healthy")
+        print(f"[WARN] Only {online}/{total} services healthy")
 
-    print("\n✅ QA test complete!")
+    print("\n[OK] QA test complete!")
 
 
 if __name__ == "__main__":

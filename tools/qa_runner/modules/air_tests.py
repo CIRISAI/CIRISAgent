@@ -62,7 +62,7 @@ class AIRTests:
 
     async def run(self) -> List[Dict[str, Any]]:
         """Run all AIR tests."""
-        self.console.print("\n[cyan]🛡️ Testing AIR (Artificial Interaction Reminder) System[/cyan]")
+        self.console.print("\n[cyan] Testing AIR (Artificial Interaction Reminder) System[/cyan]")
 
         tests = [
             ("No reminder before threshold", self.test_no_reminder_before_threshold),
@@ -79,10 +79,10 @@ class AIRTests:
             try:
                 await test_func()
                 self.results.append({"test": name, "status": "✅ PASS", "error": None})
-                self.console.print(f"  ✅ {name}")
+                self.console.print(f" [OK] {name}")
             except Exception as e:
                 self.results.append({"test": name, "status": "❌ FAIL", "error": str(e)})
-                self.console.print(f"  ❌ {name}: {str(e)[:120]}")
+                self.console.print(f" [FAIL] {name}: {str(e)[:120]}")
                 if self.console.is_terminal:
                     self.console.print(f"     [dim]{traceback.format_exc()}[/dim]")
 

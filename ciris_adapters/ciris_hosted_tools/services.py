@@ -231,9 +231,9 @@ class CIRISHostedToolService:
                             logger.warning(f"[HOSTED_TOOLS] .env exists but no CIRIS_BILLING_GOOGLE_ID_TOKEN found")
 
                 if not token:
-                    logger.error("[HOSTED_TOOLS] ✗ No token found in any .env location!")
+                    logger.error("[HOSTED_TOOLS] [FAIL] No token found in any .env location!")
             except Exception as e:
-                logger.error(f"[HOSTED_TOOLS] ✗ Failed to read .env file: {e}")
+                logger.error(f"[HOSTED_TOOLS] [FAIL] Failed to read .env file: {e}")
 
         return token
 
@@ -566,19 +566,19 @@ class CIRISHostedToolService:
             response = await self._make_request(
                 "POST", "/v1/web/search", json_data=payload, use_fallback=use_fallback, service="proxy"
             )
-            logger.info(f"[WEB_SEARCH] ✓ Request succeeded via {region}")
+            logger.info(f"[WEB_SEARCH] [OK] Request succeeded via {region}")
             return response, None
         except httpx.ConnectTimeout as e:
-            logger.warning(f"[WEB_SEARCH] ✗ {region} TIMEOUT: {e}")
+            logger.warning(f"[WEB_SEARCH] [FAIL] {region} TIMEOUT: {e}")
             return None, e
         except httpx.ConnectError as e:
-            logger.warning(f"[WEB_SEARCH] ✗ {region} CONNECTION_ERROR: {e}")
+            logger.warning(f"[WEB_SEARCH] [FAIL] {region} CONNECTION_ERROR: {e}")
             return None, e
         except httpx.TimeoutException as e:
-            logger.warning(f"[WEB_SEARCH] ✗ {region} TIMEOUT: {e}")
+            logger.warning(f"[WEB_SEARCH] [FAIL] {region} TIMEOUT: {e}")
             return None, e
         except httpx.RequestError as e:
-            logger.warning(f"[WEB_SEARCH] ✗ {region} NETWORK_ERROR: {e}")
+            logger.warning(f"[WEB_SEARCH] [FAIL] {region} NETWORK_ERROR: {e}")
             return None, e
 
     @staticmethod

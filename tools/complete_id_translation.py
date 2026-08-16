@@ -128,7 +128,7 @@ class IndonesianTranslator:
         with open(id_path, "w", encoding="utf-8") as f:
             json.dump(id_data, f, ensure_ascii=False, indent=4)
 
-        print(f"✓ Saved Indonesian translation to {id_path}")
+        print(f"[OK] Saved Indonesian translation to {id_path}")
         print(f"  File size: {id_path.stat().st_size / 1024:.1f} KB")
 
 

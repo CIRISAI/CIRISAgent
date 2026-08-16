@@ -242,7 +242,7 @@ class ShutdownProcessor(BaseProcessor):
                     shutdown_ready=True,
                     duration_seconds=0.0,
                 )
-                logger.info("✓ Shutdown task completed - agent accepted shutdown")
+                logger.info("[OK] Shutdown task completed - agent accepted shutdown")
                 logger.info("Shutdown processor signaling completion to runtime")
             else:
                 # Already reported completion, just wait

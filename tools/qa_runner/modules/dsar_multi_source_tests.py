@@ -51,7 +51,7 @@ class DSARMultiSourceTests:
 
     async def run(self) -> List[Dict]:
         """Run all DSAR multi-source lifecycle tests."""
-        self.console.print("\n[cyan]📦 Testing DSAR Multi-Source Orchestration[/cyan]")
+        self.console.print("\n[cyan] Testing DSAR Multi-Source Orchestration[/cyan]")
 
         tests = [
             # Phase 1: Setup
@@ -78,10 +78,10 @@ class DSARMultiSourceTests:
             try:
                 await test_func()
                 self.results.append({"test": name, "status": "✅ PASS", "error": None})
-                self.console.print(f"  ✅ {name}")
+                self.console.print(f" [OK] {name}")
             except Exception as e:
                 self.results.append({"test": name, "status": "❌ FAIL", "error": str(e)})
-                self.console.print(f"  ❌ {name}: {str(e)[:100]}")
+                self.console.print(f" [FAIL] {name}: {str(e)[:100]}")
                 if self.console.is_terminal:
                     self.console.print(f"     [dim]{traceback.format_exc()}[/dim]")
 
@@ -587,10 +587,10 @@ global_identifier_column: user_id
                     self.console.print(f"     [dim]Adapter cleanup warning: {e}[/dim]")
 
             # Test database and schema are gitignored, will be cleaned up automatically
-            self.console.print("[green]✅ Cleanup complete[/green]")
+            self.console.print("[green][OK] Cleanup complete[/green]")
 
         except Exception as e:
-            self.console.print(f"[yellow]⚠️  Cleanup warning: {e}[/yellow]")
+            self.console.print(f"[yellow][WARN] Cleanup warning: {e}[/yellow]")
 
     def _print_summary(self):
         """Print test summary table."""

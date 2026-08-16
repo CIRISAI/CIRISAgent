@@ -105,7 +105,7 @@ class UnifiedAnalyzer:
     def analyze_code_quality(self, issues: Dict[str, UnifiedIssue]) -> Dict[str, UnifiedIssue]:
         """Add SonarCloud metrics to issues."""
         if not self.sonar_client:
-            print("⚠️  SonarCloud token not found. Skipping quality metrics.")
+            print("[WARN] SonarCloud token not found. Skipping quality metrics.")
             return issues
 
         try:
@@ -129,7 +129,7 @@ class UnifiedAnalyzer:
                 issues[path].uncovered_lines = file_data["uncovered_lines"]
 
         except Exception as e:
-            print(f"⚠️  Error getting SonarCloud data: {e}")
+            print(f"[WARN] Error getting SonarCloud data: {e}")
 
         return issues
 
@@ -149,7 +149,7 @@ class UnifiedAnalyzer:
         print()
 
         # Top priority files
-        print("🎯 TOP 15 PRIORITY FILES:")
+        print(" TOP 15 PRIORITY FILES:")
         print()
 
         for i, issue in enumerate(sorted_issues[:15], 1):
@@ -183,7 +183,7 @@ class UnifiedAnalyzer:
 
         # Statistics by category
         print("=" * 80)
-        print("📊 ISSUE BREAKDOWN:")
+        print(" ISSUE BREAKDOWN:")
         print()
 
         # Type safety issues
@@ -214,7 +214,7 @@ class UnifiedAnalyzer:
 
         # Quick wins
         print("=" * 80)
-        print("⚡ QUICK WINS:")
+        print(" QUICK WINS:")
         print()
 
         # Type safety quick wins (few Dict[str, Any], no other issues)
@@ -246,7 +246,7 @@ class UnifiedAnalyzer:
 
         # Total effort
         print("=" * 80)
-        print("💪 TOTAL EFFORT ESTIMATE:")
+        print(" TOTAL EFFORT ESTIMATE:")
         print()
 
         all_issues = list(issues.values())
@@ -266,20 +266,20 @@ class UnifiedAnalyzer:
         print(f"  - Refactoring: ~{refactor_work:.1f} hours")
         print(f"  - TOTAL: ~{total_work:.1f} hours")
         print()
-        print("🚀 Start with the top 5 files for maximum impact!")
+        print(" Start with the top 5 files for maximum impact!")
 
 
 def generate_unified_plan():
     """Main entry point for unified analysis."""
     analyzer = UnifiedAnalyzer()
 
-    print("🔍 Analyzing type safety with ciris_mypy_toolkit...")
+    print(" Analyzing type safety with ciris_mypy_toolkit...")
     issues = analyzer.analyze_type_safety()
 
-    print("📊 Analyzing code quality with sonar_tool...")
+    print(" Analyzing code quality with sonar_tool...")
     issues = analyzer.analyze_code_quality(issues)
 
-    print("📝 Generating unified report...\n")
+    print(" Generating unified report...\n")
     analyzer.generate_report(issues)
 
 

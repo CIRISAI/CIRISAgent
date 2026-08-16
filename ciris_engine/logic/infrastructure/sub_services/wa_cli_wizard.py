@@ -37,14 +37,14 @@ class WACLIWizardService:
 
     async def onboard_wizard(self) -> WizardResult:
         """Interactive onboarding wizard for new operators."""
-        self.console.print("\n🎭 [bold cyan]Welcome to CIRIS WA Onboarding![/bold cyan]\n")
+        self.console.print("\n [bold cyan]Welcome to CIRIS WA Onboarding![/bold cyan]\n")
 
         # Check if any WAs exist
         existing_was = await self.auth_service.list_was(active_only=False)
         root_exists = any(wa.role == "root" for wa in existing_was)
 
         if root_exists:
-            self.console.print("✅ A root WA already exists in this system.")
+            self.console.print("[OK] A root WA already exists in this system.")
             self.console.print("You can:")
             self.console.print("  1. Join the existing WA tree (request approval)")
             self.console.print("  2. Stay as an observer (default)")
@@ -57,10 +57,10 @@ class WACLIWizardService:
             elif choice == "3":
                 return await self._configure_oauth()
             else:
-                self.console.print("✅ You'll remain an observer. You can run this wizard again anytime.")
+                self.console.print("[OK] You'll remain an observer. You can run this wizard again anytime.")
                 return WizardResult(status="observer")
         else:
-            self.console.print("🌟 No root WA exists yet!")
+            self.console.print(" No root WA exists yet!")
             self.console.print("You can:")
             self.console.print("  1. Create a new root WA (become the first authority)")
             self.console.print("  2. Import an existing root certificate")
@@ -73,12 +73,12 @@ class WACLIWizardService:
             elif choice == "2":
                 return await self._import_root_cert()
             else:
-                self.console.print("✅ You'll remain an observer. You can run this wizard again anytime.")
+                self.console.print("[OK] You'll remain an observer. You can run this wizard again anytime.")
                 return WizardResult(status="observer")
 
     async def _create_root_wa(self) -> RootCreationResult:
         """Wizard flow for creating a new root WA."""
-        self.console.print("\n🌱 [bold]Creating New Root WA[/bold]\n")
+        self.console.print("\n [bold]Creating New Root WA[/bold]\n")
 
         # Get name
         name = Prompt.ask("Enter a name for your root WA", default="ciris_root")
@@ -100,19 +100,19 @@ class WACLIWizardService:
         )
 
         if result["status"] == "success":
-            self.console.print("\n🎉 [bold green]Root WA created successfully![/bold green]")
-            self.console.print("\n⚠️  [bold yellow]IMPORTANT: Back up your private key![/bold yellow]")
+            self.console.print("\n [bold green]Root WA created successfully![/bold green]")
+            self.console.print("\n[WARN] [bold yellow]IMPORTANT: Back up your private key![/bold yellow]")
             self.console.print(f"Key location: {result['key_file']}")
 
             if shamir_shares:
-                self.console.print("\n📋 Your Shamir shares have been generated.")
+                self.console.print("\n Your Shamir shares have been generated.")
                 self.console.print("Store each share with a different trusted person.")
 
         return RootCreationResult(**result)
 
     async def _import_root_cert(self) -> WizardResult:
         """Wizard flow for importing existing root certificate."""
-        self.console.print("\n📥 [bold]Import Root Certificate[/bold]\n")
+        self.console.print("\n [bold]Import Root Certificate[/bold]\n")
 
         cert_path = Prompt.ask("Path to root certificate JSON file")
 
@@ -129,18 +129,18 @@ class WACLIWizardService:
             wa_cert = WACertificate(**cert_data)
             await self.auth_service._store_wa_certificate(wa_cert)
 
-            self.console.print("✅ Root certificate imported successfully!")
-            self.console.print("⚠️  You'll need the corresponding private key to use root privileges.")
+            self.console.print("[OK] Root certificate imported successfully!")
+            self.console.print("[WARN] You'll need the corresponding private key to use root privileges.")
 
             return WizardResult(status="imported", wa_id=cert_data["wa_id"])
 
         except Exception as e:
-            self.console.print(f"❌ Error importing certificate: {e}")
+            self.console.print(f"[FAIL] Error importing certificate: {e}")
             return WizardResult(status="error", error=str(e))
 
     def _join_wa_tree(self) -> JoinRequestResult:
         """Wizard flow for joining existing WA tree."""
-        self.console.print("\n🤝 [bold]Join Existing WA Tree[/bold]\n")
+        self.console.print("\n [bold]Join Existing WA Tree[/bold]\n")
 
         name = Prompt.ask("Your desired WA name")
         role = Prompt.ask("Requested role", choices=["authority", "observer"], default="observer")
@@ -149,7 +149,7 @@ class WACLIWizardService:
         result = self.bootstrap_service.generate_mint_request(name=name, requested_role=role)
 
         if result["status"] == "success":
-            self.console.print("\n📋 Join request generated!")
+            self.console.print("\n Join request generated!")
             self.console.print("Share this code with an existing WA holder.")
             self.console.print("The code expires in 10 minutes.")
 
@@ -157,7 +157,7 @@ class WACLIWizardService:
 
     async def _configure_oauth(self) -> OAuthConfigResult:
         """Wizard flow for OAuth configuration."""
-        self.console.print("\n🔐 [bold]Configure OAuth Provider[/bold]\n")
+        self.console.print("\n [bold]Configure OAuth Provider[/bold]\n")
 
         providers = ["google", "discord", "github", "custom"]
         provider = Prompt.ask("Select OAuth provider", choices=providers)
@@ -174,7 +174,7 @@ class WACLIWizardService:
         )
 
         if result.status == "success":
-            self.console.print("\n✅ OAuth configured successfully!")
+            self.console.print("\n[OK] OAuth configured successfully!")
             self.console.print("You can now login with:")
             self.console.print(f"[bold]ciris wa oauth-login {provider}[/bold]")
 

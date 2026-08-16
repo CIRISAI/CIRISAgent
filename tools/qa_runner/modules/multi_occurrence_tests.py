@@ -83,7 +83,7 @@ class MultiOccurrenceTestModule:
             "errors": [],
         }
 
-        runner.console.print("\n[bold cyan]🔄 STARTING TRUE MULTI-OCCURRENCE INTEGRATION TEST[/bold cyan]")
+        runner.console.print("\n[bold cyan] STARTING TRUE MULTI-OCCURRENCE INTEGRATION TEST[/bold cyan]")
         runner.console.print("[dim]Spawning 2 separate runtime processes...[/dim]\n")
 
         occurrence_ids = ["occurrence_1", "occurrence_2"]
@@ -91,35 +91,35 @@ class MultiOccurrenceTestModule:
 
         try:
             # Step 1: Spawn occurrence managers
-            runner.console.print("[cyan]📦 Creating occurrence managers...[/cyan]")
+            runner.console.print("[cyan] Creating occurrence managers...[/cyan]")
             occurrence_managers = runner.spawn_multi_occurrence_servers(occurrence_ids, base_port=9000)
-            runner.console.print(f"[green]✅ Created {len(occurrence_managers)} occurrence managers[/green]\n")
+            runner.console.print(f"[green][OK] Created {len(occurrence_managers)} occurrence managers[/green]\n")
 
             # Step 2: Start first occurrence
-            runner.console.print("[cyan]🚀 Starting occurrence_1...[/cyan]")
-            runner.console.print("[dim]📁 Logs: logs/occurrence_1/[/dim]")
+            runner.console.print("[cyan] Starting occurrence_1...[/cyan]")
+            runner.console.print("[dim] Logs: logs/occurrence_1/[/dim]")
             success_1 = runner.start_occurrence("occurrence_1", occurrence_managers["occurrence_1"])
             if not success_1:
                 results["errors"].append("Failed to start occurrence_1")
-                runner.console.print("[red]❌ Check logs at: logs/occurrence_1/incidents_latest.log[/red]")
-                runner.console.print("[red]❌ Check logs at: logs/occurrence_1/latest.log[/red]")
+                runner.console.print("[red][FAIL] Check logs at: logs/occurrence_1/incidents_latest.log[/red]")
+                runner.console.print("[red][FAIL] Check logs at: logs/occurrence_1/latest.log[/red]")
                 return results
-            runner.console.print("[green]✅ occurrence_1 started successfully[/green]\n")
+            runner.console.print("[green][OK] occurrence_1 started successfully[/green]\n")
 
             # Give it time to complete wakeup
             runner.console.print("[dim]⏳ Waiting for occurrence_1 to complete wakeup (30s)...[/dim]")
             time.sleep(30)
 
             # Step 3: Start second occurrence (should detect wakeup already done)
-            runner.console.print("[cyan]🚀 Starting occurrence_2...[/cyan]")
-            runner.console.print("[dim]📁 Logs: logs/occurrence_2/[/dim]")
+            runner.console.print("[cyan] Starting occurrence_2...[/cyan]")
+            runner.console.print("[dim] Logs: logs/occurrence_2/[/dim]")
             success_2 = runner.start_occurrence("occurrence_2", occurrence_managers["occurrence_2"])
             if not success_2:
                 results["errors"].append("Failed to start occurrence_2")
-                runner.console.print("[red]❌ Check logs at: logs/occurrence_2/incidents_latest.log[/red]")
-                runner.console.print("[red]❌ Check logs at: logs/occurrence_2/latest.log[/red]")
+                runner.console.print("[red][FAIL] Check logs at: logs/occurrence_2/incidents_latest.log[/red]")
+                runner.console.print("[red][FAIL] Check logs at: logs/occurrence_2/latest.log[/red]")
                 return results
-            runner.console.print("[green]✅ occurrence_2 started successfully[/green]\n")
+            runner.console.print("[green][OK] occurrence_2 started successfully[/green]\n")
 
             # Give it time to detect existing wakeup
             runner.console.print("[dim]⏳ Waiting for occurrence_2 to detect wakeup (20s)...[/dim]")
@@ -127,7 +127,7 @@ class MultiOccurrenceTestModule:
 
             # Step 4: Query wakeup tasks from database
             # Check for ANY wakeup tasks - shared or transferred to an occurrence
-            runner.console.print("\n[cyan]🔍 Querying wakeup tasks from database...[/cyan]")
+            runner.console.print("\n[cyan] Querying wakeup tasks from database...[/cyan]")
             all_wakeup_tasks = runner.query_all_wakeup_tasks_db()
             shared_tasks = runner.query_shared_tasks_db()
 
@@ -176,7 +176,7 @@ class MultiOccurrenceTestModule:
                 results["details"]["wakeup_coordination"] = "SKIPPED"
 
             # Step 5: Query thoughts by occurrence
-            runner.console.print("\n[cyan]🔍 Querying thoughts by occurrence...[/cyan]")
+            runner.console.print("\n[cyan] Querying thoughts by occurrence...[/cyan]")
             thoughts_by_occ = runner.query_thoughts_by_occurrence_db()
 
             runner.console.print(f"[yellow]Thoughts by occurrence:[/yellow]")
@@ -194,11 +194,11 @@ class MultiOccurrenceTestModule:
                 )
                 results["details"]["thought_ownership"] = "PASS"
             else:
-                runner.console.print("[red]❌ No test occurrences have thoughts![/red]")
+                runner.console.print("[red][FAIL] No test occurrences have thoughts![/red]")
                 results["details"]["thought_ownership"] = "FAIL"
 
             # Step 6a: Test thought processing on occurrence_1 (BASELINE CHECK)
-            runner.console.print("\n[cyan]🧠 Testing thought processing on occurrence_1 (baseline)...[/cyan]")
+            runner.console.print("\n[cyan] Testing thought processing on occurrence_1 (baseline)...[/cyan]")
             runner.console.print("[dim]This verifies interact endpoint works correctly[/dim]")
 
             import requests
@@ -223,7 +223,7 @@ class MultiOccurrenceTestModule:
                     results["errors"].append(f"occurrence_1 auth failed: {auth_response.status_code}")
                 else:
                     token = auth_response.json()["access_token"]
-                    runner.console.print("[green]✅ Authenticated to occurrence_1[/green]")
+                    runner.console.print("[green][OK] Authenticated to occurrence_1[/green]")
 
                     # Submit a test message
                     runner.console.print("[dim]Submitting test message to occurrence_1...[/dim]")
@@ -243,10 +243,10 @@ class MultiOccurrenceTestModule:
                             else ""
                         )
                         if actual_response:
-                            runner.console.print(f"[green]✅ occurrence_1 processed thought successfully![/green]")
+                            runner.console.print(f"[green][OK] occurrence_1 processed thought successfully![/green]")
                             runner.console.print(f"[dim]Response: {actual_response[:100]}...[/dim]")
                         else:
-                            runner.console.print(f"[yellow]⚠️  occurrence_1 responded but with empty response[/yellow]")
+                            runner.console.print(f"[yellow][WARN] occurrence_1 responded but with empty response[/yellow]")
                             runner.console.print(f"[dim]DEBUG response_data: {response_data}[/dim]")
                     else:
                         runner.console.print(
@@ -256,14 +256,14 @@ class MultiOccurrenceTestModule:
                         results["errors"].append(f"occurrence_1 interact failed: {interact_response.status_code}")
 
             except requests.exceptions.Timeout:
-                runner.console.print("[red]❌ occurrence_1 interact request timed out[/red]")
+                runner.console.print("[red][FAIL] occurrence_1 interact request timed out[/red]")
                 results["errors"].append("occurrence_1 interact timeout")
             except Exception as e:
-                runner.console.print(f"[red]❌ Error testing occurrence_1 thought processing: {e}[/red]")
+                runner.console.print(f"[red][FAIL] Error testing occurrence_1 thought processing: {e}[/red]")
                 results["errors"].append(f"occurrence_1 thought processing test error: {str(e)}")
 
             # Step 6b: Test thought processing on occurrence_2 (CRITICAL BUG CHECK)
-            runner.console.print("\n[cyan]🧠 Testing thought processing on occurrence_2...[/cyan]")
+            runner.console.print("\n[cyan] Testing thought processing on occurrence_2...[/cyan]")
             runner.console.print(
                 "[dim]This verifies thoughts can be fetched and processed with correct occurrence_id[/dim]"
             )
@@ -289,7 +289,7 @@ class MultiOccurrenceTestModule:
                     results["details"]["thought_processing"] = "FAIL"
                 else:
                     token = auth_response.json()["access_token"]
-                    runner.console.print("[green]✅ Authenticated to occurrence_2[/green]")
+                    runner.console.print("[green][OK] Authenticated to occurrence_2[/green]")
 
                     # Submit a test message
                     runner.console.print("[dim]Submitting test message to occurrence_2...[/dim]")
@@ -309,11 +309,11 @@ class MultiOccurrenceTestModule:
                             else ""
                         )
                         if actual_response:
-                            runner.console.print(f"[green]✅ occurrence_2 processed thought successfully![/green]")
+                            runner.console.print(f"[green][OK] occurrence_2 processed thought successfully![/green]")
                             runner.console.print(f"[dim]Response: {actual_response[:100]}...[/dim]")
                             results["details"]["thought_processing"] = "PASS"
                         else:
-                            runner.console.print(f"[yellow]⚠️  occurrence_2 responded but with empty response[/yellow]")
+                            runner.console.print(f"[yellow][WARN] occurrence_2 responded but with empty response[/yellow]")
                             runner.console.print(f"[dim]DEBUG response_data: {response_data}[/dim]")
                             results["details"]["thought_processing"] = "PARTIAL"
                     else:
@@ -331,12 +331,12 @@ class MultiOccurrenceTestModule:
                 results["errors"].append("occurrence_2 interact timeout - thoughts may be stuck in processing")
                 results["details"]["thought_processing"] = "TIMEOUT"
             except Exception as e:
-                runner.console.print(f"[red]❌ Error testing occurrence_2 thought processing: {e}[/red]")
+                runner.console.print(f"[red][FAIL] Error testing occurrence_2 thought processing: {e}[/red]")
                 results["errors"].append(f"occurrence_2 thought processing test error: {str(e)}")
                 results["details"]["thought_processing"] = "ERROR"
 
             # Step 7: Verify separate log files
-            runner.console.print("\n[cyan]📋 Verifying separate log files...[/cyan]")
+            runner.console.print("\n[cyan] Verifying separate log files...[/cyan]")
             import os
             from pathlib import Path
 
@@ -354,10 +354,10 @@ class MultiOccurrenceTestModule:
             results["details"]["log_files"] = log_files_found
 
             if all(count > 0 for count in log_files_found.values()):
-                runner.console.print("[green]✅ All occurrences have separate log files[/green]")
+                runner.console.print("[green][OK] All occurrences have separate log files[/green]")
                 results["details"]["log_separation"] = "PASS"
             else:
-                runner.console.print("[red]❌ Some occurrences missing log files[/red]")
+                runner.console.print("[red][FAIL] Some occurrences missing log files[/red]")
                 results["details"]["log_separation"] = "FAIL"
 
             # Determine overall success
@@ -375,28 +375,28 @@ class MultiOccurrenceTestModule:
                 and thought_processing_ok  # Thought processing must work
             ):
                 results["success"] = True
-                runner.console.print("\n[bold green]✅ MULTI-OCCURRENCE INTEGRATION TEST PASSED![/bold green]")
+                runner.console.print("\n[bold green][OK] MULTI-OCCURRENCE INTEGRATION TEST PASSED![/bold green]")
             else:
-                runner.console.print("\n[bold yellow]⚠️  MULTI-OCCURRENCE INTEGRATION TEST HAD ISSUES[/bold yellow]")
+                runner.console.print("\n[bold yellow][WARN] MULTI-OCCURRENCE INTEGRATION TEST HAD ISSUES[/bold yellow]")
                 if not thought_processing_ok:
                     runner.console.print(
                         "[red]❌ CRITICAL: Thought processing failed (ProcessingQueueItem bug detected!)[/red]"
                     )
 
         except Exception as e:
-            runner.console.print(f"\n[bold red]❌ Test failed with exception: {e}[/bold red]")
+            runner.console.print(f"\n[bold red][FAIL] Test failed with exception: {e}[/bold red]")
             results["errors"].append(str(e))
             results["success"] = False
 
         finally:
             # Cleanup: Stop all occurrences
-            runner.console.print("\n[cyan]🛑 Stopping all occurrences...[/cyan]")
+            runner.console.print("\n[cyan] Stopping all occurrences...[/cyan]")
             for occ_id, manager in occurrence_managers.items():
                 try:
                     manager.stop()
-                    runner.console.print(f"[green]✅ Stopped {occ_id}[/green]")
+                    runner.console.print(f"[green][OK] Stopped {occ_id}[/green]")
                 except Exception as e:
-                    runner.console.print(f"[yellow]⚠️  Error stopping {occ_id}: {e}[/yellow]")
+                    runner.console.print(f"[yellow][WARN] Error stopping {occ_id}: {e}[/yellow]")
 
         return results
 

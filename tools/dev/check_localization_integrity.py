@@ -646,7 +646,7 @@ def main() -> int:
     bundle = REPO_ROOT / args.bundle
     en_file = bundle / "en.json"
     if not en_file.exists():
-        print(f"❌ ERROR: bundle en.json not found at {args.bundle}")
+        print(f"[FAIL] ERROR: bundle en.json not found at {args.bundle}")
         return 1
 
     langs = manifest_languages(bundle)
@@ -656,7 +656,7 @@ def main() -> int:
     allow = load_allow(args.allow_file)
     en_common = english_common_words(en, args.stopword_df)
 
-    print("🔍 Localization value integrity")
+    print(" Localization value integrity")
     print(f"   bundle: {args.bundle}  ({len(en)} keys, {len(langs)} languages)")
     print()
 
@@ -706,7 +706,7 @@ def main() -> int:
         print()
 
     if not errors:
-        print("✅ no functional breaks (placeholders intact, no cross-script bleed)")
+        print("[OK] no functional breaks (placeholders intact, no cross-script bleed)")
         print()
 
     print(f"   {len(errors)} error(s), {len(warnings)} warning(s) across {len(files)} locale file(s)")
@@ -715,18 +715,18 @@ def main() -> int:
         gated = [f for f in findings if f.check in set(args.fail_on)]
         names = ", ".join(sorted(set(args.fail_on)))
         if gated:
-            print(f"❌ ratcheted check(s) regressed: {len(gated)} finding(s) in [{names}]")
+            print(f"[FAIL] ratcheted check(s) regressed: {len(gated)} finding(s) in [{names}]")
             for f in gated[: args.max_per_check]:
                 print(f"      [{f.check}] {f.lang} {f.key}: {f.detail}")
             return 1
-        print(f"✅ ratcheted check(s) still clean: [{names}]")
+        print(f"[OK] ratcheted check(s) still clean: [{names}]")
         print("   (other findings above are pre-existing debt and do not gate)")
         return 0
 
     if errors or (args.strict and warnings):
-        print("❌ localization integrity check failed")
+        print("[FAIL] localization integrity check failed")
         return 1
-    print("✅ localization integrity check passed")
+    print("[OK] localization integrity check passed")
     return 0
 
 

@@ -103,7 +103,7 @@ class AccordMetricsAdapter(Service):
         # CONSENT STATE LOGGING - Make it OBVIOUS what's happening
         # =====================================================================
         logger.info("=" * 70)
-        logger.info("📊 ACCORD METRICS ADAPTER INITIALIZING")
+        logger.info(" ACCORD METRICS ADAPTER INITIALIZING")
         logger.info(f"   Config consent_given: {adapter_config.get('consent_given', False)}")
         logger.info(f"   Env CIRIS_ACCORD_METRICS_CONSENT: {os.environ.get('CIRIS_ACCORD_METRICS_CONSENT', 'not set')}")
         logger.info(
@@ -111,7 +111,7 @@ class AccordMetricsAdapter(Service):
         )
 
         if env_consent:
-            logger.info("✅ CONSENT ENABLED via environment variable")
+            logger.info("[OK] CONSENT ENABLED via environment variable")
             # Update adapter_config so the service also gets consent
             adapter_config["consent_given"] = True
             adapter_config["consent_timestamp"] = env_timestamp or datetime.now(timezone.utc).isoformat()
@@ -122,7 +122,7 @@ class AccordMetricsAdapter(Service):
             logger.info("Consent not yet granted — capture runs; seals are consent_blocked at the substrate until the CEG grant exists")
             logger.warning("   Set CIRIS_ACCORD_METRICS_CONSENT=true or complete setup wizard")
         else:
-            logger.info(f"✅ CONSENT GIVEN - traces WILL be captured and sent")
+            logger.info(f"[OK] CONSENT GIVEN - traces WILL be captured and sent")
 
         logger.info("=" * 70)
 
@@ -153,7 +153,7 @@ class AccordMetricsAdapter(Service):
             List of service registrations for WiseAuthority bus
         """
         logger.info("=" * 70)
-        logger.info("📋 ACCORD METRICS - get_services_to_register() called")
+        logger.info(" ACCORD METRICS - get_services_to_register() called")
         logger.info(f"   Current consent state: {self._consent_given}")
 
         # 2.9.6: registration is UNCONDITIONAL. The adapter is the agent's
@@ -173,7 +173,7 @@ class AccordMetricsAdapter(Service):
                 ],
             )
         ]
-        logger.info("✅ REGISTERED AccordMetricsService on WiseAuthority bus")
+        logger.info("[OK] REGISTERED AccordMetricsService on WiseAuthority bus")
         logger.info("   Capabilities: send_deferral, accord_metrics")
         logger.info("   (consent gates sharing at the substrate seal, not registration)")
 
@@ -183,7 +183,7 @@ class AccordMetricsAdapter(Service):
     async def start(self) -> None:
         """Start the Accord Metrics adapter."""
         logger.info("=" * 70)
-        logger.info("🚀 ACCORD METRICS ADAPTER STARTING")
+        logger.info(" ACCORD METRICS ADAPTER STARTING")
         logger.info(f"   Consent: {self._consent_given}")
         logger.info("=" * 70)
 
@@ -255,7 +255,7 @@ class AccordMetricsAdapter(Service):
                     logger.info("   consent-CEG migration: emit no-op (engine/key unavailable or kill-switch)")
             except Exception as exc:  # noqa: BLE001 — best-effort, never block adapter start
                 logger.warning(f"   consent-CEG migration failed ({type(exc).__name__}): {exc}")
-            logger.info("✅ AccordMetricsAdapter STARTED - collecting metrics")
+            logger.info("[OK] AccordMetricsAdapter STARTED - collecting metrics")
         else:
             logger.info("AccordMetricsAdapter started pre-consent — capture active, sharing gated at the substrate seal")
 

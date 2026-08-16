@@ -1329,7 +1329,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             if wa.role == WARole.ROOT:
                 # Create system WA as child of root
                 new_system_wa = await self._create_system_wa_certificate(wa.wa_id)
-                logger.info(f"✅ Created system WA {new_system_wa.wa_id} as child of ROOT {wa.wa_id}")
+                logger.info(f"[OK] Created system WA {new_system_wa.wa_id} as child of ROOT {wa.wa_id}")
                 return new_system_wa.wa_id
 
         logger.warning("Cannot create system WA - no ROOT WA found")

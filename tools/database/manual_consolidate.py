@@ -161,7 +161,7 @@ async def run_manual_consolidation(
                 print(f"  Actual count: {actual_count:,}")
 
                 if claimed_count == actual_count and actual_count > 0:
-                    print("  ✓ Counts match! Deleting...")
+                    print(" [OK] Counts match! Deleting...")
                     cursor.execute(
                         """
                         DELETE FROM graph_nodes
@@ -175,7 +175,7 @@ async def run_manual_consolidation(
                     print(f"  Deleted {deleted:,} tsdb_data nodes")
                     total_deleted += deleted
                 else:
-                    print("  ✗ Count mismatch or no data! Not deleting.")
+                    print(" [FAIL] Count mismatch or no data! Not deleting.")
 
             elif node_type == "audit_summary":
                 claimed_count = attrs.get("source_node_count", 0)
@@ -194,7 +194,7 @@ async def run_manual_consolidation(
                 print(f"  Actual count: {actual_count:,}")
 
                 if claimed_count == actual_count and actual_count > 0:
-                    print("  ✓ Counts match! Deleting...")
+                    print(" [OK] Counts match! Deleting...")
                     cursor.execute(
                         """
                         DELETE FROM graph_nodes
@@ -225,7 +225,7 @@ async def run_manual_consolidation(
                 print(f"  Actual count: {actual_count:,}")
 
                 if claimed_count == actual_count and actual_count > 0:
-                    print("  ✓ Counts match! Deleting...")
+                    print(" [OK] Counts match! Deleting...")
                     cursor.execute(
                         """
                         DELETE FROM service_correlations

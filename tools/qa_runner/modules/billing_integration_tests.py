@@ -33,7 +33,7 @@ class BillingIntegrationTests:
 
     async def run(self) -> List[Dict]:
         """Run full billing integration tests."""
-        self.console.print("\n[cyan]💳 Testing Billing Integration (Credit Deduction)[/cyan]")
+        self.console.print("\n[cyan] Testing Billing Integration (Credit Deduction)[/cyan]")
         self.console.print(
             "[dim]Testing with OAuth user account - billing backend will auto-replenish to 3 credits[/dim]"
         )
@@ -55,10 +55,10 @@ class BillingIntegrationTests:
             try:
                 await test_func()
                 self.results.append({"test": name, "status": "✅ PASS", "error": None})
-                self.console.print(f"  ✅ {name}")
+                self.console.print(f" [OK] {name}")
             except Exception as e:
                 self.results.append({"test": name, "status": "❌ FAIL", "error": str(e)})
-                self.console.print(f"  ❌ {name}: {str(e)[:100]}")
+                self.console.print(f" [FAIL] {name}: {str(e)[:100]}")
                 if self.console.is_terminal:
                     # Show detailed error for debugging
                     error_lines = traceback.format_exc().split("\n")

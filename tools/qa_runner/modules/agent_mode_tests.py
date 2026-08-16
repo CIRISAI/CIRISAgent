@@ -75,7 +75,7 @@ class AgentModeTests:
     # Test orchestrator
     # ------------------------------------------------------------------
     async def run(self) -> List[Dict[str, Any]]:
-        self.console.print("\n[cyan]🎛️  Testing AgentMode endpoints[/cyan]")
+        self.console.print("\n[cyan] Testing AgentMode endpoints[/cyan]")
 
         tests = [
             ("GET requires auth (401 when missing)", self.test_get_requires_auth),
@@ -91,10 +91,10 @@ class AgentModeTests:
             try:
                 await test_func()
                 self.results.append({"test": name, "status": "✅ PASS", "error": None})
-                self.console.print(f"  ✅ {name}")
+                self.console.print(f" [OK] {name}")
             except Exception as exc:  # noqa: BLE001 — we want to record every failure
                 self.results.append({"test": name, "status": "❌ FAIL", "error": str(exc)})
-                self.console.print(f"  ❌ {name}: {str(exc)[:200]}")
+                self.console.print(f" [FAIL] {name}: {str(exc)[:200]}")
                 if self.console.is_terminal:
                     self.console.print(f"     [dim]{traceback.format_exc()[:600]}[/dim]")
 

@@ -65,7 +65,7 @@ class ModuleLoader:
 
         # Emit LOUD warnings
         logger.warning("=" * 80)
-        logger.warning("🚨 MOCK MODULE DETECTED 🚨")
+        logger.warning("[ALERT] MOCK MODULE DETECTED [ALERT]")
         logger.warning(f"Loading MOCK module: {module_name}")
         logger.warning("THIS IS FOR TESTING ONLY - NOT FOR PRODUCTION")
         logger.warning("=" * 80)
@@ -75,8 +75,8 @@ class ModuleLoader:
             self.disabled_service_types.add(service.type)
 
             if disable_core:
-                logger.warning(f"⚠️  DISABLING all non-mock {service.type.value} services")
-                logger.warning(f"⚠️  ONLY {module_name} will provide {service.type.value} services")
+                logger.warning(f"[WARN] DISABLING all non-mock {service.type.value} services")
+                logger.warning(f"[WARN] ONLY {module_name} will provide {service.type.value} services")
 
         # Log to audit trail
         logger.critical(
@@ -183,7 +183,7 @@ class ModuleLoader:
                 initialized_services.append(service_metadata)
 
                 if manifest.module.is_mock:
-                    logger.warning(f"⚠️  MOCK service registered: {service_class.__name__}")
+                    logger.warning(f"[WARN] MOCK service registered: {service_class.__name__}")
                     result.warnings.append(f"MOCK service registered: {service_class.__name__}")
                     # Log SERVICE X/22 for mock LLM services (replaces real LLM service #14)
                     if service_decl.type == ServiceType.LLM:

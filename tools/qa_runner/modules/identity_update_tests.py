@@ -30,6 +30,8 @@ import yaml
 from rich.console import Console
 from rich.table import Table
 
+from tools.qa_runner.platform_procs import kill_processes_matching
+
 
 class IdentityUpdateTests:
     """Integration test for identity update functionality."""
@@ -246,21 +248,12 @@ class IdentityUpdateTests:
     async def test_stop_server(self) -> None:
         """Stop the current server (managed by qa_runner)."""
         # The qa_runner manages the server, but we need to stop it for restart
-        # Kill any server on our port
-        try:
-            result = subprocess.run(
-                ["pkill", "-f", f"python.*main.py.*--port.*{self._port}"],
-                capture_output=True,
-                timeout=10,
-            )
-            # Also try without port specification
-            subprocess.run(
-                ["pkill", "-f", "python.*main.py.*--adapter.*api.*--mock-llm"],
-                capture_output=True,
-                timeout=10,
-            )
-        except Exception:
-            pass
+        # Kill any server on our port. These used to shell out to `pkill`, which
+        # does not exist on Windows -- the bare except meant it silently did
+        # nothing there rather than crashing, so the restart test "passed"
+        # without ever restarting anything.
+        kill_processes_matching(f"python.*main.py.*--port.*{self._port}")
+        kill_processes_matching("python.*main.py.*--adapter.*api.*--mock-llm")
 
         # Wait for port to be free
         for _ in range(30):

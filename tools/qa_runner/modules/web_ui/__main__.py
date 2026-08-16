@@ -67,6 +67,8 @@ from typing import Dict, List, Optional
 
 import requests
 
+from tools.qa_runner.platform_procs import temp_path
+
 from .browser_helper import BrowserConfig, ensure_playwright_installed
 from .desktop_app_helper import DesktopAppConfig, DesktopAppHelper, check_desktop_app_running
 from .federation_walk_test import FederationWalkTest
@@ -1148,7 +1150,7 @@ def _start_emulator(avd: str) -> Optional[subprocess.Popen]:
         "-no-audio",
         "-no-boot-anim",
     ]
-    log_path = Path("/tmp") / "ciris_android_emulator.log"
+    log_path = temp_path("ciris_android_emulator.log")
     log_file = open(log_path, "w")
     print(f"  emulator: starting {avd} (log: {log_path})")
     return subprocess.Popen(cmd, stdout=log_file, stderr=subprocess.STDOUT, start_new_session=True)
@@ -1461,7 +1463,7 @@ async def run_desktop_up(args: argparse.Namespace) -> int:
         env["CIRIS_TEST_MODE"] = "true"
         env["CIRIS_TEST_PORT"] = str(args.desktop_port)
         env["CIRIS_API_URL"] = server.base_url
-        log_path = Path("/tmp") / "ciris_desktop_up.log"
+        log_path = temp_path("ciris_desktop_up.log")
         with open(log_path, "w") as log:
             subprocess.Popen(
                 ["java", "-jar", str(jar)],
@@ -1577,7 +1579,7 @@ async def run_desktop_first_run_up(args: argparse.Namespace) -> int:
     env["CIRIS_TEST_MODE"] = "true"
     env["CIRIS_TEST_PORT"] = str(args.desktop_port)
     env["CIRIS_API_URL"] = server.base_url
-    log_path = Path("/tmp") / "ciris_desktop_setup.log"
+    log_path = temp_path("ciris_desktop_setup.log")
     with open(log_path, "w") as log:
         subprocess.Popen(
             ["java", "-jar", str(jar)],

@@ -173,6 +173,61 @@ def test_helpers_never_raise_when_the_tool_is_missing(monkeypatch: pytest.Monkey
     assert platform_procs.pids_listening_on(8080) == []
 
 
+#: Modules on the Windows desktop path. The mobile/ios suites drive an Android
+#: emulator or Xcode from a developer machine and never run on the Windows
+#: workflow, so their /tmp screenshot paths are out of scope here.
+WINDOWS_REACHABLE = [
+    "tools/qa_runner/modules/web_ui/__main__.py",
+    "tools/qa_runner/modules/web_ui/server_manager.py",
+    "tools/qa_runner/modules/web_ui/desktop_app_helper.py",
+]
+
+
+@pytest.mark.parametrize("rel", WINDOWS_REACHABLE)
+def test_no_hardcoded_tmp_on_the_windows_path(rel: str) -> None:
+    """`Path("/tmp") / x` is `\\tmp\\x` on Windows, and that directory does not exist.
+
+    This killed Boot 1 the moment the readiness gate was fixed and the run got
+    far enough to open a log file:
+
+        FileNotFoundError: [Errno 2] No such file or directory: '\\tmp\\ciris_desktop_setup.log'
+
+    tempfile.gettempdir() is correct everywhere and honours TMPDIR/TEMP/TMP.
+    """
+    path = REPO / rel
+    if not path.exists():
+        pytest.skip(f"{rel} not in this checkout")
+    hits = [
+        f"{rel}:{i}"
+        for i, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
+        if ('"/tmp' in line or "'/tmp" in line) and not line.lstrip().startswith("#")
+    ]
+    assert not hits, (
+        f"hardcoded /tmp at {hits}; on Windows this resolves to \\tmp on the current "
+        "drive and raises FileNotFoundError. Use platform_procs.temp_path()."
+    )
+
+
+def test_temp_path_lands_in_the_real_temp_dir(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    """It must follow the runner's configured scratch space, not assume one."""
+    from tools.qa_runner import platform_procs
+
+    monkeypatch.setenv("TMPDIR", str(tmp_path))
+    monkeypatch.setenv("TEMP", str(tmp_path))
+    monkeypatch.setenv("TMP", str(tmp_path))
+    import importlib
+    import tempfile as _tf
+
+    importlib.reload(_tf)
+    result = platform_procs.temp_path("ciris_desktop_setup.log")
+    assert result.name == "ciris_desktop_setup.log"
+    assert result.parent.is_dir(), "temp_path pointed at a directory that does not exist"
+    # The decisive property: writable, which \tmp on Windows was not.
+    result.write_text("ok", encoding="utf-8")
+    assert result.read_text(encoding="utf-8") == "ok"
+    result.unlink()
+
+
 def test_empty_pid_list_means_unknown_not_free() -> None:
     """Guard the contract, since misreading it would reintroduce a race.
 

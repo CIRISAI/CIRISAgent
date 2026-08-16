@@ -23,6 +23,8 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import tempfile
+from pathlib import Path
 from typing import List
 
 IS_WINDOWS = sys.platform == "win32"
@@ -104,3 +106,20 @@ def desktop_process_pattern() -> str:
     if sys.platform == "darwin":
         return "CIRIS-macos"
     return "CIRIS-linux"
+
+
+def temp_path(name: str) -> Path:
+    """A scratch path under the platform's real temp directory.
+
+    `Path("/tmp") / name` is an absolute POSIX path. On Windows it becomes
+    `\\tmp\\name` on the current drive -- a directory that does not exist -- so
+    opening it for write raises
+
+        FileNotFoundError: [Errno 2] No such file or directory: '\\tmp\\ciris_desktop_setup.log'
+
+    which is what killed Boot 1 immediately after the server came up healthy.
+    tempfile.gettempdir() honours TMPDIR/TEMP/TMP and falls back sensibly, so it
+    is right on all three platforms and respects a runner's configured scratch
+    space rather than assuming one.
+    """
+    return Path(tempfile.gettempdir()) / name

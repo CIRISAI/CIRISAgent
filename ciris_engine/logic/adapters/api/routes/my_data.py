@@ -709,30 +709,16 @@ def _apply_consent_change(adapter: Any, consent_given: bool) -> None:
 
 
 def _substrate_can_scrub() -> bool:
-    """Does the pinned substrate expose a real egress scrubber?
+    """Delegates to the shared probe — see `utils/substrate_caps`.
 
-    The agent builds persist's Engine from Python with ``scrubber=None``, which
-    persist fills in with ``NullScrubber`` — it redacts nothing and reports
-    ``ner_ran: false``. From persist v32.1.0 that combination is a HARD
-    REJECTION at ``full_traces`` (``scrub_treatment_mismatch``), so every batch
-    is refused and **nothing is persisted at all**. ``detailed`` still passes,
-    which is why production was unaffected and only this opt-in setting is.
-
-    Probing for the binding rather than version-comparing: ``egress_scrub``
-    appearing is exactly the condition that makes ``full_traces`` safe, and this
-    guard then lifts on its own when the substrate ships it. A pin comparison
-    would need editing again on the very release that fixes the problem.
+    Kept as a thin local name because the tests monkeypatch it here, and because
+    the interactive route's behaviour on a False answer (REFUSE) differs from the
+    adapter bootstrap's (downgrade), so the two call sites read differently even
+    though they ask the same question.
     """
-    try:
-        # Same ignore set the other ciris_server imports carry (location_utils,
-        # _substrate, compose_dump): the wheel ships no py.typed, and it is absent
-        # from some CI images entirely. `unused-ignore` keeps it quiet where it IS
-        # resolvable.
-        import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
+    from ciris_engine.logic.utils.substrate_caps import substrate_can_scrub
 
-        return hasattr(ciris_server, "egress_scrub")
-    except Exception:
-        return False
+    return substrate_can_scrub()
 
 
 def _apply_trace_level_change(adapter: Any, trace_level: str) -> None:

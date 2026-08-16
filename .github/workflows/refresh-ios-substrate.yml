@@ -175,8 +175,29 @@ jobs:
           # first automatic run reported "already matches the pins" while iOS sat a
           # release behind.
           python3 tools/dev/check_ios_substrate_current.py
-          
-          if git diff --quiet && git diff --cached --quiet; then
+
+          # A byte diff is NOT evidence of a substantive change, and treating it as
+          # one put this workflow in a loop that blocked the 2.9.18 release.
+          #
+          # Re-zipping identical content yields different bytes because zip embeds
+          # mtimes; substrate.lock.json rewrites `updated_at` every run; the
+          # xcframework Info.plist repair rewrites timestamps too. So a re-run over
+          # an ALREADY-CURRENT bundle always looked "changed" -> committed -> pushed.
+          # And because a bot-authored commit parks every workflow in
+          # `action_required`, each of those no-op pushes froze the whole PR's
+          # checks. Every subsequent push re-triggered the refresh (a pull_request
+          # path filter is cumulative, not per-push), so it never settled.
+          #
+          # Currency is the real question, and check_ios_substrate_current.py above
+          # already answers it authoritatively from substrate.lock.json. If the
+          # bundle is current, there is nothing to say — regardless of what the byte
+          # diff claims.
+          if python3 tools/dev/check_ios_substrate_current.py >/dev/null 2>&1 \
+             && git diff --quiet -- client/iosApp/Resources/ ; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "iOS bundle is already current for these pins — not committing timestamp-only churn."
+            git diff --stat || true
+          elif git diff --quiet && git diff --cached --quiet; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "No changes — iOS bundle already matches the pins."
           else

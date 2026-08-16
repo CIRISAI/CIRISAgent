@@ -464,14 +464,14 @@ class ServerManager:
 
         try:
             # Find processes using the port
-            result = subprocess.run(
-                ["lsof", "-t", f"-i:{self.config.port}"],
-                capture_output=True,
-                text=True,
-            )
+            # `lsof` is POSIX-only; on Windows this raised FileNotFoundError.
+            # An empty list means "could not determine", NOT "port is free".
+            from tools.qa_runner.platform_procs import pids_listening_on
 
-            if result.stdout.strip():
-                pids = result.stdout.strip().split("\n")
+            _found = pids_listening_on(self.config.port)
+
+            if _found:
+                pids = [str(x) for x in _found]
                 for pid in pids:
                     try:
                         os.kill(int(pid), signal.SIGKILL)
@@ -481,11 +481,14 @@ class ServerManager:
                 time.sleep(1)
 
         except FileNotFoundError:
-            # lsof not available, try pkill
-            subprocess.run(
-                ["pkill", "-f", f"python.*main.py.*{self.config.port}"],
-                capture_output=True,
-            )
+            # Kept as a last resort, but pids_listening_on() no longer raises
+            # FileNotFoundError — it returns [] when it cannot tell — so this
+            # branch is now effectively unreachable. `pkill` is POSIX-only and
+            # would itself have raised here on Windows, which is the bug this
+            # whole change is fixing.
+            from tools.qa_runner.platform_procs import kill_processes_matching
+
+            kill_processes_matching(f"python.*main.py.*{self.config.port}")
 
     def __enter__(self) -> "ServerManager":
         """Context manager entry."""

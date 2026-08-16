@@ -989,13 +989,11 @@ TEST_ADMIN_PASSWORD = "qa_test_password_12345"
 def _kill_port(port: int) -> None:
     """SIGKILL whatever is listening on a port."""
     try:
-        out = subprocess.run(
-            ["lsof", "-tiTCP:" + str(port), "-sTCP:LISTEN"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        ).stdout.strip()
-        for pid in out.splitlines():
+        # `lsof` is POSIX-only and absent on Windows (and on minimal Linux
+        # images), where it raised FileNotFoundError instead of finding nothing.
+        from tools.qa_runner.platform_procs import pids_listening_on
+
+        for pid in pids_listening_on(port):
             try:
                 os.kill(int(pid), 9)
             except Exception:
@@ -1399,8 +1397,9 @@ async def run_desktop_up(args: argparse.Namespace) -> int:
     print("[1/5] Stopping anything on 8080/8091 and wiping dev data...")
     _kill_port(args.port)
     _kill_port(args.desktop_port)
-    subprocess.run(["pkill", "-9", "-f", "CIRIS-macos"], capture_output=True)
-    subprocess.run(["pkill", "-9", "-f", "CIRIS-linux"], capture_output=True)
+    from tools.qa_runner.platform_procs import desktop_process_pattern, kill_processes_matching
+    kill_processes_matching(desktop_process_pattern())
+    # CIRIS-linux handled by desktop_process_pattern() above; pkill is POSIX-only.
     time.sleep(1)
     _wipe_dev_data()
 
@@ -1514,7 +1513,9 @@ async def run_desktop_up(args: argparse.Namespace) -> int:
     print(f"[OK] Ready. Backend: {server.base_url} Desktop test server: http://localhost:{args.desktop_port}")
     # Username only — see the note at the admin-created line above.
     print(f"   Admin: {TEST_ADMIN_USERNAME} (password: see TEST_ADMIN_PASSWORD)")
-    print("   Processes left running — kill with: pkill -9 -f 'CIRIS-macos|main.py --adapter api'")
+    _hint = ("taskkill /F /IM CIRIS-windows.exe" if sys.platform == "win32"
+             else "pkill -9 -f 'CIRIS-(macos|linux)|main.py --adapter api'")
+    print(f"   Processes left running — kill with: {_hint}")
     return 0
 
 
@@ -1535,8 +1536,9 @@ async def run_desktop_first_run_up(args: argparse.Namespace) -> int:
     print("[1/3] Stopping anything on 8080/8091 and wiping dev data...")
     _kill_port(args.port)
     _kill_port(args.desktop_port)
-    subprocess.run(["pkill", "-9", "-f", "CIRIS-macos"], capture_output=True)
-    subprocess.run(["pkill", "-9", "-f", "CIRIS-linux"], capture_output=True)
+    from tools.qa_runner.platform_procs import desktop_process_pattern, kill_processes_matching
+    kill_processes_matching(desktop_process_pattern())
+    # CIRIS-linux handled by desktop_process_pattern() above; pkill is POSIX-only.
     time.sleep(1)
     _wipe_dev_data()
     # _wipe_dev_data rewrites ~/ciris/.env with CIRIS_CONFIGURED="true" (for

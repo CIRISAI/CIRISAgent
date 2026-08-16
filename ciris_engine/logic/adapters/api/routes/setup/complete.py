@@ -517,7 +517,9 @@ async def _create_setup_users(
     logger.info("=" * 70)
     logger.info("CIRIS_USER_CREATE: _create_setup_users() called")
     logger.info("=" * 70)
-    logger.info(f"CIRIS_USER_CREATE: main_db_path = {main_db_path}")
+    from ciris_engine.logic.persistence.db.core import _redact_dsn
+
+    logger.info(f"CIRIS_USER_CREATE: main_db_path = {_redact_dsn(str(main_db_path))}")
     logger.info(f"CIRIS_USER_CREATE: skip_user_creation = {setup.skip_user_creation}")
     # SECURITY: Log provider only, not full external_id (could be PII)
     ingress_provider = ingress_user_id.split(":")[0] if ingress_user_id and ":" in ingress_user_id else None

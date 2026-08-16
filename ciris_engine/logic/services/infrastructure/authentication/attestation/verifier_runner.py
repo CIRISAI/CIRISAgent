@@ -232,7 +232,11 @@ def _verify_audit_trail(
         return attestation_data
 
     try:
-        logger.info(f"[attestation] Calling verify_audit_trail_sync with db_path={audit_db_path}")
+        from ciris_engine.logic.persistence.db.core import _redact_dsn
+
+        logger.info(
+            f"[attestation] Calling verify_audit_trail_sync with db_path={_redact_dsn(str(audit_db_path))}"
+        )
         audit_result = verifier.verify_audit_trail_sync(
             db_path=audit_db_path,
             portal_key_id=key_fingerprint,

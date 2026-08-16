@@ -372,29 +372,101 @@ class DesktopAppTestRunner:
 
         # ── Step 0: land on the Setup wizard ──────────────────────────
         async def wait_for_setup():
+            """First run now starts at LOGIN, not at the wizard (#1055).
+
+            The Login screen used to be auto-skipped on first run because
+            `googleSignInCallback == null` was read as "no OAuth configured" --
+            untrue once the browser-handoff flow landed. With that fixed, a fresh
+            install lands on a provider chooser:
+
+                screen = Login
+                  btn_google_signin  btn_local_login  btn_login_reset_device
+                  btn_privacy_policy btn_server_status language_selector
+
+            and the wizard only appears after a sign-in method is chosen.
+
+            This is also the answer to the Windows/Linux divergence I chased
+            earlier today: Windows was already showing this chooser while Linux
+            went straight to the form. They agree now -- and the behaviour they
+            agree on is the Windows one, so the harness needs it on every
+            platform rather than as a Windows special case.
+            """
             self._log("Waiting for Setup wizard...")
-            if not await self.helper.wait_for_screen("Setup", timeout=30000):
+            if await self.helper.wait_for_screen("Setup", timeout=8000):
+                return
+
+            screen = await self.helper.get_screen()
+            if screen == "Login" and await self.helper.is_element_visible("btn_local_login"):
+                self._log("first run starts at the Login chooser — selecting local signup")
+                await self.helper.click("btn_local_login")
+                if await self.helper.wait_for_screen("Setup", timeout=20000):
+                    return
                 screen = await self.helper.get_screen()
-                raise RuntimeError(f"Setup wizard did not appear (on '{screen}')")
+
+            await self._dump_tree("wait_for_setup_wizard")
+            raise RuntimeError(f"Setup wizard did not appear (on '{screen}')")
 
         await self.run_test("wait_for_setup_wizard", wait_for_setup)
 
         # ── Screen 1: YOU (fed-ID name + account + age band) ──────────
         async def you_step():
-            self._log(f"YOU: fed-ID label={fed_label}, username={username}, band={age_band}")
-            if not await self.helper.wait_for_element("input_fedid_label", timeout=10000):
-                raise RuntimeError("input_fedid_label not found on screen 1")
-            await self.helper.input_text("input_fedid_label", fed_label)
-            await self.helper.input_text("input_username", username)
-            await self.helper.input_text("input_password", password)
-            await self.helper.input_text("input_password_confirm", password)
+            """Drive YOU in its current order: Age -> Account -> Federation identity.
+
+            AGE LEADS AND IS REQUIRED (#1055). SetupFormState.canAdvance now gates
+            YOU on `ageRange.selectedBandToken != null`, because the band seeds the
+            fed-ID and the minor-stewardship gate -- nothing below it can be judged
+            until it is answered.
+
+            This step used to fill the fed-ID label first and click the age band
+            LAST, behind `if is_element_visible(...)`, so a band that had not
+            rendered yet was silently skipped. That is now unadvanceable, and the
+            old shape would have reported a PASS anyway: clicking btn_next
+            "succeeds" as a click even when the wizard refuses to move, and the
+            failure only surfaced one step later as a confusing "the consent screen
+            has no toggles". Order fixed, and the skip made loud.
+            """
+            self._log(f"YOU: band={age_band}, username={username}, fed-ID label={fed_label}")
+
+            # 1. AGE — first, required, and never silently skipped.
             band_tag = f"age_band_{age_band}"
-            if await self.helper.is_element_visible(band_tag):
-                await self.helper.click(band_tag)
+            if not await self.helper.wait_for_element(band_tag, timeout=10000):
+                await self._dump_tree("you_step:age")
+                raise RuntimeError(f"{band_tag} not found — YOU cannot advance without an age band")
+            await self.helper.click(band_tag)
+            await asyncio.sleep(0.2)
+
+            # 2. ACCOUNT — local username/password render only for non-OAuth
+            # signup (showLocalUserFields()), so probe rather than assume.
+            if await self.helper.is_element_visible("input_username"):
+                await self.helper.input_text("input_username", username)
+                await self.helper.input_text("input_password", password)
+                await self.helper.input_text("input_password_confirm", password)
+            else:
+                self._log("no local account fields (OAuth signup) — skipping credentials")
+
+            # 3. FEDERATION IDENTITY — the label now AUTO-DERIVES from the
+            # username / OAuth id and is only overridden when the user edits it.
+            # Setting it explicitly keeps runs identifiable and still exercises
+            # the manual-edit path (labelManuallyEdited).
+            if await self.helper.is_element_visible("input_fedid_label"):
+                await self.helper.input_text("input_fedid_label", fed_label)
+
             await asyncio.sleep(0.3)
             if not await self.helper.click("btn_next"):
                 raise RuntimeError("Failed to click btn_next on screen 1 (YOU)")
+
+            # VERIFY IT ACTUALLY ADVANCED. A click that lands but does not move
+            # the wizard is the exact shape that made this pass while leaving the
+            # run broken -- the same lesson as the .env assertion that passed
+            # while asserting nothing. If YOU is unsatisfied, say so here, where
+            # the cause is, instead of two steps downstream.
             await asyncio.sleep(0.5)
+            if await self.helper.is_element_visible(band_tag):
+                await self._dump_tree("you_step:did-not-advance")
+                raise RuntimeError(
+                    "still on the YOU step after btn_next — a required field is unsatisfied "
+                    "(age band, account, or fed-ID label)"
+                )
 
         await self.run_test("you_step", you_step)
 

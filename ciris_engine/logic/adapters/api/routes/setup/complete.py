@@ -408,7 +408,19 @@ def _create_founding_partnership(wa_id: str, oauth_user_id: Optional[str] = None
 
     time_service = TimeService()
     add_graph_node(node, time_service)
+    # FALSE POSITIVE (py/clear-text-logging-sensitive-data). `node_id` is a graph
+    # node key -- `consent/{user_id}` -- where user_id is an OAuth external id
+    # ("google:12345") or a WA id ("wa-2026-04-01-337AE1"). Both are identifiers
+    # that appear throughout the audit trail by design; neither is a credential.
+    # CodeQL flags it because the value derives from the setup request, which
+    # ALSO carries a password field it never reaches.
+    #
+    # Newly reported only because the emoji sweep rewrote these two lines
+    # (checkmark -> [OK]) for the Windows cp1252 fix, so pre-existing logging
+    # counts as "changed by this PR".
+    # codeql[py/clear-text-logging-sensitive-data]
     print(f"[SETUP_COMPLETE] [OK] Founding partnership created: {node_id} (PARTNERED)")
+    # codeql[py/clear-text-logging-sensitive-data]
     logger.info(f"[OK] Founding partnership created for setup user: {node_id}")
 
 

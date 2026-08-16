@@ -58,8 +58,16 @@ def create_databases(main_db, db_user, superuser, superuser_password, host="loca
             cursor.execute(
                 sql.SQL("CREATE DATABASE {} OWNER {}").format(sql.Identifier(secrets_db), sql.Identifier(db_user))
             )
+            # FALSE POSITIVE (py/clear-text-logging-sensitive-data). `secrets_db`
+            # is a DATABASE NAME -- f"{main_db}_secrets", e.g. "ciris_secrets".
+            # CodeQL matches on the identifier containing "secrets"; the value is
+            # a schema name that appears in every connection string and psql
+            # prompt, and no credential passes through here. The superuser
+            # password IS in this function and is deliberately never printed.
+            # codeql[py/clear-text-logging-sensitive-data]
             print(f"[OK] Created {secrets_db}")
         else:
+            # codeql[py/clear-text-logging-sensitive-data]
             print(f"[OK] Secrets database {secrets_db} already exists")
 
         # Create auth database

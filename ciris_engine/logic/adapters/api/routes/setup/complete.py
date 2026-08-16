@@ -16,6 +16,7 @@ from fastapi import APIRouter, HTTPException, Request, status
 
 from ciris_engine.logic.config.db_paths import get_sqlite_db_full_path
 from ciris_engine.logic.setup.wizard import create_env_file
+from ciris_engine.logic.utils.env_file import env_line
 from ciris_engine.schemas.api.responses import SuccessResponse
 
 from .._common import RESPONSES_400_403_500
@@ -726,11 +727,11 @@ def _write_backup_llm_config(f: Any, setup: SetupCompleteRequest) -> None:
     if not setup.backup_llm_api_key:
         return
     f.write("\n# Backup/Secondary LLM Configuration\n")
-    f.write(f'CIRIS_OPENAI_API_KEY_2="{setup.backup_llm_api_key}"\n')
+    f.write(env_line("CIRIS_OPENAI_API_KEY_2", setup.backup_llm_api_key))
     if setup.backup_llm_base_url:
-        f.write(f'CIRIS_OPENAI_API_BASE_2="{setup.backup_llm_base_url}"\n')
+        f.write(env_line("CIRIS_OPENAI_API_BASE_2", setup.backup_llm_base_url))
     if setup.backup_llm_model:
-        f.write(f'CIRIS_OPENAI_MODEL_NAME_2="{setup.backup_llm_model}"\n')
+        f.write(env_line("CIRIS_OPENAI_MODEL_NAME_2", setup.backup_llm_model))
 
 
 def _write_node_connection_config(f: Any, setup: SetupCompleteRequest) -> None:
@@ -738,18 +739,18 @@ def _write_node_connection_config(f: Any, setup: SetupCompleteRequest) -> None:
     if not setup.node_url:
         return
     _write_section_header(f, "CIRISNode Connection (provisioned via device auth)")
-    f.write(f'CIRISNODE_BASE_URL="{setup.node_url}"\n')
+    f.write(env_line("CIRISNODE_BASE_URL", setup.node_url))
     if setup.identity_template:
-        f.write(f'CIRIS_IDENTITY_TEMPLATE="{setup.identity_template}"\n')
+        f.write(env_line("CIRIS_IDENTITY_TEMPLATE", setup.identity_template))
     if setup.stewardship_tier is not None:
         f.write(f"CIRIS_STEWARDSHIP_TIER={setup.stewardship_tier}\n")
     if setup.approved_adapters:
-        f.write(f'CIRIS_APPROVED_ADAPTERS="{",".join(setup.approved_adapters)}"\n')
+        f.write(env_line("CIRIS_APPROVED_ADAPTERS", ",".join(setup.approved_adapters)))
     if setup.org_id:
-        f.write(f'CIRIS_ORG_ID="{setup.org_id}"\n')
+        f.write(env_line("CIRIS_ORG_ID", setup.org_id))
     # Portal-issued key ID (private key is stored in hardware keystore, NOT here)
     if setup.signing_key_id:
-        f.write(f'CIRIS_SIGNING_KEY_ID="{setup.signing_key_id}"\n')
+        f.write(env_line("CIRIS_SIGNING_KEY_ID", setup.signing_key_id))
 
 
 def _write_licensed_package_config(f: Any, setup: SetupCompleteRequest) -> None:
@@ -757,9 +758,9 @@ def _write_licensed_package_config(f: Any, setup: SetupCompleteRequest) -> None:
     if not setup.licensed_package_path:
         return
     _write_section_header(f, "Licensed Module Package")
-    f.write(f'CIRIS_LICENSED_PACKAGE_PATH="{setup.licensed_package_path}"\n')
+    f.write(env_line("CIRIS_LICENSED_PACKAGE_PATH", setup.licensed_package_path))
     if setup.licensed_modules_path:
-        f.write(f'CIRIS_MODULE_PATH="{setup.licensed_modules_path}"\n')
+        f.write(env_line("CIRIS_MODULE_PATH", setup.licensed_modules_path))
 
 
 def _write_verify_config(f: Any, setup: SetupCompleteRequest) -> None:
@@ -767,7 +768,7 @@ def _write_verify_config(f: Any, setup: SetupCompleteRequest) -> None:
     if not setup.verify_binary_path:
         return
     _write_section_header(f, "CIRISVerify")
-    f.write(f'CIRIS_VERIFY_BINARY_PATH="{setup.verify_binary_path}"\n')
+    f.write(env_line("CIRIS_VERIFY_BINARY_PATH", setup.verify_binary_path))
     require_hw = "true" if setup.verify_require_hardware else "false"
     f.write(f"CIRIS_VERIFY_REQUIRE_HARDWARE={require_hw}\n")
 
@@ -891,7 +892,7 @@ def _write_mobile_local_llm_config(f: Any, setup: SetupCompleteRequest) -> None:
     f.write("\n# Mobile Local LLM (On-Device Inference)\n")
     f.write("CIRIS_MOBILE_LOCAL_LLM_ENABLED=true\n")
     if setup.llm_model:
-        f.write(f'CIRIS_MOBILE_LOCAL_LLM_MODEL="{setup.llm_model}"\n')
+        f.write(env_line("CIRIS_MOBILE_LOCAL_LLM_MODEL", setup.llm_model))
     logger.info("[SETUP] Mobile Local LLM adapter enabled for on-device inference")
 
 
@@ -914,20 +915,20 @@ def _write_adapter_specific_config(f: Any, setup: SetupCompleteRequest) -> None:
 def _write_location_config(f: Any, setup: SetupCompleteRequest) -> None:
     """Write location settings for weather/navigation adapters."""
     if setup.location_city:
-        f.write(f'CIRIS_USER_CITY="{setup.location_city}"\n')
+        f.write(env_line("CIRIS_USER_CITY", setup.location_city))
     if setup.location_region:
-        f.write(f'CIRIS_USER_REGION="{setup.location_region}"\n')
+        f.write(env_line("CIRIS_USER_REGION", setup.location_region))
     if setup.location_country:
-        f.write(f'CIRIS_USER_COUNTRY="{setup.location_country}"\n')
+        f.write(env_line("CIRIS_USER_COUNTRY", setup.location_country))
         location_parts = [setup.location_city, setup.location_region, setup.location_country]
         location_display = ", ".join(p for p in location_parts if p)
-        f.write(f'CIRIS_USER_LOCATION="{location_display}"\n')
+        f.write(env_line("CIRIS_USER_LOCATION", location_display))
     if setup.location_latitude is not None:
-        f.write(f'CIRIS_USER_LATITUDE="{setup.location_latitude}"\n')
+        f.write(env_line("CIRIS_USER_LATITUDE", setup.location_latitude))
     if setup.location_longitude is not None:
-        f.write(f'CIRIS_USER_LONGITUDE="{setup.location_longitude}"\n')
+        f.write(env_line("CIRIS_USER_LONGITUDE", setup.location_longitude))
     if setup.timezone:
-        f.write(f'CIRIS_USER_TIMEZONE="{setup.timezone}"\n')
+        f.write(env_line("CIRIS_USER_TIMEZONE", setup.timezone))
 
 
 def _write_location_sharing_consent(f: Any, setup: SetupCompleteRequest) -> None:
@@ -982,7 +983,7 @@ def _save_setup_config(setup: SetupCompleteRequest) -> Path:
         # User preferences (language & location)
         f.write("\n# User Preferences (from setup wizard PREFERENCES step)\n")
         preferred_lang = setup.preferred_language or "en"
-        f.write(f'CIRIS_PREFERRED_LANGUAGE="{preferred_lang}"\n')
+        f.write(env_line("CIRIS_PREFERRED_LANGUAGE", preferred_lang))
         _write_location_config(f, setup)
         _write_location_sharing_consent(f, setup)
 

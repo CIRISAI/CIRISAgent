@@ -1052,6 +1052,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
             _detect_provider_from_env,
             _get_api_key_for_provider,
         )
+        from ciris_engine.logic.services.runtime.llm_service.service import _is_placeholder_api_key
 
         provider = _detect_provider_from_env()
         api_key = _get_api_key_for_provider(provider)
@@ -1166,6 +1167,35 @@ This directory contains critical cryptographic keys for the CIRIS system.
             replica_count = max(1, int(os.environ.get("CIRIS_LLM_REPLICAS", "1")))
         except (TypeError, ValueError):
             replica_count = 1
+
+        # A PLACEHOLDER KEY IS "NO USABLE KEY" — NOT A FATAL ERROR.
+        #
+        # 2.9.16 added `_is_placeholder_api_key` so the agent would stop dialling
+        # a key it can see is fake (`sk-test` and friends can only return 401).
+        # That part was right. Raising from `OpenAICompatibleClient.__init__` was
+        # not: nothing on this path catches it, so it surfaced as
+        #
+        #     ✗ Core Services failed: The openai API key is a placeholder ...
+        #     RuntimeError: Initialization sequence failed
+        #
+        # and the whole agent refused to boot. Strictly worse than the bug it
+        # replaced — before, the agent ran and only the LLM call failed.
+        #
+        # The correct shape is twelve lines up: a missing key logs and RETURNS,
+        # leaving the agent healthy-but-degraded and letting persisted runtime
+        # providers load. `no_llm_provider` is a supported state with its own
+        # health warning and UI affordance. A placeholder is functionally a
+        # missing key, so it takes the same branch.
+        if _is_placeholder_api_key(api_key, base_url):
+            logger.warning(
+                "⚠️  %s API key is a placeholder, not a credential (length %d) — NOT registering "
+                "this provider; it could only return 401. The agent will start without an LLM "
+                "(health reports `no_llm_provider`). Set a real key, or point base_url at a local "
+                "runtime that does not need one.",
+                provider.value,
+                len(api_key.strip()),
+            )
+            return
 
         # Create and start primary service
         openai_service = OpenAICompatibleClient(
@@ -1296,6 +1326,19 @@ This directory contains critical cryptographic keys for the CIRIS system.
             # Reduced from 3 to 2 to fit within DMA timeout budget
             max_retries=self._get_llm_service_config_value(config, "llm_max_retries", 2),
         )
+
+        # Same rule as the primary: a placeholder is "no usable key", and this
+        # call site has no try/except either, so raising here would take the
+        # whole boot down over an OPTIONAL fallback provider.
+        from ciris_engine.logic.services.runtime.llm_service.service import _is_placeholder_api_key
+
+        if _is_placeholder_api_key(api_key, base_url):
+            logger.warning(
+                "⚠️  secondary LLM API key is a placeholder (length %d) — skipping the secondary "
+                "provider; the primary is unaffected.",
+                len(api_key.strip()),
+            )
+            return
 
         # Create and start service
         service = OpenAICompatibleClient(

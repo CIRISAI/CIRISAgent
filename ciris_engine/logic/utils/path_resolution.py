@@ -823,11 +823,38 @@ def _sanitize_env_value(value: str) -> str:
     """
     # Remove newlines and carriage returns (prevent multi-line injection)
     sanitized = value.replace("\n", "").replace("\r", "")
-    # Escape double quotes
-    sanitized = sanitized.replace('"', '\\"')
-    # Escape backslashes (must come after quote escaping)
-    sanitized = sanitized.replace("\\\\", "\\")
-    return sanitized
+    # Escaping for the double-quoted form is `env_quoted`'s job — backslashes
+    # FIRST, then quotes, or the backslash introduced by the quote escape gets
+    # double-escaped.
+    #
+    # WHAT WAS HERE BEFORE, AND WHY IT CORRUPTED CLEAN INSTALLS:
+    #
+    #     sanitized = sanitized.replace('"', '\\"')          # escape quotes
+    #     sanitized = sanitized.replace("\\\\", "\\")        # "escape backslashes"
+    #
+    # The second line replaces the two-character string `\\` with the single
+    # character `\` — it COLLAPSES double backslashes, the opposite of what its
+    # comment claimed, and it never escaped a lone backslash at all.
+    #
+    # This function does not just write a value; `persist_env_var` PARSES the
+    # whole existing .env and REWRITES every line through here. So a Windows
+    # path the setup wizard had correctly written as
+    #
+    #     CIRIS_DATA_DIR="C:\\Users\\franc\\ciris\\data"
+    #
+    # came back through as `C:\Users\franc\ciris\data` and was rewritten
+    # UNESCAPED. python-dotenv then read `\f` as a FORM FEED, and the agent
+    # died trying to mkdir a path containing a control character:
+    #
+    #     OSError: [WinError 123] ... 'C:\\Users\\x0cranc\\ciris\\data'
+    #
+    # That is why wiping the CIRIS folder and reinstalling did not help — the
+    # sync re-corrupted the freshly-written file. Third site of this defect
+    # after wizard.py (2.9.17) and complete.py (2.9.19), which is why the
+    # escaping now lives in exactly one builder.
+    from ciris_engine.logic.utils.env_file import env_quoted
+
+    return env_quoted(sanitized)
 
 
 def _parse_and_sanitize_env_content(content: str) -> dict[str, str]:
@@ -875,6 +902,11 @@ def _parse_and_sanitize_env_content(content: str) -> dict[str, str]:
             raw_value.startswith("'") and raw_value.endswith("'")
         ):
             raw_value = raw_value[1:-1]
+            # The on-disk form is ESCAPED, so decode before re-sanitizing.
+            # Without this the value gains a backslash pair on every sync.
+            from ciris_engine.logic.utils.env_file import env_unquoted
+
+            raw_value = env_unquoted(raw_value)
 
         # Sanitize the value
         sanitized_value = _sanitize_env_value(raw_value)
@@ -892,6 +924,9 @@ def _reconstruct_env_content(env_vars: dict[str, str]) -> str:
     Returns:
         Safe .env file content
     """
+    # Values arrive already escaped by `_sanitize_env_value`, so this only wraps
+    # them. Kept as an explicit f-string rather than `env_line` to avoid escaping
+    # twice — the seam is documented so the next reader does not "fix" it.
     lines = [f'{name}="{value}"' for name, value in sorted(env_vars.items())]
     return "\n".join(lines) + "\n" if lines else ""
 

@@ -82,16 +82,50 @@ def test_the_refusal_does_not_half_apply_the_change(
     assert adapter.metrics_service._trace_level == "detailed"
 
 
-def test_full_traces_is_allowed_once_the_substrate_can_scrub(
+def test_full_traces_is_allowed_once_the_agent_INSTALLS_a_scrubber(
     monkeypatch: pytest.MonkeyPatch, adapter: _Adapter
 ) -> None:
-    """The guard lifts on its own — 0.5.174 needs no change here."""
-    _fake_substrate(monkeypatch, has_scrub=True)
+    """The gate is what the AGENT wires, not what the substrate offers.
+
+    This test used to fake a `ciris_server` module carrying `egress_scrub` and
+    expect the guard to lift. That encoded the bug: from 0.5.174 the binding
+    exists on every supported pin, so a substrate-capability probe answers True
+    while the agent still builds `Engine(scrubber=None)` — persist installs
+    NullScrubber and full_traces is refused. A dependency bump would have
+    silently disabled the guard.
+
+    So the seam is now `substrate_can_scrub()`, which reports whether WE install
+    a scrubber, and this patches that.
+    """
+    import ciris_engine.logic.utils.substrate_caps as caps
+
+    monkeypatch.setattr(caps, "_AGENT_INSTALLS_SCRUBBER", True, raising=True)
 
     my_data._apply_trace_level_change(adapter, "full_traces")
 
-    assert adapter.metrics_service._trace_level is not None
     assert adapter.metrics_service._trace_level.value == "full_traces"
+
+
+def test_a_substrate_binding_alone_does_NOT_lift_the_guard(
+    monkeypatch: pytest.MonkeyPatch, adapter: _Adapter
+) -> None:
+    """The regression this file now exists to prevent.
+
+    A `ciris_server` exposing `egress_scrub` must NOT be enough. Until the agent
+    passes it to the Engine, nothing is redacted, and full_traces would be
+    refused by persist with scrub_treatment_mismatch.
+    """
+    import sys
+    import types
+
+    mod = types.ModuleType("ciris_server")
+    mod.egress_scrub = lambda *a, **k: None  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "ciris_server", mod)
+
+    with pytest.raises(HTTPException) as exc:
+        my_data._apply_trace_level_change(adapter, "full_traces")
+
+    assert exc.value.status_code == 400
 
 
 @pytest.mark.parametrize("level", ["generic", "detailed"])

@@ -1179,6 +1179,146 @@ def write_ios_substrate_lock(lib: str, version: str) -> None:
     print(f"  -> substrate.lock.json: {lib}={version}")
 
 
+#: Optional-dependency packages that have drawn a BLOCKING supply-chain alert
+#: purely by being named in a vendored METADATA. Add only with a real alert to
+#: point at — every entry costs a bundle-integrity edit (METADATA + RECORD).
+_FLAGGED_EXTRA_PKGS = {"lxml"}
+
+
+def prune_unsatisfiable_extras() -> int:
+    """Drop optional-dependency declarations naming packages not in the bundle.
+
+    WHY. Socket read `fonttools-4.61.1.dist-info/METADATA` in the vendored iOS
+    tree, found
+
+        Provides-Extra: lxml
+        Requires-Dist: lxml>=4.0; extra == "lxml"
+
+    and raised a **Block/High** alert: "pypi lxml is 86.0% likely malicious"
+    (confidence 0.86). `lxml` is not vendored here, is in no requirements file,
+    and is imported nowhere. The verdict's own notes — eval() on untrusted
+    `.xml` during "parsing/translation", writes derived outputs to disk — read
+    as an analysis of **fonttools** (TTX is XML), attached to the extra it
+    happens to declare. A misattribution, but a blocking one.
+
+    An `extra` is a promise that `pip install pkg[extra]` can pull something
+    later. A sealed iOS bundle installs nothing at runtime, so an extra naming
+    an absent package is unsatisfiable by construction: it cannot be exercised,
+    only misread. Removing the declaration changes no executable byte.
+
+    Deliberately NOT removing fonttools itself. Nothing first-party imports it,
+    but it arrives under `toga_iOS`, and `Resources/app/ciris_ios/app.py` does
+    `import toga` at startup — so toga is load-bearing and fonttools may be
+    reached lazily for font handling. Cutting it to silence a false positive
+    would risk iOS at runtime, on the platform where shipping a fix is slowest.
+
+    SCOPED ON PURPOSE. Run unrestricted this prunes ~247 declaration lines across
+    two dozen packages — correct in principle, but every edited METADATA is
+    sha256'd in its sibling `RECORD`, so each one is a bundle-integrity edit on
+    an artifact this tool cannot test. `_FLAGGED_EXTRA_PKGS` keeps the blast
+    radius at the packages actually causing a blocking alert. Widen it
+    deliberately, not by default.
+
+    RECORD is rewritten alongside, so the bundle stays self-consistent.
+
+    Idempotent, and re-applied on every refresh so a later substrate bump does
+    not quietly reintroduce the alert.
+    """
+    pkgs_dir = IOS_RESOURCES_DIR / "app_packages"
+    if not pkgs_dir.is_dir():
+        return 0
+
+    present = {
+        d.name.split("-")[0].replace("_", "-").lower()
+        for d in pkgs_dir.iterdir()
+        if d.is_dir() and d.name.endswith(".dist-info")
+    }
+    targets = {p for p in _FLAGGED_EXTRA_PKGS if p not in present}
+    if not targets:
+        return 0
+
+    extra_re = re.compile(r'^Requires-Dist:\s*([A-Za-z0-9._-]+).*;\s*extra\s*==\s*["\']([^"\']+)["\']')
+    pruned = 0
+
+    for meta in sorted(pkgs_dir.glob("*.dist-info/METADATA")):
+        try:
+            lines = meta.read_text(encoding="utf-8", errors="replace").splitlines(keepends=True)
+        except OSError:
+            continue
+
+        drop_extras = {
+            m.group(2)
+            for line in lines
+            if (m := extra_re.match(line)) and m.group(1).replace("_", "-").lower() in targets
+        }
+        if not drop_extras:
+            continue
+
+        # Pass 1: drop only the Requires-Dist lines naming a flagged package.
+        kept = []
+        for line in lines:
+            m = extra_re.match(line)
+            if m and m.group(2) in drop_extras and m.group(1).replace("_", "-").lower() in targets:
+                pruned += 1
+                continue
+            kept.append(line)
+
+        # Pass 2: retire a Provides-Extra ONLY if nothing still requires it.
+        #
+        # An umbrella extra like fonttools' `all` names lxml AND a dozen other
+        # packages. Removing its declaration while its surviving Requires-Dist
+        # lines still say `extra == "all"` leaves metadata referencing an extra
+        # that no longer exists — trading a false-positive alert for a real
+        # inconsistency. Only extras left with no requirements at all are dropped.
+        still_used = {m.group(2) for line in kept if (m := extra_re.match(line))}
+        final = []
+        for line in kept:
+            if (
+                line.startswith("Provides-Extra:")
+                and line.split(":", 1)[1].strip() in drop_extras
+                and line.split(":", 1)[1].strip() not in still_used
+            ):
+                pruned += 1
+                continue
+            final.append(line)
+        kept = final
+
+        body = "".join(kept)
+        meta.write_text(body, encoding="utf-8")
+        _rewrite_record_entry(meta)
+        print(f"  pruned unsatisfiable extras {sorted(drop_extras)} from {meta.parent.name}")
+
+    return pruned
+
+
+def _rewrite_record_entry(target: Path) -> None:
+    """Refresh `target`'s line in its sibling RECORD (wheel PEP 376 format).
+
+    A dist-info RECORD stores `path,sha256=<urlsafe-b64, unpadded>,<size>`.
+    Editing METADATA without this leaves the bundle self-inconsistent, which is
+    the kind of quiet breakage that surfaces much later as an install/verify
+    failure rather than here.
+    """
+    import base64
+
+    record = target.parent / "RECORD"
+    if not record.exists():
+        return
+
+    raw = target.read_bytes()
+    digest = base64.urlsafe_b64encode(hashlib.sha256(raw).digest()).rstrip(b"=").decode("ascii")
+    rel = f"{target.parent.name}/{target.name}"
+
+    out = []
+    for line in record.read_text(encoding="utf-8", errors="replace").splitlines(keepends=True):
+        if line.split(",", 1)[0] == rel:
+            eol = "\r\n" if line.endswith("\r\n") else "\n" if line.endswith("\n") else ""
+            out.append(f"{rel},sha256={digest},{len(raw)}{eol}")
+        else:
+            out.append(line)
+    record.write_text("".join(out), encoding="utf-8")
+
+
 def materialize_resources_tree() -> None:
     """Unpack Resources.zip into Resources/ so the refresh has something to edit.
 

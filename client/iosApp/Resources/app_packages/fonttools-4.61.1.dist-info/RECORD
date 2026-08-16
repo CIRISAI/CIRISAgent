@@ -668,7 +668,7 @@ fontTools/voltLib/lexer.py,sha256=OvuETOSvlS6v7iCVeJ3IdH2Cg71n3OJoEyiB3-h6vhE,33
 fontTools/voltLib/parser.py,sha256=rkw2IHBZPsrhGVC7Kw7V501m0u52kh1JSM5HXp-xchM,25396
 fontTools/voltLib/voltToFea.py,sha256=Z2yvnaZLQXzPLT86Uta0zRsXIYgj6NnvZtSWt5xmw2s,36549
 fonttools-4.61.1.dist-info/INSTALLER,sha256=zuuue4knoyJ-UwPPXg8fezS7VCrXJQrAP7zeNuwvFQg,4
-fonttools-4.61.1.dist-info/METADATA,sha256=sF0h1Ul5KoQam4cNjcDOXJ1D2Z1nYh_xN5sYvop8OUA,114185
+fonttools-4.61.1.dist-info/METADATA,sha256=HVdlLFP4Lw3i4Dab6KmjkUSP--NX1rytvSO5xIdV0c0,114081
 fonttools-4.61.1.dist-info/RECORD,,
 fonttools-4.61.1.dist-info/WHEEL,sha256=_zCd3N1l69ArxyTb8rzEoP9TpbYXkqRFSNOD5OuxnTs,91
 fonttools-4.61.1.dist-info/entry_points.txt,sha256=8kVHddxfFWA44FSD4mBpmC-4uCynQnkoz_9aNJb227Y,147

@@ -1,0 +1,76 @@
+# Line endings, and why some files must never have theirs changed.
+#
+# THE BUG THIS FIXES. On Windows, git's `core.autocrlf` defaults to true — that
+# is the default on Windows installs AND on GitHub's windows runners — so any
+# file git considers "text" gets LF rewritten to CRLF at checkout. Until this
+# file existed, nothing in the repo said otherwise:
+#
+#     $ git check-attr text eol -- seed/accord_manifest.json
+#     seed/accord_manifest.json: text: unspecified
+#     seed/accord_manifest.json: eol: unspecified
+#
+# `seed/accord_manifest.json` is Ed25519-signed over its EXACT BYTES, and it has
+# 19 newlines. Rewriting them changes 19 bytes:
+#
+#     7c7c7e3a24d89b4b82893849c4077b96   as committed (LF)
+#     296b6b32bb137c5f5d1560fff60b89b9   after autocrlf
+#
+# so on Windows the agent aborts at startup with
+#
+#     [ACCORD] SIGNATURE VERIFICATION FAILED: InvalidSignature
+#     This indicates possible tampering with ACCORD files or the comprehensive guide.
+#
+# Nothing was tampered with. Git was being helpful with a file that must never be
+# touched, and the message sends whoever reads it hunting a security incident
+# instead of a checkout setting.
+#
+# It breaks TWICE over, which is easy to miss: the manifest also hashes four
+# content files, so those get CRLF'd and fail their hash check independently of
+# the signature failing on the manifest itself.
+#
+# Wheel installs were never affected — a wheel extracts bytes verbatim — which is
+# why real users never saw it and why it took a Windows CI runner to surface.
+
+# Sensible default: normalise text in the repo, let checkout decide locally.
+* text=auto
+
+# ── SIGNED / HASHED ARTIFACTS — byte-exact, never translated ────────────────
+# The manifest, its detached signature, and the root public key.
+seed/**                                   -text
+seed/*.json                               -text
+seed/*.sig                                -text
+
+# The four files the manifest hashes. Listed by name rather than by glob so that
+# adding a fifth to the manifest without adding it here is a visible omission
+# rather than a silent one.
+ciris_engine/data/accord_1.2b_POLYGLOT.txt             -text
+ciris_engine/data/accord_1.2b_POLYGLOT_compressed.txt  -text
+ciris_engine/data/CIRIS_COMPREHENSIVE_GUIDE.md         -text
+ciris_engine/data/CIRIS_COMPREHENSIVE_GUIDE_MOBILE.md  -text
+
+# Localized ACCORD + guide corpora. Not manifest-covered today, but they are
+# content whose bytes matter and which a future manifest is likely to cover.
+ciris_engine/data/localized/**            -text
+
+# ── KEY MATERIAL — never translated, never diffed ───────────────────────────
+*.key                                     -text
+*.pem                                     -text
+*.p256.key                                -text
+identity/**                               -text
+
+# ── BINARY BUNDLES ─────────────────────────────────────────────────────────
+*.zip                                     binary
+*.jar                                     binary
+*.apk                                     binary
+*.whl                                     binary
+*.so                                      binary
+*.dylib                                   binary
+*.dll                                     binary
+*.png                                     binary
+*.onnx                                    binary
+
+# ── SHELL SCRIPTS — LF even on Windows checkouts ───────────────────────────
+# A CRLF shebang line makes a script unrunnable under bash/WSL/git-bash with a
+# confusing "bad interpreter" error.
+*.sh                                      text eol=lf
+gradlew                                   text eol=lf

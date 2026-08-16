@@ -112,6 +112,9 @@ def prompt_llm_configuration() -> tuple[str, str, str, str]:
 
 
 
+from ciris_engine.logic.utils.env_file import env_path_value
+
+
 def _env_quoted(value: str) -> str:
     """Escape a value for a DOUBLE-QUOTED `.env` line.
 
@@ -171,7 +174,7 @@ def create_env_file(
     if is_android() or is_ios():
         # Use absolute path for mobile - tilde doesn't expand
         # Must match ios_main.py / android_main.py CIRIS_DATA_DIR setting
-        data_dir = _env_quoted(str(get_ciris_home()))
+        data_dir = _env_quoted(env_path_value(get_ciris_home()))
     else:
         # Desktop: honor CIRIS_HOME via get_data_dir() instead of
         # hardcoding ~/ciris/data. Previously this was literal
@@ -187,7 +190,7 @@ def create_env_file(
         # gives that, anchored at get_ciris_home().
         from ciris_engine.logic.utils.path_resolution import get_data_dir
 
-        data_dir = _env_quoted(str(get_data_dir()))
+        data_dir = _env_quoted(env_path_value(get_data_dir()))
 
     # Log what we received for debugging
     logger.info(f"[create_env_file] Received llm_provider='{llm_provider}', llm_base_url='{llm_base_url}'")

@@ -35,9 +35,16 @@ logger = logging.getLogger(__name__)
 
 _PATH_VALUED_ENV_VARS = frozenset(
     {
+        # Both spellings on purpose. The wizard WRITES `SECRETS_DB_PATH` /
+        # `AUDIT_LOG_PATH`; the config layer READS `CIRIS_SECRETS_DB_PATH` /
+        # `CIRIS_AUDIT_DB_PATH`. Those names do not match — a separate bug, and
+        # the reason a repair list built from either side alone would miss half
+        # the keys. Cover both so this set cannot drift from either.
         "CIRIS_DB_PATH",
         "CIRIS_SECRETS_DB_PATH",
         "CIRIS_AUDIT_DB_PATH",
+        "SECRETS_DB_PATH",
+        "AUDIT_LOG_PATH",
         "CIRIS_DATA_DIR",
         "CIRIS_HOME",
         "CIRIS_LOG_DIR",

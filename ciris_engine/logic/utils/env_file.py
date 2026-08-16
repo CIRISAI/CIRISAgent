@@ -117,3 +117,20 @@ def repair_dotenv_escapes(value: str) -> str:
     for ctrl, source in _ESCAPE_SOURCE.items():
         out = out.replace(ctrl, source)
     return out
+
+
+def env_path_value(path: object) -> str:
+    """Render a filesystem path for a `.env` line, backslash-free.
+
+    Windows accepts forward slashes everywhere — `os`, `pathlib`, `open`, and
+    the Win32 API all normalise them — so writing `C:/Users/franc/ciris` instead
+    of `C:\\Users\\franc\\ciris` costs nothing and removes the hazard by
+    construction: a value with no backslashes cannot be mangled by escape
+    processing, no matter which writer produces it or which reader consumes it.
+
+    This is the belt to `env_quoted`'s braces. Escaping is a rule every writer
+    must remember; forward slashes are a property of the value itself. Three
+    separate sites got the escaping wrong before this existed, so the value not
+    needing the rule is worth more than the rule being applied correctly.
+    """
+    return str(path).replace("\\", "/")

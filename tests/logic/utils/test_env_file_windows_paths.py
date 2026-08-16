@@ -257,3 +257,46 @@ def test_the_repair_log_does_not_print_the_path(monkeypatch: pytest.MonkeyPatch,
 
     assert "CIRIS_DB_PATH" in caplog.text
     assert "franc" not in caplog.text
+
+
+def test_wizard_written_key_spellings_are_repaired(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The wizard writes SECRETS_DB_PATH; the config layer reads CIRIS_SECRETS_DB_PATH.
+
+    Those names do not match — a real bug of its own — and it means a repair set
+    built from either side alone misses half the keys. A live user's .env had
+    exactly these two lines still carrying backslashes.
+    """
+    import ciris_engine.logic.config.env_utils as eu
+
+    monkeypatch.setattr(eu, "_ENV_LOADED", True, raising=False)
+    for key in ("SECRETS_DB_PATH", "AUDIT_LOG_PATH", "CIRIS_SECRETS_DB_PATH", "CIRIS_AUDIT_DB_PATH"):
+        monkeypatch.setenv(key, "C:\\Users\x0cranc\\ciris\\data\\x.db")
+        assert eu.get_env_var(key) == r"C:\Users\franc\ciris\data\x.db", key
+
+
+@pytest.mark.parametrize("path", WINDOWS_PATHS)
+def test_env_path_value_removes_the_hazard_entirely(path: str) -> None:
+    """Forward slashes cannot be mangled, by construction.
+
+    Escaping is a rule every writer has to remember, and three separate sites
+    got it wrong. A value with no backslashes needs no rule — this is the belt
+    to env_quoted's braces.
+    """
+    from ciris_engine.logic.utils.env_file import env_path_value
+
+    v = env_path_value(path)
+    assert "\\" not in v
+
+
+def test_forward_slash_paths_roundtrip_untouched(tmp_path: Path) -> None:
+    """And they survive the write/read pair with no escaping needed at all."""
+    dotenv = pytest.importorskip("dotenv")
+    from ciris_engine.logic.utils.env_file import env_path_value
+
+    v = env_path_value(r"C:\Users\franc\ciris\data")
+    env = tmp_path / ".env"
+    env.write_text(env_line("CIRIS_DATA_DIR", v), encoding="utf-8")
+
+    got = dotenv.dotenv_values(str(env))["CIRIS_DATA_DIR"]
+    assert got == "C:/Users/franc/ciris/data"
+    assert not [c for c in got if ord(c) < 32]

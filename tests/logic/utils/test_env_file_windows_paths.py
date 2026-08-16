@@ -181,3 +181,122 @@ def test_env_quoted_and_env_unquoted_are_exact_inverses() -> None:
 
     for value in WINDOWS_PATHS + [r'C:\a\b "quoted" \c', "", "plain", "/posix/path", "a\\\\b"]:
         assert env_unquoted(env_quoted(value)) == value, f"not an inverse for {value!r}"
+
+
+# ---------------------------------------------------------------------------
+# REPAIR ON READ. 2.9.19 fixed the writers, which stops NEW corruption and does
+# nothing for the .env files already on disk. A user installed 2.9.19 and hit
+# the IDENTICAL WinError 123, because his file was poisoned by an earlier
+# version. Fixing the writers and fixing the USERS are two different problems.
+# ---------------------------------------------------------------------------
+
+POISONED = {
+    "C:\\Users\x0cranc\\ciris\\data": r"C:\Users\franc\ciris\data",   # \f — reported
+    "C:\\Users\x0bictor\\ciris": r"C:\Users\victor\ciris",            # \v
+    "C:\\Users\tom\\ciris": r"C:\Users\tom\ciris",                    # \t
+    "C:\\Users\rachel\\ciris": r"C:\Users\rachel\ciris",              # \r
+    "C:\\Users\nancy\\ciris": r"C:\Users\nancy\ciris",                # \n
+    "C:\\Users\x08en\\ciris": r"C:\Users\ben\ciris",                  # \b
+    "C:\\Users\x07lice\\ciris": r"C:\Users\alice\ciris",              # \a
+}
+
+
+@pytest.mark.parametrize("poisoned,expected", sorted(POISONED.items()))
+def test_a_poisoned_value_is_repaired(poisoned: str, expected: str) -> None:
+    from ciris_engine.logic.utils.env_file import repair_dotenv_escapes
+
+    assert repair_dotenv_escapes(poisoned) == expected
+
+
+def test_repair_is_idempotent_and_leaves_clean_values_alone() -> None:
+    """Runs on every read, so it must never degrade an already-good value."""
+    from ciris_engine.logic.utils.env_file import repair_dotenv_escapes
+
+    for clean in (r"C:\Users\franc\ciris", "C:/Users/franc/ciris", "/home/e/ciris", ""):
+        assert repair_dotenv_escapes(clean) == clean
+    once = repair_dotenv_escapes("C:\\Users\x0cranc")
+    assert repair_dotenv_escapes(once) == once
+
+
+def test_get_env_var_repairs_path_keys(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The assertion that matters: the CALLER must get a usable path.
+
+    The standalone helper passing while `get_env_var` returned the corrupted
+    value is precisely the shape of this bug — a fix verified at the wrong layer.
+    """
+    import ciris_engine.logic.config.env_utils as eu
+
+    monkeypatch.setattr(eu, "_ENV_LOADED", True, raising=False)
+    monkeypatch.setenv("CIRIS_DB_PATH", "C:\\Users\x0cranc\\ciris\\data\\ciris_engine.db")
+
+    got = eu.get_env_var("CIRIS_DB_PATH")
+
+    assert got == r"C:\Users\franc\ciris\data\ciris_engine.db"
+    assert not [c for c in got if ord(c) < 32]
+
+
+def test_non_path_keys_are_left_untouched(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Only PATH values are repaired — elsewhere a control char may be deliberate."""
+    import ciris_engine.logic.config.env_utils as eu
+
+    monkeypatch.setattr(eu, "_ENV_LOADED", True, raising=False)
+    monkeypatch.setenv("SOME_OTHER_VALUE", "keep\x0cthis")
+
+    assert eu.get_env_var("SOME_OTHER_VALUE") == "keep\x0cthis"
+
+
+def test_the_repair_log_does_not_print_the_path(monkeypatch: pytest.MonkeyPatch, caplog) -> None:
+    """The value is user data, and the corrupted form has been through enough logs."""
+    import ciris_engine.logic.config.env_utils as eu
+
+    monkeypatch.setattr(eu, "_ENV_LOADED", True, raising=False)
+    monkeypatch.setenv("CIRIS_DB_PATH", "C:\\Users\x0cranc\\ciris\\data")
+
+    with caplog.at_level("WARNING"):
+        eu.get_env_var("CIRIS_DB_PATH")
+
+    assert "CIRIS_DB_PATH" in caplog.text
+    assert "franc" not in caplog.text
+
+
+def test_wizard_written_key_spellings_are_repaired(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The wizard writes SECRETS_DB_PATH; the config layer reads CIRIS_SECRETS_DB_PATH.
+
+    Those names do not match — a real bug of its own — and it means a repair set
+    built from either side alone misses half the keys. A live user's .env had
+    exactly these two lines still carrying backslashes.
+    """
+    import ciris_engine.logic.config.env_utils as eu
+
+    monkeypatch.setattr(eu, "_ENV_LOADED", True, raising=False)
+    for key in ("SECRETS_DB_PATH", "AUDIT_LOG_PATH", "CIRIS_SECRETS_DB_PATH", "CIRIS_AUDIT_DB_PATH"):
+        monkeypatch.setenv(key, "C:\\Users\x0cranc\\ciris\\data\\x.db")
+        assert eu.get_env_var(key) == r"C:\Users\franc\ciris\data\x.db", key
+
+
+@pytest.mark.parametrize("path", WINDOWS_PATHS)
+def test_env_path_value_removes_the_hazard_entirely(path: str) -> None:
+    """Forward slashes cannot be mangled, by construction.
+
+    Escaping is a rule every writer has to remember, and three separate sites
+    got it wrong. A value with no backslashes needs no rule — this is the belt
+    to env_quoted's braces.
+    """
+    from ciris_engine.logic.utils.env_file import env_path_value
+
+    v = env_path_value(path)
+    assert "\\" not in v
+
+
+def test_forward_slash_paths_roundtrip_untouched(tmp_path: Path) -> None:
+    """And they survive the write/read pair with no escaping needed at all."""
+    dotenv = pytest.importorskip("dotenv")
+    from ciris_engine.logic.utils.env_file import env_path_value
+
+    v = env_path_value(r"C:\Users\franc\ciris\data")
+    env = tmp_path / ".env"
+    env.write_text(env_line("CIRIS_DATA_DIR", v), encoding="utf-8")
+
+    got = dotenv.dotenv_values(str(env))["CIRIS_DATA_DIR"]
+    assert got == "C:/Users/franc/ciris/data"
+    assert not [c for c in got if ord(c) < 32]

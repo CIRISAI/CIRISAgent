@@ -129,6 +129,65 @@ class DesktopAppHelper:
         self._current_screen = data.get("screen", "unknown")
         return self._current_screen
 
+    async def capture_step(self, label: str, out_dir: "str | Path" = "ui_captures") -> dict:
+        """Snapshot the UI at a named step: PNG, element tree, and screen name.
+
+        WHY BOTH, AND WHY THE TREE MATTERS MORE IN CI. The PNG comes from AWT
+        `Robot.createScreenCapture`, which grabs the SCREEN rather than rendering
+        the window. It needs a real display, so on a CI runner with no
+        interactive desktop session it will throw or hand back a black frame.
+        Locally it is the fastest way to see what went wrong; in CI it may be
+        worth nothing.
+
+        The tree has the opposite property: plain text, no display required,
+        greppable and diffable across runs. For "which step did the UI stop
+        matching what we expected", a tree dump usually beats a picture — you
+        can diff the passing run against the failing one.
+
+        So this captures both and NEVER raises. A troubleshooting aid that can
+        fail a test it was only meant to explain is worse than no aid at all —
+        the first Windows run failed inside the harness, and a capture helper
+        that added its own failure mode would have buried the real cause.
+
+        Returns what it managed to collect, so the caller can log the gaps.
+        """
+        from pathlib import Path as _Path
+
+        out = _Path(out_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        got: dict = {"label": label, "screen": None, "tree": None, "png": None, "errors": []}
+
+        if not self._client:
+            got["errors"].append("not connected")
+            return got
+
+        try:
+            got["screen"] = await self.get_screen()
+        except Exception as e:
+            got["errors"].append(f"screen: {type(e).__name__}")
+
+        try:
+            resp = await self._client.get("/tree")
+            tree_path = out / f"{label}.tree.json"
+            tree_path.write_text(resp.text, encoding="utf-8")
+            got["tree"] = str(tree_path)
+        except Exception as e:
+            got["errors"].append(f"tree: {type(e).__name__}")
+
+        try:
+            resp = await self._client.get("/screenshot")
+            if resp.status_code == 200 and resp.content:
+                png_path = out / f"{label}.png"
+                png_path.write_bytes(resp.content)
+                got["png"] = str(png_path)
+            else:
+                got["errors"].append(f"screenshot: HTTP {resp.status_code}")
+        except Exception as e:
+            # Expected on a headless runner — Robot needs a display.
+            got["errors"].append(f"screenshot: {type(e).__name__}")
+
+        return got
+
     async def get_elements(self) -> List[ElementInfo]:
         """Get all UI elements currently visible."""
         if not self._client:

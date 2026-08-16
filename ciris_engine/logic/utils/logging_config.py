@@ -186,7 +186,9 @@ def setup_basic_logging(
     if log_to_file and not console_output:
         print("\n" + "=" * 80)
         print(f" LOGGING INITIALIZED - SEE DETAILED LOGS AT: {log_filename}")
-        print(f" Symlinked to: {latest_link}")
+        # Not necessarily a symlink: on Windows an unprivileged symlink is
+        # refused, so this may be a hardlink or a pointer file.
+        print(f" Latest: {log_path / 'latest.log'}")
         if enable_incident_capture:
             print(f"[WARN] Incident capture: {log_dir}/incidents_latest.log (WARNING/ERROR messages captured as incidents)")
         print("=" * 80 + "\n")

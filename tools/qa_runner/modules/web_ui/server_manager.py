@@ -338,18 +338,23 @@ class ServerManager:
 
             # Check if process actually died (not just signaled)
             # Note: In some shell environments, poll() can return -17 (SIGCHLD) spuriously
-            # when the process is still running. We verify by checking if we can still send signals.
+            # when the process is still running. We verify by re-polling.
+            #
+            # This used to "double-check" with os.kill(pid, 0). That is a liveness
+            # probe on POSIX ONLY. On Windows, signal 0 is CTRL_C_EVENT, so
+            # os.kill(pid, 0) does not ask whether the process is alive -- it
+            # sends the process group a Ctrl+C, which is a request to STOP. The
+            # check meant to confirm the server survived was capable of killing
+            # the server, and of interrupting the harness sharing its console.
             poll_result = self._process.poll()
             if poll_result is not None:
-                # Double-check by trying to send a null signal
-                try:
-                    os.kill(self._process.pid, 0)
-                    # Process still exists, poll() was wrong - continue waiting
-                    print(f"   (poll returned {poll_result} but process {self._process.pid} still exists)")
-                except OSError:
-                    # Process really is dead
+                # Re-poll once: a genuinely dead process stays dead, while a
+                # spurious result clears. No signal is sent either way.
+                time.sleep(0.2)
+                if self._process.poll() is not None:
                     status.error = f"Server process exited unexpectedly (exit code: {poll_result})"
                     return status
+                print(f"   (poll returned {poll_result} spuriously; process {self._process.pid} is alive)")
 
             # Check health endpoint
             try:
@@ -365,8 +370,26 @@ class ServerManager:
                     is_healthy = health_data.get("status") == "healthy"
                     is_ready = agent_state and agent_state.lower() in ["work", "ready"]
                     is_first_run = agent_state is None and is_healthy
-                    # SETUP state is expected in first-run mode and is ready for /v1/setup/complete
-                    is_setup = agent_state and agent_state.lower() == "setup" and is_healthy
+
+                    # SETUP means the API is up and waiting for /v1/setup/complete.
+                    #
+                    # This deliberately does NOT require status == "healthy",
+                    # which it used to and which made the condition impossible to
+                    # satisfy -- so first-run bring-up timed out after 60s on
+                    # EVERY platform, not just Windows. Before the wizard runs
+                    # there is no LLM provider and no services are registered, so
+                    # the registry is empty and determine_overall_status()
+                    # correctly reports "critical":
+                    #
+                    #     {"status": "critical", "services": {},
+                    #      "initialization_complete": true,
+                    #      "cognitive_state": "SETUP", "degraded_mode": true}
+                    #
+                    # Waiting for "healthy" here asks the agent to finish
+                    # initialising before running the step whose whole job is to
+                    # initialise it. initialization_complete is the right signal:
+                    # the API is serving and can accept the wizard's POST.
+                    is_setup = bool(agent_state) and agent_state.lower() == "setup" and health_data.get("initialization_complete", False)
 
                     if is_ready or is_first_run or (self.config.first_run_mode and is_setup):
                         status.running = True

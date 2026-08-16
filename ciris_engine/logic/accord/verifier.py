@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from ciris_engine.schemas.accord import AccordMessage, AccordPayload, AccordVerificationResult, verify_accord_signature
+from ciris_engine.logic.utils.hard_kill import terminate_immediately
 
 logger = logging.getLogger(__name__)
 
@@ -223,14 +224,11 @@ class AccordVerifier:
         if loaded == 0:
             # CRITICAL: No authorities means no working kill switch
             # This is a fatal error - agent cannot operate
-            import os
-            import signal
-
             logger.critical(
                 "CRITICAL FAILURE: No accord authorities loaded! "
                 "Agent cannot operate without a functioning kill switch. TERMINATING."
             )
-            os.kill(os.getpid(), signal.SIGKILL)
+            terminate_immediately("ACCORD: no authorities loaded - kill switch is non-functional")
         else:
             logger.info(f"Loaded {loaded} accord authorities")
 

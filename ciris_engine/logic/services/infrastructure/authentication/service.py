@@ -1761,7 +1761,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             # Load and insert root certificate
             seed_path = Path(__file__).parent.parent.parent / "seed" / "root_pub.json"
             if seed_path.exists():
-                async with aiofiles.open(seed_path) as f:
+                async with aiofiles.open(seed_path, encoding="utf-8") as f:
                     content = await f.read()
                     root_data = json.loads(content)
 

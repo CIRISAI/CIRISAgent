@@ -379,7 +379,7 @@ class AccordMetricsService:
                 candidate = Path(env_local_copy_dir) / safe_instance
                 candidate.mkdir(parents=True, exist_ok=True)
                 probe = candidate / ".accord_local_copy_probe"
-                probe.write_text("")
+                probe.write_text("", encoding="utf-8")
                 probe.unlink()
                 self._local_copy_dir = candidate
                 logger.info(
@@ -1314,7 +1314,7 @@ class AccordMetricsService:
             path = _os.environ.get("CIRIS_RESEARCH_PROMPT_OVERRIDES")
             if not path or _os.environ.get("CIRIS_TESTING_MODE", "").lower() != "true":
                 return None
-            with open(path) as fh:
+            with open(path, encoding="utf-8") as fh:
                 declared = _json.load(fh).get("condition")
             return str(declared) if declared is not None else None
         except Exception:  # noqa: BLE001 — a manifest problem must not break the seal
@@ -1483,7 +1483,7 @@ class AccordMetricsService:
             }
             safe = re.sub(r"[^A-Za-z0-9._-]", "_", str(trace_id))[:120]
             out = self._local_copy_dir / f"ceg-seal-{safe}.json"
-            out.write_text(json.dumps(payload, indent=1, ensure_ascii=False, default=str))
+            out.write_text(json.dumps(payload, indent=1, ensure_ascii=False, default=str), encoding="utf-8")
             if signed == 0:
                 logger.warning(
                     f"⚠️ [{self._adapter_instance_id}] CEG seal teed {out.name} but {len(ceg_rows)} row(s) "

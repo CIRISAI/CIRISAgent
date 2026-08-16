@@ -35,7 +35,7 @@ class ModuleLoader:
             return False
 
         try:
-            with open(manifest_path) as f:
+            with open(manifest_path, encoding="utf-8") as f:
                 manifest_data = json.load(f)
 
             # Parse into typed manifest

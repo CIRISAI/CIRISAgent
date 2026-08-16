@@ -293,7 +293,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
             thought_archive_file = self.archive_dir / f"archive_thoughts_{archive_timestamp_str}.jsonl"
             thought_ids_to_delete_for_archive: List[Any] = []
 
-            async with aiofiles.open(thought_archive_file, "w") as f:
+            async with aiofiles.open(thought_archive_file, "w", encoding="utf-8") as f:
                 for thought in thoughts_to_archive:
                     # Archive all thoughts older than threshold
                     await f.write(thought.model_dump_json() + "\n")

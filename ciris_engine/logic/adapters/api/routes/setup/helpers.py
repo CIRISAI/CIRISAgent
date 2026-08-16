@@ -69,7 +69,7 @@ def _get_agent_templates() -> List[AgentTemplate]:
 
         try:
             logger.info(f"[SETUP TEMPLATES] Loading: {template_file.name}")
-            with open(template_file, "r") as f:
+            with open(template_file, "r", encoding="utf-8") as f:
                 template_data = yaml.safe_load(f)
 
             # Load and validate template

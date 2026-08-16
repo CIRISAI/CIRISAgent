@@ -535,7 +535,7 @@ class ApiPlatform(Service):
             return False
 
         try:
-            with open(manifest_path) as f:
+            with open(manifest_path, encoding="utf-8") as f:
                 manifest_data = json.load(f)
             return self._register_adapter_from_manifest(manifest_data, adapter_path.name)
         except Exception as e:
@@ -707,7 +707,7 @@ class ApiPlatform(Service):
             # Try files() API first (Python 3.9+)
             files = pkg_resources.files(package_name)
             manifest_path = files.joinpath(MANIFEST_FILENAME)
-            manifest_text = manifest_path.read_text()
+            manifest_text = manifest_path.read_text(encoding="utf-8")
         except (TypeError, AttributeError):
             # Fallback for older API
             try:

@@ -185,7 +185,7 @@ class ConfigBootstrap:
         yaml_path = config_path or Path("config/essential.yaml")
         if yaml_path.exists():
             try:
-                async with aiofiles.open(yaml_path, "r") as f:
+                async with aiofiles.open(yaml_path, "r", encoding="utf-8") as f:
                     yaml_content = await f.read()
                     yaml_data = yaml.safe_load(yaml_content) or {}
                 config_data = ConfigBootstrap._deep_merge(config_data, yaml_data)

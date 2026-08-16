@@ -1308,7 +1308,7 @@ class APIAuthService:
         try:
             # Load ROOT public key from seed/
             root_pub_path = Path(__file__).parent.parent.parent.parent.parent.parent / "seed" / "root_pub.json"
-            async with aiofiles.open(root_pub_path, "r") as f:
+            async with aiofiles.open(root_pub_path, "r", encoding="utf-8") as f:
                 content = await f.read()
                 root_data = json.loads(content)
 

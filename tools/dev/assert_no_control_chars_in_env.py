@@ -93,6 +93,41 @@ def main() -> int:
     except Exception as exc:  # pragma: no cover - import shape varies by install
         print(f"{tag}::warning::could not read through the config layer ({type(exc).__name__})")
 
+    # ── 3. PROVE THE TEST WAS CAPABLE OF FAILING ───────────────────────────
+    # Without this the assertion can pass VACUOUSLY, and it did -- for three
+    # consecutive Windows runs.
+    #
+    # The job pins a home containing `\f` on purpose, but the harness overwrote
+    # CIRIS_HOME with the repo checkout when spawning the backend, so every path
+    # written into .env was D:\a\CIRISAgent\CIRISAgent\data\... -- no escape
+    # sequence anywhere. "No control characters found" was true and meaningless:
+    # the dangerous shape had never been constructed.
+    #
+    # So require that at least one path value actually descends from the home we
+    # asked for. A green result then means "the risky path was built and came out
+    # clean", not "nothing risky was attempted".
+    home_resolved = str(Path(args.home)).replace("\\", "/").rstrip("/").lower()
+    derived = []
+    for line in raw.splitlines():
+        if "=" not in line or line.lstrip().startswith("#"):
+            continue
+        key, _, val = line.partition("=")
+        if key.strip() in PATH_KEYS:
+            if home_resolved and home_resolved in val.strip().strip('"').replace("\\", "/").lower():
+                derived.append(key.strip())
+
+    if not derived:
+        print(
+            f"{tag}::error::no path in .env derives from the home this job pinned — "
+            "the escape-triggering path was never constructed, so a clean result proves nothing"
+        )
+        print(
+            "  This is exactly how the guard passed vacuously for three runs: the harness "
+            "replaced CIRIS_HOME with the repo checkout, so nothing dangerous was ever written. "
+            "Check that the backend is spawned with the pinned CIRIS_HOME (setdefault, not assignment)."
+        )
+        return 1
+
     if failures:
         print(f"{tag}::error::a path carried a control character — this is the WinError 123 defect")
         for f in failures:

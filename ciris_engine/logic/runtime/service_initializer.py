@@ -677,7 +677,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
                 if manifest_path.exists():
                     try:
-                        async with aiofiles.open(manifest_path) as f:
+                        async with aiofiles.open(manifest_path, encoding="utf-8") as f:
                             content = await f.read()
                             manifest_data = json.loads(content)
 

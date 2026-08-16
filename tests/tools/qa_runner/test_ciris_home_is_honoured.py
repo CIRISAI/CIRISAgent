@@ -116,3 +116,35 @@ def test_config_path_follows_ciris_home(monkeypatch: pytest.MonkeyPatch, tmp_pat
 
     resolved = get_default_config_path()
     assert resolved == home / ".env", f"CIRIS_HOME was ignored; .env resolved to {resolved}"
+
+
+def test_the_wipe_target_follows_ciris_home(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    """A destructive helper must aim at the home it was TOLD to use.
+
+    _wipe_dev_data used to hardcode `Path.home()/"ciris"`, so setting CIRIS_HOME
+    to a scratch directory still deleted the developer's real ~/ciris/data on
+    every desktop-setup run. Observed doing exactly that on 2026-08-16.
+
+    This tests the DECISION, not the destruction. Calling _wipe_dev_data for
+    real also clears `<repo>/data` -- a unit test that damages the working tree
+    of whoever runs the suite, which the first version of this test did.
+    """
+    from tools.qa_runner.modules.web_ui.__main__ import resolved_qa_home
+
+    pinned = tmp_path / "scratch" / "ciris"
+    monkeypatch.setenv("CIRIS_HOME", str(pinned))
+    assert resolved_qa_home() == pinned
+
+    monkeypatch.delenv("CIRIS_HOME", raising=False)
+    assert resolved_qa_home() == pathlib.Path.home() / "ciris", "the default for an unset CIRIS_HOME changed"
+
+
+def test_the_wipe_uses_the_shared_resolver() -> None:
+    """It must not go back to reading Path.home() directly."""
+    src = (REPO / "tools/qa_runner/modules/web_ui/__main__.py").read_text(encoding="utf-8")
+    body = src[src.index("def _wipe_dev_data") :]
+    body = body[: body.index("\ndef ", 10)] if "\ndef " in body[10:] else body
+    assert "resolved_qa_home()" in body
+    # The ASSIGNMENT, not any mention: the docstring names the old expression on
+    # purpose, to record what the bug was.
+    assert 'home_ciris = Path.home() / "ciris"' not in body, "_wipe_dev_data hardcodes the home again"

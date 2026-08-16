@@ -1073,15 +1073,34 @@ def _kill_port(port: int) -> None:
         pass
 
 
-def _wipe_dev_data() -> None:
-    """Wipe every data location the CIRIS backend may use in dev mode.
+def resolved_qa_home() -> Path:
+    """The home directory the harness may treat as its own, honouring CIRIS_HOME.
 
-    The server picks paths from env/cwd, so both ~/ciris/data and the
-    repo-local data/ must be cleared. Signing key is preserved so
-    device identity survives across resets.
+    Split out from _wipe_dev_data so the DECISION can be tested without running
+    the destruction. A test that calls _wipe_dev_data for real also clears
+    `<repo>/data`, i.e. it damages the working tree of whoever runs the suite --
+    which it duly did the first time I wrote one.
+
+    Falls back to ~/ciris, the product's default, when CIRIS_HOME is unset.
     """
-    home_ciris = Path.home() / "ciris"
+    env_home = os.environ.get("CIRIS_HOME")
+    return Path(env_home).expanduser() if env_home else Path.home() / "ciris"
+
+
+def _wipe_dev_data() -> None:
+    """Wipe every data location the CIRIS backend may use, for a clean first run.
+
+    HONOURS CIRIS_HOME. This used to hardcode `Path.home() / "ciris"`, so an
+    operator who set CIRIS_HOME to a scratch directory still had their REAL
+    ~/ciris/data deleted -- on every single desktop-setup invocation. It is a
+    destructive operation aimed at whichever directory the harness assumed,
+    rather than the one it was told to use.
+
+    The signing key is preserved so device identity survives a reset.
+    """
+    home_ciris = resolved_qa_home()
     repo_root = Path(__file__).resolve().parents[4]
+
     signing_key = home_ciris / "agent_signing.key"
     key_backup = None
     if signing_key.exists():
@@ -1101,7 +1120,7 @@ def _wipe_dev_data() -> None:
     # Rewrite minimal .env so the server doesn't re-enter first-run after setup completes
     env_path = home_ciris / ".env"
     env_path.parent.mkdir(parents=True, exist_ok=True)
-    env_path.write_text('CIRIS_CONFIGURED="true"\n')
+    env_path.write_text('CIRIS_CONFIGURED="true"\n', encoding="utf-8")
 
 
 def _find_desktop_jar() -> Optional[Path]:

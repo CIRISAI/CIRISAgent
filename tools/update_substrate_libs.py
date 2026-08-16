@@ -1573,12 +1573,17 @@ def main(argv: Optional[List[str]] = None) -> None:
         # real bundle. Unpack the committed artifact first so there is something
         # real to modify.
         materialize_resources_tree()
+        # Re-apply after every materialisation: extracting the committed archive
+        # restores the pruned declarations, so without this the next substrate
+        # bump quietly reintroduces the blocking Socket alert.
+        prune_unsatisfiable_extras()
         repair_xcframework_info_plists()
 
     if args.rebuild_zip_only:
         # Same reason: rebuilding from an unmaterialised tree is how a 5,862-entry
         # bundle became 66.
         materialize_resources_tree()
+        prune_unsatisfiable_extras()
         rebuild_resources_zip()
         return
 

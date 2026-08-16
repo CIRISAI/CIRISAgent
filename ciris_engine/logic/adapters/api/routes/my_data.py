@@ -708,9 +708,48 @@ def _apply_consent_change(adapter: Any, consent_given: bool) -> None:
         logger.debug(f"consent-CEG: accord-settings emit skipped: {e}")
 
 
+def _substrate_can_scrub() -> bool:
+    """Does the pinned substrate expose a real egress scrubber?
+
+    The agent builds persist's Engine from Python with ``scrubber=None``, which
+    persist fills in with ``NullScrubber`` — it redacts nothing and reports
+    ``ner_ran: false``. From persist v32.1.0 that combination is a HARD
+    REJECTION at ``full_traces`` (``scrub_treatment_mismatch``), so every batch
+    is refused and **nothing is persisted at all**. ``detailed`` still passes,
+    which is why production was unaffected and only this opt-in setting is.
+
+    Probing for the binding rather than version-comparing: ``egress_scrub``
+    appearing is exactly the condition that makes ``full_traces`` safe, and this
+    guard then lifts on its own when the substrate ships it. A pin comparison
+    would need editing again on the very release that fixes the problem.
+    """
+    try:
+        import ciris_server
+
+        return hasattr(ciris_server, "egress_scrub")
+    except Exception:
+        return False
+
+
 def _apply_trace_level_change(adapter: Any, trace_level: str) -> None:
-    """Apply a trace-level change; 400 on an unknown level."""
+    """Apply a trace-level change; 400 on an unknown or unsupportable level."""
     from ciris_adapters.ciris_accord_metrics.services import TraceDetailLevel
+
+    if trace_level == "full_traces" and not _substrate_can_scrub():
+        # Refusing loudly beats accepting and dropping everything. The user
+        # asked for MORE trace detail; silently returning none is the worst
+        # possible answer to that request, and it would look like the
+        # federation link had broken rather than like a setting had failed.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "trace_level 'full_traces' is unavailable on this build: the pinned "
+                "substrate has no egress scrubber, and it rejects unscrubbed "
+                "full-detail batches outright — selecting it would stop trace "
+                "persistence entirely rather than increase detail. Use 'detailed'. "
+                "See CIRISServer#418."
+            ),
+        )
 
     try:
         adapter.metrics_service._trace_level = TraceDetailLevel(trace_level)

@@ -124,18 +124,25 @@ actual class PythonRuntime actual constructor() : PythonRuntimeProtocol {
      */
     private fun readClaimPinFromFileIfMissing() {
         if (_localClaimPin.value != null) return
-        runCatching {
-            val pinFile = java.io.File(nodeHomeDir(), "claim_pin")
-            if (pinFile.canRead()) {
-                val pin = pinFile.readText().trim()
-                if (pin.isNotEmpty()) {
-                    _localClaimPin.value = pin
-                    println("[PythonRuntime.desktop] Captured CLAIM PIN from ${pinFile.path} (file fallback).")
-                }
-            }
-        }.onFailure {
-            println("[PythonRuntime.desktop] claim_pin file fallback failed: ${it.message}")
+        val pin = runCatching { readClaimPinFile() }.getOrNull()
+        if (!pin.isNullOrEmpty()) {
+            _localClaimPin.value = pin
+            println("[PythonRuntime.desktop] Captured CLAIM PIN from ${nodeHomeDir().path}/claim_pin (file fallback).")
         }
+    }
+
+    /**
+     * Race-free, on-demand read of the durable `<home>/claim_pin` file (0600).
+     * The node writes claim_pin a few seconds after health answers, so the
+     * boot-time latch above can miss it; the setup flow calls this at claim time
+     * (well after boot) when the file is guaranteed present. See
+     * [PythonRuntimeProtocol.readLocalClaimPin].
+     */
+    override suspend fun readLocalClaimPin(): String? = runCatching { readClaimPinFile() }.getOrNull()
+
+    private fun readClaimPinFile(): String? {
+        val pinFile = java.io.File(nodeHomeDir(), "claim_pin")
+        return if (pinFile.canRead()) pinFile.readText().trim().ifEmpty { null } else null
     }
 
     /**

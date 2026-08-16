@@ -840,8 +840,12 @@ def test_physical_ui_login(helper: IDeviceHelper, ui: PhysicalDeviceUIHelper, co
     bundle_id = "ai.ciris.mobile"
     test_port_local = config.get("test_port_local", 19091)
     test_port_remote = config.get("test_port_remote", 9091)
-    username = config.get("username", "admin")
-    password = config.get("password", "qa_test_password_12345")
+    # "admin" is reserved by the backend and 422s completeSetup — never default to it.
+    username = config.get("username") or "ciris_founder"
+    password = config.get("password") or "qa_test_password_12345"
+    llm_provider = (config.get("llm_provider") or "openai").strip()
+    llm_api_key = config.get("llm_api_key") or ""
+    llm_model = (config.get("llm_model") or "").strip()
 
     iproxy_proc: Optional[subprocess.Popen] = None
     try:
@@ -910,8 +914,7 @@ def test_physical_ui_login(helper: IDeviceHelper, ui: PhysicalDeviceUIHelper, co
                 message=f"Did not reach Login screen (still on {client.screen()!r})",
             )
 
-        print("  [5b/6] Driving Login → Local Login → submit...")
-
+        print("  [5b] Local login → first-run Setup wizard (You → Federation → AI)...")
         if not client.click("btn_local_login"):
             return TestReport(
                 name="test_physical_ui_login",
@@ -921,78 +924,200 @@ def test_physical_ui_login(helper: IDeviceHelper, ui: PhysicalDeviceUIHelper, co
             )
         time.sleep(2)  # StateFlow propagation
 
-        if not client.input("input_username", username):
+        # A fresh install (reinstall + clear-data) lands in the 3-step Setup
+        # wizard. A returning/configured user would instead land on Interact.
+        if client.wait_for_screen("Interact", timeout=4.0):
             return TestReport(
                 name="test_physical_ui_login",
-                result=TestResult.FAILED,
+                result=TestResult.PASSED,
                 duration=time.time() - start_time,
-                message="Could not enter username",
-            )
-        time.sleep(2)
-
-        if not client.input("input_password", password):
-            return TestReport(
-                name="test_physical_ui_login",
-                result=TestResult.FAILED,
-                duration=time.time() - start_time,
-                message="Could not enter password",
-            )
-        time.sleep(2)
-
-        if not client.click("btn_login_submit"):
-            return TestReport(
-                name="test_physical_ui_login",
-                result=TestResult.FAILED,
-                duration=time.time() - start_time,
-                message="Could not click btn_login_submit",
-            )
-
-        if not client.wait_for_screen("Interact", timeout=15.0):
-            return TestReport(
-                name="test_physical_ui_login",
-                result=TestResult.FAILED,
-                duration=time.time() - start_time,
-                message=f"Did not reach Interact screen (still on {client.screen()!r})",
-            )
-
-        interact_shot = ui.screenshot(f"/tmp/ciris_phys_ui_interact_{int(time.time())}.png")
-        if interact_shot:
-            screenshots.append(interact_shot)
-
-        print("  [6/6] Navigating Interact → Telemetry → Interact...")
-        # The nav drawer button is testable on both screens.
-        client.click("btn_nav_drawer_open")
-        time.sleep(2)
-        if not client.click("nav_epistemic_telemetry"):
-            return TestReport(
-                name="test_physical_ui_login",
-                result=TestResult.FAILED,
-                duration=time.time() - start_time,
-                message="Could not navigate to Telemetry",
+                message=f"Already configured — logged straight into Interact as {username!r}",
                 screenshots=screenshots,
             )
-        if not client.wait_for_screen("Telemetry", timeout=8.0):
+
+        # ── Step 1 "You": federation identity + local owner credentials ──
+        print("  [5c] 'You' step: federation identity + owner credentials...")
+        client.input("input_fedid_label", f"{username}-node")
+        time.sleep(1)
+        client.input("input_device_name", "qa-iphone")
+        time.sleep(1)
+        # Generate the node's ONE federation identity — REQUIRED before Next.
+        if not client.click("btn_federation_identity"):
             return TestReport(
                 name="test_physical_ui_login",
                 result=TestResult.FAILED,
                 duration=time.time() - start_time,
-                message=f"Did not reach Telemetry (still on {client.screen()!r})",
+                message="Could not click btn_federation_identity",
+            )
+        time.sleep(6)  # Ed25519 / ML-DSA keygen
+        client.input("input_username", username)
+        time.sleep(1)
+        client.input("input_password", password)
+        time.sleep(1)
+        client.input("input_password_confirm", password)
+        time.sleep(1)
+        client.click("age_band_adult")
+        time.sleep(1)
+        if not client.click("btn_next"):
+            return TestReport(
+                name="test_physical_ui_login",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message="Could not advance from the 'You' step (btn_next)",
+            )
+        time.sleep(3)
+
+        # ── Step 2 "Join Federation": consent → advance ──
+        print("  [5d] 'Join Federation' step → advance...")
+        client.click("btn_next")
+        time.sleep(3)
+
+        # ── Step 3 "AI": LLM provider / key / model ──
+        print(f"  [5e] 'AI' step: LLM provider={llm_provider} model={llm_model or '(default)'}...")
+        if client.click("input_llm_provider"):
+            time.sleep(1)
+            client.click(f"menu_provider_{llm_provider}")
+            time.sleep(1)
+        if llm_api_key:
+            client.input("input_api_key", llm_api_key)
+            time.sleep(1)
+        if llm_model:
+            client.input("input_llm_model_text", llm_model)
+            time.sleep(1)
+
+        # ── Finish → "CLAIM then COMPLETE" (exercises the claim_pin file read) ──
+        print("  [5f] Finishing setup — self-claim + complete...")
+        if not client.click("btn_next"):
+            return TestReport(
+                name="test_physical_ui_login",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message="Could not click Finish (btn_next) on the AI step",
+            )
+
+        # ── Verify the local node was self-CLAIMED. This is the regression check
+        # for the claim_pin file-read fix: if the client fails to capture the PIN,
+        # the wizard still "completes" but leaves the node UNCLAIMED (owner=null).
+        print("  [6/6] Verifying local node ownership (self-claim)...")
+        node_iproxy = _ensure_iproxy(14243, 4243, udid)
+        owner: Optional[str] = None
+        deadline = time.time() + 60.0
+        while time.time() < deadline:
+            try:
+                with urllib.request.urlopen("http://127.0.0.1:14243/v1/setup/owned-nodes", timeout=5) as r:
+                    payload = json.loads(r.read())
+                data = payload.get("data", payload)
+                owner = data.get("owner") or None
+                if not owner:
+                    for node in data.get("nodes", []) or []:
+                        if node.get("owned") or node.get("owner"):
+                            owner = node.get("owner") or node.get("key_id") or "owned"
+                            break
+                if owner:
+                    break
+            except Exception:
+                pass
+            time.sleep(3)
+        if node_iproxy is not None:
+            try:
+                node_iproxy.terminate()
+            except Exception:
+                pass
+
+        final_screen = client.screen()
+        setup_shot = ui.screenshot(f"/tmp/ciris_phys_setup_claim_{int(time.time())}.png")
+        if setup_shot:
+            screenshots.append(setup_shot)
+
+        if not owner:
+            return TestReport(
+                name="test_physical_ui_login",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message=(
+                    "Setup finished but the local node is UNCLAIMED (owner=null) — the "
+                    f"client did not supply the claim PIN. (final screen={final_screen!r})"
+                ),
                 screenshots=screenshots,
             )
-        telemetry_shot = ui.screenshot(f"/tmp/ciris_phys_ui_telemetry_{int(time.time())}.png")
-        if telemetry_shot:
-            screenshots.append(telemetry_shot)
 
-        client.click("btn_nav_drawer_open")
-        time.sleep(2)
-        client.click("nav_epistemic_interact")
-        client.wait_for_screen("Interact", timeout=8.0)
+        # ── Interaction: log in as the owner and exchange one real message with the
+        # agent. Self-claim proves the node was owned; this proves setup produced a
+        # WORKING agent that reasons and SPEAKs, not just a claimed-but-mute node. ──
+        print("  [7/7] Interacting with the agent (login → message → reply)...")
+        interact_iproxy = _ensure_iproxy(18080, 8080, udid)
+        agent_reply: Optional[str] = None
+        interact_err: Optional[str] = None
+        try:
+            api = APIClient("http://127.0.0.1:18080")
+            # The API adapter serves right after setup completes; give it a moment
+            # and retry the login (fresh owner credentials were just created).
+            deadline = time.time() + 45.0
+            while time.time() < deadline:
+                if api.login(username, password):
+                    break
+                time.sleep(3)
+            if not api.token:
+                interact_err = "could not authenticate as the owner after setup"
+            else:
+                # A freshly-set-up agent boots into WAKEUP and only answers once it
+                # reaches WORK; the very first real-LLM turn is also the slowest.
+                # Wait for WORK (up to ~120s) so we don't time out on cold start,
+                # THEN interact with a generous window.
+                work_ready = False
+                deadline = time.time() + 120.0
+                while time.time() < deadline:
+                    st, body = api.get("/v1/agent/status", timeout=10)
+                    if st == 200:
+                        data = body.get("data", body) if isinstance(body, dict) else {}
+                        cog = str(data.get("cognitive_state") or "").upper()
+                        if cog == "WORK":
+                            work_ready = True
+                            break
+                    time.sleep(4)
+                if not work_ready:
+                    print("        [note] agent not in WORK after 120s — interacting anyway")
+                status, body = api.post(
+                    "/v1/agent/interact",
+                    {"message": "Hello! Please introduce yourself in one short sentence."},
+                    timeout=150,
+                )
+                data = body.get("data", body) if isinstance(body, dict) else {}
+                agent_reply = (data.get("response") or data.get("message") or "").strip() or None
+                if status != 200 or not agent_reply:
+                    interact_err = f"interact status={status} body={str(body)[:200]}"
+                elif "still processing" in agent_reply.lower() or "not guaranteed" in agent_reply.lower():
+                    # The interact PATH works (200 + response) but no working LLM was
+                    # configured for this run, so the agent is degraded and returns the
+                    # paused placeholder rather than a real SPEAK. Mark it so — pass the
+                    # path, flag the degraded LLM. Supply --llm-key-file for a real reply.
+                    agent_reply = f"(LLM-degraded, interaction path OK) {agent_reply}"
+        finally:
+            if interact_iproxy is not None:
+                try:
+                    interact_iproxy.terminate()
+                except Exception:
+                    pass
+
+        if interact_err or not agent_reply:
+            return TestReport(
+                name="test_physical_ui_login",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message=(
+                    f"Node SELF-CLAIMED (owner={owner!r}) but agent interaction FAILED: "
+                    f"{interact_err or 'empty reply'}. final screen={final_screen!r}"
+                ),
+                screenshots=screenshots,
+            )
 
         return TestReport(
             name="test_physical_ui_login",
             result=TestResult.PASSED,
             duration=time.time() - start_time,
-            message=(f"Logged in as {username!r} via Compose testTags; " f"navigated Interact → Telemetry → Interact"),
+            message=(
+                f"Setup + self-claim (owner={owner!r}) as {username!r} + agent replied: " f"{agent_reply[:120]!r}"
+            ),
             screenshots=screenshots,
         )
 

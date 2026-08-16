@@ -44,27 +44,27 @@ class TestFirstRunDetection:
         # Stale env var should be cleared
         assert os.environ.get("CIRIS_CONFIGURED") is None
 
-    def test_is_first_run_cwd_env_not_auto_detected(self, tmp_path, monkeypatch):
-        """Test that CWD .env is NOT auto-detected (2.3.2 behavior change).
+    def test_is_first_run_dev_mode_cwd_env_is_detected(self, tmp_path, monkeypatch):
+        """Dev-mode (git repo) cwd .env IS the config → NOT first run.
 
-        As of 2.3.2, CWD-based path detection was removed for consistency.
-        Use CIRIS_CONFIG_DIR environment variable for explicit override instead.
+        get_default_config_path() WRITES the setup wizard's .env under
+        get_ciris_home() (dev mode → cwd, since 2.9.4), so get_config_paths()
+        must READ the same location. Before this fix the two diverged
+        (write = cwd/CIRIS_HOME, read = ~/ciris), leaving desktop/dev
+        permanently "first run" — the split-home bug behind the setup hang.
         """
         monkeypatch.setenv("HOME", str(tmp_path))
-        # Create .git directory to simulate development mode
-        git_dir = tmp_path / ".git"
-        git_dir.mkdir()
-
-        # Create .env in CWD - this should NOT be auto-detected
-        env_file = tmp_path / ".env"
-        env_file.write_text("CIRIS_CONFIGURED=true")
+        monkeypatch.delenv("CIRIS_HOME", raising=False)
+        # .git → development mode → get_ciris_home() resolves to cwd
+        (tmp_path / ".git").mkdir()
+        (tmp_path / ".env").write_text("CIRIS_CONFIGURED=true")
         monkeypatch.chdir(tmp_path)
         monkeypatch.delenv("CIRIS_CONFIGURED", raising=False)
 
         from ciris_engine.logic.setup.first_run import is_first_run
 
-        # CWD .env is NOT auto-detected - this IS first run
-        assert is_first_run() is True
+        # cwd/.env is where setup writes in dev mode — so it is detected.
+        assert is_first_run() is False
 
     def test_is_first_run_with_config_dir_override(self, tmp_path, monkeypatch):
         """Test not first run when CIRIS_CONFIG_DIR points to valid config.
@@ -275,27 +275,49 @@ class TestInteractiveDetection:
 class TestConfigPaths:
     """Tests for config path detection."""
 
-    def test_get_config_paths_priority(self, tmp_path, monkeypatch):
-        """Test config paths returned in correct priority order.
+    def test_get_config_paths_dev_mode_uses_cwd(self, tmp_path, monkeypatch):
+        """Dev mode (git repo) resolves config under cwd — the SAME location
+        get_default_config_path() writes to (both go through get_ciris_home()).
 
-        As of 2.3.2, config path is standardized to ~/ciris/.env regardless of
-        whether we're in a git repo. CWD-based paths were removed for consistency.
+        get_config_paths (READ) must not diverge from get_default_config_path
+        (WRITE); previously it hardcoded ~/ciris while the writer honored
+        CIRIS_HOME / dev-cwd.
         """
         monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.delenv("CIRIS_HOME", raising=False)
+        monkeypatch.delenv("CIRIS_CONFIG_DIR", raising=False)
         monkeypatch.chdir(tmp_path)
-
-        # Create .git directory - should no longer affect path resolution
-        git_dir = tmp_path / ".git"
-        git_dir.mkdir()
+        (tmp_path / ".git").mkdir()
 
         from ciris_engine.logic.setup.first_run import get_config_paths
 
         paths = get_config_paths()
 
-        # Should be: ~/ciris/.env (primary), possibly /etc/ciris/.env (system)
-        assert len(paths) >= 1
         assert paths[0].name == ".env"
-        assert paths[0] == tmp_path / "ciris" / ".env"  # ~/ciris/.env with mocked HOME
+        # dev mode → cwd/.env first (matches the writer), ~/ciris/.env kept as fallback
+        assert paths[0] == tmp_path / ".env"
+        assert (tmp_path / "ciris" / ".env") in paths
+
+    def test_get_config_paths_honors_ciris_home(self, tmp_path, monkeypatch):
+        """CIRIS_HOME wins so first-run READS where setup WRITES.
+
+        Regression for the desktop/iOS setup hang: the node wrote its .env,
+        identity, and one-time claim_pin under CIRIS_HOME while first_run only
+        looked at ~/ciris — so setup could never be seen as complete.
+        """
+        home = tmp_path / "operator_home"
+        home.mkdir()
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setenv("CIRIS_HOME", str(home))
+        monkeypatch.delenv("CIRIS_CONFIG_DIR", raising=False)
+
+        from ciris_engine.logic.setup.first_run import get_config_paths, get_default_config_path
+
+        paths = get_config_paths()
+
+        assert paths[0] == home / ".env"
+        # The read path and the write path now agree.
+        assert get_default_config_path() == home / ".env"
 
     def test_get_config_paths_installed_mode(self, tmp_path, monkeypatch):
         """Test config paths in installed mode (no git repo)."""

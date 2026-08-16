@@ -689,11 +689,16 @@ private fun YouStep(
             modifier = Modifier.padding(bottom = 20.dp)
         )
 
-        FederationIdentitySection(viewModel = viewModel, state = state)
+        // Order matters: AGE first (required, and it gates minor-stewardship),
+        // then the local account (username/password — only rendered for non-OAuth
+        // setups), then the federation identity whose label AUTO-POPULATES from the
+        // username/OAuth id entered just above (still overridable). Asking age →
+        // who-you-sign-in-as → what-to-name-the-identity reads top to bottom.
+        AgeRangeSection(viewModel = viewModel, state = state)
         Spacer(modifier = Modifier.height(24.dp))
         AccountSection(viewModel = viewModel, state = state)
         Spacer(modifier = Modifier.height(24.dp))
-        AgeRangeSection(viewModel = viewModel, state = state)
+        FederationIdentitySection(viewModel = viewModel, state = state)
     }
 }
 
@@ -2861,4 +2866,3 @@ private fun NavigationButtons(
         }
     }
 }
-

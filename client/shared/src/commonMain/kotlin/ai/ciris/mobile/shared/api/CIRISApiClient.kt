@@ -1641,6 +1641,47 @@ class CIRISApiClient(
         localNodeUrl: String = LOCAL_NODE_URL,
     ): String = "$localNodeUrl/v1/auth/oauth/$provider/login?app_nonce=$appNonce"
 
+    /**
+     * The OAuth providers this deployment actually has credentials for.
+     *
+     * A provider only appears here when the node was provisioned with its
+     * client_id AND client_secret (the PKCE secret CI bakes from GH secrets into
+     * `oauth.json`; see `oauth_provider_sync.py` — an unprovisioned provider is
+     * skipped). So an empty/`google`-less list is the authoritative "sign-in with
+     * Google is NOT wired on this build" signal, and the Login screen greys the
+     * button out rather than offering a door that opens onto redirect_uri_mismatch.
+     *
+     * Served natively by the node on :4243 and proxied through the agent's front
+     * door on :8080, so it answers in both node and agent mode. Returns an empty
+     * list on any error — fail closed (button disabled) rather than dangle a
+     * broken affordance.
+     */
+    suspend fun getOAuthProviders(nodeUrl: String = baseUrl): List<String> {
+        val client = federationHttpClient()
+        return try {
+            val response = client.get("$nodeUrl/v1/auth/oauth/providers")
+            if (!response.status.isSuccess()) return emptyList()
+            val root = jsonConfig.parseToJsonElement(response.bodyAsText()).jsonObject
+            // Tolerate {providers:[...]} and {data:{providers:[...]}}, where each
+            // entry is either a bare "google" string or an object with a name/
+            // provider/id field.
+            val arr = (root["providers"] ?: (root["data"] as? JsonObject)?.get("providers"))
+                as? kotlinx.serialization.json.JsonArray ?: return emptyList()
+            arr.mapNotNull { el ->
+                when (el) {
+                    is JsonPrimitive -> el.content
+                    is JsonObject -> (el["name"] ?: el["provider"] ?: el["id"])
+                        ?.let { (it as? JsonPrimitive)?.content }
+                    else -> null
+                }
+            }.map { it.lowercase() }
+        } catch (_: Exception) {
+            emptyList()
+        } finally {
+            client.close()
+        }
+    }
+
     suspend fun isLocalNodeUp(nodeUrl: String = baseUrl): Boolean {
         val client = federationHttpClient()
         return try {
@@ -6270,18 +6311,20 @@ class CIRISApiClient(
         return try {
             // Use auth/attestation endpoint for cached attestation (fast, no network calls)
             // Falls back to setup/verify-status only during first-run setup with Play Integrity
-            val url = if (isNodeMode()) {
-                // Fabric node: the read-only verify-status route on the substrate.
-                "$baseUrl/v1/system/verify-status"
-            } else if (playIntegrityToken != null && playIntegrityNonce != null) {
+            val url = if (playIntegrityToken != null && playIntegrityNonce != null) {
                 // Full attestation with Play Integrity - use setup endpoint (first-run only)
                 "$baseUrl/v1/setup/verify-status?mode=full&play_integrity_token=$playIntegrityToken&play_integrity_nonce=$playIntegrityNonce"
-            } else if (refresh) {
-                // Force re-attestation via FFI
-                "$baseUrl/v1/auth/attestation?refresh=true"
             } else {
-                // Cached attestation from auth service - instant response
-                "$baseUrl/v1/auth/attestation"
+                // Verify is substrate-owned. The read-only status route lives on the
+                // node (:4243 serves it natively); in AGENT mode (iOS/desktop bundle,
+                // isNodeMode()==false) the agent's front door proxies the SAME path to
+                // the node (auth_proxy.py `proxy_verify_status_to_node`). Both answer a
+                // GET 200. The old agent-mode fallback hit `/v1/auth/attestation`, which
+                // 2.9.14 made a POST-only node route → GET 405 every 30s (132×/session on
+                // a live iPhone). One path for both modes closes that for good; `refresh`
+                // rides through as a query param the node honors (or safely ignores).
+                val base = "$baseUrl/v1/system/verify-status"
+                if (refresh) "$base?refresh=true" else base
             }
             val response = client.get(url)
 

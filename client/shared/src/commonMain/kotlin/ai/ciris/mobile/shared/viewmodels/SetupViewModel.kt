@@ -128,7 +128,16 @@ class SetupViewModel(
             // with WELCOME merged into screen 1 there is nothing to skip, and
             // the fork was what made the trace-consent checkbox unreachable on
             // the non-OAuth path while showing a disabled one on the OAuth path.
-            currentStep = _state.value.currentStep
+            currentStep = _state.value.currentStep,
+            // Auto-derive the Fed-ID label from the OAuth identity (email local-
+            // part, else the userId) until the user edits the label directly.
+            federationIdentity = _state.value.federationIdentity.let { fed ->
+                if (isAuth && !fed.labelManuallyEdited && !fed.minted && !fed.admitted) {
+                    fed.copy(label = deriveFedLabel(email ?: userId))
+                } else {
+                    fed
+                }
+            }
         )
     }
 
@@ -333,7 +342,24 @@ class SetupViewModel(
      * Set the username for local user account.
      */
     fun setUsername(username: String) {
-        _state.value = _state.value.copy(username = username)
+        val s = _state.value
+        val fed = s.federationIdentity
+        // Auto-derive the Fed-ID label from the username until the user edits the
+        // label field directly — one fewer field to fill on the YOU step.
+        val newFed =
+            if (!fed.labelManuallyEdited && !fed.minted && !fed.admitted) {
+                fed.copy(label = deriveFedLabel(username))
+            } else {
+                fed
+            }
+        _state.value = s.copy(username = username, federationIdentity = newFed)
+    }
+
+    /** Derive a federation-identity label from a username / email / OAuth id: the
+     *  email local-part when it looks like an email, else the trimmed seed. */
+    private fun deriveFedLabel(seed: String?): String {
+        val s = (seed ?: "").trim()
+        return (if ("@" in s) s.substringBefore("@") else s).trim()
     }
 
     /**
@@ -603,7 +629,7 @@ class SetupViewModel(
      */
     fun setFederationLabel(label: String) {
         _state.value = _state.value.copy(
-            federationIdentity = _state.value.federationIdentity.copy(label = label)
+            federationIdentity = _state.value.federationIdentity.copy(label = label, labelManuallyEdited = true)
         )
     }
 

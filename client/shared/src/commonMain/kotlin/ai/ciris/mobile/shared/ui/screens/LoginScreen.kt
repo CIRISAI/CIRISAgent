@@ -91,6 +91,12 @@ fun LoginScreen(
     observerBlocked: Boolean = false,
     showLocalLoginForm: Boolean = false,
     isFirstRun: Boolean = true,
+    // Whether this deployment actually has Google OAuth credentials wired
+    // (node's /v1/auth/oauth/providers lists "google"; the PKCE secret is baked
+    // by CI). When false the Google button renders GREYED/disabled instead of
+    // offering a sign-in that can only fail with redirect_uri_mismatch. Defaults
+    // true so callers that don't (yet) probe providers keep the button live.
+    googleOAuthAvailable: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     var marketingOptIn by remember { mutableStateOf(false) }
@@ -300,20 +306,40 @@ fun LoginScreen(
 
                     Button(
                         onClick = onGoogleSignIn,
+                        enabled = googleOAuthAvailable,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = LoginColors.White,
-                            contentColor = LoginColors.Primary
+                            contentColor = LoginColors.Primary,
+                            // Greyed when this build has no Google credentials wired.
+                            disabledContainerColor = LoginColors.White.copy(alpha = 0.35f),
+                            disabledContentColor = LoginColors.Primary.copy(alpha = 0.5f)
                         ),
                         shape = RoundedCornerShape(24.dp),
                         modifier = Modifier
                             .width(280.dp)
                             .height(48.dp)
-                            .testableClickable(if (isIOS()) "btn_apple_signin" else "btn_google_signin") { onGoogleSignIn() }
+                            .testableClickable(if (isIOS()) "btn_apple_signin" else "btn_google_signin") {
+                                if (googleOAuthAvailable) onGoogleSignIn()
+                            }
                     ) {
                         Text(
                             text = signinProvider,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Medium
+                        )
+                    }
+
+                    // Explain the greyed button rather than leaving a dead control.
+                    if (!googleOAuthAvailable) {
+                        Text(
+                            text = localizedString("mobile.login_google_unavailable"),
+                            color = LoginColors.White.copy(alpha = 0.7f),
+                            fontSize = 12.sp,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .width(280.dp)
+                                .padding(top = 6.dp)
+                                .testable("txt_google_unavailable")
                         )
                     }
 

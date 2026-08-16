@@ -724,7 +724,11 @@ def _substrate_can_scrub() -> bool:
     would need editing again on the very release that fixes the problem.
     """
     try:
-        import ciris_server
+        # Same ignore set the other ciris_server imports carry (location_utils,
+        # _substrate, compose_dump): the wheel ships no py.typed, and it is absent
+        # from some CI images entirely. `unused-ignore` keeps it quiet where it IS
+        # resolvable.
+        import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
 
         return hasattr(ciris_server, "egress_scrub")
     except Exception:

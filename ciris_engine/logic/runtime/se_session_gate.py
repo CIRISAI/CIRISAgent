@@ -49,7 +49,7 @@ import subprocess
 import sys
 import time
 from enum import Enum
-from typing import Callable, List, Optional, Tuple
+from typing import Any, Callable, Dict, Final, List, Optional, Tuple, Union
 
 logger = logging.getLogger(__name__)
 
@@ -78,8 +78,14 @@ _DEFAULT_WAIT_TIMEOUT_SECS = 45.0
 _TIMEOUT_ENV = "CIRIS_SE_SESSION_GATE_TIMEOUT_SECONDS"
 
 # Sentinel so callers can pass timeout_secs=None ("wait indefinitely") distinctly
-# from "not supplied" (resolve the env-backed bounded default).
-_ENV_DEFAULT = object()
+# from "not supplied" (resolve the env-backed bounded default). A bare `object()`
+# cannot type-check as a default for `Optional[float]`, so the sentinel gets its
+# own type and joins the union — keeping all THREE states expressible.
+class _EnvDefault:
+    """Marker type for "caller did not supply a timeout"."""
+
+
+_ENV_DEFAULT: Final[_EnvDefault] = _EnvDefault()
 
 
 def _resolve_default_timeout() -> Optional[float]:
@@ -121,7 +127,7 @@ def _is_macos_desktop() -> bool:
     return "iphoneos" not in multiarch.lower()
 
 
-def _read_console_users() -> Optional[List[dict]]:
+def _read_console_users() -> Optional[List[Dict[str, Any]]]:
     """Return the IOConsoleUsers array from IOKit, or None if unreadable.
 
     Uses ``ioreg -a`` (archived plist) + plistlib so there is no PyObjC/Quartz
@@ -142,7 +148,7 @@ def _read_console_users() -> Optional[List[dict]]:
         logger.debug("SE gate: could not read IOConsoleUsers (%s)", exc)
         return None
 
-    def _find(node: object) -> Optional[List[dict]]:
+    def _find(node: object) -> Optional[List[Dict[str, Any]]]:
         if isinstance(node, dict):
             if "IOConsoleUsers" in node:
                 users = node["IOConsoleUsers"]
@@ -161,7 +167,7 @@ def _read_console_users() -> Optional[List[dict]]:
     return _find(root)
 
 
-def _classify(users: Optional[List[dict]]) -> Tuple[bool, bool]:
+def _classify(users: Optional[List[Dict[str, Any]]]) -> Tuple[bool, bool]:
     """(on_console, screen_locked) for the user that actually holds the console.
 
     on-console and screen-locked are a PER-USER property. Two independent any()
@@ -199,7 +205,7 @@ def secure_enclave_session_state() -> SESessionState:
 def await_secure_enclave_session(
     status_cb: Optional[Callable[[str], None]] = None,
     poll_secs: float = _POLL_SECS,
-    timeout_secs: Optional[float] = _ENV_DEFAULT,
+    timeout_secs: Union[float, None, _EnvDefault] = _ENV_DEFAULT,
     _sleep: Callable[[float], None] = time.sleep,
 ) -> SESessionState:
     """Block until the Secure Enclave can be reached deterministically.
@@ -215,7 +221,7 @@ def await_secure_enclave_session(
     env-backed default (``_resolve_default_timeout``); pass ``None`` explicitly to
     wait indefinitely.
     """
-    if timeout_secs is _ENV_DEFAULT:
+    if isinstance(timeout_secs, _EnvDefault):
         timeout_secs = _resolve_default_timeout()
 
     state = secure_enclave_session_state()

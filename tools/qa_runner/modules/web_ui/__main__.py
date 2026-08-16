@@ -118,6 +118,26 @@ class DesktopAppTestRunner:
         if self.verbose:
             print(f"  {msg}")
 
+    async def _dump_tree(self, label: str) -> None:
+        """Print every testTag currently composed, for a failed element wait.
+
+        Deliberately unconditional -- not gated on --verbose. This runs when
+        something has ALREADY failed, and it is the difference between a CI log
+        that says "Element not found: input_username" (which costs another full
+        round trip to learn anything) and one that says which screen variant
+        actually rendered. Never raises: a diagnostic that can fail replaces the
+        real error with its own.
+        """
+        try:
+            elements = await self.helper.get_elements()
+            print(f"  [tree:{label}] screen={self.helper.current_screen!r} elements={len(elements)}")
+            for e in elements:
+                print(f"      {e.test_tag}")
+            if not elements:
+                print("      (nothing composed — the app rendered no tagged elements at all)")
+        except Exception as exc:
+            print(f"  [tree:{label}] could not read the element tree: {type(exc).__name__}: {exc}")
+
     async def run_test(self, name: str, test_fn) -> DesktopTestResult:
         """Run a single test and record result."""
         start = datetime.now()
@@ -166,7 +186,23 @@ class DesktopAppTestRunner:
         # Wait for username input
         async def wait_for_username_input():
             self._log("Waiting for username input...")
-            if not await self.helper.wait_for_element("input_username", timeout=10000):
+            # try/except, not `if not await ...`: wait_for_element RAISES on
+            # timeout rather than returning False, so a truthiness check never
+            # runs and the diagnostic below would be silently skipped -- which
+            # is exactly what happened on the first attempt at this.
+            try:
+                found = await self.helper.wait_for_element("input_username", timeout=10000)
+            except Exception:
+                # Dump what IS on screen, then re-raise unchanged. "Element not
+                # found" on its own cost a full Windows CI round trip to learn
+                # nothing: the screen reported "Login" and the field was absent,
+                # with no artifact saying what was actually composed. The tree
+                # separates "a different screen variant rendered" from "nothing
+                # rendered at all".
+                await self._dump_tree("wait_for_username_input")
+                raise
+            if not found:
+                await self._dump_tree("wait_for_username_input")
                 raise RuntimeError("Username input not found")
 
         await self.run_test("wait_for_username_input", wait_for_username_input)

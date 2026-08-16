@@ -53,51 +53,61 @@ def _point_at_bundled_tpm_plugin() -> None:
 
 _point_at_bundled_tpm_plugin()
 
-from . import _scope_privacy as scope_privacy
-from ._accord_custody import verify_accord_custody_attestation
-from ._epoch_key import derive_epoch_key, derive_epoch_stream_nonce
-from ._federation_identity import create_federation_identity
+from .client import CIRISVerify, MockCIRISVerify, verify_tree, DEFAULT_REGISTRY_URL
 from ._jcs import jcs_canonicalize
-from ._manifest_contribution import verify_build_manifest_contribution
-from ._operational_admit import resolve_role_authority, verify_delegation_scope_split, verify_partner_record_quorum
 from ._rns_dest_hash import rns_destination_hash
-from ._self_enc import EncryptionPubkeys, SelfEncKeys, derive_self_enc, self_enc_pubkeys, self_enc_respond
+from . import _scope_privacy as scope_privacy
+from ._epoch_key import derive_epoch_key, derive_epoch_stream_nonce
+from ._self_enc import (
+    EncryptionPubkeys,
+    SelfEncKeys,
+    derive_self_enc,
+    self_enc_pubkeys,
+    self_enc_respond,
+)
+from ._federation_identity import create_federation_identity
+from ._manifest_contribution import verify_build_manifest_contribution
+from ._accord_custody import verify_accord_custody_attestation
 from ._test_anchor import test_anchor_compiled_in
-from .client import DEFAULT_REGISTRY_URL, CIRISVerify, MockCIRISVerify, verify_tree
-from .exceptions import (
-    AttestationInProgressError,
-    BinaryNotFoundError,
-    BinaryTamperedError,
-    CIRISVerifyError,
-    CommunicationError,
-    TimeoutError,
-    VerificationFailedError,
+from ._operational_admit import (
+    resolve_role_authority,
+    verify_delegation_scope_split,
+    verify_partner_record_quorum,
 )
 from .types import (
-    BinaryIntegrityStatus,
-    CapabilityCheckResult,
-    DisclosureSeverity,
-    FailedFile,
-    FailedFileKind,
-    FileCheckStatus,
-    FileIntegrityResult,
-    HardwareInfo,
-    HardwareLimitation,
-    HardwareType,
-    KeyringScope,
-    LicenseDetails,
     LicenseStatus,
-    LicenseStatusResponse,
     LicenseTier,
+    LicenseDetails,
     MandatoryDisclosure,
-    PythonIntegrityResult,
+    DisclosureSeverity,
+    LicenseStatusResponse,
+    CapabilityCheckResult,
+    FileIntegrityResult,
+    FileCheckStatus,
+    BinaryIntegrityStatus,
+    HardwareType,
+    ValidationStatus,
     PythonModuleHashes,
+    PythonIntegrityResult,
     SecurityAdvisory,
+    HardwareLimitation,
+    HardwareInfo,
     StorageDescriptor,
     StorageKind,
+    KeyringScope,
     TreeVerifyRequest,
     TreeVerifyResult,
-    ValidationStatus,
+    FailedFile,
+    FailedFileKind,
+)
+from .exceptions import (
+    CIRISVerifyError,
+    BinaryNotFoundError,
+    BinaryTamperedError,
+    VerificationFailedError,
+    TimeoutError,
+    CommunicationError,
+    AttestationInProgressError,
 )
 
 
@@ -123,11 +133,11 @@ def setup_logging(verifier: CIRISVerify, level: str = "INFO", logger_name: str =
 
     # Map Rust levels to Python logging levels
     level_map = {
-        1: _logging.ERROR,  # ERROR
+        1: _logging.ERROR,    # ERROR
         2: _logging.WARNING,  # WARN
-        3: _logging.INFO,  # INFO
-        4: _logging.DEBUG,  # DEBUG
-        5: _logging.DEBUG,  # TRACE (Python has no TRACE, use DEBUG)
+        3: _logging.INFO,     # INFO
+        4: _logging.DEBUG,    # DEBUG
+        5: _logging.DEBUG,    # TRACE (Python has no TRACE, use DEBUG)
     }
 
     # Map level string to Rust level int

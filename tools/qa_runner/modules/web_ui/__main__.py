@@ -183,6 +183,39 @@ class DesktopAppTestRunner:
 
         await self.run_test("wait_for_login_screen", wait_for_login)
 
+        # Reveal the local-credentials panel if the Login screen is a chooser.
+        #
+        # WINDOWS SHOWS A CHOOSER AND LINUX DOES NOT. The element tree on a
+        # failing Windows run was:
+        #
+        #   screen='Login' elements=8
+        #     btn_google_signin  btn_local_login  btn_login_reset_device
+        #     btn_privacy_policy btn_server_status language_selector
+        #     login_language_selector txt_owner_hint
+        #
+        # No input_username anywhere -- it is composed only after
+        # btn_local_login is clicked. On Linux the same build lands straight on
+        # the credential form, which is why this flow passed 6/6 here and failed
+        # 5 of 6 there.
+        #
+        # desktop_app_helper.login() already probes for exactly this, but its
+        # comment calls it an "iOS/Android landing page" and says "Desktop's
+        # Login shows input_username directly". That is true of Linux desktop
+        # and false of Windows desktop, and this step-by-step flow never had the
+        # probe at all.
+        async def reveal_local_login():
+            if await self.helper.is_element_visible("input_username"):
+                self._log("Login screen shows the credential form directly")
+                return
+            if not await self.helper.is_element_visible("btn_local_login"):
+                await self._dump_tree("reveal_local_login")
+                raise RuntimeError("Login screen has neither input_username nor btn_local_login")
+            self._log("Login screen is a provider chooser — selecting local login")
+            await self.helper.click("btn_local_login")
+            await self.helper.wait_for_element("input_username", timeout=5000)
+
+        await self.run_test("reveal_local_login", reveal_local_login)
+
         # Wait for username input
         async def wait_for_username_input():
             self._log("Waiting for username input...")

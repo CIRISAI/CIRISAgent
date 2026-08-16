@@ -443,11 +443,19 @@ class DesktopAppHelper:
                 return True
             return False
 
-        # iOS/Android Login is a landing page with sign-in-method tiles
-        # (btn_apple_signin, btn_local_login). The username/password fields
-        # are revealed only after btn_local_login is tapped. Desktop's Login
-        # shows input_username directly. Detect by probing for input_username;
-        # if absent, click btn_local_login first.
+        # The Login screen is a landing page with sign-in-method tiles
+        # (btn_google_signin / btn_apple_signin, btn_local_login) and the
+        # username/password fields are revealed only after btn_local_login is
+        # chosen.
+        #
+        # This comment used to say the chooser was iOS/Android only and that
+        # "Desktop's Login shows input_username directly". That is true of LINUX
+        # desktop and FALSE of WINDOWS desktop, where the tree is
+        # btn_google_signin / btn_local_login / btn_login_reset_device / ... and
+        # carries no input_username until the tile is clicked. The probe below
+        # was already platform-agnostic and handled it correctly; the comment
+        # was not, and it sent the step-by-step desktop-login flow down a path
+        # that assumed the form was always present.
         is_mobile_login = False
         if not await self.is_element_visible("input_username"):
             if await self.is_element_visible("btn_local_login"):

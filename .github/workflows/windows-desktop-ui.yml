@@ -1,0 +1,185 @@
+# Windows desktop UI QA — the check that would have caught the form-feed bug.
+#
+# WHY THIS EXISTS. A Windows user hit the same total boot failure THREE TIMES
+# across 2.9.17, 2.9.18 and 2.9.19:
+#
+#     OSError: [WinError 123] ... 'C:\Users\x0cranc\ciris\data'
+#
+# `.env` applies POSIX escape processing inside double quotes, so `\franc`
+# read back as a FORM FEED plus `ranc`. Every round we fixed a writer, shipped,
+# and he hit it again through a door we had not shut. Nothing in CI could see
+# it, because:
+#
+#   * it needs a REAL WINDOWS FILESYSTEM — no Linux runner produces WinError 123;
+#   * it needs a HOME DIRECTORY WHOSE PATH TRIGGERS AN ESCAPE — `\f`, `\t`, `\n`,
+#     `\v`, `\b`, `\a`, `\r`, `\0`, `\x`, `\u`;
+#   * it needs TWO BOOTS — the third occurrence was the env SYNC un-escaping a
+#     file the wizard had just written correctly, which only bites on the
+#     SECOND start. A single-boot test passed while users were broken;
+#   * it needs the WHEEL, not a source checkout — that is what `pip install`
+#     actually delivers.
+#
+# So this job reproduces the user's machine rather than approximating it, and
+# drives the real UI through the app's CIRIS_TEST_MODE server (`/click`,
+# `/input`, `/wait` against testTags) instead of poking the API underneath it.
+# The bugs of the last four releases were all in the seam between the UI and
+# the runtime, which is exactly what an API-level test cannot see.
+
+name: Windows Desktop UI
+
+on:
+  workflow_dispatch:
+    inputs:
+      home_flavour:
+        description: "Escape trigger to exercise in the home path"
+        default: "franc"
+        type: choice
+        options: ["franc", "tom", "nancy", "victor", "ben"]
+  # DISPATCH-ONLY UNTIL PROVEN GREEN. A brand-new workflow needs iterations, and
+  # a failing new gate on an in-flight release PR is exactly how this release
+  # cycle already lost time twice. Once it passes twice in a row, add:
+  #
+  #   pull_request:
+  #     paths:
+  #       - "ciris_engine/logic/setup/**"
+  #       - "ciris_engine/logic/config/**"
+  #       - "ciris_engine/logic/utils/env_file.py"
+  #       - "ciris_engine/logic/utils/path_resolution.py"
+  #       - "ciris_engine/logic/adapters/api/routes/setup/**"
+  #       - "client/**"
+  #
+  # NOTE when enabling: a pull_request path filter is CUMULATIVE, not per-push —
+  # once any commit in a PR has matched, every later push re-triggers the job.
+
+concurrency:
+  group: windows-ui-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  desktop-ui:
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    env:
+      # THE POINT OF THE WHOLE JOB. A home directory whose path contains a
+      # backslash followed by an escape character. `\f` is the reported one —
+      # `C:\Users\...\franc\ciris` is byte-for-byte the shape that failed.
+      #
+      # Not left to the runner's default `C:\Users\runneradmin`: that happens to
+      # contain `\r`, so it would catch this by luck. A guard that works by
+      # accident stops working the day the runner image changes its username.
+      CIRIS_UI_HOME_FLAVOUR: ${{ github.event.inputs.home_flavour || 'franc' }}
+      CIRIS_TEST_MODE: "true"
+      CIRIS_TESTING_MODE: "true"
+      CIRIS_TEST_PORT: "8091"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Pin a home path that triggers an escape
+        shell: pwsh
+        run: |
+          $home_dir = "$env:USERPROFILE\$env:CIRIS_UI_HOME_FLAVOUR\ciris"
+          New-Item -ItemType Directory -Force -Path $home_dir | Out-Null
+          "CIRIS_HOME=$home_dir" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "CIRIS_HOME = $home_dir"
+          # Fail early if the path does NOT contain an escape trigger — this job
+          # is worthless without one, and a silently-safe path would make it a
+          # gate that cannot fail.
+          if ($home_dir -notmatch '\\[abfnrtv0xu]') {
+            Write-Error "home path contains no escape trigger; this job would prove nothing"
+            exit 1
+          }
+
+      # Build and install the WHEEL, not the checkout. `pip install .` would
+      # exercise a source tree users never receive.
+      - name: Build and install the wheel
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build --wheel --outdir dist
+          $wheel = (Get-ChildItem dist\*.whl | Select-Object -First 1).FullName
+          Write-Host "installing $wheel"
+          python -m pip install "$wheel"
+          python -m pip install requests
+
+      - name: Build the desktop app
+        shell: pwsh
+        working-directory: client
+        run: ./gradlew.bat :desktopApp:packageUberJarForCurrentOS --no-daemon --stacktrace
+
+      # ── BOOT 1 — first run, full setup driven through the UI ──────────────
+      - name: Boot 1 — setup wizard and local login, via the UI
+        shell: pwsh
+        run: |
+          python -m tools.qa_runner.modules.web_ui desktop-setup `
+            --launch --headless --mock-llm `
+            --username qaadmin --password "qa_test_password_12345" `
+            --provider local `
+            --json-report boot1.json -v
+        env:
+          CIRIS_FORCE_FIRST_RUN: "1"
+
+      - name: Boot 1 — assert no control character reached any path
+        shell: pwsh
+        run: python tools/dev/assert_no_control_chars_in_env.py --home "$env:CIRIS_HOME" --label boot1
+
+      # ── BOOT 2 — THE ONE THAT CATCHES IT ─────────────────────────────────
+      # The env sync rewrites .env on every start. In 2.9.19 it un-escaped what
+      # the wizard had just written correctly, so boot 1 was always clean and
+      # boot 2 was broken. Restarting is the entire value of this step.
+      - name: Boot 2 — restart and log in again, via the UI
+        shell: pwsh
+        run: |
+          python -m tools.qa_runner.modules.web_ui desktop-login `
+            --launch --headless `
+            --username qaadmin --password "qa_test_password_12345" `
+            --json-report boot2.json -v
+
+      - name: Boot 2 — assert no control character reached any path
+        shell: pwsh
+        run: python tools/dev/assert_no_control_chars_in_env.py --home "$env:CIRIS_HOME" --label boot2
+
+      # ── OAUTH ────────────────────────────────────────────────────────────
+      # Deliberately NOT a real Google sign-in: that needs interactive consent
+      # and account credentials, which do not belong in CI. What broke hosted
+      # OAuth was never the consent screen — it was the redirect_uri we SEND
+      # (CIRISServer#421: the agent-id segment was dropped, and the base fell
+      # back to loopback). That is fully observable from the authorize redirect,
+      # so this asserts the URL the UI's sign-in button actually produces.
+      - name: OAuth — the sign-in button must emit a usable redirect_uri
+        shell: pwsh
+        run: |
+          python -m tools.qa_runner.modules.web_ui desktop-up --launch --headless --json-report oauth_up.json -v
+          python tools/dev/assert_oauth_redirect_uri.py --agent-port 8080 --provider google
+
+      - name: Collect artifacts
+        if: always()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          Copy-Item boot1.json,boot2.json,oauth_up.json artifacts -ErrorAction SilentlyContinue
+          if (Test-Path "$env:CIRIS_HOME\logs") { Copy-Item "$env:CIRIS_HOME\logs" artifacts\logs -Recurse -ErrorAction SilentlyContinue }
+          # .env carries secrets — ship the SHAPE, never the values, so a failed
+          # run is diagnosable without leaking keys into a public artifact.
+          if (Test-Path "$env:CIRIS_HOME\.env") {
+            Get-Content "$env:CIRIS_HOME\.env" |
+              ForEach-Object { $_ -replace '=".*"', '=<redacted>' } |
+              Out-File artifacts\env.shape.txt -Encoding utf8
+          }
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-desktop-ui
+          path: artifacts
+          retention-days: 7

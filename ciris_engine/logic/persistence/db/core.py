@@ -599,49 +599,10 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
         and "iphoneos" in getattr(sys.implementation, "_multiarch", "").lower()
     )
 
-    # CIRISServer#418, agent half. persist's `Engine(..., scrubber=None)` — the
-    # constructor default — installs `NullScrubber`, which redacts NOTHING, and
-    # since persist v32.1.0 has its `full_traces` batches REFUSED outright.
-    #
-    # The substrate always HAD a working scrubber; it was wired into both RUST
-    # ingest paths. The agent reaches persist through PYTHON, so it never saw
-    # one. That is the whole defect — not missing NER, which is built in.
-    #
-    # The quiet half matters more than the refusal: NullScrubber redacts nothing
-    # and persist ACCEPTS that at `detailed`, which is what production runs. So
-    # unredacted content has been federating under a warning nobody could act on.
-    # This is the line that stops it.
-    #
-    # Engine-level default because persist's Python `receive_and_persist(body,
-    # pre_verified)` takes no scrubber argument — the Engine field is the only
-    # lever Python has. Safe for exactly one reason, per the substrate's
-    # COHABITATION.md: NO RELAY PATH GOES THROUGH PYTHON. Relays are Rust and
-    # name their scrubber at the call site, so this default cannot reach them.
-    # That matters because capture and relay want OPPOSITE things — scrubbing is
-    # the ORIGINATING node's responsibility, and re-scrubbing at relays would
-    # drift the same trace across nodes running different NER versions.
-    #
-    # Absent on an older substrate, so probe rather than assume: an agent pinned
-    # below 0.5.174 keeps today's behaviour instead of failing to boot.
-    try:
-        import ciris_server as _cs  # type: ignore[import-not-found, import-untyped, unused-ignore]
-
-        _scrubber = getattr(_cs, "egress_scrub", None)
-    except Exception:  # pragma: no cover - substrate absent
-        _scrubber = None
-    if _scrubber is None:
-        logger.warning(
-            "persist Engine: substrate exposes no egress_scrub — installing NullScrubber. "
-            "Nothing will be redacted, and full_traces batches will be refused (CIRISServer#418)."
-        )
-    else:
-        logger.info("persist Engine: egress_scrub installed — capture-side redaction is live")
-
     def _construct_engine() -> "Engine":
         return Engine(
             dsn,
             signing_key_id,
-            scrubber=_scrubber,
             identity_dir=str(identity_dir),
             keystore_alias=signing_key_id,
             # First provisioning mints the node's ONE identity. persist warns
@@ -730,7 +691,7 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
                 # unbounded hang wearing a different hat (#937).
                 engine = cast(
                     Any,
-                    _construct_engine_bounded(lambda: Engine(dsn, signing_key_id, scrubber=_scrubber), dsn, bump_stack=True),
+                    _construct_engine_bounded(lambda: Engine(dsn, signing_key_id), dsn, bump_stack=True),
                 )
             else:
                 raise

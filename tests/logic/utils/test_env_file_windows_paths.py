@@ -113,3 +113,71 @@ def test_complete_py_has_no_raw_quoted_writes() -> None:
     src = inspect.getsource(complete)
     raw = re.findall(r"""f\.write\(f'[A-Z0-9_]+="\{""", src)
     assert not raw, f"{len(raw)} raw quoted .env write(s) — use env_line() instead"
+
+
+# ---------------------------------------------------------------------------
+# The env-SYNC round trip — the third site, and the one that re-corrupted a
+# clean install. `path_resolution.persist_env_var` reads the WHOLE .env,
+# sanitizes every value, and writes it back. So the escape/decode pair has to
+# be an exact inverse, and has to stay stable across MANY rewrites, because it
+# runs on every boot.
+# ---------------------------------------------------------------------------
+
+
+def _sync_once(env_path: Path) -> None:
+    from ciris_engine.logic.utils.path_resolution import (
+        _parse_and_sanitize_env_content,
+        _reconstruct_env_content,
+    )
+
+    parsed = _parse_and_sanitize_env_content(env_path.read_text(encoding="utf-8"))
+    env_path.write_text(_reconstruct_env_content(parsed), encoding="utf-8")
+
+
+@pytest.mark.parametrize("path", WINDOWS_PATHS)
+def test_env_sync_does_not_corrupt_a_correctly_written_path(tmp_path: Path, path: str) -> None:
+    """THE FRANK BUG: the wizard wrote it right, then the sync broke it.
+
+    Before the fix `_sanitize_env_value` ended with
+
+        sanitized.replace("\\\\", "\\")
+
+    which COLLAPSES double backslashes — the opposite of its own comment. It
+    parsed the wizard's escaped value, un-escaped it, and wrote it back bare.
+    dotenv then read `\\f` as a form feed. Wiping the CIRIS folder did not help,
+    because the sync re-corrupted the freshly-written file.
+    """
+    dotenv = pytest.importorskip("dotenv")
+    env = tmp_path / ".env"
+    env.write_text(env_line("CIRIS_DATA_DIR", path), encoding="utf-8")
+
+    _sync_once(env)
+
+    assert dotenv.dotenv_values(str(env))["CIRIS_DATA_DIR"] == path
+
+
+@pytest.mark.parametrize("path", [r"C:\Users\franc\ciris\data", r"\\server\share\ciris"])
+def test_repeated_syncs_do_not_drift(tmp_path: Path, path: str) -> None:
+    """Stability across MANY rewrites, not just one.
+
+    The opposite-sign failure is quieter than the form feed and would survive a
+    single-round-trip test: escaping without a matching decode grows one
+    backslash pair per sync, so the path only stops resolving after several
+    boots. This runs the sync ten times.
+    """
+    dotenv = pytest.importorskip("dotenv")
+    env = tmp_path / ".env"
+    env.write_text(env_line("CIRIS_DATA_DIR", path), encoding="utf-8")
+
+    for i in range(10):
+        _sync_once(env)
+        got = dotenv.dotenv_values(str(env))["CIRIS_DATA_DIR"]
+        assert got == path, f"drifted on sync {i + 1}: {got!r}"
+
+
+def test_env_quoted_and_env_unquoted_are_exact_inverses() -> None:
+    """The pair is the contract; assert it directly rather than via a file."""
+    from ciris_engine.logic.utils.env_file import env_quoted, env_unquoted
+
+    for value in WINDOWS_PATHS + [r'C:\a\b "quoted" \c', "", "plain", "/posix/path", "a\\\\b"]:
+        assert env_unquoted(env_quoted(value)) == value, f"not an inverse for {value!r}"

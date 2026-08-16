@@ -48,3 +48,23 @@ def env_line(key: str, value: object) -> str:
     wrong.
     """
     return f'{key}="{env_quoted(value)}"\n'
+
+
+def env_unquoted(value: str) -> str:
+    """Reverse `env_quoted` — decode a value read back from a quoted `.env` line.
+
+    Needed because anything that PARSES a `.env` and REWRITES it round-trips
+    every value through both halves, and the two must be exact inverses.
+    `path_resolution.persist_env_var` does precisely that: it reads the whole
+    file, sanitizes, and writes it back.
+
+    Get this wrong in either direction and a Windows path degrades on every
+    sync. Under-escaping gave `C:\\Users\\franc` -> a FORM FEED on read (the
+    original bug). Escaping without a matching decode gives the opposite:
+    `C:\\\\Users\\\\franc` growing another pair of backslashes on every single
+    rewrite, until the path stops resolving. Same defect, opposite sign, and the
+    second one is quieter because it never produces a control character.
+
+    Backslash LAST here, mirroring `env_quoted` doing it first.
+    """
+    return value.replace('\\"', '"').replace("\\\\", "\\")

@@ -72,7 +72,17 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
 
         # All deferrals and guidance are persisted in the database
 
-        logger.info(f"Consolidated WA Service initialized with DB: {self.db_path}")
+        # REDACTED. `db_path` is a full DSN in a Postgres deployment, password
+        # included, and this line wrote it in cleartext to /app/logs/latest.log
+        # on EVERY boot — a file `qa_runner pull-logs` collects into support
+        # bundles by design, so the credential travelled off-host with them.
+        # Found on live production containers.
+        #
+        # The helper already existed and the `[DB_INIT]` logger three lines
+        # earlier was already using it correctly; this call site simply did not.
+        from ciris_engine.logic.persistence.db.core import _redact_dsn
+
+        logger.info(f"Consolidated WA Service initialized with DB: {_redact_dsn(str(self.db_path))}")
 
     def _get_placeholder(self) -> str:
         """Get the appropriate parameter placeholder for the current dialect."""

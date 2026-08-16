@@ -107,6 +107,44 @@ def _call(method: str, url: str, body: Optional[Dict[str, Any]] = None) -> tuple
         return 0, f"{type(e).__name__}: {e}"
 
 
+def _hosted_callback_url(provider: str) -> Optional[str]:
+    """The callback URL this deployment has registered with the provider.
+
+    Rebuilds, byte for byte, what the pre-fold router sent and what the identity
+    provider's console therefore has on file:
+
+        {OAUTH_CALLBACK_BASE_URL}/v1/auth/oauth/{CIRIS_AGENT_ID}/{provider}/callback
+
+    BUILT FROM THIS AGENT'S OWN ENV, never forwarded from `oauth.json`. That
+    file's `callback_url` names whichever agent it was provisioned for — on the
+    scout hosts it reads `.../datum/google/callback` — because one Google client
+    serves the whole fleet with many redirect URIs registered against it. Copying
+    that field would make every agent claim to be datum.
+
+    WHY THE AGENT-ID SEGMENT IS THERE AND WHY IT NEVER REACHES US. nginx routes
+    the public path and STRIPS the segment before forwarding:
+
+        location ~ ^/v1/auth/oauth/scout-remote-test-dahrb9/(.+)/callback$ {
+            proxy_pass http://agent_.../v1/auth/oauth/$1/callback...;
+        }
+
+    so the agent id lives in the PUBLIC url for routing and console registration
+    and is never seen by the app. That is exactly what the auth fold lost: the
+    node derived `{base}/v1/auth/oauth/{provider}/callback`, a URL nginx does not
+    route and no console has, and every hosted login got redirect_uri_mismatch.
+
+    Returns None on a desktop install (no base configured), where the node's
+    loopback default is correct per RFC 8252 — a native app is a public client
+    and registers a loopback URI. Sending a public URL there would break the one
+    platform that still worked.
+    """
+    base = (os.environ.get("OAUTH_CALLBACK_BASE_URL") or "").strip().rstrip("/")
+    agent_id = (os.environ.get("CIRIS_AGENT_ID") or "").strip()
+    if not base or not agent_id:
+        return None
+    return f"{base}/v1/auth/oauth/{agent_id}/{provider}/callback"
+
+
 def _sync_callback_base(node_url: str) -> None:
     """Point the node's derived callback at the deployment's public origin.
 
@@ -166,16 +204,34 @@ def sync_oauth_providers_to_node(node_url: str = "http://127.0.0.1:4243") -> Non
             logger.warning("[OAUTH_SYNC] provider %r has no client_id/client_secret — skipped", name)
             continue
 
-        # EXACTLY these fields. `redirect_uri` is not part of this payload and
-        # would be dropped silently while the call still returned 200 — the
-        # callback comes from the config key instead.
-        status, body = _call(
-            "POST",
-            f"{node_url}/v1/auth/oauth/providers",
-            {"provider": name, "client_id": client_id, "client_secret": client_secret, "metadata": {}},
-        )
+        # `callback_url` is accepted from ciris-server 0.5.176 (CIRISServer#421)
+        # and returned VERBATIM as the redirect_uri, so the node no longer has to
+        # derive a URL it cannot get right — it has no agent id to derive one
+        # from. Sending it removes the guess instead of improving it.
+        #
+        # Older substrates ignore unknown fields and still answer 200, so this is
+        # safe to send unconditionally; on those the callback falls back to the
+        # derived form exactly as before.
+        payload: Dict[str, Any] = {
+            "provider": name,
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "metadata": {},
+        }
+        callback_url = _hosted_callback_url(name)
+        if callback_url:
+            payload["callback_url"] = callback_url
+
+        status, body = _call("POST", f"{node_url}/v1/auth/oauth/providers", payload)
         if status == 200:
-            logger.info("[OAUTH_SYNC] provider %r registered with the node", name)
+            if callback_url:
+                logger.info("[OAUTH_SYNC] provider %r registered; callback %s", name, callback_url)
+            else:
+                logger.info(
+                    "[OAUTH_SYNC] provider %r registered; no OAUTH_CALLBACK_BASE_URL/CIRIS_AGENT_ID, "
+                    "so the node keeps its loopback default (correct for a desktop install)",
+                    name,
+                )
         else:
             # Never log the body on failure: the request carried a client secret
             # and an error echo could include it.

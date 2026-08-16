@@ -130,13 +130,12 @@ def setup_basic_logging(
         file_handler.setFormatter(formatter)
         target_logger.addHandler(file_handler)
 
-        latest_link = log_path / "latest.log"
-        if latest_link.exists() or latest_link.is_symlink():
-            latest_link.unlink()
-        try:
-            latest_link.symlink_to(log_filename.name)
-        except Exception:
-            pass
+        # Symlink where permitted, hardlink or a pointer file where not. On
+        # Windows an unprivileged symlink raises WinError 1314, and this used to
+        # swallow that -- so Windows users had no latest.log at all.
+        from ciris_engine.logic.utils.latest_link import link_latest
+
+        link_latest(log_path / "latest.log", log_filename)
 
         # Store the actual log filename for the telemetry endpoint
         actual_log_path = log_path / ".current_log"

@@ -226,6 +226,9 @@ class FailureStreak:
     last_error_message: str = ""
 
 
+from ciris_engine.logic.utils.substrate_caps import substrate_can_scrub
+
+
 class TraceDetailLevel(str, Enum):
     """Trace detail levels for privacy/bandwidth control.
 
@@ -459,6 +462,38 @@ class AccordMetricsService:
             logger.warning(f"Invalid trace_level '{level_str}', defaulting to 'generic'")
             self._trace_level = TraceDetailLevel.GENERIC
             level_source = "default (invalid)"
+
+        # A substrate with no egress scrubber REJECTS full_traces outright
+        # (CIRISServer#418): the agent builds persist's Engine with
+        # `scrubber=None`, persist substitutes NullScrubber, and from
+        # persist v32.1.0 `receive_and_persist` raises
+        #
+        #   ValueError: ('scrub_treatment_mismatch', 'label=full_traces ...')
+        #
+        # for every batch. Not a degraded capture — ZERO traces persist. Staged
+        # QA registers a full_traces adapter after auth (by design, for the
+        # fine-tuning corpus) and took 10 of these per run.
+        #
+        # Downgrade rather than refuse, because this is bootstrap config, not an
+        # interactive request: refusing here would fail adapter registration and
+        # take the whole run down over a level nobody asked for at runtime. It
+        # also mirrors what the substrate does on its OWN supported path —
+        # persist's EgressScrubber downgrades FullTraces -> Detailed when
+        # `!ner::is_configured()`. The interactive route
+        # (PATCH /v1/my-data/accord-settings) still REFUSES, because there a
+        # silent downgrade would show the user a level the agent is not using.
+        #
+        # Lifts itself when the substrate grows `egress_scrub` (0.5.174).
+        if self._trace_level == TraceDetailLevel.FULL_TRACES and not substrate_can_scrub():
+            logger.warning(
+                "⚠️  [%s] trace_level 'full_traces' requested (source=%s) but this substrate "
+                "has no egress scrubber — it rejects unscrubbed full-detail batches, so NOTHING "
+                "would persist. Capturing at 'detailed' instead. See CIRISServer#418.",
+                self._adapter_instance_id,
+                level_source,
+            )
+            self._trace_level = TraceDetailLevel.DETAILED
+            level_source = f"{level_source} (downgraded: substrate cannot scrub)"
 
         logger.info(
             f"📊 [{self._adapter_instance_id}] Trace detail level: {self._trace_level.value} "

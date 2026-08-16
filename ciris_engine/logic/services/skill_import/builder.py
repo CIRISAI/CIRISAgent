@@ -39,6 +39,22 @@ logger = logging.getLogger(__name__)
 # Directory for skill drafts
 _DRAFTS_DIR = Path.home() / ".ciris" / "skill_drafts"
 
+#: A draft id is ALWAYS a uuid4 (see ``SkillDraft.draft_id``), so nothing
+#: legitimate needs the freedom that made this exploitable: the id arrives as a
+#: raw FastAPI path parameter and was interpolated straight into a filename.
+#:
+#: ``/skills/drafts/{draft_id}`` matches one path segment on the RAW path and
+#: percent-decodes afterwards, so ``..%2F..%2Fetc%2Fpasswd`` matches as a single
+#: segment and then becomes a traversal. That reached ``path.unlink()`` in
+#: ``delete_draft`` (arbitrary ``.json`` deletion — ``oauth.json`` holds the
+#: deployment's OAuth client secrets) and ``path.read_text()`` in
+#: ``load_draft``, whose failure branch logs the pydantic error — and pydantic
+#: echoes the offending input, so an unparseable file's CONTENTS land in the log.
+#:
+#: Admin-gated, which caps the blast radius but does not make it acceptable: an
+#: admin has no business deleting files outside the drafts directory.
+_DRAFT_ID_RE = re.compile(r"\A[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\Z")
+
 
 # ============================================================================
 # Card Schemas - Each card is a section of the skill
@@ -405,24 +421,44 @@ class SkillBuilder:
 
         return errors
 
+    def _draft_path(self, draft_id: str) -> Optional[Path]:
+        """The on-disk path for ``draft_id``, or None if the id is not a draft id.
+
+        Validate-then-build, rather than build-then-check-it-is-inside: the
+        id has exactly one legal shape (uuid4) and anything else is not a
+        request we can serve, so there is nothing to normalise or recover.
+        """
+        if not _DRAFT_ID_RE.match(draft_id or ""):
+            # Never echo the rejected id — it is attacker-controlled, and
+            # this log line is the one place it would otherwise reach a log
+            # unescaped (CWE-117).
+            logger.warning("Rejected a draft id that is not a uuid4")
+            return None
+        return self.drafts_dir / f"{draft_id}.json"
+
     def save_draft(self, draft: SkillDraft) -> Path:
         """Save a draft to disk as JSON."""
+        path = self._draft_path(draft.draft_id)
+        if path is None:
+            raise ValueError("draft_id must be a uuid4")
         self.drafts_dir.mkdir(parents=True, exist_ok=True)
-        path = self.drafts_dir / f"{draft.draft_id}.json"
         path.write_text(draft.model_dump_json(indent=2), encoding="utf-8")
         logger.info(f"Saved draft {draft.draft_id} to {path}")
         return path
 
     def load_draft(self, draft_id: str) -> Optional[SkillDraft]:
         """Load a draft from disk."""
-        path = self.drafts_dir / f"{draft_id}.json"
-        if not path.exists():
+        path = self._draft_path(draft_id)
+        if path is None or not path.exists():
             return None
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
             return SkillDraft.model_validate(data)
         except Exception as e:
-            logger.error(f"Failed to load draft {draft_id}: {e}")
+            # Type name only. A pydantic ValidationError renders the input it
+            # rejected, so logging `e` here would print the contents of
+            # whatever file was read — the second half of the traversal bug.
+            logger.error(f"Failed to load draft {draft_id}: {type(e).__name__}")
             return None
 
     def list_drafts(self) -> List[SkillDraft]:
@@ -440,8 +476,8 @@ class SkillBuilder:
 
     def delete_draft(self, draft_id: str) -> bool:
         """Delete a draft from disk."""
-        path = self.drafts_dir / f"{draft_id}.json"
-        if path.exists():
+        path = self._draft_path(draft_id)
+        if path is not None and path.exists():
             path.unlink()
             return True
         return False

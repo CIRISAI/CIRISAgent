@@ -152,12 +152,8 @@ def _startup_lock_options() -> str:
     """
     import os
 
-    lock_timeout = os.environ.get(
-        DB_INIT_LOCK_TIMEOUT_ENV, DB_INIT_LOCK_TIMEOUT_DEFAULT
-    ).strip()
-    statement_timeout = os.environ.get(
-        DB_INIT_STATEMENT_TIMEOUT_ENV, DB_INIT_STATEMENT_TIMEOUT_DEFAULT
-    ).strip()
+    lock_timeout = os.environ.get(DB_INIT_LOCK_TIMEOUT_ENV, DB_INIT_LOCK_TIMEOUT_DEFAULT).strip()
+    statement_timeout = os.environ.get(DB_INIT_STATEMENT_TIMEOUT_ENV, DB_INIT_STATEMENT_TIMEOUT_DEFAULT).strip()
 
     parts = []
     if lock_timeout and lock_timeout != "0":
@@ -252,17 +248,13 @@ def _blocker_hint(dsn: str) -> str:
             conn.close()
         if rows:
             rendered = "; ".join(
-                f"pid={r[0]} state={r[1]} age={r[2]} blocked_by={r[3]} query={str(r[4])[:200]}"
-                for r in rows
+                f"pid={r[0]} state={r[1]} age={r[2]} blocked_by={r[3]} query={str(r[4])[:200]}" for r in rows
             )
             return f" Active backends: {rendered}."
     except Exception as probe_err:  # noqa: BLE001 - diagnostics are best-effort
         logger.debug("pg_stat_activity blocker probe unavailable: %s", probe_err)
 
-    return (
-        " To identify the blocker, run against the same database: "
-        f"{PG_BLOCKER_DIAGNOSTIC_SQL}"
-    )
+    return " To identify the blocker, run against the same database: " f"{PG_BLOCKER_DIAGNOSTIC_SQL}"
 
 
 def initialize_database(db_path: Optional[str] = None) -> None:
@@ -341,14 +333,8 @@ def _persist_dsn_and_sentinel(db_path: str) -> Tuple[str, Optional[Path]]:
         # SQLAlchemy form: sqlite:///rel/path (3 slashes -> relative) or
         # sqlite:////abs/path (4 slashes -> absolute). Splitting on
         # 'sqlite:///' keeps the right leading-slash count for Path().
-        path_part = (
-            db_path.split("sqlite:///", 1)[-1] if "sqlite:///" in db_path else ""
-        )
-        sentinel = (
-            Path(path_part).resolve().parent
-            if path_part and path_part != ":memory:"
-            else None
-        )
+        path_part = db_path.split("sqlite:///", 1)[-1] if "sqlite:///" in db_path else ""
+        sentinel = Path(path_part).resolve().parent if path_part and path_part != ":memory:" else None
         return db_path, sentinel
     abs_path = Path(db_path).resolve()
     # `sqlite:///{abs_path}` where abs_path begins with '/' yields
@@ -356,9 +342,7 @@ def _persist_dsn_and_sentinel(db_path: str) -> Tuple[str, Optional[Path]]:
     return f"sqlite:///{abs_path}", abs_path.parent
 
 
-def _construct_engine_bounded(
-    construct: Callable[[], Any], dsn: str, bump_stack: bool = False
-) -> Any:
+def _construct_engine_bounded(construct: Callable[[], Any], dsn: str, bump_stack: bool = False) -> Any:
     """Run persist's blocking Engine constructor under a wall-clock bound.
 
     Three properties #937 needs and the previous inline call lacked:
@@ -406,9 +390,7 @@ def _construct_engine_bounded(
     try:
         if bump_stack:
             threading.stack_size(8 * 1024 * 1024)
-        worker = threading.Thread(
-            target=_worker, name="persist-engine-init", daemon=True
-        )
+        worker = threading.Thread(target=_worker, name="persist-engine-init", daemon=True)
         worker.start()
     finally:
         threading.stack_size(prev_stack)
@@ -482,13 +464,8 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
     # an _expected_dsn that actually matches and the idempotent-skip works.
     _expected_dsn = _persist_dsn_and_sentinel(_resolved_db_path)[0]
 
-    if (
-        graph_persistence._engine is not None
-        and graph_persistence._engine_dsn == _expected_dsn
-    ):
-        logger.debug(
-            "persist engine already wired to %s, skipping re-bootstrap", _expected_dsn
-        )
+    if graph_persistence._engine is not None and graph_persistence._engine_dsn == _expected_dsn:
+        logger.debug("persist engine already wired to %s, skipping re-bootstrap", _expected_dsn)
         return
 
     # Resolve the DSN. Postgres takes its own URL; SQLite uses
@@ -648,15 +625,26 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
             create_identity_if_missing=True,
         )
 
+    # macOS Secure Enclave session gate (CIRISServer#380). The federation
+    # keystore is opened here (the Engine) and again by the node's compose in
+    # `serve_with_python_adapter`. On a macOS console session whose screen is
+    # LOCKED, the Secure Enclave is only intermittently reachable, so those two
+    # opens can seal DIFFERENT keys under one alias and the node refuses to boot
+    # with "TWO FEDERATION IDENTITIES IN ONE NODE". Block here until SE is
+    # deterministically reachable (unlocked session → use SE) or consistently
+    # unavailable (headless → software-only is deterministic). No-op off macOS,
+    # and on iOS (which reaches its Secure Enclave reliably in the foreground).
+    from ciris_engine.logic.runtime.se_session_gate import await_secure_enclave_session
+
+    await_secure_enclave_session()
+
     try:
         # #937 — ALWAYS construct on a worker thread, not just on iOS.
         # The thread was originally an iOS stack-size workaround; it is now
         # also the only way to bound a blocking FFI call from Python. The
         # main thread joins with a deadline, logs progress while it waits,
         # and raises DatabaseInitializationTimeout if the budget is spent.
-        engine = cast(
-            Any, _construct_engine_bounded(_construct_engine, dsn, bump_stack=_is_ios)
-        )
+        engine = cast(Any, _construct_engine_bounded(_construct_engine, dsn, bump_stack=_is_ios))
     except DatabaseInitializationTimeout:
         # #937 — MUST precede the stale-lock heuristic below. That heuristic
         # is a substring match on "lock", and the timeout message says
@@ -698,16 +686,12 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
 
                     reset_engine()
                 except Exception as reset_err:
-                    logger.debug(
-                        "reset_engine() before retry failed (non-fatal): %s", reset_err
-                    )
+                    logger.debug("reset_engine() before retry failed (non-fatal): %s", reset_err)
                 # Bounded on the retry too — a wedged retry is the same
                 # unbounded hang wearing a different hat (#937).
                 engine = cast(
                     Any,
-                    _construct_engine_bounded(
-                        lambda: Engine(dsn, signing_key_id), dsn, bump_stack=True
-                    ),
+                    _construct_engine_bounded(lambda: Engine(dsn, signing_key_id), dsn, bump_stack=True),
                 )
             else:
                 raise
@@ -728,15 +712,10 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
             try:
                 import json as _json
 
-                logger.info(
-                    "A0a migration sentinel absent — running legacy graph migration"
-                )
+                logger.info("A0a migration sentinel absent — running legacy graph migration")
                 raw = engine.run_legacy_graph_migration(_json.dumps({"dry_run": False}))
                 stats = _json.loads(raw) if isinstance(raw, (bytes, str)) else raw
-                if (
-                    stats.get("outcome") in ("ok", "partial")
-                    and stats.get("errors", 0) == 0
-                ):
+                if stats.get("outcome") in ("ok", "partial") and stats.get("errors", 0) == 0:
                     sentinel.write_text(
                         f'{{"nodes_written":{stats.get("nodes_written", 0)},'
                         f'"edges_written":{stats.get("edges_written", 0)}}}'

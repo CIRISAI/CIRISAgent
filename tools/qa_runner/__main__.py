@@ -553,7 +553,9 @@ def main():
 
             print(f"🔑 Live mode enabled:")
             print(f"   Provider: {live_provider}")
-            print(f"   Key: {live_api_key[:10]}...{live_api_key[-4:]}")
+            # Length, not material. This runs in CI as well as locally, and CI
+            # job logs are readable by anyone with repo read access.
+            print(f"   Key: loaded ({len(live_api_key)} chars)")
             print(f"   Model: {live_model}")
             if live_base_url:
                 print(f"   Base URL: {live_base_url}")

@@ -8,6 +8,7 @@ import json
 import logging
 import math
 from datetime import datetime
+from html import escape
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from ciris_engine.schemas.services.graph_core import GraphEdge, GraphNode, NodeType
@@ -255,32 +256,48 @@ def _render_edge(edge: GraphEdge, positions: Dict[str, Tuple[float, float]]) -> 
 
     if edge.relationship:
         # Place label at the control point for better positioning
+        # Same sink as the node label: relationship names are graph content.
         parts.append(
             f'<text class="edge-label" x="{cx}" y="{cy}" text-anchor="middle" '
-            f'font-size="10" fill="{color}">{edge.relationship}</text>'
+            f'font-size="10" fill="{color}">{escape(edge.relationship)}</text>'
         )
 
     return parts
 
 
 def _render_node(node: GraphNode, position: Tuple[float, float], edge_count: int = 0) -> List[str]:
-    """Render a single node as SVG elements."""
+    """Render a single node as SVG elements.
+
+    `node.id` is GRAPH CONTENT, not a route parameter, and it is emitted into
+    `<title>`, `<text>` and an attribute of a document served as `text/html`.
+    Unescaped, an id containing `</title><script>…` closes the element and
+    executes — stored XSS, persisted by whatever wrote the node and fired for
+    whoever opens the visualiser.
+
+    `generate_html_wrapper` escapes its own scalar arguments and carries a
+    comment saying so, which is exactly why this was easy to miss: the wrapper
+    was hardened and the body it wraps was not. Escaping belongs at the point
+    of interpolation, so it is done here rather than over the assembled SVG.
+    """
     x, y = position
     color = get_node_color(node.type)
     size = get_node_size(node, edge_count)
 
     # Get string values for type and scope
-    type_str = node.type.value if hasattr(node.type, "value") else str(node.type)
-    scope_str = node.scope.value if hasattr(node.scope, "value") else str(node.scope)
+    type_str = escape(node.type.value if hasattr(node.type, "value") else str(node.type))
+    scope_str = escape(node.scope.value if hasattr(node.scope, "value") else str(node.scope))
 
-    # Truncate label if needed
-    label = node.id[:20] + "..." if len(node.id) > 20 else node.id
+    # Escape BEFORE truncating: slicing an escaped entity in half (`&a`) would
+    # emit a malformed one, and truncating first then escaping would still be
+    # correct but makes the 20 a character budget over a different alphabet.
+    node_id = escape(node.id)
+    label = node_id[:20] + "..." if len(node_id) > 20 else node_id
 
     return [
         f'<circle class="node" cx="{x}" cy="{y}" r="{size}" '
         f'fill="{color}" stroke="white" stroke-width="2" '
-        f'data-node-id="{node.id}" data-node-type="{type_str}">'
-        f"<title>{node.id}\nType: {type_str}\nScope: {scope_str}</title>"
+        f'data-node-id="{node_id}" data-node-type="{type_str}">'
+        f"<title>{node_id}\nType: {type_str}\nScope: {scope_str}</title>"
         f"</circle>",
         f'<text class="node-label" x="{x}" y="{y + size + 12}" text-anchor="middle">{label}</text>',
     ]

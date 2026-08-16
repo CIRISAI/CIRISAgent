@@ -88,6 +88,43 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: iOS substrate currency — an Xcode build off this branch must ship the pinned substrate
+        run: |
+          # Resources.zip records no version of its own — the vendored
+          # ciris_server declares no __version__ and the .so embeds no version
+          # literal, which the updater reports when it probes and finds nothing.
+          # So nothing could tell whether iOS shipped the substrate everything
+          # else was pinned to, and it drifted a full release behind while
+          # requirements.txt, CLIENT_VERSION, the Android gradle pin and the
+          # Android wheels all moved to 0.5.173.
+          #
+          # substrate.lock.json is written by the updater on every iOS refresh,
+          # so this runs on any runner in milliseconds and answers the question
+          # the artifact cannot answer about itself.
+          python tools/dev/check_ios_substrate_current.py
+
+      - name: Version alignment — the shipped client must match the shipped node
+        run: |
+          # WHY THIS RUNS IN CI AND NOT ONLY IN pre-commit.
+          #
+          # `CLIENT_VERSION` (ClientMode.kt) must equal the `ciris-server==` pin.
+          # When they drift, every user of that build sees
+          #
+          #     Node is v0.5.173 — app built for 0.5.172
+          #
+          # and a release has already shipped that way once. The check itself is
+          # correct and has been wired into .pre-commit-config.yaml — but ONLY
+          # there, so it protects a developer's machine and nothing else. A
+          # commit made with --no-verify, or in any environment where hooks are
+          # not installed, walks straight past it.
+          #
+          # A guard that only runs where the mistake is least likely is not a
+          # guard. This is the same shape as the persist round-trip canary that
+          # skipped silently for months, and the localization test that compared
+          # keys while claiming byte-identity: correct logic, never executed on
+          # the path that matters.
+          python tools/dev/check_version_alignment.py
+
       - name: Dump twice — determinism is part of the instrument
         run: |
           python3 -m ciris_engine.logic.utils.compose_dump dump \

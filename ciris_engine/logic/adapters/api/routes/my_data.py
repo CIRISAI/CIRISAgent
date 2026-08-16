@@ -708,9 +708,38 @@ def _apply_consent_change(adapter: Any, consent_given: bool) -> None:
         logger.debug(f"consent-CEG: accord-settings emit skipped: {e}")
 
 
+def _substrate_can_scrub() -> bool:
+    """Delegates to the shared probe — see `utils/substrate_caps`.
+
+    Kept as a thin local name because the tests monkeypatch it here, and because
+    the interactive route's behaviour on a False answer (REFUSE) differs from the
+    adapter bootstrap's (downgrade), so the two call sites read differently even
+    though they ask the same question.
+    """
+    from ciris_engine.logic.utils.substrate_caps import substrate_can_scrub
+
+    return substrate_can_scrub()
+
+
 def _apply_trace_level_change(adapter: Any, trace_level: str) -> None:
-    """Apply a trace-level change; 400 on an unknown level."""
+    """Apply a trace-level change; 400 on an unknown or unsupportable level."""
     from ciris_adapters.ciris_accord_metrics.services import TraceDetailLevel
+
+    if trace_level == "full_traces" and not _substrate_can_scrub():
+        # Refusing loudly beats accepting and dropping everything. The user
+        # asked for MORE trace detail; silently returning none is the worst
+        # possible answer to that request, and it would look like the
+        # federation link had broken rather than like a setting had failed.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "trace_level 'full_traces' is unavailable on this build: the pinned "
+                "substrate has no egress scrubber, and it rejects unscrubbed "
+                "full-detail batches outright — selecting it would stop trace "
+                "persistence entirely rather than increase detail. Use 'detailed'. "
+                "See CIRISServer#418."
+            ),
+        )
 
     try:
         adapter.metrics_service._trace_level = TraceDetailLevel(trace_level)

@@ -137,13 +137,131 @@ async def _check_existing_oauth_wa(auth_service: Any, setup: SetupCompleteReques
     return existing_wa, True
 
 
+#: Roles a node-claimed owner can hold. Mirrors `setup/dependencies.py`, which
+#: needs the same "is there already a human in charge?" answer for the wizard gate.
+_OWNER_ROLES = ("root", "authority")
+
+
+class _AdoptedNodeOwner:
+    """The node-claimed owner, carried in the shape the setup flow expects.
+
+    NOT a `WACertificate`, and it cannot be one: `WACertificate.wa_id` is pinned
+    to `^wa-\\d{4}-\\d{2}-\\d{2}-[A-Z0-9]{6}$`, and a node-claimed owner's id is
+    `wa-root-<fed-id>-<suffix>`. That regex is exactly why `_is_brain_wa_row`
+    exists and why this owner is invisible to `list_was()`.
+
+    Deliberately carries NO credential. The right to manage this node and
+    responsibility for this agent come from CEG; the node has native auth and
+    the server owns the password. This type exists only so the CEG artifacts the
+    AGENT still owns — the founding-partnership consent node and the user's
+    language/location preferences — can be keyed to the owner's id. Both take a
+    plain string, so nothing here needs the brain's certificate schema.
+    """
+
+    __slots__ = ("wa_id", "name", "role")
+
+    def __init__(self, wa_id: str, name: str, role: str) -> None:
+        self.wa_id = wa_id
+        self.name = name
+        self.role = role
+
+
+def _node_owner_named(username: str) -> Optional[_AdoptedNodeOwner]:
+    """The node-claimed owner answering to `username`, if one already exists.
+
+    WHY THIS EXISTS. Setup performs the node self-claim FIRST — the saga logs
+    it as `E5 claim_accepted role=SYSTEM_ADMIN waId=wa-root-…` — and only then
+    runs `completeSetup`. By that point the owner the user asked for already
+    exists. But the duplicate check in `_create_new_wa` goes through
+    `list_was()`, which ends in `if _is_brain_wa_row(row)` (#922) and therefore
+    CANNOT see `wa-root-*`. The brain concludes nobody exists and mints a second
+    ROOT certificate under the same name.
+
+    Nothing is corrupt afterwards and nothing raises. The agent reports
+    `status=healthy state=work init=True` — and every login attempt gets 409
+    from the node:
+
+        2 active certificates answer to the name "qaadmin"
+        (wa-2026-08-16-143618, wa-root-qa-node-…) — refusing to choose
+        between them.
+
+    That refusal is correct: picking one would silently authenticate the user as
+    whichever row the node happened to order first, and only one of them carries
+    the password. So the fix belongs here, at the site that creates the
+    ambiguity, not at the node that reports it.
+
+    HOW IT GOT HERE (2a26daba0, 2026-07-15, shipped since v2.9.10). The
+    claim-then-complete REORDER made the node write its owner row before
+    `/v1/setup/complete` read it. `_row_to_wa` then raised on that row and
+    `completeSetup` 500'd — loud, and it blocked setup, so nobody ended up with
+    a broken install. That commit fixed the crash by filtering `wa-root-*` out
+    of the brain's WA world, explicitly to restore "the brain's WA world to
+    exactly its pre-node-claim state".
+
+    That is the flaw. Pre-node-claim state means the brain still believes no
+    owner exists, so it goes on to mint one. The 500 became a silent duplicate:
+    setup now COMPLETES, the agent comes up healthy, and login is impossible
+    forever. Seven releases carried it because nothing errors and no unit test
+    looks across both identity kinds — keeping them apart is the filter's job.
+
+    This is the fourth call site blinded by that filter, after the setup-wizard
+    lockout and the missing founding partnership (both fixed in 2.9.16 the same
+    way, by consulting `_list_active_by_role` alongside `list_was()`).
+    """
+    try:
+        from ciris_engine.logic.persistence.stores.authentication_store import (
+            _is_brain_wa_row,
+            _list_active_by_role,
+        )
+    except Exception:  # pragma: no cover - store unavailable in some test rigs
+        return None
+
+    wanted = (username or "").strip().casefold()
+    if not wanted:
+        return None
+
+    for role in _OWNER_ROLES:
+        try:
+            rows = _list_active_by_role(role)
+        except Exception as exc:  # noqa: BLE001
+            # A failed probe is NOT evidence of absence. Minting on a read error
+            # is what creates the lockout, so treat it as "unknown" and let the
+            # caller fall through to its normal path rather than asserting the
+            # owner is missing.
+            logger.warning("CIRIS_USER_CREATE: could not enumerate %s rows (%s)", role, type(exc).__name__)
+            continue
+        for row in rows or []:
+            if _is_brain_wa_row(row):
+                continue  # a brain cert is visible to list_was(); not our concern
+            if str(row.get("name") or "").strip().casefold() != wanted:
+                continue
+            return _AdoptedNodeOwner(
+                wa_id=str(row.get("wa_id")),
+                name=str(row.get("name")),
+                role=str(row.get("role") or role),
+            )
+    return None
+
+
 async def _create_new_wa(auth_service: Any, setup: SetupCompleteRequest) -> Any:
-    """Create a new WA certificate for the setup user.
+    """Create a new WA certificate for the setup user, or adopt the node's owner.
 
     Returns:
-        WA certificate for the newly created user
+        WA certificate for the newly created user, or the already-existing
+        node-claimed owner of the same name (see `_node_owner_named`).
     """
     from ciris_engine.schemas.services.authority_core import WARole
+
+    # Ask the substrate before minting. `list_was()` below cannot answer this.
+    adopted = _node_owner_named(setup.admin_username)
+    if adopted is not None:
+        logger.info(
+            "CIRIS_USER_CREATE: node-claimed owner %s already answers to this "
+            "username — adopting it instead of minting a second ROOT cert "
+            "(a same-named rival makes every login 409 at the node)",
+            adopted.wa_id,
+        )
+        return adopted
 
     logger.info(f"CIRIS_USER_CREATE: Creating NEW user: {setup.admin_username} with role: {WARole.ROOT}")
 
@@ -171,7 +289,23 @@ async def _create_new_wa(auth_service: Any, setup: SetupCompleteRequest) -> Any:
 
 
 async def _set_password_for_wa(auth_service: Any, setup: SetupCompleteRequest, wa_cert: Any) -> None:
-    """Set password hash for non-OAuth users."""
+    """Set password hash for non-OAuth users the BRAIN owns.
+
+    Never for a node-claimed owner. The node has native auth and the server owns
+    the credential — it was already set there, and `E6 owner_login ok` fires in
+    the setup saga BEFORE `/v1/setup/complete` runs, which is the proof: the node
+    had authenticated that owner before the brain did anything. Writing a second
+    password here would make the agent an authority on a credential it does not
+    own, and leave two places to rotate it.
+    """
+    if isinstance(wa_cert, _AdoptedNodeOwner):
+        logger.info(
+            "CIRIS_USER_CREATE: skipping password for node-claimed owner %s — "
+            "the node owns auth for this identity",
+            wa_cert.wa_id,
+        )
+        return
+
     is_oauth_setup = bool(setup.oauth_provider and setup.oauth_external_id)
 
     if is_oauth_setup:

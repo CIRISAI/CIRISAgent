@@ -259,9 +259,11 @@ def _log_validation_start(config: LLMValidationRequest) -> None:
     logger.info(
         f"[VALIDATE_LLM] API key provided: {bool(config.api_key)} (length: {len(config.api_key) if config.api_key else 0})"
     )
-    logger.info(
-        f"[VALIDATE_LLM] API key prefix: {config.api_key[:20] + '...' if config.api_key and len(config.api_key) > 20 else config.api_key}"
-    )
+    # The key's PREFIX is not a safe thing to log. `sk-` is 3 characters, so
+    # `[:20]` published 17 characters of the secret — and on the else-branch,
+    # a key of 20 characters or fewer was logged in full. The line above
+    # already reports presence and length, which is everything this log was
+    # actually used to diagnose (empty key, whitespace, wrong variable).
     logger.info(f"[VALIDATE_LLM] Base URL: {config.base_url}")
     logger.info(f"[VALIDATE_LLM] Model: {config.model}")
 

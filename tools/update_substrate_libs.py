@@ -51,6 +51,7 @@ Version defaults to the per-library pin floor in requirements.txt.
 
 import argparse
 import hashlib
+import json
 import os
 import re
 import shutil
@@ -1129,15 +1130,308 @@ def update_python_bindings_ios(lib: SubstrateLib, version: str) -> bool:
     return True
 
 
-def rebuild_resources_zip() -> None:
-    """Rebuild Resources.zip from the Resources directory."""
-    print("\nRebuilding Resources.zip...")
-    os.chdir(IOS_RESOURCES_DIR)
+#: A rebuild may legitimately shrink the bundle a little; losing most of it is
+#: never legitimate. Set well below any real change and well above the disaster.
+_ZIP_SHRINK_FLOOR = 0.75
+
+
+
+#: Records which substrate versions the iOS bundle was actually built from.
+#:
+#: `Resources.zip` carries no version information — `app_packages/ciris_server/`
+#: declares no `__version__`, and the `.so` embeds no version literal (the
+#: updater's own probe says so). So NOTHING outside a macOS host could tell which
+#: substrate iOS was shipping, and it drifted a full release behind while every
+#: other platform moved. This file is the answer to "what is in there", and it is
+#: tracked so any runner can check it against requirements.txt.
+IOS_SUBSTRATE_LOCK = IOS_APP_DIR / "substrate.lock.json"
+
+
+def write_ios_substrate_lock(lib: str, version: str) -> None:
+    """Record `lib` -> `version` for the iOS bundle, preserving other libs."""
+    import datetime as _dt
+
+    data = {}
+    if IOS_SUBSTRATE_LOCK.exists():
+        try:
+            data = json.loads(IOS_SUBSTRATE_LOCK.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            data = {}
+    libs = dict(data.get("libs") or {})
+    libs[lib] = version
+    IOS_SUBSTRATE_LOCK.write_text(
+        json.dumps(
+            {
+                "_comment": (
+                    "What the iOS Resources.zip was BUILT FROM. Written by "
+                    "tools/update_substrate_libs.py --platform ios. The bundle itself "
+                    "records no version, so this is the only thing a non-macOS runner "
+                    "can check against requirements.txt."
+                ),
+                "libs": dict(sorted(libs.items())),
+                "updated_at": _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds"),
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    print(f"  -> substrate.lock.json: {lib}={version}")
+
+
+#: Optional-dependency packages that have drawn a BLOCKING supply-chain alert
+#: purely by being named in a vendored METADATA. Add only with a real alert to
+#: point at — every entry costs a bundle-integrity edit (METADATA + RECORD).
+_FLAGGED_EXTRA_PKGS = {"lxml"}
+
+
+def prune_unsatisfiable_extras() -> int:
+    """Drop optional-dependency declarations naming packages not in the bundle.
+
+    WHY. Socket read `fonttools-4.61.1.dist-info/METADATA` in the vendored iOS
+    tree, found
+
+        Provides-Extra: lxml
+        Requires-Dist: lxml>=4.0; extra == "lxml"
+
+    and raised a **Block/High** alert: "pypi lxml is 86.0% likely malicious"
+    (confidence 0.86). `lxml` is not vendored here, is in no requirements file,
+    and is imported nowhere. The verdict's own notes — eval() on untrusted
+    `.xml` during "parsing/translation", writes derived outputs to disk — read
+    as an analysis of **fonttools** (TTX is XML), attached to the extra it
+    happens to declare. A misattribution, but a blocking one.
+
+    An `extra` is a promise that `pip install pkg[extra]` can pull something
+    later. A sealed iOS bundle installs nothing at runtime, so an extra naming
+    an absent package is unsatisfiable by construction: it cannot be exercised,
+    only misread. Removing the declaration changes no executable byte.
+
+    Deliberately NOT removing fonttools itself. Nothing first-party imports it,
+    but it arrives under `toga_iOS`, and `Resources/app/ciris_ios/app.py` does
+    `import toga` at startup — so toga is load-bearing and fonttools may be
+    reached lazily for font handling. Cutting it to silence a false positive
+    would risk iOS at runtime, on the platform where shipping a fix is slowest.
+
+    SCOPED ON PURPOSE. Run unrestricted this prunes ~247 declaration lines across
+    two dozen packages — correct in principle, but every edited METADATA is
+    sha256'd in its sibling `RECORD`, so each one is a bundle-integrity edit on
+    an artifact this tool cannot test. `_FLAGGED_EXTRA_PKGS` keeps the blast
+    radius at the packages actually causing a blocking alert. Widen it
+    deliberately, not by default.
+
+    RECORD is rewritten alongside, so the bundle stays self-consistent.
+
+    Idempotent, and re-applied on every refresh so a later substrate bump does
+    not quietly reintroduce the alert.
+    """
+    pkgs_dir = IOS_RESOURCES_DIR / "app_packages"
+    if not pkgs_dir.is_dir():
+        return 0
+
+    present = {
+        d.name.split("-")[0].replace("_", "-").lower()
+        for d in pkgs_dir.iterdir()
+        if d.is_dir() and d.name.endswith(".dist-info")
+    }
+    targets = {p for p in _FLAGGED_EXTRA_PKGS if p not in present}
+    if not targets:
+        return 0
+
+    extra_re = re.compile(r'^Requires-Dist:\s*([A-Za-z0-9._-]+).*;\s*extra\s*==\s*["\']([^"\']+)["\']')
+    pruned = 0
+
+    for meta in sorted(pkgs_dir.glob("*.dist-info/METADATA")):
+        try:
+            lines = meta.read_text(encoding="utf-8", errors="replace").splitlines(keepends=True)
+        except OSError:
+            continue
+
+        drop_extras = {
+            m.group(2)
+            for line in lines
+            if (m := extra_re.match(line)) and m.group(1).replace("_", "-").lower() in targets
+        }
+        if not drop_extras:
+            continue
+
+        # Pass 1: drop only the Requires-Dist lines naming a flagged package.
+        kept = []
+        for line in lines:
+            m = extra_re.match(line)
+            if m and m.group(2) in drop_extras and m.group(1).replace("_", "-").lower() in targets:
+                pruned += 1
+                continue
+            kept.append(line)
+
+        # Pass 2: retire a Provides-Extra ONLY if nothing still requires it.
+        #
+        # An umbrella extra like fonttools' `all` names lxml AND a dozen other
+        # packages. Removing its declaration while its surviving Requires-Dist
+        # lines still say `extra == "all"` leaves metadata referencing an extra
+        # that no longer exists — trading a false-positive alert for a real
+        # inconsistency. Only extras left with no requirements at all are dropped.
+        still_used = {m.group(2) for line in kept if (m := extra_re.match(line))}
+        final = []
+        for line in kept:
+            if (
+                line.startswith("Provides-Extra:")
+                and line.split(":", 1)[1].strip() in drop_extras
+                and line.split(":", 1)[1].strip() not in still_used
+            ):
+                pruned += 1
+                continue
+            final.append(line)
+        kept = final
+
+        body = "".join(kept)
+        meta.write_text(body, encoding="utf-8")
+        _rewrite_record_entry(meta)
+        print(f"  pruned unsatisfiable extras {sorted(drop_extras)} from {meta.parent.name}")
+
+    return pruned
+
+
+def _rewrite_record_entry(target: Path) -> None:
+    """Refresh `target`'s line in its sibling RECORD (wheel PEP 376 format).
+
+    A dist-info RECORD stores `path,sha256=<urlsafe-b64, unpadded>,<size>`.
+    Editing METADATA without this leaves the bundle self-inconsistent, which is
+    the kind of quiet breakage that surfaces much later as an install/verify
+    failure rather than here.
+    """
+    import base64
+
+    record = target.parent / "RECORD"
+    if not record.exists():
+        return
+
+    raw = target.read_bytes()
+    digest = base64.urlsafe_b64encode(hashlib.sha256(raw).digest()).rstrip(b"=").decode("ascii")
+    rel = f"{target.parent.name}/{target.name}"
+
+    out = []
+    for line in record.read_text(encoding="utf-8", errors="replace").splitlines(keepends=True):
+        if line.split(",", 1)[0] == rel:
+            eol = "\r\n" if line.endswith("\r\n") else "\n" if line.endswith("\n") else ""
+            out.append(f"{rel},sha256={digest},{len(raw)}{eol}")
+        else:
+            out.append(line)
+    record.write_text("".join(out), encoding="utf-8")
+
+
+def materialize_resources_tree() -> None:
+    """Unpack Resources.zip into Resources/ so the refresh has something to edit.
+
+    THE BUG THIS FIXES. `Resources.zip` is a committed artifact, but the tree it
+    is built from is gitignored build output: of ~5,862 entries, `app_packages/`
+    (2,741) and `python/` (1,210) are not in git. A fresh checkout has ~50 files
+    there. This tool writes into `Resources/app_packages/...` and then zips the
+    whole directory — so on ANY clean checkout it edited a near-empty tree and
+    rebuilt a 66-entry shell over a 5,862-entry bundle.
+
+    That is not a local-environment quirk. The macOS CI runner does a plain
+    `git checkout` too, and hit it identically:
+
+        REFUSING to replace Resources.zip: the rebuild has 66 entries
+        against the existing 5862.
+
+    So the iOS refresh could not have worked on any runner, and would have
+    destroyed the bundle on each attempt if the shrink guard had not stopped it.
+
+    Extracting first makes the operation self-contained: unpack the committed
+    artifact, modify it, re-zip. Idempotent — if the tree is already fuller than
+    the archive (someone ran a real iOS build), leave it alone.
+    """
     zip_path = IOS_APP_DIR / "Resources.zip"
+    if not zip_path.exists():
+        return
+
+    with zipfile.ZipFile(zip_path) as z:
+        archived = len(z.namelist())
+        present = sum(1 for _ in IOS_RESOURCES_DIR.rglob("*")) if IOS_RESOURCES_DIR.exists() else 0
+        if present >= archived:
+            print(f"  Resources/ already materialised ({present} entries) — not unpacking")
+            return
+        print(f"  Materialising Resources/ from Resources.zip ({archived} entries; tree had {present})...")
+        IOS_RESOURCES_DIR.mkdir(parents=True, exist_ok=True)
+        z.extractall(IOS_RESOURCES_DIR)
+
+    # TRACKED FILES WIN. The archive also contains copies of files that ARE in
+    # git — localization bundles, ffi_bindings — and those copies are as old as
+    # the last iOS refresh. Extracting over them silently reverts committed work:
+    # this reverted an en.json string added earlier the same day, which would
+    # then have been re-zipped and shipped as the current bundle.
+    #
+    # So restore anything git tracks under Resources/ after unpacking. The
+    # archive supplies only what git does not have.
+    tracked = subprocess.run(
+        ["git", "ls-files", str(IOS_RESOURCES_DIR.relative_to(REPO_ROOT))],
+        capture_output=True, text=True, cwd=REPO_ROOT,
+    ).stdout.split()
+    if tracked:
+        subprocess.run(["git", "checkout", "--", *tracked], cwd=REPO_ROOT, check=False)
+        print(f"  -> restored {len(tracked)} tracked file(s) over the unpacked copies")
+    print("  -> Resources/ ready")
+
+
+def rebuild_resources_zip() -> None:
+    """Rebuild Resources.zip from the Resources directory — refusing to gut it.
+
+    `Resources.zip` is a COMMITTED ARTIFACT, and most of what it contains is not
+    in git: of its ~5,862 entries, `app_packages/` (2,741) and `python/` (1,210)
+    are build outputs that exist only on a machine that has run iOS packaging.
+    A fresh checkout has ~50 tracked files under `Resources/`.
+
+    So `zip -r Resources.zip .` in a checkout without those outputs produces a
+    bundle missing 94% of the payload — and this function used to report
+    `SUCCESS` for it. Measured, on exactly that path:
+
+        committed   5,862 entries   94.6 MB uncompressed
+        rebuilt        66 entries   17.5 MB uncompressed
+
+    An iOS build shipped from that zip would be missing its Python runtime and
+    every vendored package. Nothing downstream would catch it: the file exists,
+    the version pin is right, and the updater's own `.so` version probe is
+    inconclusive by design.
+
+    Now the entry count is compared against the bundle being replaced and the
+    rebuild is REFUSED on a collapse, leaving the existing artifact untouched.
+    Run the iOS refresh on a host where the Resources tree is materialised.
+    """
+    print("\nRebuilding Resources.zip...")
+    zip_path = IOS_APP_DIR / "Resources.zip"
+
+    prior_entries = 0
+    if zip_path.exists():
+        try:
+            with zipfile.ZipFile(zip_path) as z:
+                prior_entries = len(z.namelist())
+        except zipfile.BadZipFile:
+            prior_entries = 0
+
+    os.chdir(IOS_RESOURCES_DIR)
+    staged = zip_path.with_suffix(".zip.rebuild")
+    staged.unlink(missing_ok=True)
+    run_cmd(["zip", "-q", "-r", str(staged), "."], check=True)
+
+    with zipfile.ZipFile(staged) as z:
+        new_entries = len(z.namelist())
+
+    if prior_entries and new_entries < prior_entries * _ZIP_SHRINK_FLOOR:
+        staged.unlink(missing_ok=True)
+        raise SystemExit(
+            f"\nREFUSING to replace Resources.zip: the rebuild has {new_entries} entries "
+            f"against the existing {prior_entries}.\n"
+            f"Most of this bundle is build output that is NOT in git "
+            f"(app_packages/, python/), so a checkout without it rebuilds an empty shell.\n"
+            f"The existing artifact has been left untouched. Run the iOS refresh on a host "
+            f"where the Resources tree is materialised."
+        )
+
     zip_path.unlink(missing_ok=True)
-    run_cmd(["zip", "-q", "-r", str(zip_path), "."], check=True)
+    staged.rename(zip_path)
     size_mb = zip_path.stat().st_size / 1024 / 1024
-    print(f"  -> Resources.zip ({size_mb:.1f}MB)")
+    print(f"  -> Resources.zip ({size_mb:.1f}MB, {new_entries} entries)")
 
 
 def verify_dylib_version(lib: SubstrateLib, version: str) -> bool:
@@ -1273,9 +1567,23 @@ def main(argv: Optional[List[str]] = None) -> None:
     # the caller doesn't think to ask. App Store error 90056 is hard to recover
     # from late in the upload flow.
     if do_ios:
+        # BEFORE anything touches the tree. Resources/ is gitignored build output,
+        # so a clean checkout has ~50 files where the archive has ~5,862 — and the
+        # refresh then edits an almost-empty tree and rebuilds a shell over the
+        # real bundle. Unpack the committed artifact first so there is something
+        # real to modify.
+        materialize_resources_tree()
+        # Re-apply after every materialisation: extracting the committed archive
+        # restores the pruned declarations, so without this the next substrate
+        # bump quietly reintroduces the blocking Socket alert.
+        prune_unsatisfiable_extras()
         repair_xcframework_info_plists()
 
     if args.rebuild_zip_only:
+        # Same reason: rebuilding from an unmaterialised tree is how a 5,862-entry
+        # bundle became 66.
+        materialize_resources_tree()
+        prune_unsatisfiable_extras()
         rebuild_resources_zip()
         return
 
@@ -1320,6 +1628,12 @@ def main(argv: Optional[List[str]] = None) -> None:
 
     if ios_ok:
         rebuild_resources_zip()
+        # Record what went in, BEFORE the inconclusive binary probes below. The
+        # bundle carries no version of its own, so without this the only way to
+        # answer "which substrate is iOS shipping?" is to have been the machine
+        # that built it.
+        for name in ios_ok:
+            write_ios_substrate_lock(name, versions[name])
         print("\nVerifying bundled iOS binaries...")
         for name in ios_ok:
             if not verify_dylib_version(LIBS[name], versions[name]):

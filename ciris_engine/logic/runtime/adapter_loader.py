@@ -48,9 +48,19 @@ class AdapterLoader:
                     # Store path separately for loading
                     setattr(manifest, "_path", service_dir)
                     services.append(manifest)
-                    logger.info(f"Discovered adapter: {manifest.module.name}")
+                    # DEBUG, not INFO. A user reporting a startup failure has to scroll
+                    # past 63 of these to reach the line that matters, and did. The count
+                    # is logged once below; the names are a debugging detail.
+                    logger.debug(f"Discovered adapter: {manifest.module.name}")
                 except Exception as e:
                     logger.error(f"Failed to load manifest from {service_dir}: {e}")
+
+        if services:
+            logger.info(
+                "Discovered %d adapters: %s",
+                len(services),
+                ", ".join(sorted(m.module.name for m in services)),
+            )
 
         return services
 

@@ -108,6 +108,37 @@ print(f"[CIRIS STARTUP] Platform: {', '.join(_platform_flags)}")
 print(f"[CIRIS STARTUP] OS: {_sys.platform}")
 print(f"[CIRIS STARTUP] CIRIS_HOME: {_ciris_home}")
 print(f"[CIRIS STARTUP] HA Addon Mode: {_ha_addon} (SUPERVISOR_TOKEN: {_supervisor_token})")
+
+# THE VERSION AND THE PATHS, ON THE CONSOLE, EVERY BOOT.
+#
+# Every Windows report this cycle began with a screenshot that did not say which
+# version it was, and answering "is the fix even in this build?" cost a round
+# trip each time. It is one line and it removes that question permanently.
+#
+# The .env line matters just as much: the Windows failures were ALL about a path
+# read from that file, and the console never said which file, whether it was
+# found, or what came out of it. A user could not tell a missing config from a
+# corrupted one, and neither could we from their paste.
+try:
+    from ciris_engine.constants import CIRIS_VERSION as _v
+
+    print(f"[CIRIS STARTUP] Version: {_v}")
+    del _v
+except Exception:  # pragma: no cover - never let a banner stop a boot
+    pass
+
+try:
+    from pathlib import Path as _P
+
+    _env = _P(_ciris_home) / ".env"
+    if _env.exists():
+        print(f"[CIRIS STARTUP] Config: {_env} ({_env.stat().st_size} bytes)")
+    else:
+        print(f"[CIRIS STARTUP] Config: {_env} — NOT FOUND (first run will create it)")
+    del _env, _P
+except Exception:  # pragma: no cover
+    pass
+
 del _platform_flags, _supervisor_token, _ha_addon, _sys
 
 import asyncio

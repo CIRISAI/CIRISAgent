@@ -1,0 +1,115 @@
+"""A Windows path must survive a write/read round-trip through `.env`.
+
+THE BUG, REPORTED TWICE BY A REAL USER.
+
+    C:\\Users\\franc\\ciris          written
+    C:\\Users\\x0cranc\\ciris        read back
+    OSError: [WinError 123] ...
+
+python-dotenv applies POSIX escape processing inside DOUBLE quotes, so `\\f`
+became a FORM FEED and the agent tried to mkdir a path containing a control
+character — dying before its first service started. Total failure, not a
+degradation.
+
+2.9.17 fixed `setup/wizard.py`. The user hit it AGAIN, because the desktop and
+mobile wizards drive `routes/setup/complete.py`, which had twenty raw f-string
+writes of its own. Fixing one call site does not fix a defect that belongs to
+every call site, which is why the escaping now lives in the line-builder.
+
+These tests round-trip through dotenv itself rather than asserting on the
+escaped string, because the whole defect was that writing and reading disagreed
+— an assertion written against either side alone would have passed while the
+pair stayed broken.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from ciris_engine.logic.utils.env_file import env_line, env_quoted
+
+#: Every one of these is a real Windows home whose second character triggers an
+#: escape: \f form feed, \n newline, \t tab, \r CR, \b backspace, \v vertical
+#: tab, \a bell, \0 null, \x hex, \u unicode.
+WINDOWS_PATHS = [
+    r"C:\Users\franc\ciris",       # \f — the reported one
+    r"C:\Users\frank\ciris\data",
+    r"C:\Users\nancy\ciris",       # \n
+    r"C:\Users\tom\ciris",         # \t
+    r"C:\Users\rachel\ciris",      # \r
+    r"C:\Users\ben\ciris",         # \b
+    r"C:\Users\victor\ciris",      # \v
+    r"C:\Users\alice\ciris",       # \a
+    r"C:\Users\0scar\ciris",       # \0
+    r"C:\Users\xavier\ciris",      # \x
+    r"C:\Users\uma\ciris",         # \u
+    r"C:\Program Files\CIRIS\verify.exe",
+    r"\\server\share\ciris",       # UNC
+]
+
+
+def _roundtrip(tmp_path: Path, key: str, value: str) -> str | None:
+    """Write via our builder, read via dotenv — exactly the production pair."""
+    dotenv = pytest.importorskip("dotenv")
+    env = tmp_path / ".env"
+    env.write_text(env_line(key, value), encoding="utf-8")
+    return dotenv.dotenv_values(str(env)).get(key)
+
+
+@pytest.mark.parametrize("path", WINDOWS_PATHS)
+def test_windows_paths_survive_the_roundtrip(tmp_path: Path, path: str) -> None:
+    assert _roundtrip(tmp_path, "CIRIS_HOME", path) == path
+
+
+@pytest.mark.parametrize("path", WINDOWS_PATHS)
+def test_no_control_character_is_ever_produced(tmp_path: Path, path: str) -> None:
+    """The failure mode was a CONTROL CHARACTER in a path, so name it directly.
+
+    Equality above would catch this too, but this assertion says what actually
+    broke the install — and would still fire if someone 'fixed' the comparison.
+    """
+    got = _roundtrip(tmp_path, "CIRIS_HOME", path) or ""
+    offenders = {c for c in got if ord(c) < 32}
+    assert not offenders, f"control characters {[hex(ord(c)) for c in offenders]} in {got!r}"
+
+
+def test_the_exact_reported_failure(tmp_path: Path) -> None:
+    """Pinned verbatim, so this specific regression can never come back quietly."""
+    got = _roundtrip(tmp_path, "CIRIS_HOME", r"C:\Users\franc\ciris")
+    assert got == r"C:\Users\franc\ciris"
+    assert "\x0c" not in (got or ""), "form feed — the 2.9.17 bug, third occurrence"
+
+
+def test_embedded_quotes_survive(tmp_path: Path) -> None:
+    """Backslash-then-quote ordering: escaping quotes first would double-escape."""
+    value = r'C:\Users\franc\My "CIRIS" Folder'
+    assert _roundtrip(tmp_path, "CIRIS_HOME", value) == value
+
+
+def test_ordinary_posix_values_are_untouched(tmp_path: Path) -> None:
+    """The fix must not disturb the platform where nothing was wrong."""
+    for value in ("/home/emoore/ciris", "sk-abc123", "http://127.0.0.1:8080/v1", ""):
+        assert _roundtrip(tmp_path, "K", value) == value
+
+
+def test_none_becomes_empty_not_the_string_none(tmp_path: Path) -> None:
+    """`None` reaching a writer must not persist the literal text "None"."""
+    assert env_quoted(None) == ""
+
+
+def test_complete_py_has_no_raw_quoted_writes() -> None:
+    """Structural guard: the defect returns the moment someone adds an f-string.
+
+    Asserting on the SOURCE because that is where the mistake is made. The
+    round-trip tests above cannot see a write site that does not exist yet.
+    """
+    import inspect
+    import re
+
+    from ciris_engine.logic.adapters.api.routes.setup import complete
+
+    src = inspect.getsource(complete)
+    raw = re.findall(r"""f\.write\(f'[A-Z0-9_]+="\{""", src)
+    assert not raw, f"{len(raw)} raw quoted .env write(s) — use env_line() instead"

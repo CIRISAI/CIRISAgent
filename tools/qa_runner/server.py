@@ -7,7 +7,6 @@ import hashlib
 import json
 import logging
 import os
-import pty
 import re
 import subprocess
 import sys
@@ -18,6 +17,17 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
+
+# `pty` is POSIX-only. Importing it unconditionally made this module unusable on
+# Windows — `ModuleNotFoundError: No module named 'termios'` before a single test
+# ran, which is why the Windows UI job could not even reach the app. The PTY
+# itself is a workaround for ciris_verify_ffi crashing when stdout is not a TTY;
+# Windows has no equivalent, so there we use pipes and accept that the FFI
+# workaround does not apply.
+try:
+    import pty as _pty
+except ImportError:  # pragma: no cover - Windows
+    _pty = None  # type: ignore[assignment]
 
 import psutil
 import requests
@@ -1394,20 +1404,29 @@ class APIServerManager:
             self.console.print(f"[dim]🚀 Command: {' '.join(cmd)}[/dim]")
 
             # Use PTY for stdout - the Rust FFI code crashes when stdout is not a TTY
-            # This is a workaround for a bug in ciris_verify_ffi
-            master_fd, slave_fd = pty.openpty()
-            self._pty_master_fd = master_fd
-            self._pty_slave_fd = slave_fd
-
-            self.process = subprocess.Popen(
-                cmd,
-                stdout=slave_fd,
-                stderr=slave_fd,
-                stdin=slave_fd,
-                env=env,
-                cwd=Path.cwd(),
-            )
-            os.close(slave_fd)  # Close slave fd in parent
+            # This is a workaround for a bug in ciris_verify_ffi. Windows has no
+            # pty, so it gets pipes; if the FFI turns out to need a console there
+            # too, that is a real finding and this is where it will show up.
+            master_fd = None
+            if _pty is not None:
+                master_fd, slave_fd = _pty.openpty()
+                self._pty_master_fd = master_fd
+                self._pty_slave_fd = slave_fd
+                self.process = subprocess.Popen(
+                    cmd, stdout=slave_fd, stderr=slave_fd, stdin=slave_fd, env=env, cwd=Path.cwd()
+                )
+                os.close(slave_fd)  # Close slave fd in parent
+            else:
+                self._pty_master_fd = None
+                self._pty_slave_fd = None
+                self.process = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    stdin=subprocess.DEVNULL,
+                    env=env,
+                    cwd=Path.cwd(),
+                )
             self.pid = self.process.pid
             self.console.print(f"[dim]   PID: {self.pid}[/dim]")
 
@@ -1419,7 +1438,11 @@ class APIServerManager:
                 try:
                     while True:
                         try:
-                            data = os.read(master_fd, 4096)
+                            if master_fd is not None:
+                                data = os.read(master_fd, 4096)
+                            else:
+                                assert self.process.stdout is not None
+                                data = self.process.stdout.read(4096)
                             if not data:
                                 break
                             text = data.decode("utf-8", errors="replace")

@@ -26,6 +26,7 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+
 def _this_process_owns_port(port: int) -> Optional[bool]:
     """Does THIS process hold the listening socket on `port`?
 
@@ -139,7 +140,9 @@ def _surface_first_run_claim_pin() -> None:
             return  # pre-0.5.119 wheel — banner-only capture still applies
         pin = accessor()
         if pin:
-            line = f"Node fold: OWNERSHIP UNCLAIMED — one-time CLAIM PIN: {pin} (console-only; used by setup self-claim)"
+            line = (
+                f"Node fold: OWNERSHIP UNCLAIMED — one-time CLAIM PIN: {pin} (console-only; used by setup self-claim)"
+            )
             print(line, flush=True)  # → logcat python.stdout on Android; console on desktop
             logger.info(line)  # → <home>/logs/latest.log for the file-tail capture
     except Exception as exc:  # noqa: BLE001 — never let PIN surfacing break the boot
@@ -165,10 +168,15 @@ def _reprime_federation_delivery(path: str) -> None:
 
         reprime = getattr(ciris_server, "reprime_federation_delivery", None)
         if reprime is None:
-            logger.info("Node fold: reprime_federation_delivery unavailable (wheel <0.5.124) — canonical prime not re-driven (%s)", path)
+            logger.info(
+                "Node fold: reprime_federation_delivery unavailable (wheel <0.5.124) — canonical prime not re-driven (%s)",
+                path,
+            )
             return
         count = reprime()
-        logger.info("Node fold: reprime_federation_delivery(%s) → %s canonical delivery target(s) re-seeded", path, count)
+        logger.info(
+            "Node fold: reprime_federation_delivery(%s) → %s canonical delivery target(s) re-seeded", path, count
+        )
     except Exception as exc:  # noqa: BLE001
         # Non-fatal: delivery re-prime failure must never take down the fold —
         # the seal path still works; only the ship waits for the next prime.
@@ -391,6 +399,32 @@ def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Opti
     resolved_key = key_id or _resolve_key_id()
     adapter = BrainAdapter(upstream=f"http://127.0.0.1:{brain_port}")
 
+    # CIRISServer#380 "TWO FEDERATION IDENTITIES" RCA instrument: the node resolves
+    # its ONE federation identity from `<home>/identity` + alias, and the sealed
+    # keystore keys off (identity_dir, alias). When it refuses for a two-identity
+    # mismatch the substrate error does NOT name the on-disk artifacts, so a stray
+    # sealed blob, a bare `ed25519.seed`, a `.superseded-*` archive, or a second
+    # alias's key is invisible. Enumerate the dir here so the refusal is diagnosable
+    # from the agent log alone. Cheap, once per boot, never throws.
+    try:
+        from ciris_engine.logic.utils.path_resolution import get_identity_dir
+
+        _idir = get_identity_dir()
+        _entries = (
+            sorted(f"{p.name} ({p.stat().st_size}B)" for p in _idir.iterdir() if p.is_file())
+            if _idir.is_dir()
+            else ["<identity dir does not exist>"]
+        )
+        logger.info(
+            "Node fold: identity resolution — home=%s alias=%s identity_dir=%s\n  contents: %s",
+            resolved_home,
+            resolved_key,
+            str(_idir),
+            "\n            ".join(_entries) if _entries else "<empty>",
+        )
+    except Exception as exc:  # noqa: BLE001 - diagnostic must never break boot
+        logger.warning("Node fold: identity-dir enumeration failed (non-fatal): %s", exc)
+
     def _run() -> None:
         global _node_error
         try:
@@ -428,6 +462,7 @@ def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Opti
         _mobile = is_android() or is_ios()
     except Exception:  # noqa: BLE001
         _mobile = False
+
     # compose_status() (ciris-server ≥0.5.120, CIRISServer#279): in-process
     # compose-progress snapshot — {"completed", "current": {phase, elapsed_s,
     # stuck, ...} | null, "history": [{phase, ms}]}. Poll it during the bind
@@ -452,7 +487,9 @@ def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Opti
         except Exception:  # noqa: BLE001
             return None
 
-    _attempts = 190 if _mobile else 115  # mobile ~100s (must sit UNDER the 120s Start Adapters step timeout), desktop ~60s
+    _attempts = (
+        190 if _mobile else 115
+    )  # mobile ~100s (must sit UNDER the 120s Start Adapters step timeout), desktop ~60s
     _last_phase: Optional[str] = None
     for _i in range(_attempts):
         if _node_error is not None:
@@ -477,7 +514,7 @@ def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Opti
             f"(node-fails ⇒ agent-fails); compose phase at expiry: {_wedged or 'unknown (no compose_status — wheel <0.5.120?)'}"
         )
     logger.info("Node fold: node runtime started — substrate read-API LISTENING on 4243 ✅")
-    
+
     # Hand the node the deployment's OAuth providers now that it is serving.
     #
     # 2.9.14 moved /v1/auth/* onto the node but did not carry across the provider
@@ -486,10 +523,10 @@ def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Opti
     # Best-effort and idempotent: a desktop install has no oauth.json and needs none.
     try:
         from ciris_engine.logic.runtime.oauth_provider_sync import sync_oauth_providers_to_node
-    
+
         sync_oauth_providers_to_node()
     except Exception:  # pragma: no cover - never block the boot on OAuth config
-        logger.exception('Node fold: OAuth provider sync failed (agent continues)')
+        logger.exception("Node fold: OAuth provider sync failed (agent continues)")
     _reprime_federation_delivery("post-bind")
     _author_federation_consent("post-bind")
     # Surface the one-time first-run CLAIM PIN (minted during compose, stashed

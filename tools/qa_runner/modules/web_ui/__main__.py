@@ -392,19 +392,37 @@ class DesktopAppTestRunner:
             platform rather than as a Windows special case.
             """
             self._log("Waiting for Setup wizard...")
-            if await self.helper.wait_for_screen("Setup", timeout=8000):
-                return
 
-            screen = await self.helper.get_screen()
-            if screen == "Login" and await self.helper.is_element_visible("btn_local_login"):
-                self._log("first run starts at the Login chooser — selecting local signup")
-                await self.helper.click("btn_local_login")
-                if await self.helper.wait_for_screen("Setup", timeout=20000):
+            # POLL TO A DEADLINE rather than waiting for one screen then peeking
+            # at another. The first version of this waited 8s for Setup and then
+            # checked for Login — so a boot that was still on 'Startup' matched
+            # neither and failed instantly, where the original 30s wait had
+            # simply outlasted it. That is a timing regression I introduced
+            # while adding the chooser handling, and it only showed on a cold
+            # Windows runner.
+            #
+            # 'Startup' is a transient splash: keep waiting. 'Login' is terminal
+            # and actionable: click through. 'Setup' is the goal.
+            deadline = time.time() + 45
+            screen = ""
+            clicked_local = False
+            while time.time() < deadline:
+                screen = await self.helper.get_screen() or ""
+                if screen == "Setup":
                     return
-                screen = await self.helper.get_screen()
+                if screen == "Login" and not clicked_local:
+                    if await self.helper.is_element_visible("btn_local_login"):
+                        self._log("first run starts at the Login chooser — selecting local signup")
+                        await self.helper.click("btn_local_login")
+                        clicked_local = True
+                    elif await self.helper.is_element_visible("input_username"):
+                        # Already configured: this is a login screen, not first
+                        # run. Caller's problem, but say which it was.
+                        break
+                await asyncio.sleep(0.5)
 
             await self._dump_tree("wait_for_setup_wizard")
-            raise RuntimeError(f"Setup wizard did not appear (on '{screen}')")
+            raise RuntimeError(f"Setup wizard did not appear within 45s (last screen '{screen}')")
 
         await self.run_test("wait_for_setup_wizard", wait_for_setup)
 

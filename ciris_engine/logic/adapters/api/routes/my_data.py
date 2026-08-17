@@ -379,7 +379,7 @@ def _update_env_consent(consent_given: bool) -> None:
         content += f"CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP={timestamp}\n"
 
     # Write back
-    with open(env_path, "w") as f:
+    with open(env_path, "w", encoding="utf-8") as f:
         f.write(content)
 
     # Also update the current process environment

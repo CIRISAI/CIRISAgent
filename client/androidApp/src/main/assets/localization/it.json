@@ -2341,7 +2341,8 @@
     "accord_remint_step3_title": "Passo 3 — Genera la genesi portatile",
     "accord_remint_step_done": "Fatto — il seed è autorizzato",
     "accord_remint_step_of": "Passo {step} di {total}",
-    "accord_remint_title": "Ri-conia una radice di fiducia esistente"
+    "accord_remint_title": "Ri-conia una radice di fiducia esistente",
+    "login_google_unavailable": "L'accesso con {provider} non è disponibile in questa installazione."
   },
   "prompts": {
     "dma": {
@@ -4041,5 +4042,7 @@
       "timed_out": "L'accesso non è stato completato nel browser, quindi non è stato modificato nulla. Riprova oppure usa un account locale.",
       "waiting": "Completa l'accesso con Google nel browser, poi torna qui."
     }
-  }
+  },
+  "setup_validation_age_required": "Scegli la tua fascia d'età.",
+  "setup_validation_username_reserved": "Il nome utente «admin» è riservato. Scegli un nome utente diverso."
 }

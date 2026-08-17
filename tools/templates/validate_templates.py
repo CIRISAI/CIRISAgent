@@ -100,11 +100,11 @@ def main():
 
         if success:
             if "NEEDS" in message:
-                print(f"  ⚠️  {message}")
+                print(f" [WARN] {message}")
             else:
-                print(f"  ✅ {message}")
+                print(f" [OK] {message}")
         else:
-            print(f"  ❌ {message}")
+            print(f" [FAIL] {message}")
             all_valid = False
 
     # Summary

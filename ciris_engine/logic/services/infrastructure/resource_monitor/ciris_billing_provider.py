@@ -266,28 +266,28 @@ class CIRISBillingProvider(CreditGateProtocol):
             return response, "SUCCESS", "", ""
 
         except (httpx.ConnectTimeout, asyncio.TimeoutError):
-            logger.warning("[BILLING] ✗ %s TIMEOUT: %s timed out after %.1fs", region, base_url, self._timeout_seconds)
+            logger.warning("[BILLING] [FAIL] %s TIMEOUT: %s timed out after %.1fs", region, base_url, self._timeout_seconds)
             return None, "RETRY", "TIMEOUT", f"Timed out after {self._timeout_seconds}s"
 
         except httpx.ConnectError as exc:
-            logger.warning("[BILLING] ✗ %s CONNECTION_ERROR: Cannot reach %s - %s", region, base_url, exc)
+            logger.warning("[BILLING] [FAIL] %s CONNECTION_ERROR: Cannot reach %s - %s", region, base_url, exc)
             return None, "RETRY", "CONNECTION_ERROR", str(exc)
 
         except httpx.RequestError as exc:
             error_detail = f"NETWORK_ERROR:{type(exc).__name__}: {exc}"
-            logger.error("[BILLING] ✗ %s NETWORK_ERROR: %s - %s", region, base_url, error_detail)
+            logger.error("[BILLING] [FAIL] %s NETWORK_ERROR: %s - %s", region, base_url, error_detail)
             return None, "FATAL", error_detail, ""
 
     def _update_fallback_state(self, region: str) -> None:
         """Update fallback state based on which region succeeded."""
         if "fallback" in region and not self._using_fallback:
-            logger.info("[BILLING] ✓ Switched to %s: %s", region, self._fallback_url)
+            logger.info("[BILLING] [OK] Switched to %s: %s", region, self._fallback_url)
             self._using_fallback = True
         elif "primary" in region and self._using_fallback:
-            logger.info("[BILLING] ✓ Recovered to %s: %s", region, self._base_url)
+            logger.info("[BILLING] [OK] Recovered to %s: %s", region, self._base_url)
             self._using_fallback = False
         else:
-            logger.info("[BILLING] ✓ Request succeeded via %s", region)
+            logger.info("[BILLING] [OK] Request succeeded via %s", region)
 
     def _summarize_errors(self, errors: list[tuple[str, str, str]], cache_key: str) -> tuple[None, str]:
         """Summarize errors from all failed attempts."""
@@ -365,7 +365,7 @@ class CIRISBillingProvider(CreditGateProtocol):
     def _handle_check_network_error(self, error_type: str, cache_key: str) -> CreditCheckResult:
         """Handle network errors from check_credit."""
         error_category = error_type.split(":")[0] if ":" in error_type else error_type
-        logger.error("[CREDIT_CHECK] ✗ %s for %s - %s", error_category, cache_key, error_type)
+        logger.error("[CREDIT_CHECK] [FAIL] %s for %s - %s", error_category, cache_key, error_type)
         return self._handle_failure(error_category, error_type)
 
     def _handle_check_response(self, response: httpx.Response, cache_key: str) -> CreditCheckResult:
@@ -417,7 +417,7 @@ class CIRISBillingProvider(CreditGateProtocol):
     def _handle_check_no_credits(self, response: httpx.Response, cache_key: str) -> CreditCheckResult:
         """Handle payment required or forbidden response."""
         reason = self._extract_reason(response)
-        logger.warning("[CREDIT_CHECK] ✗ NO_CREDITS for %s (HTTP %d): %s", cache_key, response.status_code, reason)
+        logger.warning("[CREDIT_CHECK] [FAIL] NO_CREDITS for %s (HTTP %d): %s", cache_key, response.status_code, reason)
         result = CreditCheckResult(has_credit=False, reason=f"NO_CREDITS:{reason}")
         self._store_cache(cache_key, result)
         return result
@@ -442,7 +442,7 @@ class CIRISBillingProvider(CreditGateProtocol):
     def _handle_check_unexpected(self, response: httpx.Response, cache_key: str) -> CreditCheckResult:
         """Handle unexpected HTTP status codes."""
         reason = self._extract_reason(response)
-        logger.error("[CREDIT_CHECK] ✗ UNEXPECTED_ERROR for %s: HTTP %d - %s", cache_key, response.status_code, reason)
+        logger.error("[CREDIT_CHECK] [FAIL] UNEXPECTED_ERROR for %s: HTTP %d - %s", cache_key, response.status_code, reason)
         return self._handle_failure(f"HTTP_{response.status_code}", reason)
 
     async def spend_credit(

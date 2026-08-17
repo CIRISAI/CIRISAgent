@@ -981,7 +981,27 @@ class ThoughtProcessor(
             logger.warning(f"VERB_SECOND_PASS: Failed to emit reasoning event ({verb}): {e}")
 
     def _should_retry_with_conscience_guidance(self, conscience_result: Optional[ConscienceApplicationResult]) -> bool:
-        """Check if we should retry action selection with conscience guidance."""
+        """Check if we should retry action selection with conscience guidance.
+
+        FAIL FAST when the conscience could not reach its model (#1049). A retry
+        re-runs the same call with the same payload against the same unreachable
+        provider, so it is guaranteed to spend another full timeout and change
+        nothing. Observed on a biosecurity battery: 28 CONSCIENCE_RETRY lines, 4
+        override rounds, one conscience call taking 142s to fail, 24 of 60 turns
+        never returning.
+
+        Retry guidance only helps when the shard actually JUDGED and said what
+        was wrong. There is no guidance in "the network was down", and feeding
+        that back to action selection as if it were a critique invites the model
+        to rationalise a non-existent objection.
+        """
+        if conscience_result is not None and conscience_result.conscience_unavailable:
+            logger.warning(
+                "[CONSCIENCE] Not retrying: a conscience shard could not reach its model, so no "
+                "judgement was formed. Retrying would spend another full timeout. Reason: %s",
+                conscience_result.override_reason,
+            )
+            return False
         return (
             conscience_result is not None
             and conscience_result.overridden

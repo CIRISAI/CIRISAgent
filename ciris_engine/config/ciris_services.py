@@ -50,7 +50,7 @@ class ServiceEndpoint:
 def _load_config() -> _ConfigType:
     """Load the CIRIS services configuration from JSON."""
     config_path = Path(__file__).parent / "CIRIS_SERVICES.json"
-    with open(config_path) as f:
+    with open(config_path, encoding="utf-8") as f:
         result: _ConfigType = json.load(f)
         return result
 

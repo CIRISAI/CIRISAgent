@@ -2457,7 +2457,8 @@
     "accord_remint_step3_title": "Langkah 3 — Hasilkan genesis portabel",
     "accord_remint_step_done": "Selesai — seed telah diotorisasi",
     "accord_remint_step_of": "Langkah {step} dari {total}",
-    "accord_remint_title": "Cetak ulang trust root yang ada"
+    "accord_remint_title": "Cetak ulang trust root yang ada",
+    "login_google_unavailable": "Masuk dengan {provider} tidak tersedia pada instalasi ini."
   },
   "conscience": {
     "ponder_attempted": "Saya mencoba untuk {action}",
@@ -4010,5 +4011,7 @@
       "timed_out": "Proses masuk tidak diselesaikan di peramban, jadi tidak ada yang diubah. Coba lagi, atau gunakan akun lokal.",
       "waiting": "Selesaikan proses masuk dengan Google di peramban Anda, lalu kembali ke sini."
     }
-  }
+  },
+  "setup_validation_age_required": "Silakan pilih rentang usia Anda.",
+  "setup_validation_username_reserved": "Nama pengguna 'admin' sudah dicadangkan. Silakan pilih nama pengguna lain."
 }

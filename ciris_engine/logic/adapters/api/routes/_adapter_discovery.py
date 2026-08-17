@@ -406,7 +406,7 @@ def try_load_service_manifest(
             logger.debug(f"[ADAPTER_DISCOVERY] {service_name}: no manifest.json")
             return None
 
-        with open(manifest_file) as f:
+        with open(manifest_file, encoding="utf-8") as f:
             manifest_data = json.load(f)
 
         # Apply filtering
@@ -431,7 +431,7 @@ async def read_manifest_async(manifest_path: Path) -> Optional[Dict[str, Any]]:
     import aiofiles
 
     try:
-        async with aiofiles.open(manifest_path, mode="r") as f:
+        async with aiofiles.open(manifest_path, mode="r", encoding="utf-8") as f:
             content = await f.read()
         result: Dict[str, Any] = json.loads(content)
         return result

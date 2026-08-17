@@ -104,7 +104,7 @@ def update_admin_password(password: str, db_path: str = None) -> bool:
         )
 
         if not cursor.fetchone():
-            print("❌ wa_cert table does not exist in database")
+            print("[FAIL] wa_cert table does not exist in database")
             print(f"   Database path: {db_path}")
             print("\n   This tool is for production databases only.")
             print("   For local development, use environment variables:")
@@ -138,13 +138,13 @@ def update_admin_password(password: str, db_path: str = None) -> bool:
 
             if cursor.rowcount > 0:
                 conn.commit()
-                print(f"✅ Successfully updated password for admin (WA ID: {wa_id})")
+                print(f"[OK] Successfully updated password for admin (WA ID: {wa_id})")
                 return True
             else:
-                print("❌ Failed to update password - no rows affected")
+                print("[FAIL] Failed to update password - no rows affected")
                 return False
         else:
-            print("❌ Admin user not found in database")
+            print("[FAIL] Admin user not found in database")
             print("\nAttempting to create admin user...")
 
             # Create admin user
@@ -179,18 +179,18 @@ def update_admin_password(password: str, db_path: str = None) -> bool:
 
             if cursor.rowcount > 0:
                 conn.commit()
-                print(f"✅ Created admin user with WA ID: {wa_id}")
-                print(f"✅ Password set successfully")
+                print(f"[OK] Created admin user with WA ID: {wa_id}")
+                print(f"[OK] Password set successfully")
                 return True
             else:
-                print("❌ Failed to create admin user")
+                print("[FAIL] Failed to create admin user")
                 return False
 
     except sqlite3.Error as e:
-        print(f"❌ Database error: {e}")
+        print(f"[FAIL] Database error: {e}")
         return False
     except Exception as e:
-        print(f"❌ Unexpected error: {e}")
+        print(f"[FAIL] Unexpected error: {e}")
         import traceback
 
         traceback.print_exc()
@@ -263,10 +263,10 @@ def main():
         # Verify mode
         password = getpass.getpass("Enter password to verify: ")
         if verify_password("admin", password, args.db_path):
-            print("✅ Password is correct!")
+            print("[OK] Password is correct!")
             sys.exit(0)
         else:
-            print("❌ Password is incorrect or admin user not found")
+            print("[FAIL] Password is incorrect or admin user not found")
             sys.exit(1)
 
     # Determine the new password
@@ -275,7 +275,7 @@ def main():
         print(
             f"Generated secure password: {new_password}"
         )  # noqa: S002 - Intentional: password reset tool must display password once
-        print("⚠️  SAVE THIS PASSWORD - it will not be shown again!")
+        print("[WARN] SAVE THIS PASSWORD - it will not be shown again!")
     elif args.password:
         new_password = args.password
     else:
@@ -283,27 +283,27 @@ def main():
         while True:
             new_password = getpass.getpass("Enter new admin password: ")
             if len(new_password) < 12:
-                print("❌ Password must be at least 12 characters")
+                print("[FAIL] Password must be at least 12 characters")
                 continue
             confirm = getpass.getpass("Confirm new password: ")
             if new_password != confirm:
-                print("❌ Passwords do not match")
+                print("[FAIL] Passwords do not match")
                 continue
             break
 
     # Update the password
     print(f"\nUpdating admin password in database...")
     if update_admin_password(new_password, args.db_path):
-        print("\n✅ Password reset successful!")
+        print("\n[OK] Password reset successful!")
 
         # Verify it works
         print("\nVerifying new password...")
         if verify_password("admin", new_password, args.db_path):
-            print("✅ Password verification successful!")
+            print("[OK] Password verification successful!")
         else:
-            print("⚠️  Warning: Password was updated but verification failed")
+            print("[WARN] Warning: Password was updated but verification failed")
     else:
-        print("\n❌ Password reset failed")
+        print("\n[FAIL] Password reset failed")
         sys.exit(1)
 
 

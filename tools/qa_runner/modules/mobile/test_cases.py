@@ -1974,7 +1974,7 @@ def test_full_flow(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
         result = test_app_launch(adb, ui, config)
         results.append(result)
         all_screenshots.extend(result.screenshots)
-        print(f"  ⏱️  Step 1 completed in {time.time() - step_start:.1f}s")
+        print(f" Step 1 completed in {time.time() - step_start:.1f}s")
         if result.result != TestResult.PASSED:
             return TestReport(
                 name="test_full_flow",
@@ -1998,7 +1998,7 @@ def test_full_flow(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
             result = test_google_signin(adb, ui, config)
             results.append(result)
             all_screenshots.extend(result.screenshots)
-            print(f"  ⏱️  Step 2 completed in {time.time() - step_start:.1f}s")
+            print(f" Step 2 completed in {time.time() - step_start:.1f}s")
             if result.result not in [TestResult.PASSED, TestResult.SKIPPED]:
                 # Try local login as fallback
                 print("  Google Sign-In failed, trying Local Login...")
@@ -2034,7 +2034,7 @@ def test_full_flow(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
         result = test_setup_wizard(adb, ui, config)
         results.append(result)
         all_screenshots.extend(result.screenshots)
-        print(f"  ⏱️  Step 3 completed in {time.time() - step_start:.1f}s")
+        print(f" Step 3 completed in {time.time() - step_start:.1f}s")
         if result.result != TestResult.PASSED:
             return TestReport(
                 name="test_full_flow",
@@ -2050,7 +2050,7 @@ def test_full_flow(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
         result = test_chat_interaction(adb, ui, config)
         results.append(result)
         all_screenshots.extend(result.screenshots)
-        print(f"  ⏱️  Step 4 completed in {time.time() - step_start:.1f}s")
+        print(f" Step 4 completed in {time.time() - step_start:.1f}s")
         if result.result != TestResult.PASSED:
             return TestReport(
                 name="test_full_flow",
@@ -2235,11 +2235,11 @@ def test_screen_navigation(adb: ADBHelper, ui: UIAutomator, config: dict, screen
 
             if found_indicator:
                 results.append((sname, True, f"Found: {found_indicator}"))
-                print(f"    ✓ Screen loaded (found: {found_indicator})")
+                print(f" [OK] Screen loaded (found: {found_indicator})")
             else:
                 screen_texts = ui.get_screen_text()
                 results.append((sname, False, f"No indicators found. Visible: {screen_texts[:5]}"))
-                print(f"    ✗ Screen indicators not found")
+                print(f" [FAIL] Screen indicators not found")
 
             # Navigate back to chat screen
             adb.press_back()

@@ -100,9 +100,9 @@ async def _final_analysis(page: Page) -> None:
     """Perform final analysis of page content."""
     content = await page.content()
     if "★" in content or "recommended" in content.lower():
-        print("\n   ✓ Model recommendations appear to be showing!")
+        print("\n [OK] Model recommendations appear to be showing!")
     if "✓" in content or "compatible" in content.lower():
-        print("   ✓ Compatibility indicators found!")
+        print(" [OK] Compatibility indicators found!")
 
 
 async def test_setup_wizard() -> None:

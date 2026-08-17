@@ -1128,7 +1128,7 @@ class DBStatusTool:
         # Integrity check
         if status["integrity"]:
             self.print_subsection("Integrity Check")
-            print(f"Sequence Complete: {'✓ YES' if status['integrity']['sequence_complete'] else '✗ NO'}")
+            print(f"Sequence Complete: {'[OK] YES' if status['integrity']['sequence_complete'] else '[FAIL] NO'}")
             if not status["integrity"]["sequence_complete"]:
                 print(f"  Missing Sequences: {status['integrity']['sequence_gaps']}")
 
@@ -1138,7 +1138,7 @@ class DBStatusTool:
             self.print_subsection("Hash Chain")
             print(f"Last Entry: Seq #{chain['last_entry_seq']}")
             print(f"Hash: {chain['last_entry_hash']}")
-            print(f"Links Correctly: {'✓ YES' if chain['links_to_previous'] else '✗ NO'}")
+            print(f"Links Correctly: {'[OK] YES' if chain['links_to_previous'] else '[FAIL] NO'}")
 
         # Signatures
         if status["signatures"]:
@@ -1165,7 +1165,7 @@ class DBStatusTool:
         try:
             report = self.verify_audit_integrity(sample_size)
 
-            print(f"Verification {'PASSED ✓' if report.valid else 'FAILED ✗'}")
+            print(f"Verification {'PASSED [OK]' if report.valid else 'FAILED [FAIL]'}")
             print(f"Entries Verified: {report.entries_verified:,}")
             print(f"Time Taken: {report.verification_time_ms / 1000:.2f} seconds")
             if report.summary:
@@ -1266,23 +1266,23 @@ class DBStatusTool:
             retention = analysis["data_retention"]
 
             if retention["raw_data_old"] > 0:
-                print(f"⚠️  Raw data older than 24h: {retention['raw_data_old']:,} nodes (should be cleaned)")
+                print(f"[WARN] Raw data older than 24h: {retention['raw_data_old']:,} nodes (should be cleaned)")
             else:
-                print("✓ No raw data older than 24h")
+                print("[OK] No raw data older than 24h")
 
             if retention["basic_summaries_old"] > 0:
                 print(
                     f"⚠️  Basic summaries older than 7d: {retention['basic_summaries_old']:,} nodes (should be cleaned)"
                 )
             else:
-                print("✓ No basic summaries older than 7 days")
+                print("[OK] No basic summaries older than 7 days")
 
             if retention["daily_summaries_old"] > 0:
                 print(
                     f"⚠️  Daily summaries older than 30d: {retention['daily_summaries_old']:,} nodes (should be cleaned)"
                 )
             else:
-                print("✓ No daily summaries older than 30 days")
+                print("[OK] No daily summaries older than 30 days")
 
     def get_critical_issues(self) -> List[Dict[str, str]]:
         """Check for critical issues that need immediate attention."""
@@ -1365,7 +1365,7 @@ class DBStatusTool:
         # Check for critical issues first
         issues = self.get_critical_issues()
         if issues:
-            print("\n" + "🚨 CRITICAL ISSUES DETECTED 🚨".center(80))
+            print("\n" + "[ALERT] CRITICAL ISSUES DETECTED [ALERT]".center(80))
             print("-" * 80)
             for issue in issues:
                 print(f"\n[{issue['severity']}] {issue['issue']}")

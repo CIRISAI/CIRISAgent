@@ -136,7 +136,7 @@ def main():
             missing_keys[key] = locations
 
     if missing_keys:
-        print(f"\n❌ MISSING KEYS ({len(missing_keys)}):")
+        print(f"\n[FAIL] MISSING KEYS ({len(missing_keys)}):")
         print("=" * 60)
         for key in sorted(missing_keys.keys()):
             locations = missing_keys[key]
@@ -182,7 +182,7 @@ def main():
 
         return 1
     else:
-        print("\n✅ All Kotlin localization keys exist in JSON files!")
+        print("\n[OK] All Kotlin localization keys exist in JSON files!")
         return 0
 
 

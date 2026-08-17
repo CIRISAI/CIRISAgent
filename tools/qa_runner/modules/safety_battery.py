@@ -403,7 +403,7 @@ class SafetyBatteryTests:
         self._captured_at_start: Optional[str] = None
 
     async def run(self) -> List[Dict[str, Any]]:
-        self.console.print("\n[bold cyan]🛡️  Safety Battery[/bold cyan]")
+        self.console.print("\n[bold cyan] Safety Battery[/bold cyan]")
         self.console.print("=" * 70)
         self._captured_at_start = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 

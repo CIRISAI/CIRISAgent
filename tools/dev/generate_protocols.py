@@ -27,7 +27,7 @@ class ProtocolGenerator:
 
     def generate_all_missing_protocols(self):
         """Generate protocols for all modules without them."""
-        print("🔧 Generating Missing Protocols...\n")
+        print(" Generating Missing Protocols...\n")
 
         # Find modules without protocols
         modules_with_protocols = set()
@@ -38,7 +38,7 @@ class ProtocolGenerator:
         all_modules = set(self.trinity_data.get("modules", {}).keys())
         modules_without_protocols = all_modules - modules_with_protocols
 
-        print(f"📊 Found {len(modules_without_protocols)} modules without protocols")
+        print(f" Found {len(modules_without_protocols)} modules without protocols")
 
         # Group by category
         service_modules = []
@@ -66,7 +66,7 @@ class ProtocolGenerator:
         if not service_modules:
             return
 
-        print(f"\n📋 Generating {len(service_modules)} Service Protocols...")
+        print(f"\n Generating {len(service_modules)} Service Protocols...")
 
         # Create services protocol file content
         content = '''"""
@@ -113,7 +113,7 @@ from ciris_engine.schemas.services_schemas_v1 import MemoryQuery, MemoryOpResult
             if protocol_name in existing_protocols:
                 continue
 
-            print(f"  ✓ Generating {protocol_name} from {module_name}")
+            print(f" [OK] Generating {protocol_name} from {module_name}")
 
             # Generate protocol class
             content += f"\n\nclass {protocol_name}(Protocol):\n"
@@ -151,14 +151,14 @@ from ciris_engine.schemas.services_schemas_v1 import MemoryQuery, MemoryOpResult
         with open(new_protocols_file, "w") as f:
             f.write(content)
 
-        print(f"  💾 Saved to {new_protocols_file}")
+        print(f" Saved to {new_protocols_file}")
 
     def _generate_handler_protocols(self, handler_modules: List[str]):
         """Generate handler protocol definitions."""
         if not handler_modules:
             return
 
-        print(f"\n📋 Generating {len(handler_modules)} Handler Protocols...")
+        print(f"\n Generating {len(handler_modules)} Handler Protocols...")
 
         content = '''"""
 CIRIS Handler Protocol Definitions
@@ -212,14 +212,14 @@ class BaseHandlerProtocol(Protocol):
         with open(new_protocols_file, "w") as f:
             f.write(content)
 
-        print(f"  💾 Saved to {new_protocols_file}")
+        print(f" Saved to {new_protocols_file}")
 
     def _generate_adapter_protocols(self, adapter_modules: List[str]):
         """Generate adapter protocol definitions."""
         if not adapter_modules:
             return
 
-        print(f"\n📋 Generating {len(adapter_modules)} Adapter Protocols...")
+        print(f"\n Generating {len(adapter_modules)} Adapter Protocols...")
 
         content = '''"""
 CIRIS Adapter Protocol Definitions
@@ -310,15 +310,15 @@ class BaseAdapterProtocol(Protocol):
         with open(new_protocols_file, "w") as f:
             f.write(content)
 
-        print(f"  💾 Saved to {new_protocols_file}")
+        print(f" Saved to {new_protocols_file}")
 
     def generate_summary(self):
         """Generate a summary of what needs to be done."""
         print("\n" + "=" * 60)
-        print("📊 Protocol Generation Summary")
+        print(" Protocol Generation Summary")
         print("=" * 60)
 
-        print("\n🎯 Next Steps:")
+        print("\n Next Steps:")
         print("\n1. **Review Generated Protocols**")
         print("   - Check ciris_engine/protocols/generated_services.py")
         print("   - Check ciris_engine/protocols/handlers.py")

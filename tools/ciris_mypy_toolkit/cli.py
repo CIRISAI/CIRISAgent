@@ -35,23 +35,23 @@ def main():
 @main.command()
 def analyze():
     """Execute compliance analysis."""
-    print("🔍 CIRIS Compliance Analysis")
+    print(" CIRIS Compliance Analysis")
     print("=" * 50)
     analysis = TOOLKIT.analyze_compliance()
-    print("\n📊 MyPy Type Safety:")
+    print("\n MyPy Type Safety:")
     print(f"   Total Errors: {analysis['total_mypy_errors']}")
     if analysis["error_categories"]:
         print("   Error Categories:")
         for category, errors in analysis["error_categories"].items():
             print(f"     • {category}: {len(errors)} errors")
-    print("\n🏗️ Schema Compliance:")
+    print("\n Schema Compliance:")
     print(f"   Issues Found: {analysis['schema_compliance']['total_issues']}")
-    print("\n🔌 Protocol Compliance:")
+    print("\n Protocol Compliance:")
     print(f"   Issues Found: {analysis['protocol_compliance']['total_issues']}")
-    print("\n🧹 Code Quality:")
+    print("\n Code Quality:")
     print(f"   Unused Code Items: {analysis['unused_code']['total_items']}")
     if analysis["recommendations"]:
-        print("\n💡 Recommendations:")
+        print("\n Recommendations:")
         for rec in analysis["recommendations"]:
             print(f"   • {rec}")
 
@@ -61,21 +61,21 @@ def analyze():
 @click.option("--output", default="proposed_fixes.json", help="Output file for proposals.")
 def propose(categories, output):
     """Execute proposal generation for agent review."""
-    print("🔍 CIRIS Fix Proposal Generation")
+    print(" CIRIS Fix Proposal Generation")
     print("=" * 45)
     initial_errors = len(TOOLKIT.get_mypy_errors())
     print(f"Current mypy errors: {initial_errors}")
     proposal_file = TOOLKIT.propose_fixes(list(categories), output)
-    print(f"\n📄 Proposal generated: {proposal_file}")
-    print("🤖 AGENT: Please review the proposed changes in the file.")
-    print(f"📋 To execute: python -m ciris_mypy_toolkit execute --target {proposal_file}")
+    print(f"\n Proposal generated: {proposal_file}")
+    print(" AGENT: Please review the proposed changes in the file.")
+    print(f" To execute: python -m ciris_mypy_toolkit execute --target {proposal_file}")
 
 
 @main.command()
 @click.option("--target", required=True, help="Proposal file to execute.")
 def execute(target):
     """Execute fixes from an approved proposal file."""
-    print("🚀 Executing Approved Fixes")
+    print(" Executing Approved Fixes")
     print("=" * 35)
     print(f"Proposal file: {target}")
     import pathlib
@@ -84,15 +84,15 @@ def execute(target):
         logger.error(f"Proposal file {target} not found")
         sys.exit(1)
     results = TOOLKIT.execute_approved_fixes(target)
-    print("\n✅ Execution Results:")
+    print("\n[OK] Execution Results:")
     for category, count in results.items():
         if count > 0:
             print(f"   • {category}: {count} fixes applied")
     final_errors = len(TOOLKIT.get_mypy_errors())
-    print("\n📈 Final Status:")
+    print("\n Final Status:")
     print(f"   • Current mypy errors: {final_errors}")
     if final_errors == 0:
-        print("🎉 ZERO ERRORS ACHIEVED!")
+        print(" ZERO ERRORS ACHIEVED!")
 
 
 @main.command()
@@ -101,18 +101,18 @@ def validate(target):
     """Execute adapter validation."""
     import pathlib
 
-    print(f"🔍 Validating Adapter: {target}")
+    print(f" Validating Adapter: {target}")
     print("=" * 50)
     results = TOOLKIT.validate_adapter_compliance(str(pathlib.Path(target)))
     if "error" in results:
-        print(f"❌ Error: {results['error']}")
+        print(f"[FAIL] Error: {results['error']}")
         return
-    print(f"📊 Compliance Score: {results['compliance_score']:.1%}")
-    print(f"🏗️ Schema Usage: {'✅' if results['schema_usage']['compliant'] else '❌'}")
-    print(f"🔌 Protocol Implementation: {'✅' if results['protocol_implementation']['protocol_compliant'] else '❌'}")
-    print(f"🎯 Type Safety: {'✅' if results['type_safety']['type_safe'] else '❌'}")
+    print(f" Compliance Score: {results['compliance_score']:.1%}")
+    print(f" Schema Usage: {'[OK]' if results['schema_usage']['compliant'] else '[FAIL]'}")
+    print(f" Protocol Implementation: {'[OK]' if results['protocol_implementation']['protocol_compliant'] else '[FAIL]'}")
+    print(f" Type Safety: {'[OK]' if results['type_safety']['type_safe'] else '[FAIL]'}")
     if results.get("recommendations"):
-        print("\n💡 Recommendations:")
+        print("\n Recommendations:")
         for rec in results["recommendations"]:
             print(f"   • {rec}")
 
@@ -145,7 +145,7 @@ def simplify_engine(output):
 @main.command()
 def list_protocols():
     """List all protocols found in the codebase."""
-    print("📋 CIRIS Protocol Inventory")
+    print(" CIRIS Protocol Inventory")
     print("=" * 50)
 
     from ciris_mypy_toolkit.analyzers.protocol_analyzer import ProtocolAnalyzer
@@ -155,7 +155,7 @@ def list_protocols():
 
     total_protocols = sum(len(protocols) for protocols in categorized.values())
 
-    print("\n📊 Protocol Summary:")
+    print("\n Protocol Summary:")
     print(f"   Total Protocols: {total_protocols}")
     print(f"   Service Protocols: {len(categorized['service_protocols'])}")
     print(f"   Handler Protocols: {len(categorized['handler_protocols'])}")
@@ -166,7 +166,7 @@ def list_protocols():
 
     for category, protocols in categorized.items():
         if protocols:
-            print(f"\n🔸 {category.replace('_', ' ').title()}:")
+            print(f"\n {category.replace('_', ' ').title()}:")
             for protocol in protocols:
                 print(f"   • {protocol}")
 
@@ -176,7 +176,7 @@ def list_protocols():
 @click.option("--output", help="Output file for detailed report")
 def check_protocols(service, output):
     """Check protocol-module-schema alignment (Protocol-First Pattern)."""
-    print("🔺 Protocol-Module-Schema Alignment Check")
+    print(" Protocol-Module-Schema Alignment Check")
     print("=" * 50)
 
     from ciris_mypy_toolkit.analyzers.protocol_analyzer import ProtocolAnalyzer
@@ -200,14 +200,14 @@ def check_protocols(service, output):
         results = analyzer.check_all_services()
 
     # Display summary
-    print("\n📊 Protocol Alignment Summary:")
+    print("\n Protocol Alignment Summary:")
     print(f"   Total Services: {results['total_services']}")
-    print(f"   ✅ Fully Aligned: {results['aligned_services']}")
-    print(f"   ⚠️  Misaligned: {results['misaligned_services']}")
-    print(f"   🚫 No Dict[str, Any]: {'✅' if results['no_untyped_dicts'] else '❌'}")
+    print(f" [OK] Fully Aligned: {results['aligned_services']}")
+    print(f" [WARN] Misaligned: {results['misaligned_services']}")
+    print(f" No Dict[str, Any]: {'[OK]' if results['no_untyped_dicts'] else '[FAIL]'}")
 
     if results["issues"]:
-        print("\n⚠️  Issues Found:")
+        print("\n[WARN] Issues Found:")
         for issue in results["issues"][:10]:  # Show first 10 issues
             print(f"   • {issue['service']}: {issue['message']}")
         if len(results["issues"]) > 10:
@@ -218,7 +218,7 @@ def check_protocols(service, output):
 
         with open(output, "w") as f:
             json.dump(results, f, indent=2)
-        print(f"\n📄 Detailed report written to: {output}")
+        print(f"\n Detailed report written to: {output}")
 
     # Exit with error if misaligned
     if results["misaligned_services"] > 0:

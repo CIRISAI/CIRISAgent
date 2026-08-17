@@ -267,13 +267,20 @@ class DocumentParser:
         try:
             import pypdf
 
-            # Use temporary file for security (auto-cleaned up)
-            with tempfile.NamedTemporaryFile() as temp_file:
-                temp_file.write(file_data)
-                temp_file.flush()
+            # A temporary DIRECTORY, not NamedTemporaryFile.
+            #
+            # NamedTemporaryFile cannot be reopened by name on Windows while it
+            # is still open -- it is created with O_TEMPORARY and exclusive
+            # sharing, so the open() below raised PermissionError [WinError 32]
+            # and every PDF attachment failed there. A file inside a temp
+            # directory has no such restriction and is cleaned up just the same.
+            with tempfile.TemporaryDirectory() as temp_dir:
+                temp_path = Path(temp_dir) / "document.pdf"
+                with open(temp_path, "wb") as fh:
+                    fh.write(file_data)
 
                 # Open and extract text
-                with open(temp_file.name, "rb") as pdf_file:
+                with open(temp_path, "rb") as pdf_file:
                     reader = pypdf.PdfReader(pdf_file)
 
                     # Security check - limit number of pages
@@ -307,13 +314,16 @@ class DocumentParser:
         try:
             import docx2txt
 
-            # Use temporary file for security (auto-cleaned up)
-            with tempfile.NamedTemporaryFile(suffix=EXT_DOCX) as temp_file:
-                temp_file.write(file_data)
-                temp_file.flush()
+            # Temp DIRECTORY, not NamedTemporaryFile -- docx2txt.process() opens
+            # the path by name, which Windows refuses while the handle is open
+            # (PermissionError [WinError 32]). Every DOCX attachment failed there.
+            with tempfile.TemporaryDirectory() as temp_dir:
+                temp_path = Path(temp_dir) / f"document{EXT_DOCX}"
+                with open(temp_path, "wb") as fh:
+                    fh.write(file_data)
 
                 # Extract text
-                text = docx2txt.process(temp_file.name)
+                text = docx2txt.process(str(temp_path))
 
                 if text and text.strip():
                     return str(text.strip())

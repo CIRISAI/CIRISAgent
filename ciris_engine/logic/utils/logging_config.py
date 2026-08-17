@@ -130,13 +130,12 @@ def setup_basic_logging(
         file_handler.setFormatter(formatter)
         target_logger.addHandler(file_handler)
 
-        latest_link = log_path / "latest.log"
-        if latest_link.exists() or latest_link.is_symlink():
-            latest_link.unlink()
-        try:
-            latest_link.symlink_to(log_filename.name)
-        except Exception:
-            pass
+        # Symlink where permitted, hardlink or a pointer file where not. On
+        # Windows an unprivileged symlink raises WinError 1314, and this used to
+        # swallow that -- so Windows users had no latest.log at all.
+        from ciris_engine.logic.utils.latest_link import link_latest
+
+        link_latest(log_path / "latest.log", log_filename)
 
         # Store the actual log filename for the telemetry endpoint
         actual_log_path = log_path / ".current_log"
@@ -186,10 +185,12 @@ def setup_basic_logging(
     # Print to stdout regardless of console_output setting
     if log_to_file and not console_output:
         print("\n" + "=" * 80)
-        print(f"🔍 LOGGING INITIALIZED - SEE DETAILED LOGS AT: {log_filename}")
-        print(f"🔗 Symlinked to: {latest_link}")
+        print(f" LOGGING INITIALIZED - SEE DETAILED LOGS AT: {log_filename}")
+        # Not necessarily a symlink: on Windows an unprivileged symlink is
+        # refused, so this may be a hardlink or a pointer file.
+        print(f" Latest: {log_path / 'latest.log'}")
         if enable_incident_capture:
-            print(f"⚠️  Incident capture: {log_dir}/incidents_latest.log (WARNING/ERROR messages captured as incidents)")
+            print(f"[WARN] Incident capture: {log_dir}/incidents_latest.log (WARNING/ERROR messages captured as incidents)")
         print("=" * 80 + "\n")
         sys.stdout.flush()
 

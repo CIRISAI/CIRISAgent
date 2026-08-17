@@ -270,7 +270,7 @@ class HandlerTestModule:
                         has_action_type = payload_data.get("action_type") == expected_action.lower()
 
                         if has_thought_id and has_task_id and has_handler_name and has_action_type:
-                            self.console.print(f"    [dim]✓ Audit validated: {expected_action}[/dim]")
+                            self.console.print(f" [dim][OK] Audit validated: {expected_action}[/dim]")
                             return True
                         else:
                             missing = []
@@ -305,7 +305,7 @@ class HandlerTestModule:
         while time.time() - start_time < timeout:
             # Check if we've seen TASK_COMPLETE
             if getattr(self.sse_helper, "task_complete_seen", False):
-                self.console.print("    [dim]✓ TASK_COMPLETE seen[/dim]")
+                self.console.print(" [dim][OK] TASK_COMPLETE seen[/dim]")
                 return True
 
             time.sleep(0.1)

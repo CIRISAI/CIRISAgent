@@ -89,9 +89,9 @@ def main() -> int:
             for lineno, literal in hits:
                 violations.append(f"{rel}:{lineno}  references {literal!r}")
 
-    print("🔎 D27 runtime .md-reference gate")
+    print(" D27 runtime .md-reference gate")
     if violations:
-        print(f"\n❌ {len(violations)} runtime .md reference(s) outside the allowlist:\n")
+        print(f"\n[FAIL] {len(violations)} runtime .md reference(s) outside the allowlist:\n")
         for v in violations:
             print(f"  • {v}")
         print(
@@ -102,7 +102,7 @@ def main() -> int:
         return 1
 
     allow = ", ".join(sorted(ALLOWED)) or "none"
-    print(f"✅ no runtime .md references (allowlisted external-format handlers: {len(ALLOWED)})")
+    print(f"[OK] no runtime .md references (allowlisted external-format handlers: {len(ALLOWED)})")
     print(f"   allowlist: {allow}")
     return 0
 

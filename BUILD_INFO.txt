@@ -1,8 +1,8 @@
 # Build Information
-Code Hash: 41b9a0a4f6b9
-Build Time: 2026-08-16T00:05:18.002897
-Git Commit: b98b1066bf49dd7246e13d6f95ab8141b18cb615
-Git Branch: fix/macos-se-session-gate
+Code Hash: 93333c89493f
+Build Time: 2026-08-16T18:39:07.836468
+Git Commit: 53bc1374b3d4f8a3544b5ab1fd68cd7b48ef24a9
+Git Branch: fix/claim-pin-file-and-ciris-home
 
 This hash is a SHA-256 of all Python source files in the repository.
 It provides a deterministic version identifier based on the actual code content.

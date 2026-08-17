@@ -414,5 +414,5 @@ class IdentityManager:
                 logger.error(f"Identity missing required field: {field}")
                 return False
 
-        logger.info("✓ Agent identity verified")
+        logger.info("[OK] Agent identity verified")
         return True

@@ -31,7 +31,7 @@ class MessageIDDebugTests:
 
     async def run(self) -> List[Dict]:
         """Run all message ID correlation tests."""
-        self.console.print("\n[cyan]🔍 Testing Message ID Correlation[/cyan]")
+        self.console.print("\n[cyan] Testing Message ID Correlation[/cyan]")
 
         tests = [
             ("Send message via /agent/message", self.test_send_message),
@@ -43,10 +43,10 @@ class MessageIDDebugTests:
             try:
                 await test_func()
                 self.results.append({"test": name, "status": "✅ PASS", "error": None})
-                self.console.print(f"  ✅ {name}")
+                self.console.print(f" [OK] {name}")
             except Exception as e:
                 self.results.append({"test": name, "status": "❌ FAIL", "error": str(e)})
-                self.console.print(f"  ❌ {name}: {str(e)}")
+                self.console.print(f" [FAIL] {name}: {str(e)}")
                 if self.console.is_terminal:
                     self.console.print(f"     [dim]{traceback.format_exc()}[/dim]")
 
@@ -116,13 +116,13 @@ class MessageIDDebugTests:
                     if msg_id == self.sent_message_id:
                         found = True
                         self.history_message_id = msg_id
-                        self.console.print(f"     [dim]✅ Found matching message_id in history[/dim]")
+                        self.console.print(f" [dim][OK] Found matching message_id in history[/dim]")
                         break
 
                 if not found:
                     # Print all message IDs for debugging
                     all_ids = [msg.get("id") for msg in messages]
-                    self.console.print(f"     [red]❌ Message ID mismatch!")
+                    self.console.print(f" [red][FAIL] Message ID mismatch!")
                     self.console.print(f"     [red]Sent message_id:     {self.sent_message_id}")
                     self.console.print(f"     [red]History message_ids: {all_ids}")
                     raise ValueError(
@@ -138,9 +138,9 @@ class MessageIDDebugTests:
 
         if self.sent_message_id and self.history_message_id:
             if self.sent_message_id == self.history_message_id:
-                self.console.print(f"  [green]✅ Message IDs match correctly[/green]")
+                self.console.print(f" [green][OK] Message IDs match correctly[/green]")
                 self.console.print(f"     ID: {self.sent_message_id}")
             else:
-                self.console.print(f"  [red]❌ Message ID MISMATCH DETECTED![/red]")
+                self.console.print(f" [red][FAIL] Message ID MISMATCH DETECTED![/red]")
                 self.console.print(f"     Sent:    {self.sent_message_id}")
                 self.console.print(f"     History: {self.history_message_id}")

@@ -112,7 +112,7 @@ def ensure_database_exclusive_access(db_path: str, fail_fast: bool = True) -> No
     # Skip exclusive access check for PostgreSQL — sqlx pools handle
     # multi-process safely, and there's no notion of file-level locking.
     if db_path.startswith(("postgresql://", "postgres://")):
-        print(f"✓ Skipping exclusive access check for PostgreSQL: {db_path}")
+        print(f"[OK] Skipping exclusive access check for PostgreSQL: {db_path}")
         return
 
     db_path_obj = Path(db_path)
@@ -136,7 +136,7 @@ def ensure_database_exclusive_access(db_path: str, fail_fast: bool = True) -> No
     try:
         if not os.access(db_path_obj.parent, os.W_OK):
             raise PermissionError(f"Database parent dir not writable: {db_path_obj.parent}")
-        print(f"✓ Database parent dir ready: {db_path}")
+        print(f"[OK] Database parent dir ready: {db_path}")
 
     except Exception as e:
         msg = str(e).lower()
@@ -144,7 +144,7 @@ def ensure_database_exclusive_access(db_path: str, fail_fast: bool = True) -> No
 
         # iOS: stale lock from previous crash, not a competing agent.
         if _is_ios_runtime() and (is_lock_error or "operation not permitted" in msg):
-            print("⚠ iOS: database lock probe failed (stale lock from previous run) — proceeding")
+            print("[WARN] iOS: database lock probe failed (stale lock from previous run) — proceeding")
             print(f"  Underlying: {e}")
             return
 
@@ -199,7 +199,7 @@ def _create_directory(dir_path: Path, mode: int, fail_fast: bool) -> None:
     """Create a single directory with specified permissions."""
     if not dir_path.exists():
         dir_path.mkdir(parents=True, mode=mode)
-        print(f"✓ Created directory: {dir_path} with mode {oct(mode)}")
+        print(f"[OK] Created directory: {dir_path} with mode {oct(mode)}")
 
         # Verify creation
         if not dir_path.exists():
@@ -216,7 +216,7 @@ def _fix_directory_permissions(dir_path: Path, mode: int, fail_fast: bool) -> No
     if current_mode != mode:
         try:
             dir_path.chmod(mode)
-            print(f"✓ Fixed permissions for {dir_path}: {oct(current_mode)} -> {oct(mode)}")
+            print(f"[OK] Fixed permissions for {dir_path}: {oct(current_mode)} -> {oct(mode)}")
         except Exception as perm_error:
             error_msg = f"WRONG PERMS on {dir_path}: Has {oct(current_mode)}, needs {oct(mode)} - CANNOT FIX - EXITING"
             print(f"CRITICAL ERROR: {error_msg}", file=sys.stderr)
@@ -238,7 +238,7 @@ def _check_directory_ownership(dir_path: Path, user_id: int, group_id: int, fail
             # os.chown is Unix-only
             if hasattr(os, "chown"):
                 os.chown(dir_path, user_id, group_id)
-                print(f"✓ Fixed ownership for {dir_path}: {stat.st_uid}:{stat.st_gid} -> {user_id}:{group_id}")
+                print(f"[OK] Fixed ownership for {dir_path}: {stat.st_uid}:{stat.st_gid} -> {user_id}:{group_id}")
             else:
                 # Windows doesn't have chown
                 return
@@ -386,7 +386,7 @@ def setup_application_directories(
                 with open(file_path, "a"):
                     # Successfully opened for writing
                     pass
-                print(f"✓ Write access verified for {file_path}")
+                print(f"[OK] Write access verified for {file_path}")
             except (PermissionError, IOError) as e:
                 # Get file stats for debugging
                 stat = file_path.stat()
@@ -402,7 +402,7 @@ def setup_application_directories(
                     sys.exit(1)
                 raise PermissionError(error_msg)
 
-    print("✓ All directories and critical files successfully configured")
+    print("[OK] All directories and critical files successfully configured")
 
 
 def _validate_directory(dir_path: Path) -> None:
@@ -496,7 +496,7 @@ def validate_directories(base_dir: Optional[Path] = None) -> bool:
                 print(f"  FIX: sudo chown {current_uid}:{current_gid} {file_path}", file=sys.stderr)
                 raise PermissionError(error_msg)
 
-    print("✓ All directories and critical files validated successfully")
+    print("[OK] All directories and critical files validated successfully")
     return True
 
 
@@ -519,10 +519,10 @@ if __name__ == "__main__":
             print("Setting up CIRIS application directories...")
             setup_application_directories(fail_fast=not args.no_fail_fast)
 
-        print("\n✓ SUCCESS: All directories properly configured!")
+        print("\n[OK] SUCCESS: All directories properly configured!")
     except DirectorySetupError as e:
-        print(f"\n✗ FAILED: {e}", file=sys.stderr)
+        print(f"\n[FAIL] FAILED: {e}", file=sys.stderr)
         sys.exit(1)
     except Exception as e:
-        print(f"\n✗ UNEXPECTED ERROR: {e}", file=sys.stderr)
+        print(f"\n[FAIL] UNEXPECTED ERROR: {e}", file=sys.stderr)
         sys.exit(1)

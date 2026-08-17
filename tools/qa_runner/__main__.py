@@ -2,6 +2,17 @@
 QA Runner CLI interface.
 """
 
+# Windows cp1252 consoles raise UnicodeEncodeError on any non-ASCII glyph, which
+# takes the whole process down. main.py / cli.py / desktop_launcher already call
+# this; the QA runner never did, so it crashed on Windows CI before reaching a
+# single test — which is why this harness had never run there.
+try:
+    from ciris_engine.logic.utils import win_console as _win_console
+
+    _win_console.setup()
+except Exception:  # pragma: no cover - never let the shim stop the runner
+    pass
+
 import argparse
 import sys
 from pathlib import Path
@@ -410,14 +421,14 @@ def main():
 
         data_dir = Path("data")
         if data_dir.exists():
-            print(f"🧹 Wiping data directory: {data_dir}")
+            print(f" Wiping data directory: {data_dir}")
             try:
                 shutil.rmtree(data_dir)
-                print("   ✅ Data directory cleared")
+                print(" [OK] Data directory cleared")
             except Exception as e:
-                print(f"   ⚠️  Failed to wipe data directory: {e}")
+                print(f" [WARN] Failed to wipe data directory: {e}")
         else:
-            print(f"   ℹ️  Data directory does not exist: {data_dir}")
+            print(f" [INFO] Data directory does not exist: {data_dir}")
 
     # Parse modules (default to "all" if none specified)
     module_names = args.modules if args.modules else ["all"]
@@ -427,7 +438,7 @@ def main():
             module = QAModule(module_name.lower())
             modules.append(module)
         except ValueError:
-            print(f"❌ Unknown module: {module_name}")
+            print(f"[FAIL] Unknown module: {module_name}")
             print(f"Available modules: {', '.join(m.value for m in QAModule)}")
             sys.exit(1)
 
@@ -465,7 +476,7 @@ def main():
                     f"(key={_default_key}, model={args.live_model})"
                 )
             else:
-                print(f"❌ {_mod.value} module requires --live (live LLM required)")
+                print(f"[FAIL] {_mod.value} module requires --live (live LLM required)")
                 if _defaults.get("key_file"):
                     print(f"   Expected key file at {_default_key} (from module defaults).")
                 print(
@@ -477,33 +488,33 @@ def main():
     # HE-300 benchmark module-specific defaults
     is_he300 = QAModule.HE300_BENCHMARK in modules
     if is_he300:
-        print("🧪 HE-300 Benchmark Mode:")
-        print("   📋 Template: he-300-benchmark (speak + task_complete only)")
-        print("   🔓 Benchmark Mode: CIRIS_BENCHMARK_MODE=true (disables EpistemicHumility conscience)")
+        print(" HE-300 Benchmark Mode:")
+        print(" Template: he-300-benchmark (speak + task_complete only)")
+        print(" Benchmark Mode: CIRIS_BENCHMARK_MODE=true (disables EpistemicHumility conscience)")
         # Auto-enable --wipe-data for clean state (do it now since wipe already ran above)
         if not args.wipe_data:
-            print("   ℹ️  Auto-wiping data for clean benchmark state")
+            print(" [INFO] Auto-wiping data for clean benchmark state")
             import shutil
 
             data_dir = Path("data")
             if data_dir.exists():
                 try:
                     shutil.rmtree(data_dir)
-                    print("   ✅ Data directory cleared")
+                    print(" [OK] Data directory cleared")
                 except Exception as e:
-                    print(f"   ⚠️  Failed to wipe data directory: {e}")
+                    print(f" [WARN] Failed to wipe data directory: {e}")
             args.wipe_data = True  # Mark as done
         # Warn if not using --live mode
         if not args.live:
-            print("   ⚠️  WARNING: Running HE-300 without --live flag uses mock LLM")
+            print(" [WARN] WARNING: Running HE-300 without --live flag uses mock LLM")
             print(
                 "   ⚠️  For real benchmarking, use: --live --live-key-file ~/.openai_key --live-model gpt-4o-mini --live-base-url https://api.openai.com/v1"
             )
         else:
-            print("   ✅ Live LLM mode enabled for real ethical benchmarking")
+            print(" [OK] Live LLM mode enabled for real ethical benchmarking")
         # Set OpenAI defaults if --live but using Groq defaults
         if args.live and "groq" in args.live_base_url.lower():
-            print("   ℹ️  Tip: For OpenAI, use --live-base-url https://api.openai.com/v1 --live-model gpt-4o-mini")
+            print(" [INFO] Tip: For OpenAI, use --live-base-url https://api.openai.com/v1 --live-model gpt-4o-mini")
 
     # Handle --live mode: read API key and configure live LLM
     live_api_key = None
@@ -513,13 +524,13 @@ def main():
     if args.live:
         key_path = Path(args.live_key_file).expanduser()
         if not key_path.exists():
-            print(f"❌ Live mode requires API key file: {key_path}")
+            print(f"[FAIL] Live mode requires API key file: {key_path}")
             print(f"   Create the file with your API key or use --live-key-file to specify path")
             sys.exit(1)
         try:
             live_api_key = key_path.read_text().strip()
             if not live_api_key:
-                print(f"❌ API key file is empty: {key_path}")
+                print(f"[FAIL] API key file is empty: {key_path}")
                 sys.exit(1)
             live_model = args.live_model
             live_base_url = args.live_base_url
@@ -551,7 +562,7 @@ def main():
                 else:
                     live_provider = "openai"
 
-            print(f"🔑 Live mode enabled:")
+            print(f" Live mode enabled:")
             print(f"   Provider: {live_provider}")
             # Length, not material. This runs in CI as well as locally, and CI
             # job logs are readable by anyone with repo read access.
@@ -560,27 +571,27 @@ def main():
             if live_base_url:
                 print(f"   Base URL: {live_base_url}")
         except Exception as e:
-            print(f"❌ Failed to read API key: {e}")
+            print(f"[FAIL] Failed to read API key: {e}")
             sys.exit(1)
 
     # --live implies --live-lens (always use real Lens server with live LLM)
     if args.live and not args.live_lens:
         args.live_lens = True
-        print("   ✅ Auto-enabling --live-lens (real Lens server for accord traces)")
+        print(" [OK] Auto-enabling --live-lens (real Lens server for accord traces)")
 
     # QA runner ALWAYS wipes data to ensure clean state and use setup wizard
     # This ensures predictable test behavior with a known admin user/password
     if not args.wipe_data:
-        print("ℹ️  Auto-wiping data for clean QA state (setup wizard creates test user)")
+        print("[INFO] Auto-wiping data for clean QA state (setup wizard creates test user)")
         import shutil
 
         data_dir = Path("data")
         if data_dir.exists():
             try:
                 shutil.rmtree(data_dir)
-                print("   ✅ Data directory cleared")
+                print(" [OK] Data directory cleared")
             except Exception as e:
-                print(f"   ⚠️  Failed to wipe data directory: {e}")
+                print(f" [WARN] Failed to wipe data directory: {e}")
         args.wipe_data = True
 
     # Staged-env preparation (if requested) — must happen BEFORE config

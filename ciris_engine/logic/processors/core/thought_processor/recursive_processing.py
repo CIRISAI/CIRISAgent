@@ -212,7 +212,7 @@ class RecursiveProcessingPhase:
         retry_result = await self._recursive_aspdma_step(thought_item, thought_context, dma_results, current_conscience)
 
         if not retry_result:
-            logger.warning(f"[RECURSIVE] ✗ Retry {retry_count} - ASPDMA returned no result, stopping")
+            logger.warning(f"[RECURSIVE] [FAIL] Retry {retry_count} - ASPDMA returned no result, stopping")
             return None
 
         logger.info(f"[RECURSIVE] Retry {retry_count} - ASPDMA selected action: {retry_result.selected_action}")
@@ -320,7 +320,7 @@ class RecursiveProcessingPhase:
                 return retry_result
             except Exception as e:
                 last_error = e
-                logger.warning(f"[ASPDMA_GUIDANCE] ✗ Attempt {attempt + 1}/{max_retries} failed: {e}")
+                logger.warning(f"[ASPDMA_GUIDANCE] [FAIL] Attempt {attempt + 1}/{max_retries} failed: {e}")
 
                 # Add this attempt to retry history for next iteration
                 retry_history.append(

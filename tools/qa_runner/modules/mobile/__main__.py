@@ -34,6 +34,17 @@ Examples:
     python -m tools.qa_runner.modules.mobile build --platform ios --simulator
 """
 
+# Windows cp1252 consoles raise UnicodeEncodeError on any non-ASCII glyph, which
+# takes the whole process down. main.py / cli.py / desktop_launcher already call
+# this; the QA runner never did, so it crashed on Windows CI before reaching a
+# single test — which is why this harness had never run there.
+try:
+    from ciris_engine.logic.utils import win_console as _win_console
+
+    _win_console.setup()
+except Exception:  # pragma: no cover - never let the shim stop the runner
+    pass
+
 import os
 import sys
 import time
@@ -44,9 +55,9 @@ from typing import Dict, List, Optional, Tuple
 # Add parent paths for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from tools.qa_runner.modules.mobile.llm_preflight import PROVIDER_BASE_URLS, preflight_llm
 from tools.qa_runner.modules.mobile.adb_helper import ADBHelper
 from tools.qa_runner.modules.mobile.device_helper import DeviceHelper, Platform, create_device_helper, detect_platform
+from tools.qa_runner.modules.mobile.llm_preflight import PROVIDER_BASE_URLS, preflight_llm
 from tools.qa_runner.modules.mobile.test_runner import MobileTestConfig, MobileTestRunner
 from tools.qa_runner.modules.mobile.ui_automator import UIAutomator
 
@@ -737,10 +748,16 @@ def test_ios_physical_command(args) -> int:
         "local_login": "ui_login",
     }
 
-    # Build test config
+    # Build test config. Username must NOT be "admin" — the backend reserves it
+    # ("Username 'admin' is reserved for testing"), which 422s completeSetup.
     test_config = {
         "local_port": 18080,
         "remote_port": 8080,
+        "username": getattr(args, "username", None) or "ciris_founder",
+        "password": getattr(args, "password", None) or "qa_test_password_12345",
+        "llm_provider": getattr(args, "llm_provider", None) or "openai",
+        "llm_api_key": (getattr(args, "llm_key", None) or load_secret_file(getattr(args, "llm_key_file", None))) or "",
+        "llm_model": getattr(args, "llm_model", None) or "",
     }
 
     # Determine which tests to run
@@ -1529,7 +1546,9 @@ Examples:
     # --keep-open is kept as a harmless no-op for back-compat; --force-stop opts
     # into the old kill.
     test_parser.add_argument("--keep-open", action="store_true", help="(default) Keep app running after tests")
-    test_parser.add_argument("--force-stop", action="store_true", help="Force-stop the app at teardown (strands unshipped sealed traces)")
+    test_parser.add_argument(
+        "--force-stop", action="store_true", help="Force-stop the app at teardown (strands unshipped sealed traces)"
+    )
 
     # iOS physical/simulator selection
     test_parser.add_argument(

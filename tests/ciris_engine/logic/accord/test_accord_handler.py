@@ -107,9 +107,20 @@ class TestAccordHandler:
         handler_with_authority.remove_authority("wa-test-002")
         assert handler_with_authority.authority_count == initial_count
 
+    # These two patch terminate_immediately IN THE HANDLER'S NAMESPACE, and must:
+    # unpatched, they take the pytest process down with them, which is the
+    # helper working as designed.
+    #
+    # They previously patched `os.kill` and asserted it was called. That assertion
+    # was too weak to catch the bug it existed to guard: the real code evaluated
+    # `signal.SIGKILL` to build the argument, and that attribute does not exist on
+    # Windows, so the kill switch raised AttributeError instead of killing
+    # anything. Patching os.kill hid the failing part -- and on Windows the test
+    # itself would have errored on the same attribute lookup.
+
     def test_handler_disable_terminates(self):
         """Attempting to disable handler should terminate."""
-        with patch("os.kill") as mock_kill:
+        with patch("ciris_engine.logic.accord.handler.terminate_immediately") as mock_terminate:
             from ciris_engine.logic.accord.handler import AccordHandler
 
             handler = AccordHandler(auto_load_authorities=False)
@@ -118,18 +129,19 @@ class TestAccordHandler:
             # Attempt to disable
             handler.enabled = False
 
-            # Should have called SIGKILL
-            mock_kill.assert_called()
+            mock_terminate.assert_called_once()
+            # The reason is the only forensic record that survives a real kill.
+            assert "disable" in mock_terminate.call_args[0][0].lower()
 
     def test_auto_load_no_authorities_terminates(self):
         """Auto-load mode with no authorities should terminate."""
-        with patch("os.kill") as mock_kill:
+        with patch("ciris_engine.logic.accord.handler.terminate_immediately") as mock_terminate:
             with patch("ciris_engine.logic.accord.verifier.AccordVerifier._load_default_authorities", return_value=0):
                 from ciris_engine.logic.accord.handler import AccordHandler
 
-                # This should trigger SIGKILL because auto_load=True but no authorities loaded
                 AccordHandler(auto_load_authorities=True)
-                mock_kill.assert_called()
+                mock_terminate.assert_called_once()
+                assert "authorities" in mock_terminate.call_args[0][0].lower()
 
     def test_handler_properties(self, handler_with_authority):
         """Should expose count properties."""

@@ -353,7 +353,7 @@ class AccordMetricsService:
             )
 
         if env_consent and not config_consent:
-            logger.info("✅ CONSENT enabled via environment variable CIRIS_ACCORD_METRICS_CONSENT")
+            logger.info("[OK] CONSENT enabled via environment variable CIRIS_ACCORD_METRICS_CONSENT")
 
         # Local-tee: when CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR is set, the
         # substrate writes every sealed batch to
@@ -379,7 +379,7 @@ class AccordMetricsService:
                 candidate = Path(env_local_copy_dir) / safe_instance
                 candidate.mkdir(parents=True, exist_ok=True)
                 probe = candidate / ".accord_local_copy_probe"
-                probe.write_text("")
+                probe.write_text("", encoding="utf-8")
                 probe.unlink()
                 self._local_copy_dir = candidate
                 logger.info(
@@ -882,7 +882,7 @@ class AccordMetricsService:
             logger.info(f"   Loaded persisted events total: {self._persisted_events_sent}")
 
         logger.info("=" * 70)
-        logger.info("🚀 ACCORD METRICS SERVICE STARTING (LensCore substrate)")
+        logger.info(" ACCORD METRICS SERVICE STARTING (LensCore substrate)")
         logger.info(f"   Consent given: {self._consent_given}")
         logger.info(f"   Consent timestamp: {self._consent_timestamp or 'NOT SET'}")
         logger.info(f"   Trace level: {self._trace_level.value}")
@@ -908,7 +908,7 @@ class AccordMetricsService:
 
         # REQUIRED substrate leg — raises if unavailable (see docstring)
         self._lens = self._build_lens_client()
-        logger.info("   ✅ LensClient constructed (capture→seal→sign→persist owned by substrate)")
+        logger.info(" [OK] LensClient constructed (capture→seal→sign→persist owned by substrate)")
 
         # ONE authoritative, greppable consent one-liner (rides logcat →
         # mobile pull-logs). This is check (a) of the trace-consent validation
@@ -926,9 +926,9 @@ class AccordMetricsService:
             self._reasoning_queue = asyncio.Queue(maxsize=REASONING_QUEUE_MAXSIZE)
             reasoning_event_stream.subscribe(self._reasoning_queue)
             self._reasoning_task = asyncio.create_task(self._process_reasoning_events())
-            logger.info(f"✅ SUBSCRIBED to reasoning_event_stream (queue maxsize={REASONING_QUEUE_MAXSIZE})")
+            logger.info(f"[OK] SUBSCRIBED to reasoning_event_stream (queue maxsize={REASONING_QUEUE_MAXSIZE})")
         except Exception as e:
-            logger.error(f"❌ FAILED to subscribe to reasoning_event_stream: {e}")
+            logger.error(f"[FAIL] FAILED to subscribe to reasoning_event_stream: {e}")
             logger.error("   Traces will NOT be captured!")
 
         self._sweep_task = asyncio.create_task(self._periodic_sweep())
@@ -954,7 +954,7 @@ class AccordMetricsService:
     async def stop(self) -> None:
         """Stop the service: final sweep + stats."""
         logger.info("=" * 70)
-        logger.info("🛑 ACCORD METRICS SERVICE STOPPING")
+        logger.info(" ACCORD METRICS SERVICE STOPPING")
         logger.info(f"   Traces completed: {self._traces_completed}")
 
         # Unsubscribe from reasoning_event_stream
@@ -985,7 +985,7 @@ class AccordMetricsService:
                 logger.debug(f"Final orphan sweep failed: {e}")
         self._persist_events_total()
 
-        logger.info("📊 ACCORD METRICS FINAL STATS")
+        logger.info(" ACCORD METRICS FINAL STATS")
         logger.info(f"   Traces completed: {self._traces_completed}")
         logger.info(f"   Trace events persisted: {self._events_sent}")
         logger.info(f"   Consent-blocked seals: {self._traces_consent_blocked}")
@@ -1133,7 +1133,7 @@ class AccordMetricsService:
 
     async def _process_reasoning_events(self) -> None:
         """Process reasoning events from the stream and build traces."""
-        logger.info("🎯 Starting reasoning event processor - listening for H3ERE pipeline events")
+        logger.info(" Starting reasoning event processor - listening for H3ERE pipeline events")
         events_processed = 0
 
         # Ensure queue is initialized (mypy hint)
@@ -1147,7 +1147,7 @@ class AccordMetricsService:
                     # Wait for next event with timeout to check for cancellation
                     event_data = await asyncio.wait_for(self._reasoning_queue.get(), timeout=1.0)
                     events_processed += 1
-                    logger.info(f"📥 RECEIVED reasoning event #{events_processed}: {type(event_data).__name__}")
+                    logger.info(f" RECEIVED reasoning event #{events_processed}: {type(event_data).__name__}")
                     await self._handle_reasoning_event(event_data)
                 except asyncio.TimeoutError:
                     # No event, just continue waiting
@@ -1295,7 +1295,7 @@ class AccordMetricsService:
             )
         elif kind == "rejected":
             self._events_rejected += 1
-            logger.warning(f"🚫 Substrate rejected unknown event_type {outcome.get('raw')!r} (thought {thought_id})")
+            logger.warning(f" Substrate rejected unknown event_type {outcome.get('raw')!r} (thought {thought_id})")
         # "appended" needs no bookkeeping
 
 
@@ -1314,7 +1314,7 @@ class AccordMetricsService:
             path = _os.environ.get("CIRIS_RESEARCH_PROMPT_OVERRIDES")
             if not path or _os.environ.get("CIRIS_TESTING_MODE", "").lower() != "true":
                 return None
-            with open(path) as fh:
+            with open(path, encoding="utf-8") as fh:
                 declared = _json.load(fh).get("condition")
             return str(declared) if declared is not None else None
         except Exception:  # noqa: BLE001 — a manifest problem must not break the seal
@@ -1483,7 +1483,7 @@ class AccordMetricsService:
             }
             safe = re.sub(r"[^A-Za-z0-9._-]", "_", str(trace_id))[:120]
             out = self._local_copy_dir / f"ceg-seal-{safe}.json"
-            out.write_text(json.dumps(payload, indent=1, ensure_ascii=False, default=str))
+            out.write_text(json.dumps(payload, indent=1, ensure_ascii=False, default=str), encoding="utf-8")
             if signed == 0:
                 logger.warning(
                     f"⚠️ [{self._adapter_instance_id}] CEG seal teed {out.name} but {len(ceg_rows)} row(s) "
@@ -2202,7 +2202,7 @@ class AccordMetricsService:
             self._events_received += 1
             if outcome.get("outcome") == "opened":
                 self._open_thoughts[request.thought_id] = time.monotonic()
-            logger.info(f"🧭 WBD deferral captured for thought {request.thought_id} (outcome={outcome.get('outcome')})")
+            logger.info(f" WBD deferral captured for thought {request.thought_id} (outcome={outcome.get('outcome')})")
         except Exception as e:
             # 933: transition-logged, steady-state-counted (was a full
             # traceback per failed deferral capture).

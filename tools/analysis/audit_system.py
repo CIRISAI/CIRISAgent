@@ -67,7 +67,7 @@ class CIRISSystemAuditor:
 
     def audit(self) -> Dict[str, Any]:
         """Run complete system audit."""
-        print("🔍 Starting CIRIS Complete System Audit...\n")
+        print(" Starting CIRIS Complete System Audit...\n")
 
         # Phase 1: Scan all Python files
         self._scan_all_files()
@@ -92,7 +92,7 @@ class CIRISSystemAuditor:
 
     def _scan_all_files(self) -> None:
         """Scan all Python files and extract class information."""
-        print("📂 Scanning all Python files...")
+        print(" Scanning all Python files...")
 
         for file_path in self.ciris_root.rglob("*.py"):
             if file_path.name.startswith("_") or "test" in str(file_path):
@@ -159,13 +159,13 @@ class CIRISSystemAuditor:
                             self.import_map[str(file_path)].add(node.module)
 
             except Exception as e:
-                print(f"  ⚠️  Error scanning {file_path}: {e}")
+                print(f" [WARN] Error scanning {file_path}: {e}")
 
-        print(f"  ✓ Found {len(self.all_classes)} classes")
+        print(f" [OK] Found {len(self.all_classes)} classes")
 
     def _categorize_components(self) -> None:
         """Categorize each component into its proper category."""
-        print("\n📊 Categorizing components...")
+        print("\n Categorizing components...")
 
         for class_name, class_info in self.all_classes.items():
             file_path = class_info["file"]
@@ -346,7 +346,7 @@ class CIRISSystemAuditor:
 
     def _check_inheritance_chains(self) -> None:
         """Verify inheritance chains are correct."""
-        print("\n🔗 Checking inheritance chains...")
+        print("\n Checking inheritance chains...")
 
         # Expected inheritance patterns
         expected_patterns = {
@@ -380,7 +380,7 @@ class CIRISSystemAuditor:
 
     def _find_duplicates(self) -> None:
         """Find duplicate functionality."""
-        print("\n🔍 Finding duplicate functionality...")
+        print("\n Finding duplicate functionality...")
 
         # Group by similar names
         name_groups: Dict[str, List[str]] = defaultdict(list)
@@ -411,7 +411,7 @@ class CIRISSystemAuditor:
 
     def _check_protocol_compliance(self) -> None:
         """Check if modules comply with their protocols."""
-        print("\n📋 Checking protocol compliance...")
+        print("\n Checking protocol compliance...")
 
         # Match protocols to implementations
         for protocol_name, protocol_info in self.protocol_map.items():
@@ -460,7 +460,7 @@ class CIRISSystemAuditor:
 
     def _find_orphaned_code(self) -> None:
         """Find code that isn't used anywhere."""
-        print("\n🗑️  Finding orphaned code...")
+        print("\n Finding orphaned code...")
 
         # Build usage map
         used_classes = set()
@@ -499,7 +499,7 @@ class CIRISSystemAuditor:
 
     def _generate_report(self) -> Dict[str, Any]:
         """Generate comprehensive audit report."""
-        print("\n📊 Generating audit report...")
+        print("\n Generating audit report...")
 
         # Count totals
         total_categorized = 0
@@ -531,23 +531,23 @@ class CIRISSystemAuditor:
 
         # Print summary
         print("\n" + "=" * 60)
-        print("🔍 CIRIS System Audit Summary")
+        print(" CIRIS System Audit Summary")
         print("=" * 60)
-        print("\n📊 Component Distribution:")
+        print("\n Component Distribution:")
         summary = report.get("summary", {})
         print(f"   Total Classes: {summary.get('total_classes', 0)}")
         print(f"   Total Protocols: {summary.get('total_protocols', 0)}")
-        print(f"   ✅ Categorized: {summary.get('categorized', 0)}")
-        print(f"   ❓ Uncategorized: {summary.get('uncategorized', 0)}")
+        print(f" [OK] Categorized: {summary.get('categorized', 0)}")
+        print(f" Uncategorized: {summary.get('uncategorized', 0)}")
 
-        print("\n⚠️  Issues Found:")
+        print("\n[WARN] Issues Found:")
         print(f"   Duplicate Functionality Groups: {summary.get('duplicate_groups', 0)}")
         print(f"   Missing Protocol Implementations: {summary.get('missing_implementations', 0)}")
         print(f"   Incorrect Inheritance: {summary.get('incorrect_inheritance', 0)}")
         print(f"   Protocol Mismatches: {summary.get('protocol_mismatches', 0)}")
         print(f"   Orphaned Classes: {summary.get('orphaned_classes', 0)}")
 
-        print("\n📁 Category Breakdown:")
+        print("\n Category Breakdown:")
         for cat, subcats in self.categories.items():
             if cat == "uncategorized":
                 continue
@@ -565,7 +565,7 @@ class CIRISSystemAuditor:
         report = self.audit()
         with open(filename, "w") as f:
             json.dump(report, f, indent=2)
-        print(f"\n💾 Detailed report saved to {filename}")
+        print(f"\n Detailed report saved to {filename}")
 
         # Also save a markdown summary
         self._save_markdown_summary(report, filename.replace(".json", ".md"))
@@ -627,7 +627,7 @@ class CIRISSystemAuditor:
                     class_info = all_classes.get(item, {})
                     f.write(f"- **{item}** ({class_info.get('file', 'unknown')})\n")
 
-        print(f"📝 Markdown summary saved to {filename}")
+        print(f" Markdown summary saved to {filename}")
 
 
 def main() -> None:

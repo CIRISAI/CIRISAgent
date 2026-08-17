@@ -44,11 +44,11 @@ async def check_unhealthy_services():
             else:
                 unhealthy.append(service_name)
 
-        print(f"\n✅ HEALTHY SERVICES ({len(healthy)}):")
+        print(f"\n[OK] HEALTHY SERVICES ({len(healthy)}):")
         for svc in healthy:
             print(f"   - {svc}")
 
-        print(f"\n❌ UNHEALTHY SERVICES ({len(unhealthy)}):")
+        print(f"\n[FAIL] UNHEALTHY SERVICES ({len(unhealthy)}):")
         for svc in unhealthy:
             service_data = services[svc]
             print(f"   - {svc}")

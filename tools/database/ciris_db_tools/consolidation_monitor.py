@@ -338,7 +338,7 @@ class ConsolidationMonitor(BaseDBTool):
         # Check for orphaned nodes in consolidated periods
         orphaned = self.get_orphaned_nodes_in_consolidated_periods()
         if orphaned["total_orphaned"] > 0:
-            print(f"\n⚠️  WARNING: {orphaned['total_orphaned']} nodes without edges in consolidated periods!")
+            print(f"\n[WARN] WARNING: {orphaned['total_orphaned']} nodes without edges in consolidated periods!")
             print("   Run 'consolidation --orphaned' for details")
 
         # Health overview
@@ -357,10 +357,10 @@ class ConsolidationMonitor(BaseDBTool):
         orphaned = self.get_orphaned_nodes_in_consolidated_periods()
 
         if orphaned["total_orphaned"] == 0:
-            print("✓ No orphaned nodes found in consolidated periods")
+            print("[OK] No orphaned nodes found in consolidated periods")
             return
 
-        print(f"\n⚠️  Found {orphaned['total_orphaned']} nodes without edges in consolidated periods")
+        print(f"\n[WARN] Found {orphaned['total_orphaned']} nodes without edges in consolidated periods")
 
         if orphaned["by_type"]:
             formatter.print_subsection("Orphaned Nodes by Type")
@@ -384,7 +384,7 @@ class ConsolidationMonitor(BaseDBTool):
             if len(orphaned["by_period"]) > 5:
                 print(f"\n... and {len(orphaned['by_period']) - 5} more periods")
 
-        print("\n⚠️  This indicates the SUMMARIZES edge creation is not working properly!")
+        print("\n[WARN] This indicates the SUMMARIZES edge creation is not working properly!")
 
     def print_consolidation_health_report(self):
         """Print comprehensive consolidation health report."""
@@ -456,7 +456,7 @@ class ConsolidationMonitor(BaseDBTool):
         orphaned = self.get_orphaned_nodes_in_consolidated_periods()
 
         if orphaned["total_orphaned"] > 0:
-            print(f"\n🚨 CRITICAL: {orphaned['total_orphaned']} orphaned nodes found in consolidated periods!")
+            print(f"\n[ALERT] CRITICAL: {orphaned['total_orphaned']} orphaned nodes found in consolidated periods!")
             print("   These nodes exist within the same scope as summaries but have no SUMMARIZES edges.")
             print("   This indicates the edge creation logic is not working properly.\n")
 
@@ -487,7 +487,7 @@ class ConsolidationMonitor(BaseDBTool):
         print(f"Edge Coverage: {edge_stats['edge_coverage']:.1f}%")
 
         if edge_stats["periods_with_no_edges"]:
-            print(f"\n⚠️  {len(edge_stats['periods_with_no_edges'])} periods have NO edges")
+            print(f"\n[WARN] {len(edge_stats['periods_with_no_edges'])} periods have NO edges")
 
         # Consolidation health
         gaps = self.get_consolidation_gaps()

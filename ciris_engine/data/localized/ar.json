@@ -2341,7 +2341,8 @@
     "accord_remint_step3_title": "الخطوة 3 — أنتج التكوين المحمول",
     "accord_remint_step_done": "تم — البذرة مُصرّح بها",
     "accord_remint_step_of": "الخطوة {step} من {total}",
-    "accord_remint_title": "إعادة سكّ جذر ثقة قائم"
+    "accord_remint_title": "إعادة سكّ جذر ثقة قائم",
+    "login_google_unavailable": "تسجيل الدخول باستخدام {provider} غير متاح في هذا التثبيت."
   },
   "prompts": {
     "dma": {
@@ -4010,5 +4011,7 @@
       "timed_out": "لم يكتمل تسجيل الدخول في المتصفح، لذا لم يتغيّر أي شيء. حاول مرة أخرى، أو استخدم حسابًا محليًا بدلاً من ذلك.",
       "waiting": "أكمل تسجيل الدخول باستخدام Google في المتصفح، ثم عد إلى هنا."
     }
-  }
+  },
+  "setup_validation_age_required": "الرجاء اختيار فئتك العمرية.",
+  "setup_validation_username_reserved": "اسم المستخدم 'admin' محجوز. الرجاء اختيار اسم مستخدم آخر."
 }

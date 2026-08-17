@@ -2341,7 +2341,8 @@
     "accord_remint_step3_title": "第 3 步 — 生成可携带的创世文件",
     "accord_remint_step_done": "完成 — 种子已获授权",
     "accord_remint_step_of": "第 {step} 步，共 {total} 步",
-    "accord_remint_title": "重铸现有信任根"
+    "accord_remint_title": "重铸现有信任根",
+    "login_google_unavailable": "此安装不支持使用 {provider} 登录"
   },
   "prompts": {
     "dma": {
@@ -4010,5 +4011,7 @@
       "timed_out": "未在浏览器中完成登录，因此未做任何更改。请重试，或改用本地账户。",
       "waiting": "请在浏览器中完成 Google 登录，然后返回此处。"
     }
-  }
+  },
+  "setup_validation_age_required": "请选择您的年龄段",
+  "setup_validation_username_reserved": "用户名 admin 已被保留。请选择其他用户名。"
 }

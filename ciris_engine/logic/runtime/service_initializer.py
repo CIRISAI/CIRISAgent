@@ -523,7 +523,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
             # Clean up
             await self.memory_service.forget(test_node)
 
-            logger.info("✓ Memory service verified")
+            logger.info("[OK] Memory service verified")
             return True
 
         except Exception as e:
@@ -622,7 +622,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
             logger.error("WA auth service not healthy")
             return False
 
-        logger.info("✓ Security services verified")
+        logger.info("[OK] Security services verified")
         return True
 
     async def initialize_all_services(
@@ -677,7 +677,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
                 if manifest_path.exists():
                     try:
-                        async with aiofiles.open(manifest_path) as f:
+                        async with aiofiles.open(manifest_path, encoding="utf-8") as f:
                             content = await f.read()
                             manifest_data = json.loads(content)
 
@@ -1031,13 +1031,13 @@ This directory contains critical cryptographic keys for the CIRIS system.
         """
         # Skip if mock LLM module is being loaded
         if self._skip_llm_init:
-            logger.info("🤖 MOCK LLM module detected - skipping real LLM service initialization")
+            logger.info(" MOCK LLM module detected - skipping real LLM service initialization")
             return
 
         # Check if CIRIS services are disabled by user preference
         ciris_services_disabled = os.environ.get("CIRIS_SERVICES_DISABLED", "").lower() in ("true", "1", "yes")
         if ciris_services_disabled:
-            logger.info("🚫 CIRIS services disabled by user preference (CIRIS_SERVICES_DISABLED=true)")
+            logger.info(" CIRIS services disabled by user preference (CIRIS_SERVICES_DISABLED=true)")
             # Continue to load persisted runtime providers (local servers, BYOK keys)
             # but skip the hardcoded CIRIS proxy providers
 
@@ -1084,7 +1084,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
                 if is_ciris_proxy_url(base_url):
                     # Skip CIRIS proxy if user has disabled CIRIS services
                     if ciris_services_disabled:
-                        logger.info("🚫 Skipping CIRIS proxy (CIRIS_SERVICES_DISABLED=true)")
+                        logger.info(" Skipping CIRIS proxy (CIRIS_SERVICES_DISABLED=true)")
                         # Load any persisted runtime providers (user's BYOK providers)
                         await self._load_persisted_runtime_llm_providers()
                         # Get the first LLM service from registry to satisfy validation
@@ -1092,9 +1092,9 @@ This directory contains critical cryptographic keys for the CIRIS system.
                             llm_providers = self.service_registry._services.get(ServiceType.LLM, [])
                             if llm_providers:
                                 self.llm_service = llm_providers[0].instance
-                                logger.info(f"✓ Using persisted LLM provider: {llm_providers[0].name}")
+                                logger.info(f"[OK] Using persisted LLM provider: {llm_providers[0].name}")
                             else:
-                                logger.warning("⚠️ No LLM providers available after disabling CIRIS services")
+                                logger.warning("[WARN] No LLM providers available after disabling CIRIS services")
                         return
 
                     # Get all CIRIS proxy endpoints for multi-region failover
@@ -1270,7 +1270,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
                 "CIRIS_BILLING_APPLE_ID_TOKEN", ""
             )
             if id_token:
-                logger.info("📡 Primary LLM is local - registering CIRIS proxy as fallback")
+                logger.info(" Primary LLM is local - registering CIRIS proxy as fallback")
                 await self._initialize_ciris_proxy_fallback(config, id_token)
 
         # Optional: Initialize secondary LLM service
@@ -1287,7 +1287,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
         if is_ciris_proxy_secondary and google_id_token:
             # Skip secondary CIRIS proxy if user has disabled CIRIS services
             if ciris_services_disabled:
-                logger.info("🚫 Skipping secondary CIRIS proxy (CIRIS_SERVICES_DISABLED=true)")
+                logger.info(" Skipping secondary CIRIS proxy (CIRIS_SERVICES_DISABLED=true)")
             else:
                 # CIRIS proxy with JWT auth - always use fresh billing token
                 # (CIRIS_OPENAI_API_KEY_2 may contain a stale JWT from initial setup)
@@ -1427,7 +1427,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
         if self.resource_monitor_service and hasattr(self.resource_monitor_service, "signal_bus"):
             self.resource_monitor_service.signal_bus.register("token_refreshed", service.handle_token_refreshed)
 
-        logger.info(f"✓ CIRIS proxy fallback initialized: {model_name} ({len(base_urls)} endpoints)")
+        logger.info(f"[OK] CIRIS proxy fallback initialized: {model_name} ({len(base_urls)} endpoints)")
 
     async def _load_persisted_runtime_llm_providers(self) -> None:
         """Load runtime LLM providers that were persisted to config.
@@ -1584,7 +1584,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
                 password_hash = self.auth_service.hash_password(password)
                 await self.auth_service.update_wa(wa_id=wa_cert.wa_id, password_hash=password_hash)
 
-                logger.info(f"✅ Successfully created user: {username} (WA: {wa_cert.wa_id})")
+                logger.info(f"[OK] Successfully created user: {username} (WA: {wa_cert.wa_id})")
 
             # Process system admin password update if specified
             if "system_admin" in users_data:
@@ -1602,9 +1602,9 @@ This directory contains critical cryptographic keys for the CIRIS system.
                     # Hash new password and update
                     password_hash = self.auth_service.hash_password(new_password)
                     await self.auth_service.update_wa(wa_id=admin_wa.wa_id, password_hash=password_hash)
-                    logger.info(f"✅ Successfully updated admin password for {admin_username}")
+                    logger.info(f"[OK] Successfully updated admin password for {admin_username}")
                 else:
-                    logger.warning(f"⚠️  Admin user '{admin_username}' not found")
+                    logger.warning(f"[WARN] Admin user '{admin_username}' not found")
 
             # Delete the pending users file after processing
             pending_users_file.unlink()
@@ -1828,8 +1828,8 @@ This directory contains critical cryptographic keys for the CIRIS system.
                 if not self.llm_service:
                     logger.info("LLM service not initialized (first-run mode - will be initialized after setup)")
             elif ciris_disabled and not self.llm_service:
-                logger.warning("⚠️ No LLM provider configured - CIRIS services disabled and no local provider set up")
-                logger.warning("⚠️ Agent will start but cannot process requests until an LLM provider is added")
+                logger.warning("[WARN] No LLM provider configured - CIRIS services disabled and no local provider set up")
+                logger.warning("[WARN] Agent will start but cannot process requests until an LLM provider is added")
             elif not ciris_disabled:
                 # Only require LLM service when CIRIS services are enabled
                 critical_services["llm_service"] = self.llm_service
@@ -1844,7 +1844,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
                 logger.error("Audit service not initialized")
                 return False
 
-            logger.info("✓ All core services verified")
+            logger.info("[OK] All core services verified")
             return True
         except Exception as e:
             logger.error(f"Core services verification failed: {e}")

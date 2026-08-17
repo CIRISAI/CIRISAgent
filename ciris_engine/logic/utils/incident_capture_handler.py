@@ -108,15 +108,18 @@ class IncidentCaptureHandler(logging.Handler):
             f.write("=== This file contains WARNING and ERROR messages captured as incidents ===\n\n")
 
     def _create_symlink(self) -> None:
-        """Create or update the symlink to the latest incident log."""
-        try:
-            # Check if symlink exists (even if target is invalid)
-            if self.latest_link.is_symlink() or self.latest_link.exists():
-                self.latest_link.unlink()
-            self.latest_link.symlink_to(self.log_file.name)
-        except Exception as e:
-            # Symlinks might not work on all systems - log warning but don't fail
-            logging.warning(f"Failed to create/update incidents_latest.log symlink: {e}")
+        """Point incidents_latest.log at the current incident log.
+
+        Symlink where permitted, hardlink or a pointer file where not. This
+        previously symlinked unconditionally and swallowed the failure, so on
+        Windows -- where an unprivileged symlink raises WinError 1314 -- the file
+        our runbook tells everyone to read first did not exist.
+        """
+        from ciris_engine.logic.utils.latest_link import link_latest
+
+        kind = link_latest(self.latest_link, self.log_file)
+        if kind == "failed":
+            logging.warning("Could not create incidents_latest.log by any mechanism")
 
     def emit(self, record: logging.LogRecord) -> None:
         """

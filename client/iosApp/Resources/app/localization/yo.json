@@ -2451,7 +2451,8 @@
     "accord_remint_step3_title": "Ìgbésẹ̀ 3 — Ṣe ìpilẹ̀ṣẹ̀ tí a lè gbé kiri",
     "accord_remint_step_done": "Ó ti parí — irúgbìn náà ti gba àṣẹ",
     "accord_remint_step_of": "Ìgbésẹ̀ {step} nínú {total}",
-    "accord_remint_title": "Tún gbòǹgbò ìgbẹ́kẹ̀lé tí ó wà tẹ́lẹ̀ dá"
+    "accord_remint_title": "Tún gbòǹgbò ìgbẹ́kẹ̀lé tí ó wà tẹ́lẹ̀ dá",
+    "login_google_unavailable": "Ìwọlé pẹ̀lú {provider} kò sí lórí ìgbékalẹ̀ yìí."
   },
   "conscience": {
     "ponder_attempted": "Mo gbìyànjú láti {action}",
@@ -4002,5 +4003,7 @@
       "timed_out": "A kò parí ìwọlé nínú aṣàwákiri, nítorí náà kò sí ohun tí a yípadà. Gbìyànjú lẹ́ẹ̀kan sí i, tàbí lo àkàntì agbègbè dípò rẹ̀.",
       "waiting": "Parí ìwọlé pẹ̀lú Google nínú aṣàwákiri rẹ, lẹ́yìn náà padà wá síbí."
     }
-  }
+  },
+  "setup_validation_age_required": "Jọ̀wọ́ yan àṣàyàn ọjọ́-orí rẹ.",
+  "setup_validation_username_reserved": "A ti fi orúkọ olùṣàmúlò 'admin' pamọ́. Jọ̀wọ́ yan orúkọ olùṣàmúlò mìíràn."
 }

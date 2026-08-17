@@ -80,7 +80,7 @@ class HAIngressAuthProvider(IngressAuthProviderProtocol):
         if self._supervisor_mode:
             logger.info("[HA_INGRESS_AUTH] Supervisor mode detected - ingress auth enabled")
             if trust_all_ips:
-                logger.warning("[HA_INGRESS_AUTH] ⚠️ IP verification DISABLED - testing mode only!")
+                logger.warning("[HA_INGRESS_AUTH] [WARN] IP verification DISABLED - testing mode only!")
 
     def _is_trusted_ip(self, request: Request) -> bool:
         """Check if request comes from a trusted IP (HA Supervisor).

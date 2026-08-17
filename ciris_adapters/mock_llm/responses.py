@@ -217,7 +217,7 @@ def extract_context_from_messages(messages: List[Dict[str, Any]]) -> List[str]:
                                         "task_complete",
                                     ]
                                     if action in valid_actions:
-                                        logger.info(f"[MOCK_LLM] ✓ COMMAND FROM CONSCIENCE OVERRIDE: ${action}")
+                                        logger.info(f"[MOCK_LLM] [OK] COMMAND FROM CONSCIENCE OVERRIDE: ${action}")
                                         logger.info(f"[MOCK_LLM]   params: '{params}'")
                                         context_items.append(f"user_input:{new_user_message}")
                                         context_items.append(f"task:{new_user_message}")
@@ -377,13 +377,13 @@ def extract_context_from_messages(messages: List[Dict[str, Any]]) -> List[str]:
                                         "task_complete",
                                     ]
                                     if action in valid_actions:
-                                        logger.info(f"[MOCK_LLM] ✓ COMMAND DETECTED: ${action}")
+                                        logger.info(f"[MOCK_LLM] [OK] COMMAND DETECTED: ${action}")
                                         logger.info(f"[MOCK_LLM]   params: '{params}'")
                                         context_items.append(f"forced_action:{action}")
                                         if params:
                                             context_items.append(f"action_params:{params}")
                                     else:
-                                        logger.info(f"[MOCK_LLM] ✗ Unknown command: ${action}")
+                                        logger.info(f"[MOCK_LLM] [FAIL] Unknown command: ${action}")
                                 else:
                                     logger.info(f"[MOCK_LLM] Not a command (no $), treating as natural language")
                                 logger.info("=" * 60)

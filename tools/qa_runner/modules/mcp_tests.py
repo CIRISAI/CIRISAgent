@@ -94,7 +94,7 @@ class MCPTests:
 
     async def run(self) -> List[Dict[str, Any]]:
         """Run all MCP tests."""
-        self.console.print("\n[cyan]🔌 Testing MCP Adapter Loading & Operations[/cyan]")
+        self.console.print("\n[cyan] Testing MCP Adapter Loading & Operations[/cyan]")
 
         tests = [
             # Phase 1: Verify baseline system state
@@ -139,10 +139,10 @@ class MCPTests:
             try:
                 await test_func()
                 self.results.append({"test": name, "status": "✅ PASS", "error": None})
-                self.console.print(f"  ✅ {name}")
+                self.console.print(f" [OK] {name}")
             except Exception as e:
                 self.results.append({"test": name, "status": "❌ FAIL", "error": str(e)})
-                self.console.print(f"  ❌ {name}: {str(e)[:100]}")
+                self.console.print(f" [FAIL] {name}: {str(e)[:100]}")
                 if self.console.is_terminal:
                     self.console.print(f"     [dim]{traceback.format_exc()}[/dim]")
 
@@ -283,7 +283,7 @@ class MCPTests:
                 f"Available tools: {tool_names[:5]}"
             )
 
-        self.console.print(f"     [dim]MCP client connected via stdio, {len(mcp_tools)} tools discovered ✓[/dim]")
+        self.console.print(f" [dim]MCP client connected via stdio, {len(mcp_tools)} tools discovered [OK][/dim]")
 
     async def test_verify_tools_discovered(self) -> None:
         """Verify MCP tools were discovered and registered."""
@@ -736,7 +736,7 @@ class MCPTests:
             error_message = error.get("message", "") if isinstance(error, dict) else str(error)
             if "Authentication required" in error_message:
                 # This is EXPECTED behavior - HTTP without auth should be rejected
-                self.console.print("     [dim]Message tool correctly requires auth for HTTP ✓[/dim]")
+                self.console.print(" [dim]Message tool correctly requires auth for HTTP [OK][/dim]")
                 return
             else:
                 raise ValueError(f"Unexpected error: {error}")
@@ -752,7 +752,7 @@ class MCPTests:
         # Check for isError flag in result
         if result.get("isError"):
             if "Authentication required" in response_text:
-                self.console.print("     [dim]Message tool correctly requires auth for HTTP ✓[/dim]")
+                self.console.print(" [dim]Message tool correctly requires auth for HTTP [OK][/dim]")
                 return
             elif "No message handler available" in response_text:
                 # This means auth passed but handler not wired up
@@ -1365,6 +1365,6 @@ class MCPTests:
         total = len(self.results)
 
         if failed == 0:
-            self.console.print(f"\n[bold green]✅ All {total} MCP tests passed![/bold green]")
+            self.console.print(f"\n[bold green][OK] All {total} MCP tests passed![/bold green]")
         else:
-            self.console.print(f"\n[bold yellow]⚠️  {passed}/{total} tests passed, {failed} failed[/bold yellow]")
+            self.console.print(f"\n[bold yellow][WARN] {passed}/{total} tests passed, {failed} failed[/bold yellow]")

@@ -34,7 +34,7 @@ async def test_ciris_api():
         # Set auth header for all subsequent requests
         client.headers["Authorization"] = f"Bearer {token}"
 
-        print(f"✅ Login successful")
+        print(f"[OK] Login successful")
         print(f"   Token: {token[:30]}...")
         print(f"   Role: {auth_data.get('role', 'N/A')}")
 
@@ -45,7 +45,7 @@ async def test_ciris_api():
         response = await client.get("/v1/agent/status")
         status = response.json()
 
-        print(f"✅ Agent Status Retrieved")
+        print(f"[OK] Agent Status Retrieved")
         print(f"   State: {status.get('cognitive_state', 'N/A')}")
         print(f"   Uptime: {status.get('uptime_seconds', 0):.0f}s")
         print(f"   Messages: {status.get('messages_processed', 0)}")
@@ -57,7 +57,7 @@ async def test_ciris_api():
         response = await client.get("/v1/telemetry/unified?view=summary")
         telemetry = response.json()
 
-        print(f"✅ Telemetry Retrieved")
+        print(f"[OK] Telemetry Retrieved")
         print(f"   Services: {telemetry.get('services_online', 0)}/{telemetry.get('services_total', 0)} online")
         print(f"   Memory: {telemetry.get('memory_usage_mb', 0):.2f} MB")
         print(f"   CPU: {telemetry.get('cpu_usage_percent', 0):.1f}%")
@@ -87,7 +87,7 @@ async def test_ciris_api():
         response = await client.post("/v1/memory/store", json=node_data)
         store_result = response.json()
 
-        print(f"✅ Memory Store: {'Success' if response.status_code == 200 else f'Failed ({response.status_code})'}")
+        print(f"[OK] Memory Store: {'Success' if response.status_code == 200 else f'Failed ({response.status_code})'}")
         print(f"   Node ID: {node_id}")
 
         # Query recent memories
@@ -95,15 +95,15 @@ async def test_ciris_api():
         timeline = response.json()
         memory_count = len(timeline.get("memories", []))
 
-        print(f"✅ Memory Query: {memory_count} recent memories")
+        print(f"[OK] Memory Query: {memory_count} recent memories")
 
         # Test forget endpoint (FIXED!)
         response = await client.delete(f"/v1/memory/forget/{node_id}")
         if response.status_code == 200:
-            print(f"✅ Memory Forget: Success (import fix working!)")
+            print(f"[OK] Memory Forget: Success (import fix working!)")
         else:
             error = response.json()
-            print(f"❌ Memory Forget: Failed - {error.get('detail', 'Unknown error')}")
+            print(f"[FAIL] Memory Forget: Failed - {error.get('detail', 'Unknown error')}")
 
         # 5. Tools Endpoint (with Discord tools)
         print("\n5. TOOLS ENDPOINT")
@@ -118,7 +118,7 @@ async def test_ciris_api():
             providers = metadata.get("providers", [])
             provider_count = metadata.get("provider_count", 0)
 
-            print(f"✅ Tools Loaded: {total_tools} tools")
+            print(f"[OK] Tools Loaded: {total_tools} tools")
             print(f"   Providers: {provider_count} ({', '.join(providers)})")
 
             # Count by provider
@@ -133,13 +133,13 @@ async def test_ciris_api():
             # Check Discord tools specifically
             discord_count = provider_counts.get("DiscordToolService", 0)
             if discord_count >= 10:
-                print(f"   ✅ Discord tools fix confirmed: {discord_count} tools loaded!")
+                print(f" [OK] Discord tools fix confirmed: {discord_count} tools loaded!")
             elif discord_count > 0:
-                print(f"   ⚠️  Discord tools partial: {discord_count} tools")
+                print(f" [WARN] Discord tools partial: {discord_count} tools")
             else:
-                print(f"   ❌ Discord tools not loading")
+                print(f" [FAIL] Discord tools not loading")
         else:
-            print(f"❌ Tools endpoint format error")
+            print(f"[FAIL] Tools endpoint format error")
 
         # 6. Consent System
         print("\n6. CONSENT SYSTEM")
@@ -149,15 +149,15 @@ async def test_ciris_api():
         if response.status_code == 200:
             consents = response.json()
             consent_count = len(consents.get("consents", []))
-            print(f"✅ Active Consents: {consent_count}")
+            print(f"[OK] Active Consents: {consent_count}")
 
             # Check consent streams
             response = await client.get("/v1/consent/streams")
             if response.status_code == 200:
                 streams = response.json()
-                print(f"✅ Consent Streams: {len(streams.get('streams', []))} available")
+                print(f"[OK] Consent Streams: {len(streams.get('streams', []))} available")
         else:
-            print(f"⚠️  Consent endpoints need implementation")
+            print(f"[WARN] Consent endpoints need implementation")
 
         # 7. Audit System
         print("\n7. AUDIT SYSTEM")
@@ -167,7 +167,7 @@ async def test_ciris_api():
         audit_logs = response.json()
         entries = audit_logs.get("entries", [])
 
-        print(f"✅ Audit Logs: {len(entries)} entries retrieved")
+        print(f"[OK] Audit Logs: {len(entries)} entries retrieved")
         if entries:
             latest = entries[0]
             print(f"   Latest action: {latest.get('action', 'N/A')}")
@@ -182,7 +182,7 @@ async def test_ciris_api():
         )
         interaction = response.json()
 
-        print(f"✅ Agent Response Received")
+        print(f"[OK] Agent Response Received")
         message = interaction.get("response", "")
         print(f"   Message: {message[:100]}..." if len(message) > 100 else f"   Message: {message}")
         print(f"   State: {interaction.get('state', 'N/A')}")
@@ -195,7 +195,7 @@ async def test_ciris_api():
         response = await client.get("/v1/system/health")
         health = response.json()
 
-        print(f"✅ Health Check: {health.get('status', 'N/A')}")
+        print(f"[OK] Health Check: {health.get('status', 'N/A')}")
         print(f"   Services healthy: {health.get('services_healthy', 'N/A')}")
 
         # 10. Transparency
@@ -205,12 +205,12 @@ async def test_ciris_api():
         response = await client.get("/v1/transparency/decisions?limit=3")
         if response.status_code == 200:
             decisions = response.json()
-            print(f"✅ Decisions Feed: {len(decisions.get('decisions', []))} entries")
+            print(f"[OK] Decisions Feed: {len(decisions.get('decisions', []))} entries")
 
         response = await client.get("/v1/transparency/system_state")
         if response.status_code == 200:
             state = response.json()
-            print(f"✅ System State: Available")
+            print(f"[OK] System State: Available")
             print(f"   Cognitive: {state.get('cognitive_state', 'N/A')}")
             print(f"   Queue size: {state.get('processing_queue_size', 0)}")
 
@@ -219,24 +219,24 @@ async def test_ciris_api():
         print("QA TEST SUMMARY")
         print("=" * 80)
 
-        print("\n✅ KEY FIXES VERIFIED:")
+        print("\n[OK] KEY FIXES VERIFIED:")
         print("  1. Discord tools loading correctly (10 tools)")
         print("  2. Memory forget endpoint fixed (correct import)")
         print("  3. Tools endpoint metadata populated")
         print("  4. All services healthy with telemetry")
         print("  5. Agent interaction working with mock LLM")
 
-        print("\n📊 SYSTEM STATISTICS:")
+        print("\n SYSTEM STATISTICS:")
         print(f"  - Total tools: {total_tools}")
         print(f"  - Providers: {provider_count}")
         print(f"  - Services online: {telemetry.get('services_online', 0)}/{telemetry.get('services_total', 0)}")
         print(f"  - Uptime: {status.get('uptime_seconds', 0):.0f}s")
 
-        print("\n🎉 QA TEST COMPLETED SUCCESSFULLY!")
+        print("\n QA TEST COMPLETED SUCCESSFULLY!")
 
         # Logout
         await client.post("/v1/auth/logout")
-        print("\n✓ Logged out")
+        print("\n[OK] Logged out")
 
 
 if __name__ == "__main__":

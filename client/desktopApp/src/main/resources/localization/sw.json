@@ -2341,7 +2341,8 @@
     "accord_remint_step3_title": "Hatua ya 3 — Tengeneza mwanzo unaobebeka",
     "accord_remint_step_done": "Imekamilika — mbegu imeidhinishwa",
     "accord_remint_step_of": "Hatua ya {step} kati ya {total}",
-    "accord_remint_title": "Tengeneza upya mzizi wa uaminifu uliopo"
+    "accord_remint_title": "Tengeneza upya mzizi wa uaminifu uliopo",
+    "login_google_unavailable": "Kuingia kwa {provider} hakupatikani katika usakinishaji huu."
   },
   "prompts": {
     "dma": {
@@ -4010,5 +4011,7 @@
       "timed_out": "Kuingia hakukukamilika katika kivinjari, kwa hivyo hakuna kilichobadilishwa. Jaribu tena, au tumia akaunti ya karibu badala yake.",
       "waiting": "Maliza kuingia kwa kutumia Google katika kivinjari chako, kisha urudi hapa."
     }
-  }
+  },
+  "setup_validation_age_required": "Tafadhali chagua kundi lako la umri.",
+  "setup_validation_username_reserved": "Jina la mtumiaji 'admin' limehifadhiwa. Tafadhali chagua jina lingine la mtumiaji."
 }

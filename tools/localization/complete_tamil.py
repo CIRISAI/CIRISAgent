@@ -924,5 +924,5 @@ output_path = BASE_DIR / "ciris_engine/data/localized/ta.json"
 with open(output_path, "w", encoding="utf-8") as f:
     json.dump(ta_complete, f, ensure_ascii=False, indent=4)
 
-print(f"\n✓ Complete Tamil localization written to {output_path}")
-print(f"✓ All 1833+ keys translated")
+print(f"\n[OK] Complete Tamil localization written to {output_path}")
+print(f"[OK] All 1833+ keys translated")

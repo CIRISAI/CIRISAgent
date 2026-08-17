@@ -166,7 +166,7 @@ class WebUITestRunner:
             ServerStatus
         """
         print("\n" + "=" * 60)
-        print("🧪 CIRIS Web UI QA Test Runner")
+        print(" CIRIS Web UI QA Test Runner")
         print("=" * 60 + "\n")
 
         # Initialize server manager
@@ -179,21 +179,21 @@ class WebUITestRunner:
         status = self._server.start()
 
         if not status.healthy:
-            print(f"❌ Server failed to start: {status.error}")
+            print(f"[FAIL] Server failed to start: {status.error}")
             return status
 
         # Start browser
-        print("\n🌐 Starting browser...")
+        print("\n Starting browser...")
         self._browser = BrowserHelper(self.browser_config)
         await self._browser.start()
-        print("✅ Browser ready")
+        print("[OK] Browser ready")
 
         return status
 
     async def teardown(self) -> None:
         """Clean up test environment."""
         if self.keep_open:
-            print("\n🔓 Keep-open mode: Browser and server will remain running")
+            print("\n Keep-open mode: Browser and server will remain running")
             print(f"   Server: http://{self.server_config.host}:{self.server_config.port}")
             print("   Press Ctrl+C to stop when done")
             try:
@@ -201,9 +201,9 @@ class WebUITestRunner:
                 while True:
                     await asyncio.sleep(1)
             except (KeyboardInterrupt, asyncio.CancelledError):
-                print("\n🛑 Shutting down...")
+                print("\n Shutting down...")
 
-        print("\n🧹 Cleaning up...")
+        print("\n Cleaning up...")
 
         if self._browser:
             await self._browser.stop()
@@ -213,7 +213,7 @@ class WebUITestRunner:
             self._server.stop()
             self._server = None
 
-        print("✅ Cleanup complete")
+        print("[OK] Cleanup complete")
 
     async def run_test(self, test_name: str) -> TestReport:
         """
@@ -263,7 +263,7 @@ class WebUITestRunner:
 
             # Run full E2E flow
             print("\n" + "-" * 40)
-            print("📋 Running End-to-End Test Flow")
+            print(" Running End-to-End Test Flow")
             print("-" * 40 + "\n")
 
             reports = await test_full_e2e_flow(self._browser, self.test_config)
@@ -285,7 +285,7 @@ class WebUITestRunner:
 
         except Exception as e:
             suite.error = str(e)
-            print(f"\n💥 Test error: {e}")
+            print(f"\n[CRIT] Test error: {e}")
 
         finally:
             suite.end_time = datetime.now()
@@ -321,7 +321,7 @@ class WebUITestRunner:
 
             # Run selected tests
             print("\n" + "-" * 40)
-            print(f"📋 Running {len(test_names)} Selected Tests")
+            print(f" Running {len(test_names)} Selected Tests")
             print("-" * 40 + "\n")
 
             for test_name in test_names:
@@ -341,7 +341,7 @@ class WebUITestRunner:
 
         except Exception as e:
             suite.error = str(e)
-            print(f"\n💥 Test error: {e}")
+            print(f"\n[CRIT] Test error: {e}")
 
         finally:
             suite.end_time = datetime.now()
@@ -365,7 +365,7 @@ class WebUITestRunner:
             # Configure for first-run mode if needed
             if flow_name == "licensed_agent":
                 self.server_config.first_run_mode = True
-                print("🔓 Enabling first-run mode for licensed agent flow")
+                print(" Enabling first-run mode for licensed agent flow")
 
             # Setup
             status = await self.setup()
@@ -394,7 +394,7 @@ class WebUITestRunner:
 
         except Exception as e:
             suite.error = str(e)
-            print(f"\n💥 Test error: {e}")
+            print(f"\n[CRIT] Test error: {e}")
 
         finally:
             suite.end_time = datetime.now()
@@ -427,20 +427,20 @@ class WebUITestRunner:
     def print_summary(self, suite: WebUITestSuite) -> None:
         """Print test suite summary."""
         print("\n" + "=" * 60)
-        print("📊 TEST SUMMARY")
+        print(" TEST SUMMARY")
         print("=" * 60)
 
         print(f"\n  Duration: {suite.duration:.1f}s")
         print(f"  Total:    {len(suite.reports)}")
-        print(f"  Passed:   {suite.passed_count} ✅")
-        print(f"  Failed:   {suite.failed_count} ❌")
-        print(f"  Errors:   {suite.error_count} 💥")
-        print(f"  Skipped:  {suite.skipped_count} ⏭️")
+        print(f" Passed: {suite.passed_count} [OK]")
+        print(f" Failed: {suite.failed_count} [FAIL]")
+        print(f" Errors: {suite.error_count} [CRIT]")
+        print(f" Skipped: {suite.skipped_count} ⏭")
 
         if suite.success:
-            print("\n  🎉 ALL TESTS PASSED!")
+            print("\n ALL TESTS PASSED!")
         else:
-            print("\n  ⚠️  SOME TESTS FAILED")
+            print("\n [WARN] SOME TESTS FAILED")
 
             # List failures
             failures = [r for r in suite.reports if r.result in (TestResult.FAILED, TestResult.ERROR)]
@@ -455,7 +455,7 @@ class WebUITestRunner:
             all_screenshots.extend(r.screenshots)
 
         if all_screenshots:
-            print(f"\n  📸 Screenshots: {len(all_screenshots)}")
+            print(f"\n Screenshots: {len(all_screenshots)}")
             print(f"     Location: {self.output_dir}")
 
         print("\n" + "=" * 60 + "\n")
@@ -510,6 +510,6 @@ async def run_web_ui_tests(
 
     runner.print_summary(suite)
     report_path = runner.save_report(suite)
-    print(f"📄 Report saved: {report_path}")
+    print(f" Report saved: {report_path}")
 
     return suite

@@ -27,12 +27,12 @@ class APITestSuite:
         """Get authentication token."""
         response = requests.post(f"{BASE_URL}/v1/auth/login", json={"username": username, "password": password})
         if response.status_code != 200:
-            print(f"❌ Failed to get token: {response.status_code}")
+            print(f"[FAIL] Failed to get token: {response.status_code}")
             print(f"Response: {response.text}")
             sys.exit(1)
 
         token = response.json()["access_token"]
-        print(f"✅ Got auth token for {username}")
+        print(f"[OK] Got auth token for {username}")
         return token
 
     def test_endpoint(
@@ -64,11 +64,11 @@ class APITestSuite:
             elif method == "DELETE":
                 response = requests.delete(f"{BASE_URL}{path}", headers=headers)
             else:
-                print(f"❌ Unknown method: {method}")
+                print(f"[FAIL] Unknown method: {method}")
                 return False
 
             if response.status_code == expected_status:
-                print(f"✅ {name}: Status {response.status_code}")
+                print(f"[OK] {name}: Status {response.status_code}")
                 if response.status_code == 200:
                     try:
                         data = response.json()
@@ -88,7 +88,7 @@ class APITestSuite:
                 self.test_results[name] = {"success": True, "status": response.status_code}
                 return True
             else:
-                print(f"❌ {name}: Expected {expected_status}, got {response.status_code}")
+                print(f"[FAIL] {name}: Expected {expected_status}, got {response.status_code}")
                 print(f"   Response: {response.text[:200]}...")
                 self.test_results[name] = {
                     "success": False,
@@ -98,7 +98,7 @@ class APITestSuite:
                 return False
 
         except Exception as e:
-            print(f"❌ {name}: Exception {e}")
+            print(f"[FAIL] {name}: Exception {e}")
             self.test_results[name] = {"success": False, "error": str(e)}
             return False
 
@@ -109,7 +109,7 @@ class APITestSuite:
         print("=" * 60)
 
         # Login (already done in init)
-        print("✅ Login: Already authenticated")
+        print("[OK] Login: Already authenticated")
 
         # Verify token
         self.test_endpoint("Verify Token", "GET", "/v1/auth/verify")
@@ -241,11 +241,11 @@ class APITestSuite:
         # Final status
         print("\n" + "=" * 80)
         if passed == total:
-            print("🎉 ALL TESTS PASSED!")
+            print(" ALL TESTS PASSED!")
         elif passed >= total * 0.8:
-            print(f"✅ MOST TESTS PASSED ({passed}/{total})")
+            print(f"[OK] MOST TESTS PASSED ({passed}/{total})")
         else:
-            print(f"⚠️  SOME TESTS FAILED ({passed}/{total})")
+            print(f"[WARN] SOME TESTS FAILED ({passed}/{total})")
         print("=" * 80)
 
         return passed == total

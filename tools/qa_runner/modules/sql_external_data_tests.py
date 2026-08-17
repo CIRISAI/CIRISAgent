@@ -361,7 +361,7 @@ class SQLExternalDataTests:
             conn.commit()
             conn.close()
 
-            self.console.print(f"[green]✅ Test database created: {self.test_db_path}[/green]")
+            self.console.print(f"[green][OK] Test database created: {self.test_db_path}[/green]")
 
             # Create privacy schema YAML
             await self._create_privacy_schema()
@@ -421,7 +421,7 @@ global_identifier_column: user_id
         with open(self.privacy_schema_path, "w") as f:
             f.write(privacy_schema_yaml)
 
-        self.console.print(f"[green]✅ Privacy schema created: {self.privacy_schema_path}[/green]")
+        self.console.print(f"[green][OK] Privacy schema created: {self.privacy_schema_path}[/green]")
 
     async def _create_sql_config(self):
         """Create SQL service configuration JSON file."""
@@ -438,7 +438,7 @@ global_identifier_column: user_id
         with open(self.sql_config_path, "w") as f:
             json.dump(sql_config, f, indent=2)
 
-        self.console.print(f"[green]✅ SQL config created: {self.sql_config_path}[/green]")
+        self.console.print(f"[green][OK] SQL config created: {self.sql_config_path}[/green]")
 
     async def _test_service_initialization(self) -> Dict:
         """Test SQL service initialization with privacy schema via tool."""
@@ -852,7 +852,7 @@ global_identifier_column: user_id
             # Database file is gitignored
             # Privacy schema YAML is also gitignored
 
-            self.console.print("[green]✅ Cleanup complete[/green]")
+            self.console.print("[green][OK] Cleanup complete[/green]")
 
         except Exception as e:
-            self.console.print(f"[yellow]⚠️  Cleanup warning: {e}[/yellow]")
+            self.console.print(f"[yellow][WARN] Cleanup warning: {e}[/yellow]")

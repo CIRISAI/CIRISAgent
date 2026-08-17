@@ -200,7 +200,7 @@ def push_to_registry(
     # Duplicate-key (build already registered) is a successful no-op,
     # mirroring the historical register_agent_build.py contract.
     if result.returncode != 0 and "duplicate key" in output:
-        print(f"\n✓ Build {version} already registered (idempotent skip)")
+        print(f"\n[OK] Build {version} already registered (idempotent skip)")
         return True
     return result.returncode == 0
 

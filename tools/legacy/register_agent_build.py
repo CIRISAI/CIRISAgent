@@ -250,7 +250,7 @@ def register_build(
 
         # Handle duplicate key as success (build already registered)
         if result.returncode != 0 and "duplicate key" in output:
-            print(f"\n✓ Build {version} already registered (skipping)")
+            print(f"\n[OK] Build {version} already registered (skipping)")
             return True
 
         return result.returncode == 0

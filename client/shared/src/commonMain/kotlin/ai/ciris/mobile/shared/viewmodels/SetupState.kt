@@ -307,6 +307,10 @@ data class FederationIdentitySetupState(
      *  this is the single canonical name the user's federation identity is keyed
      *  by, so an empty/generic value would collide identities across devices. */
     val label: String = "",
+    /** True once the user edits the Fed-ID label field directly. Until then the
+     *  label AUTO-DERIVES from the username / OAuth id (see [SetupViewModel]), so
+     *  the YOU step needs one fewer field to fill in the common case. */
+    val labelManuallyEdited: Boolean = false,
     /** Custody backend hint. ALWAYS `null` now — the only option is the SECURE
      *  one: the substrate auto-picks the most secure custody available
      *  (YubiKey → TPM/Secure-Enclave → software). The UI exposes no selection. */
@@ -753,6 +757,10 @@ data class SetupFormState(
         // fail-secure (CC 0.5.1 §2580): an under-18 founder must not self-claim.
         // The age band itself is optional; declining sets the protective default.
         SetupStep.YOU -> {
+            // Age now leads the YOU step and is REQUIRED — it also seeds the fed-ID
+            // and the minor-stewardship gate, so nothing below it can be judged
+            // until it's answered.
+            val ageOk = ageRange.selectedBandToken != null
             val fedIdOk = federationIdentity.minted ||
                 federationIdentity.admitted ||
                 federationIdentity.isLabelValid()
@@ -763,7 +771,7 @@ data class SetupFormState(
                 true
             }
             val stewardshipOk = !isMinorBand() || minorStewardship.requested
-            fedIdOk && accountOk && stewardshipOk
+            ageOk && fedIdOk && accountOk && stewardshipOk
         }
 
         // Every consent here is a real choice with a stated default, including
@@ -813,6 +821,11 @@ data class SetupFormState(
             val accountError = if (showLocalUserFields()) {
                 when {
                     username.isEmpty() -> LocalizationHelper.getString("setup_validation_username_required")
+                    // Reject 'admin' client-side (the backend reserves it — see
+                    // api/routes/setup/models.py) so the user gets an inline error
+                    // now instead of a 422 at completeSetup after the whole wizard.
+                    username.trim().lowercase() == "admin" ->
+                        LocalizationHelper.getString("setup_validation_username_reserved")
                     userPassword.isEmpty() -> LocalizationHelper.getString("setup_validation_password_required")
                     userPassword.length < 8 -> LocalizationHelper.getString("setup_validation_password_length")
                     userPassword != userPasswordConfirm -> LocalizationHelper.getString("setup_validation_password_mismatch")
@@ -826,7 +839,14 @@ data class SetupFormState(
             } else {
                 null
             }
-            fedIdError ?: accountError ?: stewardshipError
+            // Age is the first thing asked now, so its "please choose" is the first
+            // reason surfaced when Next is disabled.
+            val ageError = if (ageRange.selectedBandToken == null) {
+                LocalizationHelper.getString("setup_validation_age_required")
+            } else {
+                null
+            }
+            ageError ?: fedIdError ?: accountError ?: stewardshipError
         }
 
         SetupStep.JOIN_FEDERATION -> null

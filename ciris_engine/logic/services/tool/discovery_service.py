@@ -175,7 +175,7 @@ class AdapterDiscoveryService:
                 try:
                     files = pkg_resources.files(package_name)
                     manifest_path = files.joinpath("manifest.json")
-                    manifest_text = manifest_path.read_text()
+                    manifest_text = manifest_path.read_text(encoding="utf-8")
                     manifest_data = json.loads(manifest_text)
 
                     # Parse into ServiceManifest

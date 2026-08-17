@@ -790,7 +790,7 @@ async def _check_adapter_health(adapter: Any) -> bool:
         return True
 
     if not hasattr(adapter, "is_healthy"):
-        logger.warning(f"  ⚠️  {adapter_name} has no is_healthy method")
+        logger.warning(f" [WARN] {adapter_name} has no is_healthy method")
         return False
 
     try:
@@ -799,7 +799,7 @@ async def _check_adapter_health(adapter: Any) -> bool:
             logger.debug(f"  ⏳ {adapter_name} not yet healthy, waiting...")
             return False
         else:
-            logger.info(f"  ✓ {adapter_name} is healthy and connected")
+            logger.info(f" [OK] {adapter_name} is healthy and connected")
             return True
     except Exception as e:
         logger.debug(f"  ⏳ {adapter_name} health check failed: {e}")
@@ -846,7 +846,7 @@ async def verify_adapter_service_registration(runtime: Any) -> bool:
                             required_capabilities=["send_message"],
                         )
                         if test_service:
-                            logger.info("  ✅ All adapters connected and services registered!")
+                            logger.info(" [OK] All adapters connected and services registered!")
                             return True
                     except Exception as e:
                         logger.debug(f"Service registration check failed: {e}")

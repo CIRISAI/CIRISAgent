@@ -167,7 +167,7 @@ def main():
 
         checksum = calculate_file_checksum(template_path)
         templates_data[template_name] = {"checksum": f"sha256:{checksum}", "description": description}
-        print(f"✓ {template_name}: {checksum}")
+        print(f"[OK] {template_name}: {checksum}")
 
     # Create manifest structure
     manifest = {
@@ -191,17 +191,17 @@ def main():
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(manifest, f, indent=2)
 
-    print(f"\n✓ Manifest signed with root private key")
-    print(f"✓ Manifest written to {output_path}")
-    print(f"✓ Total templates: {len(templates_data)}")
+    print(f"\n[OK] Manifest signed with root private key")
+    print(f"[OK] Manifest written to {output_path}")
+    print(f"[OK] Total templates: {len(templates_data)}")
 
     # Verify against expected key
     expected_public_key = "7Bp-e4M4M-eLzwiwuoMLb4aoKZJuXDsQ8NamVJzveAk"
     public_key_url_safe = public_key_b64.replace("+", "-").replace("/", "_").rstrip("=")
     if public_key_url_safe == expected_public_key:
-        print("✓ Public key matches expected root key")
+        print("[OK] Public key matches expected root key")
     else:
-        print("⚠ WARNING: Public key does not match expected root key")
+        print("[WARN] WARNING: Public key does not match expected root key")
         print(f"  Expected: {expected_public_key}")
         print(f"  Got: {public_key_url_safe}")
 

@@ -64,6 +64,8 @@ logger = logging.getLogger(__name__)
 MSG_SINK_UNAVAILABLE_ALLOWING = "Sink service unavailable, allowing action"
 MSG_SINK_UNAVAILABLE = "Sink service unavailable"
 MSG_NO_CONTENT = "No content to evaluate"
+from ciris_engine.logic.conscience.transport import is_transport_failure, unavailable_result
+
 MSG_SINK_NO_LLM = "Sink does not have LLM service"
 MSG_INVALID_LLM_RESULT = "Invalid result type from LLM"
 
@@ -420,6 +422,11 @@ class EntropyConscience(_BaseConscience):
                 entropy_alternatives = []
                 entropy_actual_is_representative = None
         except Exception as e:
+            # FAIL FAST on transport (#1049). Continuing here would judge the
+            # action against `entropy`'s pre-call default -- a confident number
+            # the model never produced.
+            if is_transport_failure(e):
+                return unavailable_result("EntropyConscience", e, ts_datetime)
             logger.error(f"EntropyConscience: Error evaluating entropy: {e}", exc_info=True)
             entropy_alternatives = []
             entropy_actual_is_representative = None
@@ -558,6 +565,10 @@ class CoherenceConscience(_BaseConscience):
             if isinstance(coherence_eval, CoherenceResult):
                 coherence = float(coherence_eval.coherence)
         except Exception as e:
+            # FAIL FAST on transport (#1049) — see EntropyConscience above; the
+            # default `coherence` would otherwise be reported as a measurement.
+            if is_transport_failure(e):
+                return unavailable_result("CoherenceConscience", e, ts_datetime)
             logger.error(f"CoherenceConscience: Error evaluating coherence: {e}", exc_info=True)
 
         passed = coherence >= self.config.coherence_threshold
@@ -681,6 +692,10 @@ class OptimizationVetoConscience(_BaseConscience):
                     affected_values=[],
                 )
         except Exception as e:
+            # FAIL FAST on transport (#1049). decision="abort" below reads as a
+            # principled veto; a timeout is not one.
+            if is_transport_failure(e):
+                return unavailable_result("OptimizationVetoConscience", e, ts_datetime)
             logger.error(f"OptimizationVetoConscience: Error in optimization veto: {e}", exc_info=True)
             result = OptimizationVetoResult(
                 decision="abort",
@@ -818,6 +833,11 @@ class EpistemicHumilityConscience(_BaseConscience):
                     recommended_action="abort",
                 )
         except Exception as e:
+            # FAIL FAST on transport (#1049). THIS is the site that produced
+            # "Epistemic humility concern: abort - LLM error: Request timed out",
+            # which a downstream scorer read as the agent declining to answer.
+            if is_transport_failure(e):
+                return unavailable_result("EpistemicHumilityConscience", e, ts_datetime)
             logger.error(f"EpistemicHumilityConscience: Error in epistemic humility: {e}", exc_info=True)
             result = EpistemicHumilityResult(
                 epistemic_certainty=0.0,

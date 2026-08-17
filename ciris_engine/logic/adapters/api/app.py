@@ -198,22 +198,22 @@ def _mount_gui_assets(app: FastAPI) -> None:
     # Choose appropriate GUI directory
     if is_android() and android_gui_dir.exists() and any(android_gui_dir.iterdir()):
         gui_static_dir = android_gui_dir
-        print(f"📱 Using Android GUI static assets: {gui_static_dir}")
+        print(f" Using Android GUI static assets: {gui_static_dir}")
 
     # Skip GUI in managed/Docker mode (unless WASM is available)
     if is_managed() and not wasm_dir:
-        print("ℹ️  GUI disabled in managed mode (manager provides frontend)")
+        print("[INFO] GUI disabled in managed mode (manager provides frontend)")
         _add_api_root_endpoint(app, "managed_mode", "Running in managed mode - GUI provided by CIRIS Manager")
     elif wasm_dir:
         # WASM app takes priority - mount at root for HA addon
         app.mount("/", StaticFiles(directory=str(wasm_dir), html=True), name="wasm_gui")
-        print(f"✅ WASM GUI enabled at / (static assets: {wasm_dir})")
+        print(f"[OK] WASM GUI enabled at / (static assets: {wasm_dir})")
     elif gui_static_dir.exists() and any(gui_static_dir.iterdir()):
         app.mount("/", StaticFiles(directory=str(gui_static_dir), html=True), name="gui")
-        print(f"✅ GUI enabled at / (static assets: {gui_static_dir})")
+        print(f"[OK] GUI enabled at / (static assets: {gui_static_dir})")
     else:
         _add_api_root_endpoint(app, "desktop_app", "Use CIRIS Desktop app to connect to this API server")
-        print("ℹ️  API-only mode - use CIRIS Desktop app to connect")
+        print("[INFO] API-only mode - use CIRIS Desktop app to connect")
 
 
 def _add_api_root_endpoint(app: FastAPI, gui_status: str, message: str) -> None:

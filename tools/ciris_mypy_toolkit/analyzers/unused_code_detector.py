@@ -419,12 +419,12 @@ class UnusedCodeDetector:
 
     def propose_cleanup(self) -> Dict[str, Any]:
         """Propose cleanup actions for agent review."""
-        logger.info("🔍 Analyzing cleanup opportunities for agent review...")
+        logger.info(" Analyzing cleanup opportunities for agent review...")
         return {"total_proposed": 0, "changes": []}  # Stub for now
 
     def apply_approved_cleanup(self, approved_changes: Dict[str, Any]) -> int:
         """Apply agent-approved cleanup."""
-        logger.info("🎯 Applying agent-approved cleanup...")
+        logger.info(" Applying agent-approved cleanup...")
         return 0  # Stub for now
 
     def remove_unused_code(self, categories: List[str] = None) -> int:

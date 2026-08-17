@@ -40,7 +40,7 @@ class AdapterLoader:
             manifest_path = service_dir / "manifest.json"
             if manifest_path.exists():
                 try:
-                    with open(manifest_path) as f:
+                    with open(manifest_path, encoding="utf-8") as f:
                         manifest_data = json.load(f)
 
                     # Parse into typed manifest

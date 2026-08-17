@@ -306,7 +306,7 @@ class AgentProcessor:
 
         # Skip wakeup sequence if bypassed
         if wakeup_bypassed:
-            logger.info("✓ Wakeup bypassed - proceeding directly to WORK state")
+            logger.info("[OK] Wakeup bypassed - proceeding directly to WORK state")
             self.state_manager.update_state_metadata("wakeup_complete", True)
             self.state_manager.update_state_metadata("wakeup_bypassed", True)
         else:
@@ -345,7 +345,7 @@ class AgentProcessor:
                     round_delay = 0.1 if is_mock_llm else 5.0
                     await asyncio.sleep(round_delay)
                 else:
-                    logger.info("✓ Wakeup sequence completed successfully!")
+                    logger.info("[OK] Wakeup sequence completed successfully!")
 
                 wakeup_round += 1
                 self.current_round_number += 1

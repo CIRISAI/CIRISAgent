@@ -89,6 +89,15 @@ class ConscienceApplicationResult(BaseModel):
     final_action: ActionSelectionDMAResult = Field(..., description="Final action after consciences")
     overridden: bool = Field(False, description="Whether action was overridden")
     override_reason: Optional[str] = Field(None, description="Reason for override")
+    conscience_unavailable: bool = Field(
+        False,
+        description=(
+            "True when the override came from a shard that COULD NOT REACH ITS MODEL rather than "
+            "from a judgement. The processor must not retry: the retry makes the same call and "
+            "spends another full timeout. CIRISAgent#1049 observed 28 CONSCIENCE_RETRY lines and "
+            "a 142s conscience call before the turn was abandoned."
+        ),
+    )
     epistemic_data: EpistemicData = Field(..., description="Epistemic faculty data from conscience checks (REQUIRED)")
 
     # === BYPASS GUARDRAILS ===

@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from ciris_engine.schemas.accord import AccordCommandType, AccordMessage, AccordVerificationResult
+from ciris_engine.logic.utils.hard_kill import terminate_immediately
 
 logger = logging.getLogger(__name__)
 
@@ -86,8 +87,9 @@ async def execute_shutdown(
     # Send the signal
     pid = os.getpid()
     if force:
-        logger.critical("Sending SIGKILL to self")
-        os.kill(pid, signal.SIGKILL)
+        # signal.SIGKILL does not exist on Windows; terminate_immediately picks
+        # the right uncatchable primitive per platform.
+        terminate_immediately("ACCORD SHUTDOWN_NOW (force)")
     else:
         logger.critical("Sending SIGTERM to self")
         os.kill(pid, signal.SIGTERM)

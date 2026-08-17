@@ -513,7 +513,7 @@ def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Opti
             "node fold: read-API did not bind 127.0.0.1:4243 in the bind window "
             f"(node-fails ⇒ agent-fails); compose phase at expiry: {_wedged or 'unknown (no compose_status — wheel <0.5.120?)'}"
         )
-    logger.info("Node fold: node runtime started — substrate read-API LISTENING on 4243 ✅")
+    logger.info("Node fold: node runtime started — substrate read-API LISTENING on 4243 [OK]")
 
     # Hand the node the deployment's OAuth providers now that it is serving.
     #

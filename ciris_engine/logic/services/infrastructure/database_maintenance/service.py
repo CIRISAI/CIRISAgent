@@ -293,7 +293,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
             thought_archive_file = self.archive_dir / f"archive_thoughts_{archive_timestamp_str}.jsonl"
             thought_ids_to_delete_for_archive: List[Any] = []
 
-            async with aiofiles.open(thought_archive_file, "w") as f:
+            async with aiofiles.open(thought_archive_file, "w", encoding="utf-8") as f:
                 for thought in thoughts_to_archive:
                     # Archive all thoughts older than threshold
                     await f.write(thought.model_dump_json() + "\n")
@@ -716,7 +716,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
             old_configs = await self.config_service.list_configs(prefix="adapter.ciris_covenant_metrics.")
             if old_configs:
                 logger.warning("=" * 70)
-                logger.warning("⚠️  LEGACY CONFIG DETECTED: ciris_covenant_metrics")
+                logger.warning("[WARN] LEGACY CONFIG DETECTED: ciris_covenant_metrics")
                 logger.warning("   This adapter was renamed to ciris_accord_metrics in CIRIS 2.0.2")
                 logger.warning("   Please reconfigure the adapter through the setup wizard or update")
                 logger.warning("   your .env file to use CIRIS_ACCORD_METRICS_* environment variables.")

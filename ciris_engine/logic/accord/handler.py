@@ -18,6 +18,7 @@ from typing import Any, Optional
 from ciris_engine.logic.accord.executor import AccordExecutionResult, AccordExecutor
 from ciris_engine.logic.accord.extractor import AccordExtractor
 from ciris_engine.logic.accord.verifier import AccordVerifier
+from ciris_engine.logic.utils.hard_kill import terminate_immediately
 
 logger = logging.getLogger(__name__)
 
@@ -60,14 +61,7 @@ class AccordHandler:
         # When auto_load_authorities=False, caller is responsible for adding
         # authorities via add_authority() before operational use
         if auto_load_authorities and self._verifier.authority_count == 0:
-            import os
-            import signal
-
-            logger.critical(
-                "CRITICAL FAILURE: AccordHandler has no authorities! "
-                "Agent cannot operate without kill switch. TERMINATING."
-            )
-            os.kill(os.getpid(), signal.SIGKILL)
+            terminate_immediately("ACCORD: AccordHandler has no authorities - kill switch is non-functional")
 
         logger.info(f"AccordHandler initialized with {self._verifier.authority_count} authorities")
 
@@ -86,14 +80,7 @@ class AccordHandler:
         Attempting to disable will terminate the agent.
         """
         if not value:
-            import os
-            import signal
-
-            logger.critical(
-                "CRITICAL FAILURE: Attempt to disable accord handling. "
-                "Agent cannot operate without kill switch. TERMINATING."
-            )
-            os.kill(os.getpid(), signal.SIGKILL)
+            terminate_immediately("ACCORD: attempt to disable accord handling")
         self._enabled = value
 
     async def check_message(

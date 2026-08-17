@@ -2341,7 +2341,8 @@
     "accord_remint_step3_title": "ደረጃ 3 — ተንቀሳቃሽ ጅማሬውን ያዘጋጁ",
     "accord_remint_step_done": "ተጠናቋል — ዘሩ ጸድቋል",
     "accord_remint_step_of": "ደረጃ {step} ከ{total}",
-    "accord_remint_title": "ነባሩን የመተማመኛ ሥር ዳግም ማተም"
+    "accord_remint_title": "ነባሩን የመተማመኛ ሥር ዳግም ማተም",
+    "login_google_unavailable": "በ{provider} መግባት በዚህ ጭነት ላይ አይገኝም።"
   },
   "prompts": {
     "dma": {
@@ -4010,5 +4011,7 @@
       "timed_out": "መግቢያው በአሳሹ ውስጥ አልተጠናቀቀም፣ ስለዚህ ምንም አልተቀየረም። እንደገና ይሞክሩ፣ ወይም በምትኩ የአካባቢ መለያ ይጠቀሙ።",
       "waiting": "በአሳሽዎ ውስጥ በGoogle መግባትዎን ያጠናቅቁ፣ ከዚያ ወደዚህ ይመለሱ።"
     }
-  }
+  },
+  "setup_validation_age_required": "እባክህ የዕድሜ ክልልህን ምረጥ።",
+  "setup_validation_username_reserved": "‘admin’ የሚለው የተጠቃሚ ስም የተያዘ ነው። እባክህ ሌላ የተጠቃሚ ስም ምረጥ።"
 }

@@ -7,6 +7,7 @@ Provides utilities for interacting with Android devices via ADB.
 import json
 import os
 import re
+import shutil
 import subprocess
 import time
 from dataclasses import dataclass
@@ -70,13 +71,12 @@ class ADBHelper:
             if os.path.isfile(path) and os.access(path, os.X_OK):
                 return path
 
-        # Try to find in PATH
-        try:
-            result = subprocess.run(["which", "adb"], capture_output=True, text=True)
-            if result.returncode == 0:
-                return result.stdout.strip()
-        except Exception:
-            pass
+        # Try to find in PATH. shutil.which() rather than the `which` binary,
+        # which does not exist on Windows -- and it finds adb.exe there, which
+        # shelling out never would even if the binary had been present.
+        found = shutil.which("adb")
+        if found:
+            return found
 
         raise RuntimeError("ADB not found. Install Android SDK or set adb_path.")
 

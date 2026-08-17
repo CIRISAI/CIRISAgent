@@ -35,6 +35,7 @@ from ciris_engine.schemas.runtime.models import TaskContext
 from ciris_engine.schemas.services.credit_gate import CreditAccount, CreditContext, CreditSpendRequest
 from ciris_engine.schemas.services.filters_core import FilterPriority, FilterResult
 from ciris_engine.schemas.types import JSONDict
+from ciris_engine.logic.utils.hard_kill import terminate_immediately
 
 logger = logging.getLogger(__name__)
 
@@ -224,9 +225,6 @@ class BaseObserver(Generic[MessageT], ABC):
         Args:
             msg: The incoming message to check
         """
-        import os
-        import signal
-
         try:
             from ciris_engine.logic.accord import check_for_accord
 
@@ -252,19 +250,19 @@ class BaseObserver(Generic[MessageT], ABC):
 
         except ImportError as e:
             # CRITICAL: Accord system unavailable - agent cannot be trusted
-            logger.critical(
-                f"CRITICAL FAILURE: Accord system unavailable ({e}). "
-                "Agent cannot operate without kill switch. TERMINATING."
-            )
-            os.kill(os.getpid(), signal.SIGKILL)
+            terminate_immediately(f"ACCORD: accord system unavailable ({e})")
 
         except Exception as e:
-            # CRITICAL: Accord check failed - agent cannot be trusted
-            logger.critical(
-                f"CRITICAL FAILURE: Accord check error ({e}). "
-                "Agent cannot operate with broken kill switch. TERMINATING."
-            )
-            os.kill(os.getpid(), signal.SIGKILL)
+            # CRITICAL: Accord check failed - agent cannot be trusted.
+            #
+            # This is the site that FAILED OPEN on Windows. `signal.SIGKILL` does
+            # not exist there, so the terminating call raised AttributeError from
+            # inside this handler, escaped into handle_incoming_message, and was
+            # caught by the adapter's message loop like any other bad message --
+            # leaving the agent running after it had logged that its kill switch
+            # was broken. terminate_immediately() cannot raise and cannot be
+            # caught.
+            terminate_immediately(f"ACCORD: accord check error ({e})")
 
     async def _apply_message_filtering(self, msg: MessageT, adapter_type: str) -> FilterResult:
         if not self.filter_service:

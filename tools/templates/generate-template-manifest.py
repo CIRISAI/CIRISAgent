@@ -152,7 +152,7 @@ def main():
 
         checksum = calculate_file_checksum(template_path)
         manifest["templates"][template_name] = {"checksum": f"sha256:{checksum}", "description": description}
-        print(f"✓ {template_name}: {checksum}")
+        print(f"[OK] {template_name}: {checksum}")
 
     # Sign the manifest if we have a key
     if signing_key:
@@ -170,10 +170,10 @@ def main():
         # Also include the public key for verification
         public_key = signing_key.verify_key
         manifest["root_public_key"] = base64.b64encode(public_key.encode()).decode("ascii")
-        print("\n✓ Manifest signed with root private key")
-        print(f"✓ Public key: {manifest['root_public_key']}")
+        print("\n[OK] Manifest signed with root private key")
+        print(f"[OK] Public key: {manifest['root_public_key']}")
     else:
-        print("\n⚠ Manifest not signed (key not available)")
+        print("\n[WARN] Manifest not signed (key not available)")
         manifest["root_signature"] = "NEEDS_SIGNING"
         manifest["root_public_key"] = "NEEDS_KEY"
 
@@ -182,7 +182,7 @@ def main():
     with open(output_path, "w") as f:
         json.dump(manifest, f, indent=2)
 
-    print(f"\n✓ Manifest written to {output_path}")
+    print(f"\n[OK] Manifest written to {output_path}")
 
 
 if __name__ == "__main__":

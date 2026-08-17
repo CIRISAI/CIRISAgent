@@ -2341,7 +2341,8 @@
     "accord_remint_step3_title": "Passo 3 — Produzir a génese portátil",
     "accord_remint_step_done": "Concluído — a semente está autorizada",
     "accord_remint_step_of": "Passo {step} de {total}",
-    "accord_remint_title": "Recunhar raiz de confiança existente"
+    "accord_remint_title": "Recunhar raiz de confiança existente",
+    "login_google_unavailable": "Entrar com {provider} não está disponível nesta instalação."
   },
   "prompts": {
     "dma": {
@@ -4041,5 +4042,7 @@
       "timed_out": "O início de sessão não foi concluído no navegador, portanto nada foi alterado. Tente novamente ou use uma conta local.",
       "waiting": "Conclua o início de sessão com a Google no seu navegador e depois volte aqui."
     }
-  }
+  },
+  "setup_validation_age_required": "Por favor, escolha sua faixa etária.",
+  "setup_validation_username_reserved": "O nome de usuário \"admin\" é reservado. Escolha outro nome de usuário."
 }

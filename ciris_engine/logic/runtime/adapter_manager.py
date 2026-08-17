@@ -968,7 +968,7 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                 logger.debug(f"[AUTH_STEP_INFO] {adapter_type}: manifest not found, returning False")
                 return False, None
 
-            with open(manifest_path) as f:
+            with open(manifest_path, encoding="utf-8") as f:
                 manifest_data = json.load(f)
 
             interactive_config = manifest_data.get("interactive_config")
@@ -1012,7 +1012,7 @@ class RuntimeAdapterManager(AdapterManagerInterface):
 
             if template_overlay_path.exists():
                 try:
-                    async with aiofiles.open(template_overlay_path, "r") as f:
+                    async with aiofiles.open(template_overlay_path, "r", encoding="utf-8") as f:
                         content = await f.read()
                         template_data = yaml.safe_load(content) or {}
 

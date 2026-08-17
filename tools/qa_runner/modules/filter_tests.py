@@ -92,7 +92,7 @@ class FilterTestModule(BaseTestModule):
                 except AssertionError as e:
                     self._record_result(name, False, str(e))
                     if self.fail_fast:
-                        self.console.print(f"\n[red]🛑 FAIL-FAST: Stopping at first failure[/red]")
+                        self.console.print(f"\n[red] FAIL-FAST: Stopping at first failure[/red]")
                         self.console.print(f"[dim]   Use --proceed-anyway to continue after failures[/dim]")
                         break
                 except Exception as e:
@@ -100,7 +100,7 @@ class FilterTestModule(BaseTestModule):
                     if self.console.is_terminal:
                         self.console.print(f"     [dim]{traceback.format_exc()[:500]}[/dim]")
                     if self.fail_fast:
-                        self.console.print(f"\n[red]🛑 FAIL-FAST: Stopping at first failure[/red]")
+                        self.console.print(f"\n[red] FAIL-FAST: Stopping at first failure[/red]")
                         self.console.print(f"[dim]   Use --proceed-anyway to continue after failures[/dim]")
                         break
         finally:

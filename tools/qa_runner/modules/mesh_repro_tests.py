@@ -197,7 +197,7 @@ class MeshReproTests:
             self.console.print(f"  {status} {test_name}: {error}")
 
     async def run(self) -> List[Dict[str, Any]]:
-        self.console.print("\n[bold cyan]🕸️  Mesh-Repro QA Stage (#924)[/bold cyan]")
+        self.console.print("\n[bold cyan] Mesh-Repro QA Stage (#924)[/bold cyan]")
         self.console.print("=" * 70)
         self._test_prod_wheel_guard()
         self._test_traceflow_harness()
@@ -439,7 +439,7 @@ class MeshReproTests:
         while proc.poll() is None:
             if time.monotonic() - started > timeout_secs:
                 timed_out = True
-                self.console.print(f"    [red]⏱️  harness exceeded {timeout_secs:.0f}s — terminating stack[/red]")
+                self.console.print(f" [red] harness exceeded {timeout_secs:.0f}s — terminating stack[/red]")
                 try:
                     os.killpg(proc.pid, signal.SIGTERM)
                 except (OSError, ProcessLookupError):

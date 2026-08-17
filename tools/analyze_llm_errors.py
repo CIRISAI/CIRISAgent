@@ -224,7 +224,7 @@ def print_report(stats: dict, log_path: str):
     cb_opens = len([e for e in stats["circuit_breaker_events"] if e["event"] == "OPENED"])
 
     if rl_count > 0 and cb_opens > 0:
-        print("  ⚠️  Rate limits triggered circuit breaker opening")
+        print(" [WARN] Rate limits triggered circuit breaker opening")
         print("     - Fix: Rate limits should NOT count as circuit breaker failures")
         print("     - Rate limits are transient; circuit breaker is for persistent failures")
 
@@ -233,13 +233,13 @@ def print_report(stats: dict, log_path: str):
             1, len([r for r in stats["rate_limits"] if r["retry_after"]])
         )
         if avg_retry > 0:
-            print(f"  💡 API suggests retry after ~{avg_retry:.1f}s on average")
+            print(f" API suggests retry after ~{avg_retry:.1f}s on average")
             print(f"     - Consider setting retry wait to {max(2, avg_retry + 0.5):.1f}s")
 
     token_events = [r for r in stats["rate_limits"] if r["used"] and r["limit"]]
     if token_events:
         avg_usage_pct = sum(e["used"] / e["limit"] * 100 for e in token_events) / len(token_events)
-        print(f"  📊 Average token usage at rate limit: {avg_usage_pct:.1f}%")
+        print(f" Average token usage at rate limit: {avg_usage_pct:.1f}%")
         if avg_usage_pct > 90:
             print("     - Tokens nearly exhausted before rate limit")
             print("     - Consider reducing concurrent LLM calls")

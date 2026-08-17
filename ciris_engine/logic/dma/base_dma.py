@@ -106,7 +106,17 @@ class BaseDMA(ABC, Generic[InputT, DMAResultT]):
                     self.prompts = overrides
                     return
 
-                with open(prompt_file, "r") as f:
+                # encoding="utf-8" is REQUIRED, not tidiness. Without it Python
+                # uses the locale default, which on Windows is cp1252, and the
+                # prompt YAML failed to load entirely:
+                #
+                #   Failed to load prompts from ...\action_selection_pdma.yml:
+                #   'charmap' codec can't decode byte 0x8f in position 7288
+                #
+                # It is caught and logged as a WARNING below, so the agent then
+                # reasoned with fallback prompts and kept running -- a silent
+                # behavioural change on one platform, not a crash anyone chases.
+                with open(prompt_file, "r", encoding="utf-8") as f:
                     file_prompts = yaml.safe_load(f) or {}
 
                 # Research-override application (#989). This path reads the YAML

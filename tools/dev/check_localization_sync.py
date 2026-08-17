@@ -223,13 +223,13 @@ def main() -> int:
 
     bundle = REPO_ROOT / PRIMARY_BUNDLE
     if not (bundle / "en.json").exists():
-        print(f"❌ ERROR: primary bundle en.json not found at {PRIMARY_BUNDLE}")
+        print(f"[FAIL] ERROR: primary bundle en.json not found at {PRIMARY_BUNDLE}")
         return 1
 
     langs = manifest_languages(bundle)
     en_keys = load_flat(bundle / "en.json")
 
-    print("🌍 Localization guard")
+    print(" Localization guard")
     print(f"   bundle: {PRIMARY_BUNDLE}  ({len(en_keys)} keys, {len(langs)} languages)")
     print()
 
@@ -240,12 +240,12 @@ def main() -> int:
     warnings = check_cross_language(bundle, langs, en_keys)
 
     if errors:
-        print("❌ ERRORS (block):")
+        print("[FAIL] ERRORS (block):")
         for e in errors:
             print(f"  {e}" if e.startswith("    ") else f"  • {e}")
         print()
     else:
-        print("✅ reference coverage + mirror parity OK")
+        print("[OK] reference coverage + mirror parity OK")
         print()
 
     if warnings:
@@ -255,19 +255,19 @@ def main() -> int:
             print(f"  • {w}")
         print()
     else:
-        print("✅ all locales at key parity")
+        print("[OK] all locales at key parity")
         print()
 
     failed = bool(errors) or (args.strict and bool(warnings))
     if failed:
-        print("❌ localization check failed")
+        print("[FAIL] localization check failed")
         if errors:
             print("   Fix: add the undefined key(s) to en.json across ALL mirrors:")
             for m in UI_MIRRORS:
                 print(f"     {m}/en.json")
         return 1
 
-    print("✅ localization check passed")
+    print("[OK] localization check passed")
     return 0
 
 

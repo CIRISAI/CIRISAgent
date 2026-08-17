@@ -4013,5 +4013,6 @@
     }
   },
   "setup_validation_age_required": "Tafadhali chagua kundi lako la umri.",
-  "setup_validation_username_reserved": "Jina la mtumiaji 'admin' limehifadhiwa. Tafadhali chagua jina lingine la mtumiaji."
+  "setup_validation_username_reserved": "Jina la mtumiaji 'admin' limehifadhiwa. Tafadhali chagua jina lingine la mtumiaji.",
+  "setup_validation_proxy_needs_token": "Kuingia huku hakukurudisha tokeni ambayo CIRIS Proxy inaweza kutumia. Chagua chaguo jingine la AI."
 }

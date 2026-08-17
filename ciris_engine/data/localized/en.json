@@ -4045,5 +4045,5 @@
       "waiting": "Finish signing in with Google in your browser, then come back here."
     }
   },
-  "setup_validation_proxy_needs_token": "Signed in as {email}, but this sign-in did not return a token the CIRIS proxy can use. Choose another AI option, or sign in again from the login screen."
+  "setup_validation_proxy_needs_token": "This sign-in did not return a token the CIRIS proxy can use. Choose another AI option."
 }

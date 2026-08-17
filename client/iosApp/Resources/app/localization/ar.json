@@ -4013,5 +4013,6 @@
     }
   },
   "setup_validation_age_required": "الرجاء اختيار فئتك العمرية.",
-  "setup_validation_username_reserved": "اسم المستخدم 'admin' محجوز. الرجاء اختيار اسم مستخدم آخر."
+  "setup_validation_username_reserved": "اسم المستخدم 'admin' محجوز. الرجاء اختيار اسم مستخدم آخر.",
+  "setup_validation_proxy_needs_token": "لم ينتج عن تسجيل الدخول هذا رمز يمكن لوكيل CIRIS استخدامه. اختر خياراً آخر للذكاء الاصطناعي."
 }

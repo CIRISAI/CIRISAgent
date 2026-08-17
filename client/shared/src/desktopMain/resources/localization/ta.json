@@ -4013,5 +4013,6 @@
     }
   },
   "setup_validation_age_required": "உங்கள் வயது வரம்பைத் தேர்ந்தெடுக்கவும்.",
-  "setup_validation_username_reserved": "'admin' என்ற பயனர்பெயர் ஒதுக்கப்பட்டுள்ளது. வேறு பயனர்பெயரைத் தேர்ந்தெடுக்கவும்."
+  "setup_validation_username_reserved": "'admin' என்ற பயனர்பெயர் ஒதுக்கப்பட்டுள்ளது. வேறு பயனர்பெயரைத் தேர்ந்தெடுக்கவும்.",
+  "setup_validation_proxy_needs_token": "இந்த உள்நுழைவு CIRIS proxy பயன்படுத்தக்கூடிய டோக்கனை வழங்கவில்லை. வேறு AI விருப்பத்தைத் தேர்ந்தெடுக்கவும்."
 }

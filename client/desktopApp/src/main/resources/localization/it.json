@@ -4044,5 +4044,6 @@
     }
   },
   "setup_validation_age_required": "Scegli la tua fascia d'età.",
-  "setup_validation_username_reserved": "Il nome utente «admin» è riservato. Scegli un nome utente diverso."
+  "setup_validation_username_reserved": "Il nome utente «admin» è riservato. Scegli un nome utente diverso.",
+  "setup_validation_proxy_needs_token": "Questo accesso non ha restituito un token utilizzabile dal proxy CIRIS. Scegli un'altra opzione AI."
 }

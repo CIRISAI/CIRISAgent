@@ -4013,5 +4013,6 @@
     }
   },
   "setup_validation_age_required": "దయచేసి మీ వయస్సు పరిధిని ఎంచుకోండి.",
-  "setup_validation_username_reserved": "'admin' అనే యూజర్‌నేమ్ రిజర్వ్ చేయబడింది. దయచేసి వేరే యూజర్‌నేమ్‌ను ఎంచుకోండి."
+  "setup_validation_username_reserved": "'admin' అనే యూజర్‌నేమ్ రిజర్వ్ చేయబడింది. దయచేసి వేరే యూజర్‌నేమ్‌ను ఎంచుకోండి.",
+  "setup_validation_proxy_needs_token": "ఈ సైన్-ఇన్ CIRIS ప్రాక్సీ ఉపయోగించగల టోకెన్‌ను అందించలేదు. వేరే AI ఎంపికను ఎంచుకోండి."
 }

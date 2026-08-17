@@ -4013,5 +4013,6 @@
     }
   },
   "setup_validation_age_required": "年齢層を選択してください",
-  "setup_validation_username_reserved": "ユーザー名「admin」は予約されています。別のユーザー名を選択してください。"
+  "setup_validation_username_reserved": "ユーザー名「admin」は予約されています。別のユーザー名を選択してください。",
+  "setup_validation_proxy_needs_token": "このサインインでは、CIRISプロキシが使用できるトークンが取得できませんでした。別のAIオプションを選択してください。"
 }

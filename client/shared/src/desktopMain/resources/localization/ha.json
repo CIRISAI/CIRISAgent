@@ -4013,5 +4013,6 @@
     }
   },
   "setup_validation_age_required": "Don Allah ku zaɓi kewayon shekarunku.",
-  "setup_validation_username_reserved": "An tanadi sunan mai amfani 'admin'. Don Allah ku zaɓi wani sunan mai amfani na daban."
+  "setup_validation_username_reserved": "An tanadi sunan mai amfani 'admin'. Don Allah ku zaɓi wani sunan mai amfani na daban.",
+  "setup_validation_proxy_needs_token": "Daga wannan shiga, ba a samu token da CIRIS Proxy zai iya amfani da shi ba. Zaɓi wani zaɓin AI."
 }

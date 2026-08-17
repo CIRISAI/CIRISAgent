@@ -4013,5 +4013,6 @@
     }
   },
   "setup_validation_age_required": "请选择您的年龄段",
-  "setup_validation_username_reserved": "用户名 admin 已被保留。请选择其他用户名。"
+  "setup_validation_username_reserved": "用户名 admin 已被保留。请选择其他用户名。",
+  "setup_validation_proxy_needs_token": "此次登录未返回 CIRIS 代理可用的令牌。请选择其他 AI 选项。"
 }

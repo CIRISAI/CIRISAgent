@@ -4013,5 +4013,6 @@
     }
   },
   "setup_validation_age_required": "እባክህ የዕድሜ ክልልህን ምረጥ።",
-  "setup_validation_username_reserved": "‘admin’ የሚለው የተጠቃሚ ስም የተያዘ ነው። እባክህ ሌላ የተጠቃሚ ስም ምረጥ።"
+  "setup_validation_username_reserved": "‘admin’ የሚለው የተጠቃሚ ስም የተያዘ ነው። እባክህ ሌላ የተጠቃሚ ስም ምረጥ።",
+  "setup_validation_proxy_needs_token": "ይህ መግቢያ የ CIRIS ተኪ ሊጠቀምበት የሚችል ቶከን አልመለሰም። ሌላ የ AI አማራጭ ምረጥ።"
 }

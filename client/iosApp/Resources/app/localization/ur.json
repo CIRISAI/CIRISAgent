@@ -4013,5 +4013,6 @@
     }
   },
   "setup_validation_age_required": "براہ کرم اپنی عمر کی حد منتخب کریں۔",
-  "setup_validation_username_reserved": "صارف نام 'admin' محفوظ ہے۔ براہ کرم کوئی دوسرا صارف نام منتخب کریں۔"
+  "setup_validation_username_reserved": "صارف نام 'admin' محفوظ ہے۔ براہ کرم کوئی دوسرا صارف نام منتخب کریں۔",
+  "setup_validation_proxy_needs_token": "اس سائن ان سے کوئی ایسا ٹوکن نہیں ملا جسے CIRIS پروکسی استعمال کر سکے۔ کوئی دوسرا AI آپشن منتخب کریں۔"
 }

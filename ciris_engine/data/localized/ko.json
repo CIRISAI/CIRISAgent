@@ -4013,5 +4013,6 @@
     }
   },
   "setup_validation_age_required": "연령대를 선택하세요",
-  "setup_validation_username_reserved": "사용자 이름 'admin'은 예약되어 있습니다. 다른 사용자 이름을 선택하세요."
+  "setup_validation_username_reserved": "사용자 이름 'admin'은 예약되어 있습니다. 다른 사용자 이름을 선택하세요.",
+  "setup_validation_proxy_needs_token": "이번 로그인에서는 CIRIS 프록시가 사용할 수 있는 토큰을 받지 못했습니다. 다른 AI 옵션을 선택하세요."
 }

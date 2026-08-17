@@ -5538,7 +5538,38 @@ class CIRISApiClient(
                 throw Exception("Token exchange failed (${response.status}): $errorBody")
             }
 
-            val body = response.body()
+            // DECODE FAILURES MUST SAY WHAT CAME BACK (CIRISAgent#1056).
+            //
+            // A 2xx whose body does not match NativeTokenResponse used to escape
+            // as ktor's own message:
+            //
+            //   NoTransformationFoundException: Expected response body of the type
+            //   ai.ciris.api.models.NativeTokenResponse but was SourceByteReadChannel
+            //
+            // On Android that left the user staring at the Login screen after a
+            // SUCCESSFUL Google sign-in, with nothing in the log naming the
+            // endpoint, the status, the content type, or a single byte of what the
+            // server actually sent. The `!response.success` branch above builds a
+            // good diagnostic and is simply never reached in this case.
+            val body = try {
+                response.body()
+            } catch (e: Exception) {
+                val contentType = try {
+                    response.response.headers["Content-Type"] ?: "(none)"
+                } catch (_: Exception) { "(unreadable)" }
+                val raw = try {
+                    response.response.bodyAsText().take(400)
+                } catch (_: Exception) { "(body unreadable)" }
+                logError(
+                    method,
+                    "Token exchange returned ${response.status} but the body could not be decoded as " +
+                        "NativeTokenResponse. content-type=$contentType body=$raw",
+                )
+                throw Exception(
+                    "Token exchange returned ${response.status} with a body this client cannot read " +
+                        "(content-type=$contentType). First bytes: $raw",
+                )
+            }
             logInfo(method, "Google auth successful: userId=${body.userId}, role=${body.role}")
 
             AuthResponse(

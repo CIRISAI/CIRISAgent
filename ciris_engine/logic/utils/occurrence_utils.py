@@ -112,21 +112,56 @@ def discover_active_occurrences(within_minutes: int = 10) -> List[str]:
         return []
 
 
+#: The occurrence id an agent has when nobody assigned it one.
+DEFAULT_OCCURRENCE_ID = "default"
+
+
 def get_current_occurrence_id() -> str:
     """Get the current occurrence ID from environment or default.
+
+    Both spellings are accepted, matching EssentialConfig (essential.py:239):
+    CIRIS_OCCURRENCE_ID is the current standard, AGENT_OCCURRENCE_ID the legacy
+    name. This used to read only AGENT_OCCURRENCE_ID, so an operator who set the
+    documented CIRIS_OCCURRENCE_ID got "default" here while EssentialConfig
+    correctly saw their value — the two halves of the system disagreeing about
+    which occurrence this process is.
 
     Returns:
         Occurrence ID string (default: "default")
     """
-    return os.getenv("AGENT_OCCURRENCE_ID", "default")
+    return os.getenv("CIRIS_OCCURRENCE_ID") or os.getenv("AGENT_OCCURRENCE_ID") or DEFAULT_OCCURRENCE_ID
 
 
 def is_multi_occurrence_deployment() -> bool:
     """Check if this is a multi-occurrence deployment.
 
+    CIRISAgent#1048: this read ONLY AGENT_OCCURRENCE_COUNT, so scout2 — running
+    with AGENT_OCCURRENCE_ID=002 and no COUNT set — fell through to database
+    discovery, found itself alone in the activity window, and declared
+
+        "Single-occurrence agent claiming existing wakeup task ..."
+
+    while being occurrence 002 of a shared-Postgres pair. It then took the
+    single-occurrence claiming branch, which is not the branch a non-default
+    occurrence should take.
+
+    A NON-DEFAULT OCCURRENCE ID IS ITSELF PROOF. "002" cannot exist in a
+    single-occurrence deployment — somebody assigned it, and they only do that
+    when there is more than one. Treating the id as evidence removes the
+    dependence on a second variable that nothing forces an operator to set, and
+    on database discovery, which cannot see a sibling that is merely idle
+    (discover_active_occurrences only looks back 30 minutes).
+
     Returns:
         True if running with multiple occurrences, False if single occurrence
     """
+    if get_current_occurrence_id() != DEFAULT_OCCURRENCE_ID:
+        logger.debug(
+            "Multi-occurrence inferred from occurrence id %r (a non-default id implies siblings)",
+            get_current_occurrence_id(),
+        )
+        return True
+
     count = get_occurrence_count()
     return count > 1
 

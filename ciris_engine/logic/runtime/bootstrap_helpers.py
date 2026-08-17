@@ -122,6 +122,34 @@ def check_mock_llm(runtime: Any) -> None:
             logger.info("Added mock_llm to modules to load")
 
 
+
+def _record_adapter_failure(runtime: Any, adapter_type: str, adapter_id: str, exc: Exception) -> None:
+    """Remember a configured adapter that did not load.
+
+    #1057: these were logged once and forgotten, so a fleet ran for several
+    releases with adapters failing to import on every agent while health stayed
+    green. A log line nobody greps is not a signal.
+    """
+    from ciris_engine.schemas.runtime.adapter_management import AdapterLoadFailure
+
+    # "Could not import adapter module" is raised by load_adapter() when neither
+    # ciris_engine.logic.adapters.<mode> nor ciris_adapters.<mode> exists — a
+    # STALE CONFIG NAME, not a broken adapter, and it needs a different fix
+    # (rename/remove the entry) so it is worth distinguishing.
+    missing = isinstance(exc, ValueError) and "Could not import adapter module" in str(exc)
+    if not hasattr(runtime, "adapter_load_failures"):
+        runtime.adapter_load_failures = []
+    runtime.adapter_load_failures.append(
+        AdapterLoadFailure(
+            adapter_type=adapter_type,
+            adapter_id=adapter_id,
+            error=str(exc),
+            error_type=type(exc).__name__,
+            is_missing_module=missing,
+        )
+    )
+
+
 def _load_single_adapter(runtime: Any, adapter_type: str, adapter_id: str) -> bool:
     """Load a single adapter by type and id.
 
@@ -159,6 +187,7 @@ def _load_single_adapter(runtime: Any, adapter_type: str, adapter_id: str) -> bo
         return True
     except Exception as e:
         logger.error(f"Failed to load adapter '{adapter_id}': {e}", exc_info=True)
+        _record_adapter_failure(runtime, adapter_type, adapter_id, e)
         return False
 
 
@@ -223,3 +252,4 @@ def load_adapters_from_bootstrap(runtime: Any) -> None:
             logger.info(f"Successfully loaded adapter: {load_request.adapter_id}")
         except Exception as e:
             logger.error(f"Failed to load adapter '{load_request.adapter_id}': {e}", exc_info=True)
+            _record_adapter_failure(runtime, load_request.adapter_type, load_request.adapter_id, e)

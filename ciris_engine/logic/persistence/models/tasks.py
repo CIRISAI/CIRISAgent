@@ -849,6 +849,35 @@ def set_task_updated_info_flag(
 # ==================== Multi-Occurrence Shared Task Functions ====================
 
 
+
+class SharedTaskClaimNotPersisted(RuntimeError):
+    """A shared-task claim reported success but the row is not in the store.
+
+    Raised rather than returned so the caller cannot accidentally continue as if
+    it held the task — the failure mode in #1057 was precisely an agent
+    proceeding on a claim it did not have.
+    """
+
+
+#: Claim verifications that failed this process. Surfaced by /v1/system/health
+#: so CIRISManager can see it without shelling into the container — the whole
+#: reason #1057 took a fleet-wide inspection to find.
+_SHARED_CLAIM_FAILURES: List[dict] = []
+
+
+def record_shared_claim_failure(task_id: str, outcome: str) -> None:
+    """Remember a claim that did not persist (bounded; newest kept)."""
+    _SHARED_CLAIM_FAILURES.append(
+        {"task_id": task_id, "outcome": outcome, "at": datetime.now(timezone.utc).isoformat()}
+    )
+    del _SHARED_CLAIM_FAILURES[:-20]
+
+
+def get_shared_claim_failures() -> List[dict]:
+    """Claim verifications that failed in this process, for health reporting."""
+    return list(_SHARED_CLAIM_FAILURES)
+
+
 def try_claim_shared_task(
     task_type: str,
     channel_id: str,
@@ -923,8 +952,35 @@ def try_claim_shared_task(
         raise RuntimeError(f"Shared task {task_id} claim returned no task row")
 
     task = _persist_row_to_task(task_row)
+
+    # READ BACK BEFORE DECLARING SUCCESS (CIRISAgent#1057).
+    #
+    # This used to return on the substrate's word alone. datum logged
+    # "This occurrence claimed shared ..." on every boot while its store held NO
+    # wakeup task for that day — and no row of any kind for 17 days. The agent
+    # then found 0 PENDING thoughts and span in WAKEUP to round 66, reporting
+    # healthy the whole time, because nothing ever checked that the row it
+    # believed it had written was actually there.
+    #
+    # A claim whose row cannot be read back is not a claim. We cannot fix the
+    # write from here — we do not know yet why it fails — but an agent must not
+    # proceed believing it holds a task it does not hold.
+    readback = get_task_by_id(task_id, "__shared__")
+    if readback is None:
+        record_shared_claim_failure(task_id, outcome or "unknown")
+        logger.critical(
+            "SHARED TASK CLAIM DID NOT PERSIST: %s reported outcome=%r but the row cannot be read back "
+            "from the store. The agent has NOT claimed this task and will find no work. "
+            "This is CIRISAgent#1057 — check that the process is reading the same database it wrote to.",
+            task_id,
+            outcome,
+        )
+        raise SharedTaskClaimNotPersisted(
+            f"Shared task {task_id} reported outcome={outcome!r} but is absent from the store"
+        )
+
     if outcome == "stored":
-        logger.info(f"Successfully claimed shared task {task_id}")
+        logger.info(f"Successfully claimed shared task {task_id} (verified present in store)")
         return (task, True)
     logger.info(f"Another occurrence claimed shared task {task_id} during race")
     return (task, False)

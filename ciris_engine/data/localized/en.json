@@ -4044,5 +4044,6 @@
       "timed_out": "Sign-in wasn't completed in the browser, so nothing was changed. Try again, or use a local account instead.",
       "waiting": "Finish signing in with Google in your browser, then come back here."
     }
-  }
+  },
+  "setup_validation_proxy_needs_token": "This sign-in did not return a token the CIRIS proxy can use. Choose another AI option."
 }

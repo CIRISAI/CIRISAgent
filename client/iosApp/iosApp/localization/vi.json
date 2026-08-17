@@ -4013,5 +4013,6 @@
     }
   },
   "setup_validation_age_required": "Vui lòng chọn độ tuổi của bạn",
-  "setup_validation_username_reserved": "Tên người dùng 'admin' được dành riêng cho hệ thống. Vui lòng chọn một tên người dùng khác."
+  "setup_validation_username_reserved": "Tên người dùng 'admin' được dành riêng cho hệ thống. Vui lòng chọn một tên người dùng khác.",
+  "setup_validation_proxy_needs_token": "Lần đăng nhập này không trả về token mà proxy CIRIS có thể dùng. Vui lòng chọn một tùy chọn AI khác."
 }

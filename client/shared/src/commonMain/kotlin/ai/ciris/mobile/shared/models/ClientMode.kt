@@ -61,7 +61,7 @@ fun clientModeFrom(cognitiveState: String?, serviceCount: Int): ClientMode =
  * against the node it ships with. `tools/dev/check_version_alignment.py` now
  * asserts this equality, which is the enforcement the upstream comment assumes.
  */
-const val CLIENT_VERSION = "0.5.176"
+const val CLIENT_VERSION = "0.5.177"
 
 /**
  * Whether [nodeVersion] differs materially from [CLIENT_VERSION] — i.e. a

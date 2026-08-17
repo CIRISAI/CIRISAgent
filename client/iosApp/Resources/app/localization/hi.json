@@ -4013,5 +4013,6 @@
     }
   },
   "setup_validation_age_required": "कृपया अपनी आयु सीमा चुनें।",
-  "setup_validation_username_reserved": "उपयोगकर्ता नाम 'admin' आरक्षित है। कृपया कोई दूसरा उपयोगकर्ता नाम चुनें।"
+  "setup_validation_username_reserved": "उपयोगकर्ता नाम 'admin' आरक्षित है। कृपया कोई दूसरा उपयोगकर्ता नाम चुनें।",
+  "setup_validation_proxy_needs_token": "इस साइन-इन से ऐसा कोई टोकन नहीं मिला जिसका उपयोग CIRIS प्रॉक्सी कर सके। कोई दूसरा AI विकल्प चुनें।"
 }

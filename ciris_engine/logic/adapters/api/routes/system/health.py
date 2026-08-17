@@ -388,6 +388,28 @@ async def get_system_health(request: Request) -> SuccessResponse[SystemHealthRes
     # Determine overall system status
     status = determine_overall_status(init_complete, processor_healthy, services)
 
+    # AN AGENT WITH NO WAY TO TALK TO ANYONE IS NOT HEALTHY (#1057).
+    #
+    # determine_overall_status() weighs init, the processor and the service
+    # registry — none of which know whether a single COMMUNICATION adapter
+    # loaded. So scout1 ran 0 of 4 configured adapters and still reported
+    # `status: healthy`, and that is the line every dashboard and every operator
+    # reads first. 2.9.23 surfaced the condition as a warning, which was
+    # necessary and not sufficient: a warning buried in an array under a green
+    # status is still a green status.
+    #
+    # This is the gap that went unnoticed across six releases, so the top-level
+    # field has to carry it. `critical` rather than `degraded`: an agent that
+    # cannot receive or send is not doing a reduced job, it is doing none of it.
+    if any(w.code in ("adapters_config_stale", "adapters_failed_to_load") and w.severity == "error" for w in warnings):
+        if status != "critical":
+            logger.error(
+                "Reporting status=critical: configured adapters failed to load and none are running "
+                "(was %s). See the adapters_* warning for which ones.",
+                status,
+            )
+        status = "critical"
+
     response = SystemHealthResponse(
         status=status,
         version=CIRIS_VERSION,

@@ -4005,5 +4005,6 @@
     }
   },
   "setup_validation_age_required": "Jọ̀wọ́ yan àṣàyàn ọjọ́-orí rẹ.",
-  "setup_validation_username_reserved": "A ti fi orúkọ olùṣàmúlò 'admin' pamọ́. Jọ̀wọ́ yan orúkọ olùṣàmúlò mìíràn."
+  "setup_validation_username_reserved": "A ti fi orúkọ olùṣàmúlò 'admin' pamọ́. Jọ̀wọ́ yan orúkọ olùṣàmúlò mìíràn.",
+  "setup_validation_proxy_needs_token": "Ìwọlé yìí kò pèsè àmì tí CIRIS Proxy lè lò. Yan àṣàyàn AI mìíràn."
 }

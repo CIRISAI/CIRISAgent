@@ -1509,17 +1509,57 @@ jobs:
           fi
           BASE="$REGISTRY/v1/builds/$VERSION?project=ciris-agent"
 
-          # Default (no target) → python-source-tree row
-          PY_TARGET=$(curl -fsS "$BASE" | jq -r '.target // "MISSING"')
-          test "$PY_TARGET" = "python-source-tree" \
-            || { echo "::error::Expected target=python-source-tree on default GET, got: $PY_TARGET"; exit 1; }
+          # POLL, DO NOT ASSERT INSTANTLY (2.9.23 failure).
+          #
+          # This asserted the read-back the moment the write returned. On 2.9.23
+          # BOTH registrations reported success —
+          #
+          #   OK (200 OK): Build registered ... (ios-mobile-bundle), build_id=785e663e-...
+          #   OK: registered ciris-agent 2.9.23 (1 target, all 3 tables written)
+          #
+          # — and the ios row still read back EMPTY seconds later, failing the
+          # release job on a build that had in fact published. A registry that
+          # acknowledges a write before it is queryable is not broken; asserting
+          # against it with zero tolerance is.
+          #
+          # Same shape as the shared-task claim in #1057: a write that reports
+          # success and cannot immediately be read back. There the fix was to
+          # verify; here it is to verify WITH PATIENCE, then say plainly which
+          # target is missing.
+          #
+          # set +e around the polling: a curl failure is a retry, not a job kill.
+          poll_target() {   # $1 = query suffix, $2 = expected target
+            local url="$BASE$1" want="$2" got="" waited=0
+            while [ "$waited" -lt 90 ]; do
+              got=$(curl -fsS "$url" 2>/dev/null | jq -r '.target // ""' || echo "")
+              [ "$got" = "$want" ] && { echo "$want"; return 0; }
+              sleep 5; waited=$((waited + 5))
+            done
+            echo "${got:-EMPTY}"
+            return 1
+          }
 
-          # Explicit target=ios-mobile-bundle → iOS row
-          IOS_TARGET=$(curl -fsS "$BASE&target=ios-mobile-bundle" | jq -r '.target // "MISSING"')
-          test "$IOS_TARGET" = "ios-mobile-bundle" \
-            || { echo "::error::Expected target=ios-mobile-bundle on ?target= GET, got: $IOS_TARGET"; exit 1; }
+          set +e
+          PY_TARGET=$(poll_target "" "python-source-tree");            PY_RC=$?
+          IOS_TARGET=$(poll_target "&target=ios-mobile-bundle" "ios-mobile-bundle"); IOS_RC=$?
+          set -e
 
-          echo "✓ Both target rows registered correctly (python-source-tree + ios-mobile-bundle)"
+          # Report BOTH before failing. Exiting at the first miss hid whether the
+          # other row was fine, which is half the diagnosis on a re-run.
+          echo "python-source-tree : $PY_TARGET (rc=$PY_RC)"
+          echo "ios-mobile-bundle  : $IOS_TARGET (rc=$IOS_RC)"
+
+          if [ "$PY_RC" -ne 0 ] || [ "$IOS_RC" -ne 0 ]; then
+            echo "::error::Registry rows did not become queryable within 90s."
+            echo "::error::python-source-tree=$PY_TARGET ios-mobile-bundle=$IOS_TARGET"
+            echo "::error::Both register calls reported 200 OK — if a row is still missing,"
+            echo "::error::the write was acknowledged but not indexed. Re-running this job is"
+            echo "::error::SAFE and idempotent: registration is keyed on build_hash, so a"
+            echo "::error::repeat POST of an identical build is an upsert, not a duplicate."
+            exit 1
+          fi
+
+          echo "✓ Both target rows registered and queryable (python-source-tree + ios-mobile-bundle)"
 
   deploy:
     name: Notify CIRISManager of Update

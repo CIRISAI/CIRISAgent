@@ -4013,5 +4013,6 @@
     }
   },
   "setup_validation_age_required": "Bitte wählen Sie Ihre Altersgruppe.",
-  "setup_validation_username_reserved": "Der Benutzername „admin“ ist reserviert. Bitte wählen Sie einen anderen Benutzernamen."
+  "setup_validation_username_reserved": "Der Benutzername „admin“ ist reserviert. Bitte wählen Sie einen anderen Benutzernamen.",
+  "setup_validation_proxy_needs_token": "Diese Anmeldung hat kein Token zurückgegeben, das der CIRIS-Proxy verwenden kann. Bitte wählen Sie eine andere KI-Option."
 }

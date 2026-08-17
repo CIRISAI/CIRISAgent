@@ -4013,5 +4013,6 @@
     }
   },
   "setup_validation_age_required": "ਕਿਰਪਾ ਕਰਕੇ ਆਪਣੀ ਉਮਰ ਸੀਮਾ ਚੁਣੋ।",
-  "setup_validation_username_reserved": "ਉਪਭੋਗਤਾ ਨਾਮ 'admin' ਰਾਖਵਾਂ ਹੈ। ਕਿਰਪਾ ਕਰਕੇ ਕੋਈ ਹੋਰ ਉਪਭੋਗਤਾ ਨਾਮ ਚੁਣੋ।"
+  "setup_validation_username_reserved": "ਉਪਭੋਗਤਾ ਨਾਮ 'admin' ਰਾਖਵਾਂ ਹੈ। ਕਿਰਪਾ ਕਰਕੇ ਕੋਈ ਹੋਰ ਉਪਭੋਗਤਾ ਨਾਮ ਚੁਣੋ।",
+  "setup_validation_proxy_needs_token": "ਇਸ ਸਾਈਨ-ਇਨ ਤੋਂ ਅਜਿਹਾ ਕੋਈ ਟੋਕਨ ਨਹੀਂ ਮਿਲਿਆ ਜਿਸ ਨੂੰ CIRIS proxy ਵਰਤ ਸਕੇ। ਕੋਈ ਹੋਰ AI ਵਿਕਲਪ ਚੁਣੋ।"
 }

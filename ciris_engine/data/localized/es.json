@@ -4044,5 +4044,6 @@
     }
   },
   "setup_validation_age_required": "Por favor, elige tu rango de edad.",
-  "setup_validation_username_reserved": "El nombre de usuario «admin» está reservado. Elige un nombre de usuario diferente."
+  "setup_validation_username_reserved": "El nombre de usuario «admin» está reservado. Elige un nombre de usuario diferente.",
+  "setup_validation_proxy_needs_token": "Este inicio de sesión no devolvió un token que el proxy de CIRIS pueda usar. Elige otra opción de IA."
 }

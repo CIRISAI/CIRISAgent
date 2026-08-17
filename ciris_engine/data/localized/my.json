@@ -4013,5 +4013,6 @@
     }
   },
   "setup_validation_age_required": "သင်၏ အသက်အပိုင်းအခြားကို ရွေးချယ်ပါ။",
-  "setup_validation_username_reserved": "အသုံးပြုသူနာမည် 'admin' ကို သီးသန့်ထားသည်။ အခြားအသုံးပြုသူနာမည်တစ်ခု ရွေးချယ်ပါ။"
+  "setup_validation_username_reserved": "အသုံးပြုသူနာမည် 'admin' ကို သီးသန့်ထားသည်။ အခြားအသုံးပြုသူနာမည်တစ်ခု ရွေးချယ်ပါ။",
+  "setup_validation_proxy_needs_token": "ဤဝင်ရောက်မှုမှ CIRIS Proxy က အသုံးပြုနိုင်သည့် တိုကင် မရရှိပါ။ အခြား AI ရွေးချယ်စရာတစ်ခုကို ရွေးပါ။"
 }

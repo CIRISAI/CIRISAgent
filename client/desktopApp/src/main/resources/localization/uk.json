@@ -4013,5 +4013,6 @@
     }
   },
   "setup_validation_age_required": "Будь ласка, виберіть свій віковий діапазон.",
-  "setup_validation_username_reserved": "Ім'я користувача «admin» зарезервовано. Виберіть інше ім'я користувача."
+  "setup_validation_username_reserved": "Ім'я користувача «admin» зарезервовано. Виберіть інше ім'я користувача.",
+  "setup_validation_proxy_needs_token": "Цей вхід не повернув токен, придатний для проксі CIRIS. Виберіть інший варіант AI."
 }

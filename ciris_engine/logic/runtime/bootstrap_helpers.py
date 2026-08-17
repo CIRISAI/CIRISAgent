@@ -216,9 +216,23 @@ def load_adapters_from_bootstrap(runtime: Any) -> None:
     # never whether the agent witnesses its own reasoning.
     _load_single_adapter(runtime, "ciris_accord_metrics", "ciris_accord_metrics")
 
+    # API IS ALWAYS LOADED (CIRISAgent#1057).
+    #
+    # scout1 ran 0 of 4 configured adapters and still reported healthy. Whatever
+    # else fails to load — a renamed adapter, a bad credential, a stale config —
+    # the agent must keep ONE way to be reached, or it is a process burning CPU
+    # that nobody can talk to and nobody can ask why.
+    #
+    # This is also what makes "loudly log and ignore" a safe policy for the rest:
+    # ignoring a broken adapter is only acceptable while the door stays open.
+    # Loaded here rather than left to config so that a config which forgot it —
+    # or named it wrongly — cannot produce an unreachable agent.
+    if not any(getattr(a, "adapter_type", None) == "api" for a in runtime.adapters):
+        _load_single_adapter(runtime, "api", "api")
+
     for load_request in runtime.bootstrap.adapters:
         # Skip internal adapters if someone explicitly listed them — already loaded above
-        if load_request.adapter_type in ("ciris_verify", "wallet", "ciris_accord_metrics"):
+        if load_request.adapter_type in ("ciris_verify", "wallet", "ciris_accord_metrics", "api"):
             continue
 
         from ciris_engine.schemas.adapters.runtime_context import AdapterStartupContext
@@ -253,3 +267,50 @@ def load_adapters_from_bootstrap(runtime: Any) -> None:
         except Exception as e:
             logger.error(f"Failed to load adapter '{load_request.adapter_id}': {e}", exc_info=True)
             _record_adapter_failure(runtime, load_request.adapter_type, load_request.adapter_id, e)
+
+    _log_adapter_load_summary(runtime)
+
+
+def _log_adapter_load_summary(runtime: Any) -> None:
+    """Say plainly what loaded and what did not, every boot.
+
+    CIRISAgent#1057: two adapters failed to import on EVERY agent in a
+    five-agent fleet for at least six releases. The failures WERE logged — one
+    ERROR line each, buried in a few hundred startup lines, with no statement of
+    the total. Nobody reads a line they do not know to look for; everybody reads
+    a banner.
+
+    Missing adapters are IGNORED, deliberately — a renamed or hand-typed entry
+    must not stop an agent from running, especially now that the API adapter is
+    always loaded so the agent stays reachable. But ignoring is only honest if it
+    is loud, and if the thing being ignored is NAMED.
+
+    Written for whoever is actually reading it. On a managed fleet that is
+    CIRISManager, which generated the config and can regenerate it. On a personal
+    install there is no manager at all — it is a person with a .env, and telling
+    them "regenerate the config" would be useless advice.
+    """
+    failures = list(getattr(runtime, "adapter_load_failures", []) or [])
+    loaded = [getattr(a, "adapter_type", type(a).__name__) for a in getattr(runtime, "adapters", [])]
+
+    if not failures:
+        logger.info("[ADAPTERS] %d loaded: %s", len(loaded), ", ".join(sorted(loaded)) or "(none)")
+        return
+
+    stale = sorted({f.adapter_type for f in failures if f.is_missing_module})
+    broken = sorted({f.adapter_type for f in failures if not f.is_missing_module})
+
+    logger.error("=" * 72)
+    logger.error("[ADAPTERS] %d LOADED, %d FAILED", len(loaded), len(failures))
+    logger.error("[ADAPTERS] loaded : %s", ", ".join(sorted(loaded)) or "(none)")
+    if stale:
+        logger.error("[ADAPTERS] DOES NOT EXIST (stale config, IGNORED): %s", ", ".join(stale))
+        logger.error("[ADAPTERS]   -> the config names an adapter that was renamed or removed.")
+        logger.error("[ADAPTERS]   -> regenerate it; the agent is running without them.")
+    if broken:
+        logger.error("[ADAPTERS] FAILED TO START (IGNORED): %s", ", ".join(broken))
+        logger.error("[ADAPTERS]   -> the adapter exists but raised; see the traceback above.")
+    logger.error("[ADAPTERS] also reported at /v1/system/health as adapters_config_stale /")
+    logger.error("[ADAPTERS] adapters_failed_to_load. On a personal install, fix the adapter")
+    logger.error("[ADAPTERS] list in your .env; on a managed fleet, CIRISManager regenerates it.")
+    logger.error("=" * 72)

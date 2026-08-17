@@ -4013,5 +4013,6 @@
     }
   },
   "setup_validation_age_required": "कृपया तुमचा वयोगट निवडा.",
-  "setup_validation_username_reserved": "'admin' हे वापरकर्तानाव राखीव आहे. कृपया दुसरे वापरकर्तानाव निवडा."
+  "setup_validation_username_reserved": "'admin' हे वापरकर्तानाव राखीव आहे. कृपया दुसरे वापरकर्तानाव निवडा.",
+  "setup_validation_proxy_needs_token": "या साइन-इनमधून CIRIS प्रॉक्सी वापरू शकेल असे टोकन मिळाले नाही. दुसरा AI पर्याय निवडा."
 }

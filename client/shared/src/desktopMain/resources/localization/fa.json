@@ -4019,5 +4019,6 @@
     }
   },
   "setup_validation_age_required": "لطفاً بازه سنی خود را انتخاب کنید.",
-  "setup_validation_username_reserved": "نام کاربری «admin» رزرو شده است. لطفاً نام کاربری دیگری انتخاب کنید."
+  "setup_validation_username_reserved": "نام کاربری «admin» رزرو شده است. لطفاً نام کاربری دیگری انتخاب کنید.",
+  "setup_validation_proxy_needs_token": "از این ورود توکنی قابل استفاده برای پروکسی CIRIS به دست نیامد. گزینه دیگری برای هوش مصنوعی انتخاب کنید."
 }

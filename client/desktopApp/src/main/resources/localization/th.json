@@ -4013,5 +4013,6 @@
     }
   },
   "setup_validation_age_required": "โปรดเลือกช่วงอายุของคุณ",
-  "setup_validation_username_reserved": "ชื่อผู้ใช้ admin ถูกสงวนไว้ โปรดเลือกชื่อผู้ใช้อื่น"
+  "setup_validation_username_reserved": "ชื่อผู้ใช้ admin ถูกสงวนไว้ โปรดเลือกชื่อผู้ใช้อื่น",
+  "setup_validation_proxy_needs_token": "การลงชื่อเข้าใช้นี้ไม่ได้ให้โทเคนที่พร็อกซีของ CIRIS ใช้งานได้ โปรดเลือกตัวเลือก AI อื่น"
 }

@@ -4044,5 +4044,6 @@
     }
   },
   "setup_validation_age_required": "Veuillez choisir votre tranche d'âge.",
-  "setup_validation_username_reserved": "Le nom d'utilisateur « admin » est réservé. Veuillez choisir un autre nom d'utilisateur."
+  "setup_validation_username_reserved": "Le nom d'utilisateur « admin » est réservé. Veuillez choisir un autre nom d'utilisateur.",
+  "setup_validation_proxy_needs_token": "Cette connexion n'a pas renvoyé de jeton utilisable par le proxy CIRIS. Veuillez choisir une autre option d'IA."
 }

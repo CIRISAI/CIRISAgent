@@ -4013,5 +4013,6 @@
     }
   },
   "setup_validation_age_required": "Lütfen yaş aralığınızı seçin.",
-  "setup_validation_username_reserved": "\"admin\" kullanıcı adı ayrılmıştır. Lütfen farklı bir kullanıcı adı seçin."
+  "setup_validation_username_reserved": "\"admin\" kullanıcı adı ayrılmıştır. Lütfen farklı bir kullanıcı adı seçin.",
+  "setup_validation_proxy_needs_token": "Bu oturum açma işlemi, CIRIS proxy'sinin kullanabileceği bir token döndürmedi. Farklı bir yapay zeka seçeneği seçin."
 }

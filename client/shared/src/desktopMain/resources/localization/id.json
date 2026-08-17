@@ -4013,5 +4013,6 @@
     }
   },
   "setup_validation_age_required": "Silakan pilih rentang usia Anda.",
-  "setup_validation_username_reserved": "Nama pengguna 'admin' sudah dicadangkan. Silakan pilih nama pengguna lain."
+  "setup_validation_username_reserved": "Nama pengguna 'admin' sudah dicadangkan. Silakan pilih nama pengguna lain.",
+  "setup_validation_proxy_needs_token": "Proses masuk ini tidak mengembalikan token yang dapat digunakan oleh proksi CIRIS. Pilih opsi AI lain."
 }

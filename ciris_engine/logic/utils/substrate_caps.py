@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 #: `NullScrubber`. Change that construction and change this together — they are
 #: the same fact stated twice, and the whole point of the constant is that there
 #: is exactly one of them.
-_AGENT_INSTALLS_SCRUBBER = True
+_AGENT_INSTALLS_SCRUBBER = False
 
 
 def substrate_can_scrub() -> bool:
@@ -37,7 +37,11 @@ def substrate_can_scrub() -> bool:
     substrate capability would have re-enabled it the moment we bumped the pin —
     a guard silently disabled by an unrelated dependency bump.
 
-    NOW TRUE (2.9.23). `persistence/db/core.py` constructs the Engine with
+    HELD FOR 2.9.23 pending measurement (see persistence/db/core.py). Was briefly
+    True on this branch; the text below describes the wiring that is ready to
+    land, not the shipped state.
+
+    WAS MADE TRUE, THEN HELD. `persistence/db/core.py` constructs the Engine with
     `scrubber=egress_scrub`, so persist redacts what it stores and `full_traces`
     is no longer refused.
 

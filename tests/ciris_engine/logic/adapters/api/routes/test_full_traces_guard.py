@@ -187,12 +187,16 @@ def test_the_shipped_default_actually_wires_it() -> None:
     # the latter also depends on the installed substrate, and a dev box can lag
     # the pin (this one had 0.5.173 installed against a 0.5.176 pin, so the
     # capability correctly reported False locally while CI would say True).
-    assert caps._AGENT_INSTALLS_SCRUBBER is True
+    # HELD for 2.9.23 pending measurement of egress_scrub's per-trace cost.
+    # Flip this and the two sites it names together — that pairing is the whole
+    # point of the constant.
+    assert caps._AGENT_INSTALLS_SCRUBBER is False
 
     src = pathlib.Path(caps.__file__).parent.parent / "persistence" / "db" / "core.py"
     body = src.read_text(encoding="utf-8")
+    # The Engine call still takes a `scrubber` argument; it is currently None.
     assert "scrubber=scrubber" in body
-    assert "from ciris_server import egress_scrub" in body
+    assert "scrubber = None" in body
 
 
 @pytest.mark.parametrize("level", ["generic", "detailed"])

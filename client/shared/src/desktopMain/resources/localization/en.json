@@ -4044,5 +4044,6 @@
     "ladder_t4": "tier 4 · de-admit / re-admit, refuse-writes / accept-writes",
     "usb_browse": "Browse",
     "usb_guidance": "The folder on the removable volume holding the wrapped ML-DSA-65 half. The private key never leaves it — this node opens it in place and signs."
-  }
+  },
+  "setup_validation_proxy_needs_token": "Signed in as {email}, but this sign-in did not return a token the CIRIS proxy can use. Choose another AI option, or sign in again from the login screen."
 }

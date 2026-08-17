@@ -1687,7 +1687,14 @@ fun CIRISApp(
                                     // back to inventing a unique name by hand.
                                     setupViewModel.setGoogleAuthState(
                                         isAuth = true,
-                                        idToken = null,
+                                        // Forward the provider's ID token when the node
+                                        // sends one (CIRISServer#434, ciris-server
+                                        // 0.5.177+). This used to be a hard null, which
+                                        // left isGoogleAuth=true with googleIdToken=null
+                                        // — and CIRIS_PROXY sends this token AS the LLM
+                                        // api_key, so a Google-signed-in desktop user
+                                        // could not choose the proxy at all.
+                                        idToken = collected.idToken,
                                         email = collected.email,
                                         userId = collected.externalId,
                                         provider = collected.provider,

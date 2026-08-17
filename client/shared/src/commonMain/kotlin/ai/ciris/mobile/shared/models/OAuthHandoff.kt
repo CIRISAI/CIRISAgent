@@ -29,4 +29,17 @@ data class OAuthHandoff(
     @SerialName("external_id")
     val externalId: String = "",
     val email: String? = null,
+    /**
+     * The provider's raw ID token, when the provider issues one (CIRISServer#434).
+     *
+     * CIRIS_PROXY sends this AS the LLM api_key, so without it a desktop user who
+     * signed in with Google could not select the proxy at all — and was told
+     * "Google sign-in is required" while signed in with Google. The node has held
+     * it since the code exchange; from ciris-server 0.5.177 it forwards it.
+     *
+     * Nullable and defaulted on purpose: providers that issue no ID token are a
+     * legitimate case, not an error, and an older node simply omits the field.
+     */
+    @SerialName("id_token")
+    val idToken: String? = null,
 )

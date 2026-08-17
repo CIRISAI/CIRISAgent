@@ -35,21 +35,35 @@ on:
         default: "franc"
         type: choice
         options: ["franc", "tom", "nancy", "victor", "ben"]
-  # DISPATCH-ONLY UNTIL PROVEN GREEN. A brand-new workflow needs iterations, and
-  # a failing new gate on an in-flight release PR is exactly how this release
-  # cycle already lost time twice. Once it passes twice in a row, add:
+  # ENABLED after two consecutive greens on the merged 2.9.22 branch, with two
+  # DIFFERENT escape triggers: `tom` (\t) on 146a0582b and `franc` (\f) on
+  # daadcb0d0. Two flavours on purpose — a single green fooled me once already
+  # this cycle, and the run that broke the tie was the one that varied the input.
   #
-  #   pull_request:
-  #     paths:
-  #       - "ciris_engine/logic/setup/**"
-  #       - "ciris_engine/logic/config/**"
-  #       - "ciris_engine/logic/utils/env_file.py"
-  #       - "ciris_engine/logic/utils/path_resolution.py"
-  #       - "ciris_engine/logic/adapters/api/routes/setup/**"
-  #       - "client/**"
+  # It stayed dispatch-only until then because a new gate that fails on an
+  # in-flight release PR is exactly how this cycle already lost time twice.
   #
-  # NOTE when enabling: a pull_request path filter is CUMULATIVE, not per-push —
-  # once any commit in a PR has matched, every later push re-triggers the job.
+  # PATHS. Deliberately narrow: this job takes ~20 minutes on a Windows runner,
+  # so it earns its place only on changes that can actually break first-run path
+  # handling or the desktop UI it drives.
+  pull_request:
+    paths:
+      - "ciris_engine/logic/setup/**"
+      - "ciris_engine/logic/config/**"
+      - "ciris_engine/logic/utils/env_file.py"
+      - "ciris_engine/logic/utils/path_resolution.py"
+      - "ciris_engine/logic/utils/latest_link.py"
+      - "ciris_engine/logic/adapters/api/routes/setup/**"
+      - "tools/qa_runner/modules/web_ui/**"
+      - "tools/qa_runner/platform_procs.py"
+      - "client/**"
+      - ".github/workflows/windows-desktop-ui.yml"
+  #
+  # A pull_request path filter is CUMULATIVE, not per-push: once ANY commit in a
+  # PR has matched, every later push re-triggers the job even if that push
+  # touched nothing on the list. The concurrency group below cancels the
+  # superseded run, which is the practical mitigation — without it a burst of
+  # pushes queues a burst of 20-minute Windows jobs.
 
 concurrency:
   group: windows-ui-${{ github.ref }}

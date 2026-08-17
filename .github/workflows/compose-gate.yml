@@ -45,6 +45,15 @@ on:
       - 'ciris_engine/logic/conscience/**'
       - 'ciris_engine/logic/processors/core/thought_processor/**'
       - '.github/workflows/compose-gate.yml'
+      # THE PIN ITSELF. The iOS currency job below asks "was the committed iOS
+      # bundle built from the ciris-server this branch pins?" — and the change
+      # that makes the answer 'no' is a requirements.txt bump, which was not in
+      # this list. So the gate never ran on the one event it exists to catch.
+      # It appeared to work only because GitHub's path filter is cumulative
+      # across a PR: once any commit matched, every later push re-triggered.
+      - 'requirements.txt'
+      - 'client/iosApp/substrate.lock.json'
+      - '.github/workflows/refresh-ios-substrate.yml'
   push:
     branches: [main, 'release/**']
     paths:
@@ -63,6 +72,15 @@ on:
       - 'ciris_engine/logic/conscience/**'
       - 'ciris_engine/logic/processors/core/thought_processor/**'
       - '.github/workflows/compose-gate.yml'
+      # THE PIN ITSELF. The iOS currency job below asks "was the committed iOS
+      # bundle built from the ciris-server this branch pins?" — and the change
+      # that makes the answer 'no' is a requirements.txt bump, which was not in
+      # this list. So the gate never ran on the one event it exists to catch.
+      # It appeared to work only because GitHub's path filter is cumulative
+      # across a PR: once any commit matched, every later push re-triggered.
+      - 'requirements.txt'
+      - 'client/iosApp/substrate.lock.json'
+      - '.github/workflows/refresh-ios-substrate.yml'
 
 permissions:
   contents: read
@@ -72,7 +90,67 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # ── Is the committed iOS bundle built from the substrate this branch pins? ──
+  #
+  # Milliseconds, on the cheapest runner: substrate.lock.json vs requirements.txt.
+  # Split out from the gate so the answer is a JOB OUTPUT other jobs can depend
+  # on — which is what replaced the previous arrangement, where the gate polled
+  # `gh run list` for up to 15 minutes hoping a separate workflow would push a
+  # fix mid-run. That raced, and the push it waited for is what froze the PR.
+  ios-currency:
+    name: iOS substrate currency
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      stale: ${{ steps.check.outputs.stale }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - id: check
+        run: |
+          if python tools/dev/check_ios_substrate_current.py; then
+            echo "stale=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "stale=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ── Only when stale: rebuild on the one macOS runner we have ────────────────
+  #
+  # `uses:` the refresh workflow rather than duplicating it — one implementation,
+  # invoked as a dependent job instead of triggering itself on the same event and
+  # racing the gate. upload_only stops it pushing: a push from CI is authenticated
+  # as github-actions[bot] and parks every check on the PR behind approval.
+  #
+  # macOS minutes bill at a premium, so this is gated on `stale` and skips
+  # entirely on the overwhelming majority of PRs that never touch the pin.
+  ios-refresh:
+    name: Rebuild iOS substrate
+    needs: ios-currency
+    if: needs.ios-currency.outputs.stale == 'true'
+    uses: ./.github/workflows/refresh-ios-substrate.yml
+    # A called workflow's token cannot exceed the caller's. This workflow
+    # defaults to `contents: read`, while the refresh declares `contents: write`
+    # for its workflow_dispatch path (branch push + PR). Without an explicit
+    # grant here the call fails at load time — "requesting contents: write, only
+    # allowed contents: read" — before a single step runs.
+    #
+    # upload_only never pushes, so the write scope goes unused on this path; it
+    # is granted only to satisfy the cap against the callee's declaration.
+    permissions:
+      contents: write
+      pull-requests: write
+    with:
+      target_branch: ${{ github.head_ref || github.ref_name }}
+      upload_only: true
+    secrets: inherit
+
   compose-gate:
+    # Depends on the ANSWER, not on the rebuild. The gate stays fast: it does not
+    # wait on a macOS job it cannot use the output of anyway, because landing the
+    # bundle is a commit a human makes.
+    needs: ios-currency
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -113,31 +191,44 @@ jobs:
           # So: if the lock is stale AND a refresh for this branch is in flight,
           # wait for it and re-check. If it is stale with no refresh running,
           # fail immediately — that is the real condition this gate exists for.
-          if python tools/dev/check_ios_substrate_current.py; then
+          # The check already ran in `ios-currency`; this asserts on its output.
+          #
+          # It used to poll `gh run list` for up to 15 minutes waiting for the
+          # refresh workflow to push a fix onto this branch mid-run. That was
+          # wrong twice over: it raced (the gate could win and fail a PR that was
+          # about to be fixed), and the push it was waiting for is precisely what
+          # froze all eight checks — a CI push is github-actions[bot], and this
+          # repo requires approval for bot-triggered runs.
+          #
+          # Now the rebuild happens in the `ios-refresh` job of THIS run and is
+          # handed back as an artifact. Landing it is one command, and the commit
+          # is authored by a real collaborator, so their push runs CI normally.
+          if [ "${STALE}" != "true" ]; then
+            echo "iOS bundle matches the pinned substrate."
             exit 0
           fi
 
-          echo "iOS lock is stale — checking whether a refresh is in flight for this branch."
-          BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
-          deadline=$(( SECONDS + 900 ))
-          while [ "$SECONDS" -lt "$deadline" ]; do
-            running=$(gh run list --repo "$GITHUB_REPOSITORY" \
-              --workflow=refresh-ios-substrate.yml --branch "$BRANCH" \
-              --json status --jq '[.[] | select(.status!="completed")] | length' 2>/dev/null || echo 0)
-            if [ "${running:-0}" -eq 0 ]; then
-              echo "No refresh in flight."
-              break
-            fi
-            echo "  refresh still running (${running}); waiting 30s…"
-            sleep 30
-          done
-
-          # Re-fetch: the refresh pushes its commit to this same branch.
-          git fetch --quiet origin "$BRANCH" 2>/dev/null || true
-          git checkout --quiet "origin/$BRANCH" -- client/iosApp/substrate.lock.json 2>/dev/null || true
-          python tools/dev/check_ios_substrate_current.py
+          echo "::error::iOS bundle is stale — it was NOT built from the ciris-server pinned on this branch."
+          {
+            echo "### iOS substrate is stale"
+            echo
+            echo 'The `ios-refresh` job in this run rebuilt it on the macOS runner. Land it with:'
+            echo
+            echo '```bash'
+            echo "gh run download ${{ github.run_id }} -R ${{ github.repository }} \\"
+            echo "  -n ios-substrate-refresh -D client/iosApp/"
+            echo "git add -f client/iosApp/app_packages_native client/iosApp/Frameworks \\"
+            echo "  client/iosApp/Resources/app_packages client/iosApp/Resources.zip \\"
+            echo "  client/iosApp/substrate.lock.json"
+            echo "git commit -m 'chore(ios): refresh iOS substrate to the pinned ciris-server'"
+            echo '```'
+            echo
+            echo 'It is deliberately not pushed for you: a push from CI runs as'
+            echo '`github-actions[bot]`, and every check it triggers lands in `action_required`.'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 1
         env:
-          GH_TOKEN: ${{ github.token }}
+          STALE: ${{ needs.ios-currency.outputs.stale }}
 
       - name: Version alignment — the shipped client must match the shipped node
         run: |

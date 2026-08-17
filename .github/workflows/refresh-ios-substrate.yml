@@ -19,17 +19,37 @@ name: Refresh iOS substrate binaries
 # carry the desired ciris-persist / ciris-edge / ciris-verify pins.
 
 on:
-  # AUTOMATIC: the moment a branch changes the substrate pin, iOS is stale by
-  # definition — and only this runner can fix it, because it is the only host
-  # with a materialised Resources tree. Waiting for someone to remember is how
-  # iOS ended up a full release behind every other platform.
+  # CALLED AS A JOB by compose-gate, which owns the decision about whether iOS
+  # is stale. This used to trigger itself on `pull_request` and push the
+  # refreshed lock straight back to the PR branch — which broke the PR it was
+  # trying to help:
   #
-  # Refreshes IN PLACE on the PR's own branch, so the PR that moves the pin is
-  # the PR that carries the matching iOS bundle. compose-gate's currency check
-  # then passes on that same PR rather than blocking the release later.
-  pull_request:
-    paths:
-      - 'requirements.txt'
+  #   4b609f59  github-actions[bot]  chore(ios): refresh iOS substrate…
+  #     -> ALL 8 workflows on that SHA: conclusion=action_required
+  #
+  # The push is authenticated with the workflow's own GITHUB_TOKEN, so GitHub
+  # attributes every run it triggers to github-actions[bot] and gates them
+  # behind manual approval. The author's own commits (actor=emooreatx) run
+  # untouched. Pushing as a human instead would take a PAT, which we do not
+  # want — so this no longer pushes at all in the PR path. It builds the
+  # bundle on the macOS runner (the only host that can) and hands it back as
+  # an ARTIFACT; the gate then tells you the one command to land it.
+  workflow_call:
+    inputs:
+      target_branch:
+        description: "Branch to refresh. MUST already carry the desired substrate pins in requirements.txt."
+        required: true
+        type: string
+      libs:
+        description: "Which libs to refresh (space-separated subset of: server verify), or 'all'."
+        required: false
+        default: "all"
+        type: string
+      upload_only:
+        description: "Build and upload the refreshed bundle as an artifact; do NOT commit or push. Used by compose-gate."
+        required: false
+        default: false
+        type: boolean
   workflow_dispatch:
     inputs:
       target_branch:
@@ -41,15 +61,22 @@ on:
         required: false
         default: "all"
         type: string
+      upload_only:
+        description: "Build and upload the refreshed bundle as an artifact; do NOT commit or push."
+        required: false
+        default: false
+        type: boolean
 
 permissions:
-  contents: write       # Required to push the refresh branch
-  pull-requests: write  # Required to open the PR
+  contents: write       # Required to push the refresh branch (workflow_dispatch path)
+  pull-requests: write  # Required to open the PR (workflow_dispatch path)
 
 concurrency:
-  # Don't run two iOS refresh jobs at once. If a second one is requested,
-  # cancel the in-flight one — the newer request is presumably the wanted one.
-  group: refresh-ios-substrate
+  # PER BRANCH, not global. This was a single shared group with
+  # cancel-in-progress, so two PRs bumping the substrate pin at the same time
+  # cancelled each other's refresh and whichever lost came back "stale" with no
+  # explanation. The refresh is per-branch work; the mutex must be too.
+  group: refresh-ios-substrate-${{ inputs.target_branch || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -226,15 +253,63 @@ jobs:
             git diff --stat
           fi
 
+      # ── upload_only: hand the bundle back, do not touch the branch ──────────
+      #
+      # This is the path compose-gate takes. The macOS runner is the only host
+      # that can materialise the Resources tree, so it still does ALL the work
+      # here in CI — it just stops short of committing, because a push from
+      # this job is authenticated as github-actions[bot] and freezes every
+      # check on the PR behind "waiting for approval".
+      #
+      # The artifact is the handoff. `gh run download` lands it in the working
+      # tree, and the commit is then authored by whoever runs that — a real
+      # collaborator, whose pushes trigger CI normally. No PAT required.
+      - name: Upload refreshed bundle
+        if: inputs.upload_only && steps.diff.outputs.changed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-substrate-refresh
+          if-no-files-found: error
+          retention-days: 7
+          # Mirrors the `git add` list in the commit path below — same paths,
+          # same bundle, just delivered as a download instead of a push.
+          path: |
+            client/iosApp/app_packages_native
+            client/iosApp/Frameworks
+            client/iosApp/Resources/app_packages
+            client/iosApp/Resources.zip
+            client/iosApp/substrate.lock.json
+
+      - name: How to land it
+        if: inputs.upload_only && steps.diff.outputs.changed == 'true'
+        run: |
+          {
+            echo "### iOS substrate rebuilt — one command to land it"
+            echo
+            echo 'The bundle for `ciris-server ${{ steps.pins.outputs.server }}` is attached to this run as'
+            echo '`ios-substrate-refresh`. It is NOT pushed: a push from this job runs as'
+            echo '`github-actions[bot]`, which parks every check on the PR in `action_required`.'
+            echo
+            echo '```bash'
+            echo "gh run download ${{ github.run_id }} -R ${{ github.repository }} \\"
+            echo "  -n ios-substrate-refresh -D client/iosApp/"
+            echo "git add -f client/iosApp/app_packages_native client/iosApp/Frameworks \\"
+            echo "  client/iosApp/Resources/app_packages client/iosApp/Resources.zip \\"
+            echo "  client/iosApp/substrate.lock.json"
+            echo "git commit -m 'chore(ios): refresh iOS substrate to ciris-server ${{ steps.pins.outputs.server }}'"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # ── dispatch path: still commits and opens its own PR ───────────────────
       - name: Configure git committer
-        if: steps.diff.outputs.changed == 'true'
+        if: steps.diff.outputs.changed == 'true' && !inputs.upload_only
         run: |
           git config user.name "ciris-ios-substrate-refresh[bot]"
           git config user.email "ciris-ios-substrate-refresh@users.noreply.github.com"
 
       - name: Create branch, commit, push
         id: branch
-        if: steps.diff.outputs.changed == 'true'
+        if: steps.diff.outputs.changed == 'true' && !inputs.upload_only
         run: |
           # On a pull_request the refresh belongs ON THAT PR: the branch that moved
           # the pin is the branch whose iOS bundle is now stale, and compose-gate's
@@ -266,7 +341,7 @@ jobs:
           git push origin "$branch"
 
       - name: Open PR
-        if: steps.diff.outputs.changed == 'true' && github.event_name != 'pull_request'
+        if: steps.diff.outputs.changed == 'true' && !inputs.upload_only
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TARGET_BRANCH: ${{ inputs.target_branch }}

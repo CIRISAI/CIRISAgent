@@ -2692,7 +2692,8 @@
     "accord_remint_step3_title": "Bước 3 — Tạo genesis di động",
     "accord_remint_step_done": "Xong — hạt giống đã được cấp phép",
     "accord_remint_step_of": "Bước {step} trên {total}",
-    "accord_remint_title": "Đúc lại gốc tin cậy hiện có"
+    "accord_remint_title": "Đúc lại gốc tin cậy hiện có",
+    "login_google_unavailable": "Đăng nhập bằng {provider} không khả dụng trên bản cài đặt này"
   },
   "network": {
     "title": "Mạng",
@@ -4010,5 +4011,7 @@
       "timed_out": "Quá trình đăng nhập trong trình duyệt chưa hoàn tất nên không có gì thay đổi. Hãy thử lại, hoặc dùng tài khoản cục bộ.",
       "waiting": "Hãy hoàn tất đăng nhập bằng Google trong trình duyệt của bạn, rồi quay lại đây."
     }
-  }
+  },
+  "setup_validation_age_required": "Vui lòng chọn độ tuổi của bạn",
+  "setup_validation_username_reserved": "Tên người dùng 'admin' được dành riêng cho hệ thống. Vui lòng chọn một tên người dùng khác."
 }

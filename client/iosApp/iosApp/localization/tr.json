@@ -2341,7 +2341,8 @@
     "accord_remint_step3_title": "Adım 3 — Taşınabilir genesis'i üret",
     "accord_remint_step_done": "Tamamlandı — tohum yetkilendirildi",
     "accord_remint_step_of": "Adım {step} / {total}",
-    "accord_remint_title": "Mevcut güven kökünü yeniden bas"
+    "accord_remint_title": "Mevcut güven kökünü yeniden bas",
+    "login_google_unavailable": "{provider} ile giriş bu kurulumda kullanılamıyor."
   },
   "prompts": {
     "dma": {
@@ -4010,5 +4011,7 @@
       "timed_out": "Oturum açma işlemi tarayıcıda tamamlanmadı, bu nedenle hiçbir şey değiştirilmedi. Tekrar deneyin veya bunun yerine yerel bir hesap kullanın.",
       "waiting": "Tarayıcınızda Google ile oturum açma işlemini tamamlayın, ardından buraya geri dönün."
     }
-  }
+  },
+  "setup_validation_age_required": "Lütfen yaş aralığınızı seçin.",
+  "setup_validation_username_reserved": "\"admin\" kullanıcı adı ayrılmıştır. Lütfen farklı bir kullanıcı adı seçin."
 }

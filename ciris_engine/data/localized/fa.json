@@ -2347,7 +2347,8 @@
     "accord_remint_step3_title": "گام ۳ — تولید پیدایش قابل حمل",
     "accord_remint_step_done": "انجام شد — بذر مجاز شد",
     "accord_remint_step_of": "گام {step} از {total}",
-    "accord_remint_title": "ضرب مجدد ریشهٔ اعتماد موجود"
+    "accord_remint_title": "ضرب مجدد ریشهٔ اعتماد موجود",
+    "login_google_unavailable": "ورود با {provider} در این نسخه در دسترس نیست."
   },
   "prompts": {
     "dma": {
@@ -4016,5 +4017,7 @@
       "timed_out": "ورود در مرورگر کامل نشد، بنابراین چیزی تغییر نکرد. دوباره تلاش کنید یا به‌جای آن از یک حساب محلی استفاده کنید.",
       "waiting": "ورود با Google را در مرورگر خود کامل کنید، سپس به اینجا بازگردید."
     }
-  }
+  },
+  "setup_validation_age_required": "لطفاً بازه سنی خود را انتخاب کنید.",
+  "setup_validation_username_reserved": "نام کاربری «admin» رزرو شده است. لطفاً نام کاربری دیگری انتخاب کنید."
 }

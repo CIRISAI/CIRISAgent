@@ -2457,7 +2457,8 @@
     "accord_remint_step3_title": "ਕਦਮ 3 — ਪੋਰਟੇਬਲ ਜੈਨੇਸਿਸ ਤਿਆਰ ਕਰੋ",
     "accord_remint_step_done": "ਹੋ ਗਿਆ — ਸੀਡ ਅਧਿਕਾਰਤ ਹੈ",
     "accord_remint_step_of": "{total} ਵਿੱਚੋਂ ਕਦਮ {step}",
-    "accord_remint_title": "ਮੌਜੂਦਾ ਟਰੱਸਟ ਰੂਟ ਦੁਬਾਰਾ ਮਿੰਟ ਕਰੋ"
+    "accord_remint_title": "ਮੌਜੂਦਾ ਟਰੱਸਟ ਰੂਟ ਦੁਬਾਰਾ ਮਿੰਟ ਕਰੋ",
+    "login_google_unavailable": "{provider} ਨਾਲ ਸਾਈਨ-ਇਨ ਇਸ ਇੰਸਟਾਲੇਸ਼ਨ ਵਿੱਚ ਉਪਲਬਧ ਨਹੀਂ ਹੈ।"
   },
   "conscience": {
     "ponder_attempted": "ਮੈਂ {action} ਕਰਨ ਦੀ ਕੋਸ਼ਿਸ਼ ਕੀਤੀ",
@@ -4010,5 +4011,7 @@
       "timed_out": "ਬ੍ਰਾਊਜ਼ਰ ਵਿੱਚ ਸਾਈਨ-ਇਨ ਪੂਰਾ ਨਹੀਂ ਹੋਇਆ, ਇਸ ਲਈ ਕੁਝ ਵੀ ਨਹੀਂ ਬਦਲਿਆ ਗਿਆ। ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ, ਜਾਂ ਇਸ ਦੀ ਬਜਾਏ ਸਥਾਨਕ ਖਾਤਾ ਵਰਤੋ।",
       "waiting": "ਆਪਣੇ ਬ੍ਰਾਊਜ਼ਰ ਵਿੱਚ Google ਨਾਲ ਸਾਈਨ-ਇਨ ਪੂਰਾ ਕਰੋ, ਫਿਰ ਇੱਥੇ ਵਾਪਸ ਆਓ।"
     }
-  }
+  },
+  "setup_validation_age_required": "ਕਿਰਪਾ ਕਰਕੇ ਆਪਣੀ ਉਮਰ ਸੀਮਾ ਚੁਣੋ।",
+  "setup_validation_username_reserved": "ਉਪਭੋਗਤਾ ਨਾਮ 'admin' ਰਾਖਵਾਂ ਹੈ। ਕਿਰਪਾ ਕਰਕੇ ਕੋਈ ਹੋਰ ਉਪਭੋਗਤਾ ਨਾਮ ਚੁਣੋ।"
 }

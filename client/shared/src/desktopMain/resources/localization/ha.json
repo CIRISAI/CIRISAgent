@@ -2457,7 +2457,8 @@
     "accord_remint_step3_title": "Mataki 3 — Samar da genesis mai ɗaukuwa",
     "accord_remint_step_done": "An gama — an ba da izinin irin",
     "accord_remint_step_of": "Mataki {step} na {total}",
-    "accord_remint_title": "Sake ƙirƙirar tushen amincewa da ke akwai"
+    "accord_remint_title": "Sake ƙirƙirar tushen amincewa da ke akwai",
+    "login_google_unavailable": "Shiga tare da {provider} ba ya samuwa a wannan shigarwar."
   },
   "conscience": {
     "ponder_attempted": "Na yi ƙoƙarin {action}",
@@ -4010,5 +4011,7 @@
       "timed_out": "Ba a kammala shiga ba a cikin burauza, don haka ba a canza komai ba. Sake gwadawa, ko a yi amfani da asusun cikin gida maimakon haka.",
       "waiting": "Kammala shiga da Google a cikin burauzarka, sannan ka dawo nan."
     }
-  }
+  },
+  "setup_validation_age_required": "Don Allah ku zaɓi kewayon shekarunku.",
+  "setup_validation_username_reserved": "An tanadi sunan mai amfani 'admin'. Don Allah ku zaɓi wani sunan mai amfani na daban."
 }

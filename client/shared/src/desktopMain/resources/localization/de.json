@@ -2341,7 +2341,8 @@
     "accord_remint_step3_title": "Schritt 3 – Die portable Genesis erzeugen",
     "accord_remint_step_done": "Fertig – der Seed ist autorisiert",
     "accord_remint_step_of": "Schritt {step} von {total}",
-    "accord_remint_title": "Bestehende Vertrauenswurzel neu prägen"
+    "accord_remint_title": "Bestehende Vertrauenswurzel neu prägen",
+    "login_google_unavailable": "Die Anmeldung mit {provider} ist in dieser Installation nicht verfügbar."
   },
   "prompts": {
     "dma": {
@@ -4010,5 +4011,7 @@
       "timed_out": "Die Anmeldung wurde im Browser nicht abgeschlossen, daher wurde nichts geändert. Versuche es erneut oder verwende stattdessen ein lokales Konto.",
       "waiting": "Schließe die Anmeldung mit Google in deinem Browser ab und kehre dann hierher zurück."
     }
-  }
+  },
+  "setup_validation_age_required": "Bitte wählen Sie Ihre Altersgruppe.",
+  "setup_validation_username_reserved": "Der Benutzername „admin“ ist reserviert. Bitte wählen Sie einen anderen Benutzernamen."
 }

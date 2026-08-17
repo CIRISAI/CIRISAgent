@@ -2457,7 +2457,8 @@
     "accord_remint_step3_title": "ขั้นที่ 3 — สร้าง genesis แบบพกพา",
     "accord_remint_step_done": "เสร็จสิ้น — seed ได้รับอนุมัติแล้ว",
     "accord_remint_step_of": "ขั้นที่ {step} จาก {total}",
-    "accord_remint_title": "สร้าง trust root เดิมขึ้นใหม่"
+    "accord_remint_title": "สร้าง trust root เดิมขึ้นใหม่",
+    "login_google_unavailable": "การเข้าสู่ระบบด้วย {provider} ไม่พร้อมใช้งานในการติดตั้งนี้"
   },
   "conscience": {
     "ponder_attempted": "I attempted to {action}",
@@ -4010,5 +4011,7 @@
       "timed_out": "การลงชื่อเข้าใช้ในเบราว์เซอร์ไม่เสร็จสมบูรณ์ จึงไม่มีการเปลี่ยนแปลงใด ๆ ลองอีกครั้ง หรือใช้บัญชีในเครื่องแทน",
       "waiting": "ลงชื่อเข้าใช้ด้วย Google ในเบราว์เซอร์ให้เสร็จ แล้วกลับมาที่นี่"
     }
-  }
+  },
+  "setup_validation_age_required": "โปรดเลือกช่วงอายุของคุณ",
+  "setup_validation_username_reserved": "ชื่อผู้ใช้ admin ถูกสงวนไว้ โปรดเลือกชื่อผู้ใช้อื่น"
 }

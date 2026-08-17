@@ -2341,7 +2341,8 @@
     "accord_remint_step3_title": "Étape 3 — Produire la genèse portable",
     "accord_remint_step_done": "Terminé — la graine est autorisée",
     "accord_remint_step_of": "Étape {step} sur {total}",
-    "accord_remint_title": "Re-frapper une racine de confiance existante"
+    "accord_remint_title": "Re-frapper une racine de confiance existante",
+    "login_google_unavailable": "La connexion avec {provider} n'est pas disponible sur cette installation."
   },
   "prompts": {
     "dma": {
@@ -4041,5 +4042,7 @@
       "timed_out": "La connexion n'a pas été terminée dans le navigateur, aucune modification n'a donc été effectuée. Réessayez ou utilisez plutôt un compte local.",
       "waiting": "Terminez la connexion avec Google dans votre navigateur, puis revenez ici."
     }
-  }
+  },
+  "setup_validation_age_required": "Veuillez choisir votre tranche d'âge.",
+  "setup_validation_username_reserved": "Le nom d'utilisateur « admin » est réservé. Veuillez choisir un autre nom d'utilisateur."
 }

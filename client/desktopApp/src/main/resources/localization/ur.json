@@ -2341,7 +2341,8 @@
     "accord_remint_step3_title": "مرحلہ 3 — پورٹیبل جینیسس تیار کریں",
     "accord_remint_step_done": "مکمل — بیج کی اجازت دی جا چکی ہے",
     "accord_remint_step_of": "{total} میں سے مرحلہ {step}",
-    "accord_remint_title": "موجودہ ٹرسٹ روٹ دوبارہ تیار کریں"
+    "accord_remint_title": "موجودہ ٹرسٹ روٹ دوبارہ تیار کریں",
+    "login_google_unavailable": "اس تنصیب پر {provider} کے ساتھ سائن ان دستیاب نہیں ہے۔"
   },
   "prompts": {
     "dma": {
@@ -4010,5 +4011,7 @@
       "timed_out": "براؤزر میں سائن اِن مکمل نہیں ہوا، اس لیے کچھ تبدیل نہیں کیا گیا۔ دوبارہ کوشش کریں، یا اس کے بجائے مقامی اکاؤنٹ استعمال کریں۔",
       "waiting": "اپنے براؤزر میں Google کے ساتھ سائن اِن مکمل کریں، پھر یہاں واپس آئیں۔"
     }
-  }
+  },
+  "setup_validation_age_required": "براہ کرم اپنی عمر کی حد منتخب کریں۔",
+  "setup_validation_username_reserved": "صارف نام 'admin' محفوظ ہے۔ براہ کرم کوئی دوسرا صارف نام منتخب کریں۔"
 }

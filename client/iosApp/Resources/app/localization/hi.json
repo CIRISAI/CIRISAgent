@@ -2341,7 +2341,8 @@
     "accord_remint_step3_title": "चरण 3 — पोर्टेबल जेनेसिस बनाएँ",
     "accord_remint_step_done": "पूर्ण — सीड अधिकृत है",
     "accord_remint_step_of": "{total} में से चरण {step}",
-    "accord_remint_title": "मौजूदा ट्रस्ट रूट री-मिंट करें"
+    "accord_remint_title": "मौजूदा ट्रस्ट रूट री-मिंट करें",
+    "login_google_unavailable": "{provider} से साइन-इन इस इंस्टॉलेशन पर उपलब्ध नहीं है।"
   },
   "prompts": {
     "dma": {
@@ -4010,5 +4011,7 @@
       "timed_out": "ब्राउज़र में साइन-इन पूरा नहीं हुआ, इसलिए कुछ भी नहीं बदला गया। फिर से कोशिश करें, या इसके बजाय लोकल खाते का उपयोग करें।",
       "waiting": "अपने ब्राउज़र में Google से साइन-इन पूरा करें, फिर यहाँ वापस आएँ।"
     }
-  }
+  },
+  "setup_validation_age_required": "कृपया अपनी आयु सीमा चुनें।",
+  "setup_validation_username_reserved": "उपयोगकर्ता नाम 'admin' आरक्षित है। कृपया कोई दूसरा उपयोगकर्ता नाम चुनें।"
 }

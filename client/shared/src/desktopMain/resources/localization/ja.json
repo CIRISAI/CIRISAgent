@@ -2341,7 +2341,8 @@
     "accord_remint_step3_title": "ステップ 3 — ポータブルジェネシスを生成",
     "accord_remint_step_done": "完了 — シードは承認されました",
     "accord_remint_step_of": "ステップ {step} / {total}",
-    "accord_remint_title": "既存のトラストルートを再発行"
+    "accord_remint_title": "既存のトラストルートを再発行",
+    "login_google_unavailable": "このインストールでは{provider}でのサインインは利用できません"
   },
   "prompts": {
     "dma": {
@@ -4010,5 +4011,7 @@
       "timed_out": "ブラウザでサインインが完了しなかったため、変更は行われませんでした。もう一度お試しいただくか、ローカルアカウントをご利用ください。",
       "waiting": "ブラウザで Google へのサインインを完了してから、この画面に戻ってください。"
     }
-  }
+  },
+  "setup_validation_age_required": "年齢層を選択してください",
+  "setup_validation_username_reserved": "ユーザー名「admin」は予約されています。別のユーザー名を選択してください。"
 }

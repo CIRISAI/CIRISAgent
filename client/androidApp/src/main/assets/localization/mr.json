@@ -2457,7 +2457,8 @@
     "accord_remint_step3_title": "पायरी ३ — पोर्टेबल जेनेसिस तयार करा",
     "accord_remint_step_done": "पूर्ण झाले — बीज अधिकृत झाले आहे",
     "accord_remint_step_of": "{total} पैकी पायरी {step}",
-    "accord_remint_title": "अस्तित्वात असलेले ट्रस्ट रूट री-मिंट करा"
+    "accord_remint_title": "अस्तित्वात असलेले ट्रस्ट रूट री-मिंट करा",
+    "login_google_unavailable": "{provider} सह साइन-इन या इन्स्टॉलेशनवर उपलब्ध नाही."
   },
   "conscience": {
     "ponder_attempted": "I attempted to {action}",
@@ -4010,5 +4011,7 @@
       "timed_out": "ब्राउझरमध्ये साइन-इन पूर्ण झाले नाही, त्यामुळे काहीही बदलले नाही. पुन्हा प्रयत्न करा, किंवा त्याऐवजी स्थानिक खाते वापरा.",
       "waiting": "तुमच्या ब्राउझरमध्ये Google सह साइन इन पूर्ण करा, नंतर इथे परत या."
     }
-  }
+  },
+  "setup_validation_age_required": "कृपया तुमचा वयोगट निवडा.",
+  "setup_validation_username_reserved": "'admin' हे वापरकर्तानाव राखीव आहे. कृपया दुसरे वापरकर्तानाव निवडा."
 }

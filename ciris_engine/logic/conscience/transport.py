@@ -42,10 +42,13 @@ than restating it, so the two can never drift.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Optional
+from datetime import datetime
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 if TYPE_CHECKING:  # pragma: no cover
-    pass
+    # Type-only: the runtime import stays inside unavailable_result() to keep
+    # the schema module off the import path of callers that never fail.
+    from ciris_engine.schemas.conscience.core import ConscienceCheckResult
 
 logger = logging.getLogger(__name__)
 
@@ -122,7 +125,9 @@ def transport_failure_reason(shard: str, exc: BaseException, category: Optional[
     return f"{shard} DID NOT RUN — {cat} reaching the model ({type(exc).__name__}: {exc}). " "This is not a judgement about the action."
 
 
-def unavailable_result(shard: str, exc: BaseException, check_timestamp: object = None) -> "ConscienceCheckResult":
+def unavailable_result(
+    shard: str, exc: BaseException, check_timestamp: Optional[datetime] = None
+) -> "ConscienceCheckResult":
     """The ONE result every shard returns when it could not reach its model.
 
     DRY on purpose. Four shards (entropy, coherence, optimization veto,
@@ -148,13 +153,14 @@ def unavailable_result(shard: str, exc: BaseException, check_timestamp: object =
     reason = transport_failure_reason(shard, exc, category)
     logger.error("%s: transport failure (%s), check did not run: %s", shard, category, exc)
 
-    kwargs = {}
+    kwargs: Dict[str, Any] = {}
     if check_timestamp is not None:
         kwargs["check_timestamp"] = check_timestamp
-    return ConscienceCheckResult(
+    result: "ConscienceCheckResult" = ConscienceCheckResult(
         status=ConscienceStatus.ERROR,
         passed=False,
         reason=reason,
         check_ran=False,
         **kwargs,
     )
+    return result

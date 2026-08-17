@@ -600,9 +600,49 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
     )
 
     def _construct_engine() -> "Engine":
+        # SCRUBBER (CIRISServer#418, CIRISAgent#11). `scrubber=None` — the
+        # constructor default we used to take — installs persist's NullScrubber,
+        # which redacts NOTHING and, since persist v32.1.0, has its full_traces
+        # batches REFUSED outright:
+        #
+        #     ValueError: ('scrub_treatment_mismatch', 'label=full_traces ...')
+        #
+        # The binding has been on every supported pin since ciris-server 0.5.174
+        # and is present in the 0.5.176 we pin (verified against the wheel:
+        # `ciris_server.egress_scrub`, and Engine's third parameter is
+        # `scrubber`). The crate's scrubber was already wired into both RUST
+        # ingest paths; the agent reaches persist through PYTHON, so it alone
+        # never saw one. This closes that gap rather than changing the design.
+        #
+        # Imported defensively: an older pin without the symbol must degrade to
+        # the previous behaviour (refused full_traces) rather than fail to boot.
+        # HELD OUT OF 2.9.23, deliberately, pending measurement.
+        #
+        # The wiring itself is correct and verified against the pinned wheel
+        # (ciris_server.egress_scrub exists; Engine's third parameter is
+        # `scrubber`). It is held because Staged QA (all_1) reproduces four
+        # failures on this branch that main does not have, and the one that
+        # matters is timing-bound:
+        #
+        #   accord_metrics::Verb Second Pass Trace — waits up to 60s for trace
+        #   files that appear only after a complete_trace envelope ships plus a
+        #   5s flush; its own comment records a thought taking ~36s under CI
+        #   load. Three agent_mode failures alongside it are 10s READ TIMEOUTS.
+        #
+        # egress_scrub adds per-trace work at persist and its result tuple
+        # carries `ner_ran`, so it may run NER on every trace. That is a
+        # plausible latency regression on exactly that path, and shipping one
+        # into the fleet this release exists to rescue is the wrong trade.
+        #
+        # Causation is NOT proven — holding it here is also the A/B that proves
+        # or clears it. Re-enable together with _AGENT_INSTALLS_SCRUBBER once
+        # the per-trace cost is measured.
+        scrubber = None
+
         return Engine(
             dsn,
             signing_key_id,
+            scrubber=scrubber,
             identity_dir=str(identity_dir),
             keystore_alias=signing_key_id,
             # First provisioning mints the node's ONE identity. persist warns

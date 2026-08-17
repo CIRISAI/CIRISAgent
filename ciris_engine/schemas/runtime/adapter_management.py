@@ -226,3 +226,32 @@ class ModuleTypesResponse(BaseModel):
     total_adapters: int = Field(..., description="Total number of adapters")
 
     model_config = ConfigDict(defer_build=True)
+
+
+class AdapterLoadFailure(BaseModel):
+    """A configured adapter that did NOT load, kept for the life of the process.
+
+    CIRISAgent#1057. Adapter load failures were logged once at boot and then
+    forgotten, so a fleet ran for several releases with two adapters failing to
+    import on every agent — and one agent serving with NONE of its configured
+    adapters — while every health check said `healthy`. The failure was
+    discoverable only by reading the adapter manager's own log line, which is
+    not a monitoring strategy.
+
+    Keeping the failures as state (rather than as a log event) is what lets
+    /v1/system/health answer the question an operator actually asks: is this
+    agent doing what it was configured to do?
+    """
+
+    adapter_type: str = Field(..., description="Configured adapter type that failed to load")
+    adapter_id: str = Field(..., description="Configured adapter id")
+    error: str = Field(..., description="Exception text, for the operator")
+    error_type: str = Field(..., description="Exception class name")
+    is_missing_module: bool = Field(
+        False,
+        description=(
+            "True when the adapter could not be IMPORTED at all — a renamed or removed adapter still "
+            "named in config, rather than one that exists and failed to start. In #1057 this was "
+            "'ciris_covenant_metrics' (renamed to ciris_accord_metrics) and 'sync' (gone)."
+        ),
+    )

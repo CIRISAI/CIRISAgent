@@ -70,7 +70,7 @@ def substrate_can_scrub() -> bool:
     # the precise failure this module exists to prevent. Fail closed: an import
     # error is not evidence that scrubbing works.
     try:
-        from ciris_server import egress_scrub  # noqa: F401
+        from ciris_server import egress_scrub  # type: ignore[import-untyped, unused-ignore]  # noqa: F401
     except Exception:
         return False
     return True

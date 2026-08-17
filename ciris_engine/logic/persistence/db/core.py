@@ -618,7 +618,7 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
         # the previous behaviour (refused full_traces) rather than fail to boot.
         scrubber = None
         try:
-            from ciris_server import egress_scrub as scrubber  # type: ignore[no-redef]
+            from ciris_server import egress_scrub as scrubber  # type: ignore[no-redef, import-untyped, unused-ignore]
         except ImportError:
             logger.warning(
                 "ciris_server.egress_scrub unavailable on this pin — persist will install NullScrubber "

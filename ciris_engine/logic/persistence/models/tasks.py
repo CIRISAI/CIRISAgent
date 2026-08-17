@@ -862,7 +862,7 @@ class SharedTaskClaimNotPersisted(RuntimeError):
 #: Claim verifications that failed this process. Surfaced by /v1/system/health
 #: so CIRISManager can see it without shelling into the container — the whole
 #: reason #1057 took a fleet-wide inspection to find.
-_SHARED_CLAIM_FAILURES: List[dict] = []
+_SHARED_CLAIM_FAILURES: List[Dict[str, str]] = []
 
 
 def record_shared_claim_failure(task_id: str, outcome: str) -> None:
@@ -873,7 +873,7 @@ def record_shared_claim_failure(task_id: str, outcome: str) -> None:
     del _SHARED_CLAIM_FAILURES[:-20]
 
 
-def get_shared_claim_failures() -> List[dict]:
+def get_shared_claim_failures() -> List[Dict[str, str]]:
     """Claim verifications that failed in this process, for health reporting."""
     return list(_SHARED_CLAIM_FAILURES)
 

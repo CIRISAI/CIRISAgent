@@ -302,9 +302,8 @@ def _stale_shared_task_warnings(request: Request) -> list[SystemWarning]:
     """
     try:
         from ciris_engine.logic.persistence.models.tasks import get_all_tasks
-        from ciris_engine.schemas.runtime.enums import TaskStatus
 
-        tasks = get_all_tasks(agent_occurrence_id="__shared__") or []
+        tasks = get_all_tasks(occurrence_id="__shared__") or []
     except Exception as e:
         logger.debug(f"Could not check shared tasks: {e}")
         return []

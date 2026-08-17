@@ -600,9 +600,35 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
     )
 
     def _construct_engine() -> "Engine":
+        # SCRUBBER (CIRISServer#418, CIRISAgent#11). `scrubber=None` — the
+        # constructor default we used to take — installs persist's NullScrubber,
+        # which redacts NOTHING and, since persist v32.1.0, has its full_traces
+        # batches REFUSED outright:
+        #
+        #     ValueError: ('scrub_treatment_mismatch', 'label=full_traces ...')
+        #
+        # The binding has been on every supported pin since ciris-server 0.5.174
+        # and is present in the 0.5.176 we pin (verified against the wheel:
+        # `ciris_server.egress_scrub`, and Engine's third parameter is
+        # `scrubber`). The crate's scrubber was already wired into both RUST
+        # ingest paths; the agent reaches persist through PYTHON, so it alone
+        # never saw one. This closes that gap rather than changing the design.
+        #
+        # Imported defensively: an older pin without the symbol must degrade to
+        # the previous behaviour (refused full_traces) rather than fail to boot.
+        scrubber = None
+        try:
+            from ciris_server import egress_scrub as scrubber  # type: ignore[no-redef]
+        except ImportError:
+            logger.warning(
+                "ciris_server.egress_scrub unavailable on this pin — persist will install NullScrubber "
+                "and full_traces batches will be refused (CIRISServer#418)"
+            )
+
         return Engine(
             dsn,
             signing_key_id,
+            scrubber=scrubber,
             identity_dir=str(identity_dir),
             keystore_alias=signing_key_id,
             # First provisioning mints the node's ONE identity. persist warns

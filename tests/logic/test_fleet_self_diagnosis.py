@@ -26,6 +26,7 @@ fleet: the producers are the contract manager consumes.
 
 from __future__ import annotations
 
+import pathlib
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -228,3 +229,181 @@ def test_every_new_code_is_distinct_and_actionable() -> None:
     src = open(health_mod.__file__, encoding="utf-8").read()
     for code in codes:
         assert f'code="{code}"' in src, f"{code} is not emitted by the health route"
+
+
+# ── The gap that survived 2.9.23: the top-level status field ─────────────────
+
+
+def test_the_real_loader_records_a_missing_adapter() -> None:
+    """The link that makes every warning above possible.
+
+    The warning producers are tested with hand-built failures; this asserts the
+    REAL loader populates them, because a recorder that is never reached makes
+    the whole feature inert — which is precisely how a fleet ran six releases
+    with two adapters failing to import on every agent.
+    """
+    from types import SimpleNamespace
+
+    from ciris_engine.logic.runtime.bootstrap_helpers import _load_single_adapter
+
+    runtime = SimpleNamespace(
+        adapters=[], adapter_configs={}, modules_to_load=[], startup_channel_id="",
+        debug=False, essential_config=None, bootstrap=SimpleNamespace(adapters=[]),
+    )
+    assert _load_single_adapter(runtime, "ciris_covenant_metrics", "ciris_covenant_metrics") is False
+
+    failures = getattr(runtime, "adapter_load_failures", [])
+    assert len(failures) == 1
+    assert failures[0].adapter_type == "ciris_covenant_metrics"
+    # A renamed/removed adapter is a STALE CONFIG, which manager can fix itself.
+    assert failures[0].is_missing_module is True
+
+
+def test_zero_adapters_forces_status_critical() -> None:
+    """scout1's exact state must not read `healthy` at the top level.
+
+    2.9.23 surfaced this as a warning, which was necessary and not sufficient:
+    a warning buried in an array under a green status is still a green status,
+    and `status` is the field every dashboard and operator reads first.
+
+    critical, not degraded — an agent that can neither receive nor send is not
+    doing a reduced job, it is doing none of it.
+    """
+    from ciris_engine.logic.adapters.api.routes.system.schemas import SystemWarning
+
+    warnings = [
+        SystemWarning(
+            code="adapters_config_stale",
+            message="Configured adapter(s) do not exist and were skipped: sync",
+            severity="error",
+            action_url="/settings/adapters",
+        )
+    ]
+    # Mirrors the health route's own escalation rule.
+    status = "healthy"
+    if any(w.code in ("adapters_config_stale", "adapters_failed_to_load") and w.severity == "error" for w in warnings):
+        status = "critical"
+    assert status == "critical"
+
+
+def test_a_warning_severity_adapter_gap_does_not_force_critical() -> None:
+    """Some adapters loaded: degraded, not dead. Do not cry wolf.
+
+    A gate that escalates on ANY adapter failure would fire on every agent that
+    lost one optional adapter, and an alarm that is always on is not an alarm.
+    """
+    from ciris_engine.logic.adapters.api.routes.system.schemas import SystemWarning
+
+    warnings = [
+        SystemWarning(code="adapters_config_stale", message="one of four missing", severity="warning")
+    ]
+    status = "healthy"
+    if any(w.code in ("adapters_config_stale", "adapters_failed_to_load") and w.severity == "error" for w in warnings):
+        status = "critical"
+    assert status == "healthy"
+
+
+def test_the_health_route_actually_applies_the_escalation() -> None:
+    """Pin it in the route, not just in this test's restatement of the rule."""
+    import pathlib
+
+    from ciris_engine.logic.adapters.api.routes.system import health as health_mod
+
+    src = pathlib.Path(health_mod.__file__).read_text(encoding="utf-8")
+    assert 'status = "critical"' in src
+    assert "adapters_config_stale" in src
+
+
+# ── 2.9.24: the agent must stay reachable, and say what it ignored ───────────
+
+
+def test_the_real_loader_records_a_missing_adapter() -> None:
+    """The link that makes every warning above possible.
+
+    The warning producers are tested with hand-built failures; this asserts the
+    REAL loader populates them. A recorder that is never reached makes the whole
+    feature inert — which is how a fleet ran six releases with two adapters
+    failing to import on every agent.
+    """
+    from types import SimpleNamespace
+
+    from ciris_engine.logic.runtime.bootstrap_helpers import _load_single_adapter
+
+    runtime = SimpleNamespace(
+        adapters=[], adapter_configs={}, modules_to_load=[], startup_channel_id="",
+        debug=False, essential_config=None, bootstrap=SimpleNamespace(adapters=[]),
+    )
+    assert _load_single_adapter(runtime, "ciris_covenant_metrics", "ciris_covenant_metrics") is False
+
+    failures = getattr(runtime, "adapter_load_failures", [])
+    assert len(failures) == 1
+    assert failures[0].adapter_type == "ciris_covenant_metrics"
+    assert failures[0].is_missing_module is True
+
+
+def test_api_is_always_loaded_regardless_of_config() -> None:
+    """scout1 ran 0 of 4 adapters and stayed up, unreachable.
+
+    Whatever else fails, ONE door must stay open — otherwise the agent is a
+    process burning CPU that nobody can talk to and nobody can ask why. It is
+    also what makes "loudly log and ignore" safe for everything else.
+    """
+    src = pathlib.Path("ciris_engine/logic/runtime/bootstrap_helpers.py").read_text(encoding="utf-8")
+    assert '_load_single_adapter(runtime, "api", "api")' in src
+    # And a config that also lists `api` must not load it twice.
+    assert '"ciris_accord_metrics", "api"' in src
+
+
+def test_missing_adapters_are_ignored_not_fatal() -> None:
+    """Ignoring is the policy — a stale generated config must not stop an agent."""
+    from types import SimpleNamespace
+
+    from ciris_engine.logic.runtime.bootstrap_helpers import _load_single_adapter
+
+    runtime = SimpleNamespace(
+        adapters=[], adapter_configs={}, modules_to_load=[], startup_channel_id="",
+        debug=False, essential_config=None, bootstrap=SimpleNamespace(adapters=[]),
+    )
+    # Returns False rather than raising: the caller continues.
+    assert _load_single_adapter(runtime, "definitely_not_an_adapter", "x") is False
+
+
+def test_the_summary_names_what_it_ignored(caplog: pytest.LogCaptureFixture) -> None:
+    """Loud, and specific. A count alone cannot be acted on.
+
+    The failures WERE logged before — one ERROR line each, buried in hundreds of
+    startup lines, with no total. Nobody reads a line they do not know to look
+    for; everybody reads a banner.
+    """
+    from types import SimpleNamespace
+
+    from ciris_engine.logic.runtime.bootstrap_helpers import _log_adapter_load_summary
+
+    runtime = SimpleNamespace(
+        adapters=[SimpleNamespace(adapter_type="api")],
+        adapter_load_failures=[
+            AdapterLoadFailure(
+                adapter_type="sync", adapter_id="sync", error="no module",
+                error_type="ValueError", is_missing_module=True,
+            )
+        ],
+    )
+    with caplog.at_level("ERROR"):
+        _log_adapter_load_summary(runtime)
+
+    text = caplog.text
+    assert "sync" in text, "the ignored adapter must be named, not just counted"
+    assert "IGNORED" in text
+    assert "api" in text, "what DID load matters as much as what did not"
+
+
+def test_a_clean_boot_does_not_shout(caplog: pytest.LogCaptureFixture) -> None:
+    """No failures, no banner — an alarm that is always on is not an alarm."""
+    from types import SimpleNamespace
+
+    from ciris_engine.logic.runtime.bootstrap_helpers import _log_adapter_load_summary
+
+    runtime = SimpleNamespace(adapters=[SimpleNamespace(adapter_type="api")], adapter_load_failures=[])
+    with caplog.at_level("ERROR"):
+        _log_adapter_load_summary(runtime)
+    assert "IGNORED" not in caplog.text

@@ -48,6 +48,75 @@ def main() -> None:
         _run_desktop_mode()
 
 
+
+def _explain_server_death(exit_code: int, port: int) -> None:
+    """Say WHY the server died, using the logs it just wrote.
+
+    2.9.23 promised that a failure would explain itself, and then a user on
+    Windows got exactly one line for a server that died after all 22 services
+    had started:
+
+        ERROR: Server process exited with code 1
+
+    That line is OURS, not the server's. The server logs to a file and to its
+    own incidents log; the launcher knew both paths and printed neither, so the
+    person best placed to act had the least information. Nobody greps a path
+    they were never shown.
+
+    Reads the tail of whatever it can find. Never raises: this runs on a path
+    that is already failing, and a diagnostic that throws replaces the real
+    problem with its own.
+    """
+    import os
+    from pathlib import Path
+
+    print(f"\n{'=' * 72}", file=sys.stderr)
+    print(f"CIRIS server exited with code {exit_code}", file=sys.stderr)
+    print(f"{'=' * 72}", file=sys.stderr)
+
+    try:
+        home = Path(os.environ.get("CIRIS_HOME") or (Path.home() / "ciris"))
+        logs = home / "logs"
+        # incidents first: it is WARNING+ only, so the cause is usually the tail.
+        # ciris-server.log carries the substrate's own (non-Python) output, which
+        # never reaches the incidents log — the startup banner says so.
+        candidates = [
+            ("incidents", logs / "incidents_latest.log"),
+            ("agent log", logs / "latest.log"),
+            ("substrate", logs / "ciris-server.log"),
+        ]
+        shown = False
+        for label, path in candidates:
+            try:
+                if not path.exists() or path.stat().st_size == 0:
+                    continue
+                lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+                tail = [ln for ln in lines[-40:] if ln.strip()][-12:]
+                if not tail:
+                    continue
+                print(f"\n--- last {len(tail)} lines of {label}: {path}", file=sys.stderr)
+                for ln in tail:
+                    print(f"    {ln}", file=sys.stderr)
+                shown = True
+            except OSError:
+                continue
+
+        if not shown:
+            print(f"\nNo log content found under {logs}", file=sys.stderr)
+            print("If that directory is empty the server died before logging started —", file=sys.stderr)
+            print("run `ciris-server` directly to see its output on this console.", file=sys.stderr)
+        else:
+            print(f"\nFull logs: {logs}", file=sys.stderr)
+    except Exception as exc:  # pragma: no cover - diagnostics must not throw
+        print(f"(could not read logs: {type(exc).__name__}: {exc})", file=sys.stderr)
+
+    print(f"\nIf the cause is not above, these are the usual ones:", file=sys.stderr)
+    print(f"  - port {port} already in use   (Windows: netstat -ano | findstr :{port})", file=sys.stderr)
+    print("  - a second process holding the same CIRIS_HOME (one engine per home)", file=sys.stderr)
+    print("  - a stale .env pointing at paths that no longer exist", file=sys.stderr)
+    print(f"{'=' * 72}\n", file=sys.stderr)
+
+
 def _wait_for_server_health(
     server_url: str, server_proc: "subprocess.Popen[bytes]", timeout: float = 60.0
 ) -> bool:
@@ -171,7 +240,7 @@ def _run_desktop_mode() -> None:
             # Check if process crashed while we were waiting
             exit_code = server_proc.poll()
             if exit_code is not None:
-                print(f"ERROR: Server process exited with code {exit_code}", file=sys.stderr)
+                _explain_server_death(exit_code, port)
                 sys.exit(exit_code if exit_code != 0 else 1)
             print("WARNING: Server not responding to health checks yet, launching desktop anyway...")
             print("         The desktop app will retry connecting to the server.")

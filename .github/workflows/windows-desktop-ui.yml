@@ -65,6 +65,14 @@ on:
   # superseded run, which is the practical mitigation — without it a burst of
   # pushes queues a burst of 20-minute Windows jobs.
 
+# Least privilege. Without an explicit block a workflow inherits the repository
+# default, which on many repos is write-all — and this job now runs on every PR
+# touching client/ or the setup paths, so it would hand a write token to a job
+# that builds and executes code from the PR branch. It only ever needs to read
+# the checkout; artifacts upload through the action's own token.
+permissions:
+  contents: read
+
 concurrency:
   group: windows-ui-${{ github.ref }}
   cancel-in-progress: true

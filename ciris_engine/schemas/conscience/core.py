@@ -19,6 +19,13 @@ class ConscienceStatus(str, Enum):
     PASSED = "passed"
     FAILED = "failed"
     WARNING = "warning"
+    #: The check COULD NOT RUN — the model was unreachable (timeout, connection,
+    #: rate limit, auth, missing model). Distinct from FAILED, which means the
+    #: check ran and objected. Conflating them is CIRISAgent#1049: a provider
+    #: timeout was reported as "Epistemic humility concern: abort", which reads
+    #: as the agent declining, and a scorer counted it as exactly that.
+    #: Still fails closed (passed=False) — it just says so honestly.
+    ERROR = "error"
 
 
 class EntropyResult(BaseModel):
@@ -235,6 +242,14 @@ class ConscienceCheckResult(BaseModel):
     status: ConscienceStatus = Field(description="Overall check status")
     passed: bool = Field(description="Whether all checks passed")
     reason: Optional[str] = Field(default=None, description="Reason for failure/warning")
+    check_ran: bool = Field(
+        default=True,
+        description=(
+            "False when the shard could not reach its model, so no judgement was formed. "
+            "Callers MUST NOT retry on this: the retry makes the same call and spends "
+            "another full timeout (CIRISAgent#1049)."
+        ),
+    )
     epistemic_data: Optional[EpistemicData] = Field(
         default=None, description="Epistemic safety metadata (provided by epistemic consciences)"
     )

@@ -176,6 +176,7 @@ class ConscienceExecutionPhase:
 
         final_action = action_result
         overridden = False
+        conscience_unavailable = False
         override_reason = None
         thought_depth_triggered: Optional[bool] = None
         updated_status_detected: Optional[bool] = None
@@ -300,6 +301,11 @@ class ConscienceExecutionPhase:
             if not result.passed and not overridden:
                 overridden = True
                 override_reason = result.reason
+                # #1049: remember WHY. A shard that could not reach its model
+                # still fails closed (safe), but the action was not judged --
+                # so a retry cannot change the outcome and must not be issued.
+                if not result.check_ran:
+                    conscience_unavailable = True
 
                 # Check if the conscience provides a replacement action (top-level field)
                 if result.replacement_action:
@@ -387,6 +393,7 @@ class ConscienceExecutionPhase:
             original_action=action_result,
             final_action=final_action,
             overridden=overridden,
+            conscience_unavailable=conscience_unavailable,
             override_reason=override_reason,
             epistemic_data=epistemic_data,
             # Bypass guardrails

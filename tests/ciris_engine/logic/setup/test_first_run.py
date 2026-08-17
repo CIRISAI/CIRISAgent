@@ -320,7 +320,19 @@ class TestConfigPaths:
         assert get_default_config_path() == home / ".env"
 
     def test_get_config_paths_installed_mode(self, tmp_path, monkeypatch):
-        """Test config paths in installed mode (no git repo)."""
+        """Test config paths in installed mode (no git repo, no explicit home).
+
+        CIRIS_HOME must be cleared explicitly. get_config_paths() now consults
+        get_ciris_home() FIRST so the read path and the write path agree, which
+        means this test is only meaningful when no home is set — and it inherits
+        whatever a previously-run test in the same process left behind.
+
+        It passed in isolation and failed in CI shard 6 for exactly that reason:
+        the assertion `paths[0].parts[-2:] == ("ciris", ".env")` saw a leaked
+        CIRIS_HOME instead of ~/ciris. The other tests in this class all set or
+        clear it deliberately; this one did neither.
+        """
+        monkeypatch.delenv("CIRIS_HOME", raising=False)
         monkeypatch.setenv("HOME", str(tmp_path))
         work_dir = tmp_path / "work"
         work_dir.mkdir()

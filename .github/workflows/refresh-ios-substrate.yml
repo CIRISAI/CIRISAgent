@@ -192,7 +192,28 @@ jobs:
           # already answers it authoritatively from substrate.lock.json. If the
           # bundle is current, there is nothing to say — regardless of what the byte
           # diff claims.
-          if python3 tools/dev/check_ios_substrate_current.py >/dev/null 2>&1 \
+          # A RECORDED-VERSION change is substantive even when no byte of the
+          # bundle moves. 0.5.177's iOS binaries are identical to 0.5.176's, so
+          # the ONLY thing the refresh had to change was the lock — and the
+          # Resources-only diff above called that "timestamp-only churn" and threw
+          # it away. The run then reported success while leaving the lock a
+          # release behind, which is what kept compose-gate red on 2.9.24 and,
+          # earlier, on 2.9.22.
+          #
+          # Compare the RECORDED LIBS, not the file: substrate.lock.json rewrites
+          # `updated_at` on every run, so a whole-file diff is always dirty and
+          # would resurrect exactly the churn loop this guard exists to prevent.
+          libs_of() { git show "$1:client/iosApp/substrate.lock.json" 2>/dev/null \
+            | python3 -c "import json,sys; print(json.dumps(json.load(sys.stdin).get('libs',{}),sort_keys=True))" 2>/dev/null || echo '{}'; }
+          LIBS_HEAD=$(libs_of HEAD)
+          LIBS_NOW=$(python3 -c "import json; print(json.dumps(json.load(open('client/iosApp/substrate.lock.json')).get('libs',{}),sort_keys=True))" 2>/dev/null || echo '{}')
+          if [ "$LIBS_HEAD" != "$LIBS_NOW" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "substrate.lock.json records different libs than HEAD — committing."
+            echo "  HEAD: $LIBS_HEAD"
+            echo "  now : $LIBS_NOW"
+            git diff --stat || true
+          elif python3 tools/dev/check_ios_substrate_current.py >/dev/null 2>&1 \
              && git diff --quiet -- client/iosApp/Resources/ ; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "iOS bundle is already current for these pins — not committing timestamp-only churn."

@@ -101,7 +101,43 @@ jobs:
           # substrate.lock.json is written by the updater on every iOS refresh,
           # so this runs on any runner in milliseconds and answers the question
           # the artifact cannot answer about itself.
+          #
+          # WAIT FOR THE REFRESH RATHER THAN RACING IT. When a PR bumps the
+          # ciris-server pin, refresh-ios-substrate.yml fires on the SAME event
+          # and pushes the updated lock back to this branch — but it needs a
+          # macOS runner, a release download and a Resources rebuild, so it
+          # finishes minutes after this job starts. Asserting immediately made
+          # every pin bump red-then-green-on-rerun, and a gate that is routinely
+          # wrong on first run is a gate people learn to re-run without reading.
+          #
+          # So: if the lock is stale AND a refresh for this branch is in flight,
+          # wait for it and re-check. If it is stale with no refresh running,
+          # fail immediately — that is the real condition this gate exists for.
+          if python tools/dev/check_ios_substrate_current.py; then
+            exit 0
+          fi
+
+          echo "iOS lock is stale — checking whether a refresh is in flight for this branch."
+          BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
+          deadline=$(( SECONDS + 900 ))
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            running=$(gh run list --repo "$GITHUB_REPOSITORY" \
+              --workflow=refresh-ios-substrate.yml --branch "$BRANCH" \
+              --json status --jq '[.[] | select(.status!="completed")] | length' 2>/dev/null || echo 0)
+            if [ "${running:-0}" -eq 0 ]; then
+              echo "No refresh in flight."
+              break
+            fi
+            echo "  refresh still running (${running}); waiting 30s…"
+            sleep 30
+          done
+
+          # Re-fetch: the refresh pushes its commit to this same branch.
+          git fetch --quiet origin "$BRANCH" 2>/dev/null || true
+          git checkout --quiet "origin/$BRANCH" -- client/iosApp/substrate.lock.json 2>/dev/null || true
           python tools/dev/check_ios_substrate_current.py
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: Version alignment — the shipped client must match the shipped node
         run: |

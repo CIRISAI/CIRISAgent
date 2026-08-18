@@ -215,8 +215,13 @@ jobs:
             echo 'The `ios-refresh` job in this run rebuilt it on the macOS runner. Land it with:'
             echo
             echo '```bash'
+            # Via a temp dir: `gh run download` REFUSES to overwrite, so
+            # extracting straight into client/iosApp/ aborts on the first file
+            # that already exists — which is all of them — and lands nothing.
+            echo "T=\$(mktemp -d)"
             echo "gh run download ${{ github.run_id }} -R ${{ github.repository }} \\"
-            echo "  -n ios-substrate-refresh -D client/iosApp/"
+            echo "  -n ios-substrate-refresh -D \"\$T\""
+            echo "cp -a \"\$T\"/. client/iosApp/"
             echo "git add -f client/iosApp/app_packages_native client/iosApp/Frameworks \\"
             echo "  client/iosApp/Resources/app_packages client/iosApp/Resources.zip \\"
             echo "  client/iosApp/substrate.lock.json"

@@ -6,6 +6,7 @@ Supports native SDKs for:
 - Google (Gemini models)
 """
 
+from urllib.parse import urlparse
 import json
 import logging
 import os
@@ -848,8 +849,14 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         # it, and sending an empty model broke the run. The substitution is not
         # the bug; applying it to OTHER vendors is. So it now applies only when
         # the endpoint is OpenAI's own (or unset, which means the same thing).
-        _base = (base_url or "").lower()
-        _is_openai_endpoint = not _base or "api.openai.com" in _base
+        # PARSE THE HOST — do not substring-match it. `"api.openai.com" in url`
+        # is true for https://api.openai.com.evil.com/v1 and for any URL that
+        # merely mentions it in a query string (CodeQL py/incomplete-url-
+        # substring-sanitization). This is the same sloppiness this release
+        # already fixed in _is_loopback_or_lan's `"10." in url`; I reintroduced
+        # it here and CodeQL caught it.
+        _host = (urlparse(base_url).hostname or "").lower() if base_url else ""
+        _is_openai_endpoint = not _host or _host == "api.openai.com" or _host.endswith(".openai.com")
         model_name = self.openai_config.model_name or ("gpt-4o-mini" if _is_openai_endpoint else "")
         provider = getattr(self.openai_config, "provider", LLMProvider.OPENAI)
 

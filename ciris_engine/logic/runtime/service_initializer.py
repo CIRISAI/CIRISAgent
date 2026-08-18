@@ -53,6 +53,41 @@ from ciris_engine.schemas.services.capabilities import LLMCapabilities
 logger = logging.getLogger(__name__)
 
 
+def _is_loopback_or_lan(url: str) -> bool:
+    """Is this endpoint on the loopback interface or a private network?
+
+    A TOPOLOGY question, and only that. It decides whether a provider is
+    "local_primary"; it must never be used to decide WHO a provider is — that
+    conflation is CIRISAgent#1063.
+
+    The previous implementation was a substring scan:
+
+        any(x in url.lower() for x in ["localhost","127.0.0.1","192.168.","10.","172.16."])
+
+    which matched `"10."` anywhere in a URL (a version segment, a port, a
+    hostname) and covered only 172.16/16 of the private 172.16/12 range. This
+    parses the host and asks the ipaddress module, so the answer is the real one.
+    """
+    from urllib.parse import urlparse
+
+    if not url:
+        return False
+    host = (urlparse(url).hostname or "").strip().lower()
+    if not host:
+        return False
+    if host in ("localhost", "127.0.0.1", "::1") or host.endswith(".local"):
+        return True
+    try:
+        import ipaddress
+
+        addr = ipaddress.ip_address(host)
+        return bool(addr.is_private or addr.is_loopback or addr.is_link_local)
+    except ValueError:
+        # A hostname we cannot resolve here. Not demonstrably local, so no.
+        return False
+
+
+
 class ServiceInitializer:
     """Manages initialization of all core services."""
 
@@ -1188,14 +1223,38 @@ This directory contains critical cryptographic keys for the CIRIS system.
             provider=provider,
         )
 
-        # Determine service name based on provider type
-        # Local providers (localhost, 127.0.0.1, LAN IPs) get "local_primary"
-        # Cloud/CIRIS providers get "ciris_primary"
+        # NAME THE SERVICE AFTER WHAT IT IS (CIRISAgent#1063).
+        #
+        # This used to decide the name on a TOPOLOGY axis — is this endpoint on
+        # my LAN? — and then label the answer with a BILLING one:
+        #
+        #     service_name = "local_primary" if is_local_provider else "ciris_primary"
+        #
+        # Groq is not on anyone's LAN, so Groq was called `ciris_primary`. So
+        # were OpenAI, Anthropic, Together, DeepInfra and OpenRouter. The name
+        # then reached the UI ("CIRIS Primary configured" over a Groq config),
+        # the error text ("LLM service 'ciris_primary' temporarily unavailable"
+        # for a Groq failure), and the delete path in llm_providers.py, which
+        # branches on `"ciris" in name.lower()` and cleared the wrong env vars.
+        #
+        # It cost a user a day and it misled the maintainer triaging it: the UI
+        # said CIRIS, so he was told he had selected CIRIS services. He had
+        # selected Groq.
+        #
+        # `is_ciris_proxy_url` is the SAME predicate the rest of the system uses
+        # to decide whether it is talking to the proxy, so the name cannot drift
+        # from the truth.
+        from ciris_engine.config.ciris_services import is_ciris_proxy_url
+
         effective_url = base_url or ""
-        is_local_provider = any(
-            x in effective_url.lower() for x in ["localhost", "127.0.0.1", "192.168.", "10.", "172.16."]
-        )
-        service_name = "local_primary" if is_local_provider else "ciris_primary"
+        is_local_provider = _is_loopback_or_lan(effective_url)
+        if is_ciris_proxy_url(effective_url):
+            service_name = "ciris_primary"
+        elif is_local_provider:
+            service_name = "local_primary"
+        else:
+            # e.g. groq_primary, openai_primary, together_primary.
+            service_name = f"{provider.value}_primary"
 
         # Optional: register the same OpenAI-compatible endpoint N times so the
         # LLM bus can load-balance across independently-gated replicas. Each

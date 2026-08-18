@@ -9556,7 +9556,18 @@ class CIRISApiClient(
 
             if (!response.status.isSuccess()) {
                 client.close()
-                throw RuntimeException("Add provider failed: ${response.status}")
+                // READ THE REASON THE SERVER SENT (CIRISAgent#1065).
+                //
+                // This threw the bare status, so a user adding Groq saw
+                // "400 failed request" and had nothing to act on — while the
+                // server was returning a `detail` naming the exact conflict.
+                val detail = try {
+                    val err = Json.parseToJsonElement(response.bodyAsText()).jsonObject
+                    (err["detail"] ?: err["error"])?.jsonPrimitive?.contentOrNull
+                } catch (_: Exception) {
+                    null
+                }
+                throw RuntimeException(detail ?: "Add provider failed: ${response.status}")
             }
 
             val body = response.bodyAsText()

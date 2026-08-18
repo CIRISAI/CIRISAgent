@@ -4231,6 +4231,33 @@ private suspend fun checkFirstRunStatus(
             val client = CIRISApiClient(apiBaseUrl)
             val setupStatus = client.getSetupStatus()
             platformLog("checkFirstRunStatus", "[INFO] Got setup status: setup_required=${setupStatus.data.setup_required}")
+
+            // "IS THIS A FIRST RUN?" DEPENDS ON TWO STORES, AND THIS ASKED ONE.
+            //
+            // The brain answers from its own config; the NODE independently knows
+            // whether it has ever been claimed. They can disagree, and when they do
+            // the node is decisive — an owned node is CONFIGURED, whatever the
+            // brain's .env says. Observed live (CIRISAgent#1061):
+            //
+            //     brain /v1/setup/status      setup_required=true    (.env was gone)
+            //     node  /v1/setup/owned-nodes owner present          <- decisive
+            //
+            // The user got the first-run login, and a Google sign-in there was
+            // CORRECTLY refused (auth.oauth.no_local_identity — the owner was a
+            // local credential with no OAuth identity linked). Every layer behaved
+            // as written; the node looked broken while being right every time. It
+            // was reported as "OAuth is broken" and was neither first-run nor
+            // broken OAuth.
+            //
+            // Note where the rule already lived: BOTH degrade branches below
+            // consult nodeHasOwner() and explain why. The happy path — the one
+            // that runs when nothing is wrong — was the only place it was missing.
+            // Re-entering the wizard here would re-claim a node that already has
+            // an owner, so this is a correctness fix, not just a UX one.
+            if (setupStatus.data.setup_required && nodeHasOwner(nodeBaseUrl)) {
+                platformLog("checkFirstRunStatus", "[INFO] brain says setup_required but the NODE has an OWNER → configured, NOT first-run (sign in instead)")
+                return false
+            }
             return setupStatus.data.setup_required
         } catch (e: Exception) {
             // FAST-PATH degrade (ciris-server node client): a 404 / deserialize

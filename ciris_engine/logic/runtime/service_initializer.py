@@ -1108,10 +1108,28 @@ This directory contains critical cryptographic keys for the CIRIS system.
                             f"{[ep.region for ep in endpoints]}"
                         )
 
-        # Get model name - provider-specific defaults
+        # Get model name — a default model is only meaningful WITHIN a vendor.
+        #
+        # CIRISAgent#1062. OPENAI_COMPATIBLE used to default to "gpt-4o-mini",
+        # and the trailing .get(provider, "gpt-4o-mini") did the same for any
+        # provider not in this map. But OPENAI_COMPATIBLE means "speaks the
+        # OpenAI protocol", NOT "serves OpenAI models" — it is how we reach
+        # Groq, Together, DeepInfra, OpenRouter and every local server. So a
+        # user who picked Groq and left the model blank booted a Groq endpoint
+        # asking for gpt-4o-mini. Observed live on 2.9.24:
+        #
+        #     'ciris_primary' started with model: gpt-4o-mini   <- base_url = api.groq.com
+        #     EthicalPDMAEvaluator initialized with model: gpt-4o-mini
+        #
+        # Every request then failed at the provider, surfaced as an
+        # InstructorRetryException XML dump that never named the cause. His API
+        # key was fine. He was told to check his key.
+        #
+        # A model name from the wrong vendor is not a degraded default — it is a
+        # guaranteed failure wearing the costume of a working config. Where we
+        # do not know the vendor's catalogue we must not invent an entry in it.
         default_models = {
             LLMProvider.OPENAI: "gpt-4o-mini",
-            LLMProvider.OPENAI_COMPATIBLE: "gpt-4o-mini",
             LLMProvider.ANTHROPIC: "claude-sonnet-4-20250514",
             LLMProvider.GOOGLE: "gemini-2.0-flash",
         }
@@ -1120,8 +1138,29 @@ This directory contains critical cryptographic keys for the CIRIS system.
             or os.environ.get("OPENAI_MODEL_NAME")  # OpenAI SDK convention
             or os.environ.get("OPENAI_MODEL")
             or os.environ.get("LLM_MODEL")
-            or self._get_llm_service_config_value(config, "llm_model", default_models.get(provider, "gpt-4o-mini"))
+            or self._get_llm_service_config_value(config, "llm_model", default_models.get(provider, ""))
         )
+
+        # LOUDLY LOG AND REFUSE, rather than boot a provider that cannot work.
+        #
+        # Same doctrine 2.9.24 applied to adapters: a thing that cannot function
+        # is named and skipped, never started in a broken state and left for the
+        # user to discover one failed request at a time. The API adapter stays
+        # up regardless, so the console and the LLM settings screen are both
+        # reachable to fix this.
+        if not model_name:
+            logger.error(
+                "=" * 70
+                + f"\n  NO MODEL CONFIGURED for provider '{provider.value}' at {base_url or '<default url>'}."
+                + "\n  This provider is reached over the OpenAI protocol, but that says nothing"
+                + "\n  about which models it serves — so there is no safe default to pick."
+                + "\n  NOT starting it: a wrong model name fails every request at the provider"
+                + "\n  and reports it as an instructor retry error, which names nothing."
+                + "\n  FIX: choose a model in Settings -> LLM, or set CIRIS_LLM_MODEL_NAME."
+                + "\n"
+                + "=" * 70
+            )
+            return
 
         # LLM timeout - reduced default to 20s to allow failover within DMA timeout budget
         # With 90s DMA timeout: 20s × 2 retries × 2 providers = 80s < 90s

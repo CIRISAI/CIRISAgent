@@ -5996,13 +5996,15 @@ class CIRISApiClient(
      * @param provider Provider ID (openai, anthropic, local, other)
      * @param apiKey API key for the provider
      * @param baseUrl Optional base URL for custom endpoints
-     * @return List of ModelInfo with id and display name, sorted by CIRIS compatibility
+     * @return [ModelListResult] — the models AND whether they came from the
+     *         provider ("live") or from cached static data ("static"). Callers
+     *         must not present a static list as the provider's catalogue.
      */
     suspend fun listModels(
         provider: String,
         apiKey: String,
         baseUrl: String? = null
-    ): List<ModelInfo> {
+    ): ModelListResult {
         val method = "listModels"
         logInfo(method, "Listing models: provider=$provider, baseUrl=${baseUrl ?: "default"}")
 
@@ -6035,11 +6037,12 @@ class CIRISApiClient(
 
             if (response.status.value !in 200..299) {
                 logError(method, "API returned error status: ${response.status}")
-                return emptyList()
+                return ModelListResult(emptyList(), "error", "HTTP ${response.status}")
             }
 
             val body = response.body<ListModelsApiResponse>()
-            val data = body.data ?: return emptyList()
+            val data = body.data
+                ?: return ModelListResult(emptyList(), "error", "empty response body")
 
             val models = data.models?.map { model ->
                 ModelInfo(
@@ -6051,12 +6054,43 @@ class CIRISApiClient(
                 )
             } ?: emptyList()
 
-            logInfo(method, "Listed ${models.size} models from ${data.source ?: "unknown"}")
-            models
+            val source = data.source ?: "unknown"
+            if (source != "live") {
+                // Say WHY, at WARN. This was an INFO line that reported the
+                // source and swallowed the reason, so the one signal that the
+                // list was not the provider's went unnoticed in both the log
+                // and the UI.
+                logWarn(method, "Models are NOT live (source=$source): ${data.error ?: "no reason given"}")
+            } else {
+                logInfo(method, "Listed ${models.size} models from live")
+            }
+            ModelListResult(models, source, data.error)
         } catch (e: Exception) {
             logException(method, e)
-            emptyList()
+            ModelListResult(emptyList(), "error", e.message ?: e::class.simpleName)
         }
+    }
+
+    /**
+     * What `listModels` returned AND where it came from.
+     *
+     * CIRISAgent#1062. This used to be a bare `List<ModelInfo>`, so a live list
+     * and a cached static fallback were the same value. All three call sites —
+     * the setup wizard, LLM settings, and the settings view-model — then
+     * auto-selected "the best model" out of whichever they got. A user who set
+     * up Groq while the live query was failing picked from OpenAI-flavoured
+     * cached data, and nothing on screen said the list was not his provider's.
+     *
+     * `source` is "live" or "static"; `error` is the reason the live query
+     * failed, which the server has always sent and we always discarded.
+     */
+    data class ModelListResult(
+        val models: List<ModelInfo>,
+        val source: String,
+        val error: String? = null
+    ) {
+        /** True only when this list actually came from the provider. */
+        val isLive: Boolean get() = source == "live"
     }
 
     /**
@@ -6071,7 +6105,11 @@ class CIRISApiClient(
     @Serializable
     private data class ListModelsData(
         val source: String? = null,
-        val models: List<LiveModelInfo>? = null
+        val models: List<LiveModelInfo>? = null,
+        // The server ALREADY sends this on a static fallback ("Live query failed:
+        // <cause>. Showing cached model data.") and we were dropping it on the
+        // floor, which is why a stale list was indistinguishable from a live one.
+        val error: String? = null
     )
 
     @Serializable

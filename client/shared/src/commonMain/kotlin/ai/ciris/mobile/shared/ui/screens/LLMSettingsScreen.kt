@@ -1197,11 +1197,18 @@ private fun AddProviderCard(
                             fetchError = null
                             coroutineScope.launch {
                                 try {
-                                    val models = apiClient.listModels(
+                                    val result = apiClient.listModels(
                                         provider = selectedProvider,
                                         apiKey = apiKey,
                                         baseUrl = null
                                     )
+                                    val models = result.models
+                                    // Don't present cached data as the provider's
+                                    // catalogue (#1062) — say so where the user looks.
+                                    if (!result.isLive) {
+                                        fetchError = result.error
+                                            ?: "Could not reach ${selectedProvider}; showing cached models."
+                                    }
                                     fetchedModels = models
                                     // Auto-select recommended or first model
                                     if (models.isNotEmpty()) {

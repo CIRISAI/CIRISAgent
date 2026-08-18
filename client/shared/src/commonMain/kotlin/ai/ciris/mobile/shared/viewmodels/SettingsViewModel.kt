@@ -189,6 +189,10 @@ class SettingsViewModel(
         // NOTE: "local" and "openai_compatible" intentionally omitted - always query the endpoint
     )
 
+    /** Why the model list is not the provider's own, if it is not (#1062). */
+    private val _modelListWarning = MutableStateFlow<String?>(null)
+    val modelListWarning: StateFlow<String?> = _modelListWarning.asStateFlow()
+
     private val _availableModels = MutableStateFlow<List<String>>(emptyList())
     val availableModels: StateFlow<List<String>> = _availableModels.asStateFlow()
 
@@ -538,11 +542,22 @@ class SettingsViewModel(
                 return
             }
 
-            val models = apiClient.listModels(
+            val result = apiClient.listModels(
                 provider = providerId,
                 apiKey = apiKey,
                 baseUrl = _llmBaseUrl.value.takeIf { it.isNotEmpty() }
             )
+            val models = result.models
+
+            // A static fallback is CACHED DATA, not this provider's catalogue
+            // (CIRISAgent#1062). Auto-selecting from it is how a Groq user ends
+            // up on an OpenAI model name that fails every request.
+            if (!result.isLive) {
+                logWarn(method, "Model list is ${result.source}, not live: ${result.error ?: "no reason given"}")
+                _modelListWarning.value = result.error
+            } else {
+                _modelListWarning.value = null
+            }
 
             if (models.isNotEmpty()) {
                 _availableModels.value = models.map { it.id }

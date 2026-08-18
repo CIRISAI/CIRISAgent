@@ -834,7 +834,13 @@ class TestAddProviderEndpoint:
         assert "192.168.1.100" in data["data"]["provider_name"]
 
     def test_add_provider_already_exists(self, app_with_llm_routes: FastAPI) -> None:
-        """Test that adding existing provider returns 400."""
+        """A duplicate is a CONFLICT, and the refusal must be actionable.
+
+        CIRISAgent#1065. This returned a bare 400 whose detail the client threw
+        away, so a user adding Groq saw "400 failed request" and had no way
+        forward — he already had a Groq provider but nothing said which one or
+        what to do about it.
+        """
         from ciris_engine.logic.registries.base import Priority, ServiceProvider
 
         app_with_llm_routes.state.telemetry_service = MagicMock()
@@ -862,8 +868,12 @@ class TestAddProviderEndpoint:
                     },
                 )
 
-        assert response.status_code == 400
-        assert "already exists" in response.json()["detail"].lower()
+        assert response.status_code == 409, "a name collision is a conflict, not a malformed request"
+        detail = response.json()["detail"]
+        assert "existing_provider" in detail, "the refusal must NAME the provider that collided"
+        assert "already registered" in detail.lower()
+        # ...and say what to do next, which is the half that was missing.
+        assert "different name" in detail.lower() or "remove it" in detail.lower()
 
     def test_add_provider_missing_services(self, app_with_llm_routes: FastAPI) -> None:
         """Test that 503 is returned when required services are unavailable."""

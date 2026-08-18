@@ -810,6 +810,7 @@ async def delete_provider(
     "/providers",
     responses={
         400: {"description": "Invalid provider configuration"},
+        409: {"description": "A provider with that name is already registered"},
         503: {"description": "Required services not available"},
     },
     dependencies=[SetupOrAdminDep],
@@ -856,7 +857,23 @@ async def add_provider(
     # Check if provider already exists
     existing = registry.get_provider_by_name(provider_name, ServiceType.LLM)
     if existing:
-        raise HTTPException(status_code=400, detail=f"Provider '{provider_name}' already exists")
+        # NAME WHAT EXISTS AND HOW TO PROCEED (CIRISAgent#1065).
+        #
+        # A user adding Groq got "Add profile failed: 400 failed request" and no
+        # way forward. He already had a Groq provider — but the UI was showing
+        # his primary as `ciris_primary` (#1063), so nothing on screen told him
+        # so, and the client discarded this `detail` anyway.
+        #
+        # Re-adding a provider almost always means "update it", so say which one
+        # collides and what to do, rather than refusing anonymously.
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"An LLM provider named '{provider_name}' is already registered. "
+                "Remove it first, or add this one under a different name — "
+                "pass `name` explicitly to keep both."
+            ),
+        )
 
     # Map API priority to internal priority
     priority_mapping = {

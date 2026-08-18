@@ -352,7 +352,8 @@ fun LLMSettingsScreen(
                     AdvancedSettingsContent(
                         llmViewModel = llmViewModel,
                         llmBusStatus = llmBusStatus,
-                        llmProviders = llmProviders
+                        llmProviders = llmProviders,
+                        isCirisProxy = isCirisProxy
                     )
                 }
 
@@ -1197,11 +1198,18 @@ private fun AddProviderCard(
                             fetchError = null
                             coroutineScope.launch {
                                 try {
-                                    val models = apiClient.listModels(
+                                    val result = apiClient.listModels(
                                         provider = selectedProvider,
                                         apiKey = apiKey,
                                         baseUrl = null
                                     )
+                                    val models = result.models
+                                    // Don't present cached data as the provider's
+                                    // catalogue (#1062) — say so where the user looks.
+                                    if (!result.isLive) {
+                                        fetchError = result.error
+                                            ?: "Could not reach ${selectedProvider}; showing cached models."
+                                    }
                                     fetchedModels = models
                                     // Auto-select recommended or first model
                                     if (models.isNotEmpty()) {
@@ -2131,7 +2139,10 @@ private fun LocalServersContent(
 private fun AdvancedSettingsContent(
     llmViewModel: LLMSettingsViewModel,
     llmBusStatus: ai.ciris.mobile.shared.models.LlmBusStatus?,
-    llmProviders: List<ai.ciris.mobile.shared.models.LlmProviderStatus>
+    llmProviders: List<ai.ciris.mobile.shared.models.LlmProviderStatus>,
+    // Who is ACTUALLY serving requests, as distinct from whether the CIRIS
+    // proxy is permitted (CIRISAgent#1064).
+    isCirisProxy: Boolean
 ) {
     val currentStrategy = llmBusStatus?.distributionStrategy
         ?: ai.ciris.mobile.shared.models.DistributionStrategy.LATENCY_BASED
@@ -2205,7 +2216,7 @@ private fun AdvancedSettingsContent(
         )
 
         // CIRIS Services Toggle (Danger Zone)
-        CirisServicesToggle(llmViewModel = llmViewModel)
+        CirisServicesToggle(llmViewModel = llmViewModel, isCirisProxy = isCirisProxy)
     }
 }
 
@@ -2214,7 +2225,7 @@ private fun AdvancedSettingsContent(
  * Shows a warning that re-enabling requires re-running the setup wizard.
  */
 @Composable
-private fun CirisServicesToggle(llmViewModel: LLMSettingsViewModel) {
+private fun CirisServicesToggle(llmViewModel: LLMSettingsViewModel, isCirisProxy: Boolean) {
     val semantic = SemanticColors.Default
     var showDisableDialog by remember { mutableStateOf(false) }
     val isCirisServicesEnabled by llmViewModel.cirisServicesEnabled.collectAsState()
@@ -2243,8 +2254,23 @@ private fun CirisServicesToggle(llmViewModel: LLMSettingsViewModel) {
                         fontWeight = FontWeight.Medium
                     )
                     Text(
-                        text = if (isCirisServicesEnabled) "Using CIRIS proxy for LLM requests"
-                               else "Disabled - using your own API keys",
+                        // TWO DIFFERENT QUESTIONS (CIRISAgent#1064).
+                        //
+                        // `cirisServicesEnabled` is the KILL SWITCH — it reports
+                        // whether the CIRIS proxy is permitted, from
+                        // /v1/system/llm/ciris-services/status (`disabled`). It
+                        // does NOT mean CIRIS is serving requests. A BYOK user
+                        // with the switch on was told "Using CIRIS proxy for LLM
+                        // requests" while every call went to his own provider on
+                        // his own key — and that is what a maintainer read when
+                        // triaging his report.
+                        //
+                        // `isCirisProxy` is who is actually serving. Say that.
+                        text = when {
+                            !isCirisServicesEnabled -> "Disabled - using your own API keys"
+                            isCirisProxy -> "Using CIRIS proxy for LLM requests"
+                            else -> "Available, but not in use - your own provider is serving requests"
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                     )

@@ -386,12 +386,19 @@ async def delete_provider(
     providers = await list_providers(config_service)
 
     if name not in providers:
-        # Also try to clear legacy env vars for known provider names
-        if name == "local_primary" or "local" in name.lower():
-            clear_primary_provider_env_vars(is_local=True)
-            return PersistenceResult(success=True, env_persisted=True)
-        elif name == "ciris_primary" or "ciris" in name.lower():
-            clear_primary_provider_env_vars(is_local=False)
+        # The BOOT primary is not in this store — it is rebuilt from config on
+        # every boot and never persisted. "Deleting" it means clearing the env
+        # vars that define it.
+        #
+        # This used to match on `"ciris" in name.lower()` (CIRISAgent#1063),
+        # which was true for every cloud provider back when they were all named
+        # `ciris_primary` — so deleting a Groq provider ran the CIRIS branch.
+        # Now the cloud primary is named for its provider (`groq_primary`,
+        # `openai_primary`, ...), and only a real proxy config is `ciris_primary`.
+        # `local_primary` is still the one and only local case, so it is the one
+        # and only is_local=True.
+        if name.endswith("_primary"):
+            clear_primary_provider_env_vars(is_local=(name == "local_primary"))
             return PersistenceResult(success=True, env_persisted=True)
         return PersistenceResult(
             success=False,
@@ -404,11 +411,10 @@ async def delete_provider(
     # Persist to graph
     graph_ok = await write_providers_to_graph(config_service, providers)
 
-    # Also clear legacy env vars for known provider names
-    if name == "local_primary" or "local" in name.lower():
-        clear_primary_provider_env_vars(is_local=True)
-    elif name == "ciris_primary" or "ciris" in name.lower():
-        clear_primary_provider_env_vars(is_local=False)
+    # Same rule as above: any "<provider>_primary" is the boot primary, and
+    # only `local_primary` is the local one (CIRISAgent#1063).
+    if name.endswith("_primary"):
+        clear_primary_provider_env_vars(is_local=(name == "local_primary"))
 
     return PersistenceResult(
         success=graph_ok,

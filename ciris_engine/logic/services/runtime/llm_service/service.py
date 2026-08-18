@@ -6,6 +6,7 @@ Supports native SDKs for:
 - Google (Gemini models)
 """
 
+from urllib.parse import urlparse
 import json
 import logging
 import os
@@ -316,6 +317,31 @@ def _handle_instructor_retry_exception(
     """
     error_str = str(error).lower()
     full_error = str(error)
+
+    # EVERY FAILURE MUST REACH THE LOG, NAMING THE PROVIDER AND THE MODEL.
+    #
+    # CIRISAgent#1066. Of the branches below, only the rate-limit one logged.
+    # The rest raised a RuntimeError and nothing else, so a user whose agent was
+    # visibly failing sent us a `latest.log` containing ZERO error lines — no
+    # exception, no provider message, no circuit-breaker trip. He was told to
+    # check an API key that was fine; the real fault was a model name his
+    # provider does not serve (#1062), which the provider had said plainly in a
+    # response nobody recorded.
+    #
+    # 2.9.23 promised "if it does not work, the console and logs will tell you
+    # why". This is the one line that makes that true for LLM calls: WHICH model,
+    # at WHICH provider, and what the provider actually said. Logged once here,
+    # before the branch, so no future branch can be added that stays silent.
+    logger.error(
+        "LLM call FAILED — model=%s provider=%s response_model=%s breaker=%s consecutive_failures=%d%s\n  provider said: %s",
+        error_context.model,
+        error_context.provider,
+        error_context.response_model,
+        error_context.circuit_breaker_state,
+        error_context.consecutive_failures,
+        f" thought={error_context.thought_id}" if error_context.thought_id else "",
+        full_error[:600],
+    )
 
     # Check for rate limit first - DON'T record as circuit breaker failure
     is_rate_limit = (
@@ -811,7 +837,27 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
 
         api_key = self.openai_config.api_key
         base_url = self.openai_config.base_url
-        model_name = self.openai_config.model_name or "gpt-4o-mini"
+        # An unset model may fall back to OpenAI's default ONLY IF THIS REALLY IS
+        # OPENAI (CIRISAgent#1062).
+        #
+        # This was `model_name or "gpt-4o-mini"` unconditionally — the last place
+        # a Groq/Together/DeepInfra endpoint could still be handed an OpenAI
+        # model and fail with an error naming nothing.
+        #
+        # Deleting the fallback outright was ALSO wrong, and Staged QA caught it:
+        # a config that genuinely is OpenAI and simply names no model relied on
+        # it, and sending an empty model broke the run. The substitution is not
+        # the bug; applying it to OTHER vendors is. So it now applies only when
+        # the endpoint is OpenAI's own (or unset, which means the same thing).
+        # PARSE THE HOST — do not substring-match it. `"api.openai.com" in url`
+        # is true for https://api.openai.com.evil.com/v1 and for any URL that
+        # merely mentions it in a query string (CodeQL py/incomplete-url-
+        # substring-sanitization). This is the same sloppiness this release
+        # already fixed in _is_loopback_or_lan's `"10." in url`; I reintroduced
+        # it here and CodeQL caught it.
+        _host = (urlparse(base_url).hostname or "").lower() if base_url else ""
+        _is_openai_endpoint = not _host or _host == "api.openai.com" or _host.endswith(".openai.com")
+        model_name = self.openai_config.model_name or ("gpt-4o-mini" if _is_openai_endpoint else "")
         provider = getattr(self.openai_config, "provider", LLMProvider.OPENAI)
 
         # Store provider for later use

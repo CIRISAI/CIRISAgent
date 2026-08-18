@@ -1621,13 +1621,19 @@ private fun AiStep(
                                 )
 
                                 // If validation succeeded, fetch available models
-                                val models = if (result.valid) {
+                                // THE WIZARD IS WHERE THIS BIT (#1062). A user
+                                // set up Groq while the live query was failing,
+                                // got OpenAI-flavoured cached models, and left
+                                // with a model his provider does not serve.
+                                val modelResult = if (result.valid) {
                                     apiClient.listModels(
                                         provider = providerId,
                                         apiKey = state.llmApiKey,
                                         baseUrl = state.llmBaseUrl.takeIf { it.isNotEmpty() }
                                     )
-                                } else emptyList()
+                                } else null
+                                val models = modelResult?.models ?: emptyList()
+                                val modelsAreLive = modelResult?.isLive == true
 
                                 withContext(Dispatchers.Main) {
                                     testResult = result
@@ -1635,7 +1641,11 @@ private fun AiStep(
                                     isTesting = false
 
                                     // Auto-select the best model if none is currently selected
-                                    if (models.isNotEmpty() && state.llmModel.isEmpty()) {
+                                    // Only auto-select from a list the provider
+                                    // actually gave us. Picking a cached model on
+                                    // the user's behalf is what shipped him a
+                                    // config that could never work.
+                                    if (modelsAreLive && models.isNotEmpty() && state.llmModel.isEmpty()) {
                                         // Prefer recommended, then compatible, then first available
                                         val bestModel = models.firstOrNull { it.cirisRecommended }
                                             ?: models.firstOrNull { it.cirisCompatible }

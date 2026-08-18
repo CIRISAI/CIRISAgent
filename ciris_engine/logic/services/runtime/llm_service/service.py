@@ -317,6 +317,31 @@ def _handle_instructor_retry_exception(
     error_str = str(error).lower()
     full_error = str(error)
 
+    # EVERY FAILURE MUST REACH THE LOG, NAMING THE PROVIDER AND THE MODEL.
+    #
+    # CIRISAgent#1066. Of the branches below, only the rate-limit one logged.
+    # The rest raised a RuntimeError and nothing else, so a user whose agent was
+    # visibly failing sent us a `latest.log` containing ZERO error lines — no
+    # exception, no provider message, no circuit-breaker trip. He was told to
+    # check an API key that was fine; the real fault was a model name his
+    # provider does not serve (#1062), which the provider had said plainly in a
+    # response nobody recorded.
+    #
+    # 2.9.23 promised "if it does not work, the console and logs will tell you
+    # why". This is the one line that makes that true for LLM calls: WHICH model,
+    # at WHICH provider, and what the provider actually said. Logged once here,
+    # before the branch, so no future branch can be added that stays silent.
+    logger.error(
+        "LLM call FAILED — model=%s provider=%s response_model=%s breaker=%s consecutive_failures=%d%s\n  provider said: %s",
+        error_context.model,
+        error_context.provider,
+        error_context.response_model,
+        error_context.circuit_breaker_state,
+        error_context.consecutive_failures,
+        f" thought={error_context.thought_id}" if error_context.thought_id else "",
+        full_error[:600],
+    )
+
     # Check for rate limit first - DON'T record as circuit breaker failure
     is_rate_limit = (
         ERROR_PATTERN_RATE_LIMIT in error_str

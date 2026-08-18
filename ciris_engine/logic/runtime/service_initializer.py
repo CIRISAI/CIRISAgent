@@ -1143,6 +1143,11 @@ This directory contains critical cryptographic keys for the CIRIS system.
                             f"{[ep.region for ep in endpoints]}"
                         )
 
+        # Needed by BOTH the model default below and the service name further
+        # down; computed once, here, so the two cannot disagree about it.
+        effective_url = base_url or ""
+        is_local_provider = _is_loopback_or_lan(effective_url)
+
         # Get model name — a default model is only meaningful WITHIN a vendor.
         #
         # CIRISAgent#1062. OPENAI_COMPATIBLE used to default to "gpt-4o-mini",
@@ -1183,7 +1188,22 @@ This directory contains critical cryptographic keys for the CIRIS system.
         # user to discover one failed request at a time. The API adapter stays
         # up regardless, so the console and the LLM settings screen are both
         # reachable to fix this.
-        if not model_name:
+        if not model_name and is_local_provider:
+            # A LOCAL SERVER IS NOT A VENDOR CATALOGUE.
+            #
+            # Ollama / llama.cpp / vLLM serve whatever is loaded and are handed
+            # dummy credentials on purpose. There is no foreign catalogue to
+            # guess wrong about here, and refusing to start local inference in
+            # order to catch a cloud typo is the bad trade that
+            # test_a_local_runtime_dummy_key_is_not_treated_as_placeholder
+            # exists to prevent — it caught me widening exactly that detector.
+            logger.warning(
+                "No model configured for the local provider at %s — starting anyway; "
+                "the server will use whatever it has loaded. Set one in Settings -> LLM "
+                "if it refuses the request.",
+                effective_url or "<default url>",
+            )
+        elif not model_name:
             logger.error(
                 "=" * 70
                 + f"\n  NO MODEL CONFIGURED for provider '{provider.value}' at {base_url or '<default url>'}."
@@ -1246,8 +1266,6 @@ This directory contains critical cryptographic keys for the CIRIS system.
         # from the truth.
         from ciris_engine.config.ciris_services import is_ciris_proxy_url
 
-        effective_url = base_url or ""
-        is_local_provider = _is_loopback_or_lan(effective_url)
         if is_ciris_proxy_url(effective_url):
             service_name = "ciris_primary"
         elif is_local_provider:

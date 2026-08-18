@@ -1188,34 +1188,28 @@ This directory contains critical cryptographic keys for the CIRIS system.
         # user to discover one failed request at a time. The API adapter stays
         # up regardless, so the console and the LLM settings screen are both
         # reachable to fix this.
-        if not model_name and is_local_provider:
-            # A LOCAL SERVER IS NOT A VENDOR CATALOGUE.
-            #
-            # Ollama / llama.cpp / vLLM serve whatever is loaded and are handed
-            # dummy credentials on purpose. There is no foreign catalogue to
-            # guess wrong about here, and refusing to start local inference in
-            # order to catch a cloud typo is the bad trade that
-            # test_a_local_runtime_dummy_key_is_not_treated_as_placeholder
-            # exists to prevent — it caught me widening exactly that detector.
+        # NO MODEL RESOLVED — SAY SO LOUDLY, BUT STILL BOOT.
+        #
+        # An earlier attempt REFUSED the provider here. That broke local
+        # inference twice, because locality is not knowable at this point: it is
+        # derived from base_url, which is empty whenever the operator configured
+        # the endpoint by any route other than OPENAI_API_BASE. Gating a refusal
+        # on a signal that is routinely absent fails closed on exactly the users
+        # who did nothing wrong.
+        #
+        # The fault this exists for — silently substituting ANOTHER VENDOR'S
+        # model — is already fixed above: no cross-vendor default is invented.
+        # What remains is to be loud, and to let the call fail legibly (#1066)
+        # rather than refusing to start and taking the console down with it.
+        # 2.9.24's rule holds: always keep one door open.
+        if not model_name:
             logger.warning(
-                "No model configured for the local provider at %s — starting anyway; "
-                "the server will use whatever it has loaded. Set one in Settings -> LLM "
-                "if it refuses the request.",
+                "NO MODEL CONFIGURED for provider '%s' at %s. Starting anyway, but requests will "
+                "fail at the provider until a model is chosen — set one in Settings -> LLM, or "
+                "CIRIS_LLM_MODEL_NAME. (A local server may ignore this and serve what it has loaded.)",
+                provider.value,
                 effective_url or "<default url>",
             )
-        elif not model_name:
-            logger.error(
-                "=" * 70
-                + f"\n  NO MODEL CONFIGURED for provider '{provider.value}' at {base_url or '<default url>'}."
-                + "\n  This provider is reached over the OpenAI protocol, but that says nothing"
-                + "\n  about which models it serves — so there is no safe default to pick."
-                + "\n  NOT starting it: a wrong model name fails every request at the provider"
-                + "\n  and reports it as an instructor retry error, which names nothing."
-                + "\n  FIX: choose a model in Settings -> LLM, or set CIRIS_LLM_MODEL_NAME."
-                + "\n"
-                + "=" * 70
-            )
-            return
 
         # LLM timeout - reduced default to 20s to allow failover within DMA timeout budget
         # With 90s DMA timeout: 20s × 2 retries × 2 providers = 80s < 90s

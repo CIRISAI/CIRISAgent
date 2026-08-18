@@ -836,7 +836,12 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
 
         api_key = self.openai_config.api_key
         base_url = self.openai_config.base_url
-        model_name = self.openai_config.model_name or "gpt-4o-mini"
+        # An UNSET model must not become an OpenAI one (CIRISAgent#1062). This
+        # `or "gpt-4o-mini"` is the last place a Groq/Together/DeepInfra endpoint
+        # could still be handed an OpenAI model name and fail with an error that
+        # names nothing. Empty stays empty; the provider then rejects it and says
+        # why, which #1066 now records.
+        model_name = self.openai_config.model_name
         provider = getattr(self.openai_config, "provider", LLMProvider.OPENAI)
 
         # Store provider for later use

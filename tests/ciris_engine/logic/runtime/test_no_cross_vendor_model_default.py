@@ -88,8 +88,24 @@ def test_unknown_provider_gets_no_invented_model() -> None:
         )
 
 
-def test_a_provider_with_no_model_is_refused_loudly() -> None:
-    """Booting it broken is what made this cost a user a day."""
+def test_a_provider_with_no_model_says_so_loudly() -> None:
+    """Say it, but do not refuse — refusing broke local inference twice.
+
+    Locality is derived from base_url, which is empty whenever the endpoint was
+    configured by any route other than OPENAI_API_BASE, so a refusal gated on it
+    fails closed on users who did nothing wrong. 2.9.24's rule holds: always keep
+    one door open. The cross-vendor substitution is prevented above; this is only
+    about being legible.
+    """
     src = SRC.read_text(encoding="utf-8")
-    assert "NO MODEL CONFIGURED for provider" in src, "the refusal banner is gone"
-    assert "CIRIS_LLM_MODEL_NAME" in src, "the banner must name the way out"
+    assert "NO MODEL CONFIGURED for provider" in src, "the warning is gone"
+    assert "CIRIS_LLM_MODEL_NAME" in src, "the message must name the way out"
+
+
+def test_an_unset_model_never_becomes_an_openai_one_at_call_time() -> None:
+    """The last place a Groq endpoint could still be handed gpt-4o-mini."""
+    svc = (REPO / "ciris_engine/logic/services/runtime/llm_service/service.py").read_text(encoding="utf-8")
+    assert 'model_name or "gpt-4o-mini"' not in svc, (
+        "an unset model must stay unset — substituting an OpenAI model here "
+        "reintroduces the exact failure at call time"
+    )

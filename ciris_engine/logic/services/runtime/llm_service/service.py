@@ -836,12 +836,21 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
 
         api_key = self.openai_config.api_key
         base_url = self.openai_config.base_url
-        # An UNSET model must not become an OpenAI one (CIRISAgent#1062). This
-        # `or "gpt-4o-mini"` is the last place a Groq/Together/DeepInfra endpoint
-        # could still be handed an OpenAI model name and fail with an error that
-        # names nothing. Empty stays empty; the provider then rejects it and says
-        # why, which #1066 now records.
-        model_name = self.openai_config.model_name
+        # An unset model may fall back to OpenAI's default ONLY IF THIS REALLY IS
+        # OPENAI (CIRISAgent#1062).
+        #
+        # This was `model_name or "gpt-4o-mini"` unconditionally — the last place
+        # a Groq/Together/DeepInfra endpoint could still be handed an OpenAI
+        # model and fail with an error naming nothing.
+        #
+        # Deleting the fallback outright was ALSO wrong, and Staged QA caught it:
+        # a config that genuinely is OpenAI and simply names no model relied on
+        # it, and sending an empty model broke the run. The substitution is not
+        # the bug; applying it to OTHER vendors is. So it now applies only when
+        # the endpoint is OpenAI's own (or unset, which means the same thing).
+        _base = (base_url or "").lower()
+        _is_openai_endpoint = not _base or "api.openai.com" in _base
+        model_name = self.openai_config.model_name or ("gpt-4o-mini" if _is_openai_endpoint else "")
         provider = getattr(self.openai_config, "provider", LLMProvider.OPENAI)
 
         # Store provider for later use

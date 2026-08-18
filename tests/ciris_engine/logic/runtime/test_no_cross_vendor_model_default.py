@@ -105,7 +105,10 @@ def test_a_provider_with_no_model_says_so_loudly() -> None:
 def test_an_unset_model_never_becomes_an_openai_one_at_call_time() -> None:
     """The last place a Groq endpoint could still be handed gpt-4o-mini."""
     svc = (REPO / "ciris_engine/logic/services/runtime/llm_service/service.py").read_text(encoding="utf-8")
-    assert 'model_name or "gpt-4o-mini"' not in svc, (
-        "an unset model must stay unset — substituting an OpenAI model here "
-        "reintroduces the exact failure at call time"
-    )
+    # The fallback may exist, but ONLY behind an is-this-actually-OpenAI test.
+    # Deleting it outright broke configs that legitimately are OpenAI and name no
+    # model (Staged QA caught that); applying it to other vendors is the bug.
+    assert "_is_openai_endpoint" in svc, "the call-time fallback must be vendor-gated"
+    idx = svc.find('"gpt-4o-mini" if')
+    assert idx != -1, "the OpenAI default is no longer conditional"
+    assert "_is_openai_endpoint" in svc[idx : idx + 80], "the condition must be the endpoint check"

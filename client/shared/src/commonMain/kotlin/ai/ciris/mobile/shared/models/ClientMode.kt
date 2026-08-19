@@ -36,31 +36,47 @@ enum class ClientMode {
  * the server reports a `cognitive_state` (the agent enrichment) OR a non-empty
  * agent service map; otherwise a bare NODE.
  *
+ * A brain that has not completed setup is NODE regardless of what it reports —
+ * see [brainUnconfigured].
+ *
  * @param cognitiveState the `cognitive_state` field (null when absent — the node case).
  * @param serviceCount the agent service count reported in the health envelope (0 on a node).
+ * @param brainUnconfigured the brain says it still needs setup and holds no config,
+ *   so its 10 first-run services are the wizard's, not an agent's. Only the brain
+ *   knows this; the health envelope alone cannot distinguish it from a real agent.
  */
-fun clientModeFrom(cognitiveState: String?, serviceCount: Int): ClientMode =
+fun clientModeFrom(
+    cognitiveState: String?,
+    serviceCount: Int,
+    brainUnconfigured: Boolean = false,
+): ClientMode =
     when {
-        // A BRAIN STILL IN SETUP IS NOT A USABLE AGENT (CIRISAgent#1075).
+        // A HALF-STARTED BRAIN IS NOT AN AGENT (CIRISAgent#1075).
         //
-        // `cognitive_state` was treated as proof of an agent, and "SETUP" is a
-        // non-null state — so a node whose brain had never completed first-run
-        // was classified AGENT while running 10 of 22 services. Every
-        // AGENT-only poller then fired against services that do not exist yet:
+        // A brain with no config starts 10 of its 22 services — enough to serve
+        // the setup wizard, not enough to be an agent. It still reports a
+        // `cognitive_state` of "SETUP", and that non-null value was taken as
+        // proof of an agent, so the client ran the full AGENT UI against a
+        // runtime missing telemetry, audit and the LLM bus. Every AGENT-only
+        // poller then hammered services that do not exist:
         //
         //     listAdapters      503
-        //     getAuditEntries   503   (every 3s, with a full stack trace each time)
+        //     getAuditEntries   503   (every 3s, with a full stack trace each)
         //     getLlmBusStatus   503
         //     getLlmProviders   503
-        //     addLlmProvider    503   <- and so the user could not escape
+        //     addLlmProvider    503   <- so the user could not configure an escape
         //
-        // This gate exists precisely to stop that flood, per the comment at its
-        // call site. It just needed to know that SETUP is not readiness.
+        // This gate exists precisely to stop AGENT-only pollers firing at a
+        // server that cannot answer them — its call site says so. It just had no
+        // way to know that SETUP is not readiness.
         //
-        // A claimed node with an unconfigured brain is a LEGITIMATE state, not a
-        // broken agent: the node works, the cognitive half is not set up. Run
-        // the node UI, which is what NODE mode is for.
-        cognitiveState.equals("SETUP", ignoreCase = true) && serviceCount == 0 -> ClientMode.NODE
+        // KEYED ON THE BRAIN'S OWN SETUP STATE, NOT ON SERVICE COUNT. The first
+        // version of this check tested `serviceCount == 0`, which never fires:
+        // the count is derived from the `services` map in /v1/system/health, and
+        // during first-run that map holds the 10 that ARE running. Only the brain
+        // can say whether it is configured, so the caller asks it and passes the
+        // answer in.
+        brainUnconfigured -> ClientMode.NODE
         cognitiveState != null || serviceCount > 0 -> ClientMode.AGENT
         else -> ClientMode.NODE
     }

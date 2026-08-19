@@ -886,15 +886,28 @@ fun CIRISApp(
             try {
                 val nodeHealth = apiClient.getNodeHealth(nodeBaseUrl)
                 nodeVersion = nodeHealth.version
+                // Is the brain configured at all? A brain with no config runs 10 of
+                // its 22 services to serve the wizard and reports cognitive_state
+                // "SETUP" — which reads as an agent to a health probe, and is not
+                // one. Only the brain can answer this, so ask before deciding.
+                // Unreachable/failed probe => false, i.e. no downgrade: the gate
+                // keeps its previous behaviour rather than guessing NODE.
+                val brainUnconfigured = runCatching {
+                    val s = apiClient.getSetupStatus().data
+                    s.setup_required && !s.has_env_file
+                }.getOrDefault(false)
                 var mode = ai.ciris.mobile.shared.models.clientModeFrom(
-                    nodeHealth.cognitiveState, nodeHealth.serviceCount
+                    nodeHealth.cognitiveState, nodeHealth.serviceCount, brainUnconfigured
                 )
                 if (mode.isNode) {
                     // Bare node health — ask the brain whether it is running on top.
+                    // brainUnconfigured is passed here too: without it this probe
+                    // sees "SETUP" and promotes the half-started brain straight back
+                    // to AGENT, undoing the gate above.
                     runCatching { apiClient.getSystemStatus() }
                         .onSuccess { sys ->
                             mode = ai.ciris.mobile.shared.models.clientModeFrom(
-                                sys.cognitive_state, sys.services_total
+                                sys.cognitive_state, sys.services_total, brainUnconfigured
                             )
                         }
                         .onFailure { e ->

@@ -11,6 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import ai.ciris.mobile.shared.api.CheckState
+import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.ui.theme.SemanticColors
 
 /**
@@ -47,21 +48,21 @@ fun LlmCheckIcon(
 
         CheckState.OK -> Icon(
             imageVector = CIRISIcons.success,
-            contentDescription = message ?: "Confirmed working",
+            contentDescription = message ?: localizedString("mobile.llm_check_state_ok"),
             tint = semantic.success,
             modifier = modifier.size(18.dp),
         )
 
         CheckState.DEGRADED -> Icon(
             imageVector = CIRISIcons.warning,
-            contentDescription = message ?: "Working, but not confirmed by the provider",
+            contentDescription = message ?: localizedString("mobile.llm_check_state_degraded"),
             tint = semantic.warning,
             modifier = modifier.size(18.dp),
         )
 
         CheckState.FAILED -> Icon(
             imageVector = CIRISIcons.error,
-            contentDescription = message ?: "The provider rejected this",
+            contentDescription = message ?: localizedString("mobile.llm_check_state_failed"),
             tint = semantic.error,
             modifier = modifier.size(18.dp),
         )

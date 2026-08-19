@@ -2489,7 +2489,15 @@
     "accord_remint_step3_title": "Step 3 — Produce the portable genesis",
     "accord_remint_step_done": "Done — the seed is authorized",
     "accord_remint_step_of": "Step {step} of {total}",
-    "accord_remint_title": "Re-mint existing trust root"
+    "accord_remint_title": "Re-mint existing trust root",
+    "llm_check_button": "Check Key & Fetch Models",
+    "llm_check_key_ok": "API key accepted by the provider",
+    "llm_check_key_needed": "Enter an API key to check this provider.",
+    "llm_check_models_cached": "Showing cached models — this provider did not answer, so this list may not be what it actually serves.",
+    "llm_check_model_missing": "This model is not offered by the provider. Pick one from the list.",
+    "llm_check_state_ok": "Confirmed working",
+    "llm_check_state_degraded": "Working, but not confirmed by the provider",
+    "llm_check_state_failed": "The provider rejected this"
   },
   "conscience": {
     "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'",

@@ -1260,7 +1260,7 @@ private fun AddProviderCard(
                         // It checks the key as well as listing models now, and
                         // the label should not undersell that: a user who reads
                         // "fetch models" does not expect a credential verdict.
-                        Text("Check Key & Fetch Models")
+                        Text(localizedString("mobile.llm_check_button"))
                     }
                 }
 

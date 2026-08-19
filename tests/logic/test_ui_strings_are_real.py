@@ -54,7 +54,26 @@ MIRRORS = [
 #: `getString("some.key")` / `getStringInLanguage(lang, "some.key")`.
 #: Only literal keys — a computed key cannot be checked statically, and pretending
 #: otherwise would make this test lie about its own coverage.
-_CALL = re.compile(r'getString(?:InLanguage)?\(\s*(?:[A-Za-z0-9_.]+\s*,\s*)?"([A-Za-z0-9_.]+)"')
+#: THE CALL FORMS THE UI ACTUALLY USES.
+#:
+#: This matched only `getString(` / `getStringInLanguage(` — 146 call sites —
+#: while the codebase reaches for `localizedString(` 2,318 times. So this guard,
+#: written specifically to stop English-only keys shipping after that happened
+#: twice, was inspecting 6% of the UI and passing everything else.
+#:
+#: It was caught by adding 8 keys to en.json alone and watching the guard go
+#: green. A test that cannot fail is worse than no test: it converts an unchecked
+#: area into one that looks checked.
+#: Only `getStringInLanguage` takes a leading argument (the language). Allowing
+#: an optional leading identifier for ALL forms made this match
+#: `localizedString(messageKey, "state", targetState)` — the placeholder-
+#: substitution form, where the key is the VARIABLE and "state" is a placeholder
+#: NAME — and report a perfectly good call site as a missing key. Two false
+#: positives, both from over-permissiveness. Match each form as it is written.
+_CALL = re.compile(
+    r'getStringInLanguage\(\s*[A-Za-z0-9_.]+\s*,\s*"([A-Za-z0-9_.]+)"'
+    r'|(?:getString|localizedString)\(\s*"([A-Za-z0-9_.]+)"'
+)
 
 
 def _flatten(obj: dict, prefix: str = "") -> set[str]:
@@ -84,8 +103,10 @@ def _referenced_keys() -> dict[str, list[str]]:
             text = kt.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             continue
-        for key in _CALL.findall(text):
-            found.setdefault(key, []).append(str(kt.relative_to(REPO)))
+        for groups in _CALL.findall(text):
+            key = next((g for g in groups if g), None) if isinstance(groups, tuple) else groups
+            if key:
+                found.setdefault(key, []).append(str(kt.relative_to(REPO)))
     return found
 
 

@@ -2459,7 +2459,20 @@
     "settings_auth_local_session": "Àkókò ìwọlé àdúgbò",
     "settings_token_info_desc_local": "Àmì àkókò ìṣiṣẹ́ tí ó wá láti ìwọlé rẹ pẹ̀lú orúkọ olùmúlò àti ọ̀rọ̀ àṣírí. Ó ń jẹ́rìí ìdánimọ̀ rẹ fún aṣojú yìí — kì í ṣe ẹ̀rí ìdánimọ̀ CIRIS Services, kò sì ní í ṣe pẹ̀lú bọ́tìnnì API tí olùpèsè LLM rẹ ń lò.",
     "settings_token_info_desc_oauth": "Àmì ìwọlé rẹ fún aṣojú yìí, tí o gbà nígbà tí o wọlé pẹ̀lú Google tàbí Apple. Ó yàtọ̀ sí bọ́tìnnì API tí olùpèsè LLM rẹ ń lò.",
-    "login_google_unavailable": "Ìwọlé pẹ̀lú {provider} kò sí lórí ìgbékalẹ̀ yìí."
+    "login_google_unavailable": "Ìwọlé pẹ̀lú {provider} kò sí lórí ìgbékalẹ̀ yìí.",
+    "llm_check_key_needed": "Tẹ kọ́kọ́rọ́ API sí i láti yẹ olùpèsè yìí wò.",
+    "llm_check_key_ok": "Olùpèsè gba kọ́kọ́rọ́ API náà",
+    "llm_check_model_missing": "Olùpèsè kò pèsè àwòṣe yìí. Yan ọ̀kan láti inú àkọsílẹ̀.",
+    "llm_check_models_cached": "À ń fi àwọn àwòṣe tí a tọ́jú hàn — olùpèsè yìí kò dáhùn, nítorí náà àkọsílẹ̀ yìí lè má bá ohun tí ó ń pèsè ní tòótọ́ mu.",
+    "settings_auth_oauth_session": "O wọlé pẹ̀lú {provider}",
+    "settings_set_up_agent_title": "Ṣètò aṣojú náà",
+    "settings_set_up_agent_desc": "Ojú-ìsopọ̀ yìí ń ṣiṣẹ́ láìsí aṣojú. Ṣètò ọ̀kan láti mú ìjíròrò, ìrònú àti ètò aṣojú ṣiṣẹ́.",
+    "tool_cap_affects_other_people": "Ó lè nípa lórí àwọn ẹlòmíràn",
+    "tool_cap_file_read": "Ó ń ka àwọn fáìlì",
+    "tool_cap_file_write": "Ó ń kọ tàbí yí àwọn fáìlì padà",
+    "tool_cap_network_fetch": "Ó ń kàn sí ìtakùn",
+    "tool_cap_request_body": "Ó ń fi àwọn dátà tí o pèsè ránṣẹ́",
+    "tool_disclosure_unavailable": "Irinṣẹ́ yìí kò ṣàlàyé ohun tí ó ń ṣe."
   },
   "conscience": {
     "ponder_attempted": "Mo gbìyànjú láti {action}",

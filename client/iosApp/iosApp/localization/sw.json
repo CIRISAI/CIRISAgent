@@ -2342,7 +2342,21 @@
     "accord_remint_step_done": "Imekamilika — mbegu imeidhinishwa",
     "accord_remint_step_of": "Hatua ya {step} kati ya {total}",
     "accord_remint_title": "Tengeneza upya mzizi wa uaminifu uliopo",
-    "login_google_unavailable": "Kuingia kwa {provider} hakupatikani katika usakinishaji huu."
+    "login_google_unavailable": "Kuingia kwa {provider} hakupatikani katika usakinishaji huu.",
+    "llm_check_key_needed": "Weka ufunguo wa API ili kukagua mtoaji huyu.",
+    "llm_check_key_ok": "Mtoaji amekubali ufunguo wa API",
+    "llm_check_model_missing": "Muundo huu hautolewi na mtoaji. Chagua mmoja kutoka kwenye orodha.",
+    "llm_check_models_cached": "Inaonyesha miundo iliyohifadhiwa — mtoaji huyu hakujibu, hivyo orodha hii huenda isilingane na anachotoa kwa kweli.",
+    "settings_auth_oauth_session": "Umeingia kwa {provider}",
+    "settings_set_up_agent_title": "Sanidi wakala",
+    "settings_set_up_agent_desc": "Nodi hii inafanya kazi bila wakala. Sanidi mmoja ili kuwezesha mazungumzo, hoja na mipangilio ya wakala.",
+    "llm_check_button": "Kagua Ufunguo, Pata Mifano",
+    "llm_check_state_ok": "Imethibitishwa kuwa inafanya kazi",
+    "llm_check_state_degraded": "Inafanya kazi, lakini mtoa huduma hajathibitisha",
+    "llm_check_state_failed": "Mtoa huduma amekataa hii",
+    "settings_auth_local_session": "Kipindi cha kuingia ndani",
+    "settings_token_info_desc_local": "Tokeni ya kipindi kutokana na kuingia kwako kwa jina la mtumiaji na nenosiri. Inakuthibitisha kwa wakala huyu — si kitambulisho cha CIRIS Services, na haihusiani na ufunguo wa API anaotumia mtoa huduma wako wa LLM.",
+    "settings_token_info_desc_oauth": "Tokeni yako ya kuingia kwa wakala huyu, uliyoipata ulipoingia kwa kutumia Google au Apple. Ni tofauti na ufunguo wa API anaotumia mtoa huduma wako wa LLM."
   },
   "prompts": {
     "dma": {

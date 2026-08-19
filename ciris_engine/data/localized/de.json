@@ -2349,7 +2349,14 @@
     "llm_check_state_failed": "Der Anbieter hat dies abgelehnt",
     "settings_auth_local_session": "Lokale Anmeldesitzung",
     "settings_token_info_desc_local": "Das Sitzungstoken aus Ihrer Anmeldung mit Benutzername und Passwort. Es authentifiziert Sie gegenüber diesem Agenten – es ist keine Zugangsberechtigung für CIRIS Services und hat nichts mit dem API-Schlüssel zu tun, den Ihr LLM-Anbieter verwendet.",
-    "settings_token_info_desc_oauth": "Ihr Anmeldetoken für diesen Agenten, das Sie bei der Anmeldung mit Google oder Apple erhalten haben. Es ist unabhängig von dem API-Schlüssel, den Ihr LLM-Anbieter verwendet."
+    "settings_token_info_desc_oauth": "Ihr Anmeldetoken für diesen Agenten, das Sie bei der Anmeldung mit Google oder Apple erhalten haben. Es ist unabhängig von dem API-Schlüssel, den Ihr LLM-Anbieter verwendet.",
+    "llm_check_key_needed": "Geben Sie einen API-Schlüssel ein, um diesen Anbieter zu prüfen.",
+    "llm_check_key_ok": "API-Schlüssel vom Anbieter akzeptiert",
+    "llm_check_model_missing": "Dieses Modell wird vom Anbieter nicht angeboten. Wählen Sie eines aus der Liste.",
+    "llm_check_models_cached": "Zwischengespeicherte Modelle — dieser Anbieter hat nicht geantwortet, diese Liste entspricht möglicherweise nicht seinem tatsächlichen Angebot.",
+    "settings_auth_oauth_session": "Angemeldet mit {provider}",
+    "settings_set_up_agent_title": "Agent einrichten",
+    "settings_set_up_agent_desc": "Dieser Knoten läuft ohne Agent. Richten Sie einen ein, um Chat, Schlussfolgern und die Agent-Einstellungen zu aktivieren."
   },
   "prompts": {
     "dma": {

@@ -2349,7 +2349,14 @@
     "settings_auth_local_session": "Kipindi cha kuingia ndani",
     "settings_token_info_desc_local": "Tokeni ya kipindi kutokana na kuingia kwako kwa jina la mtumiaji na nenosiri. Inakuthibitisha kwa wakala huyu — si kitambulisho cha CIRIS Services, na haihusiani na ufunguo wa API anaotumia mtoa huduma wako wa LLM.",
     "settings_token_info_desc_oauth": "Tokeni yako ya kuingia kwa wakala huyu, uliyoipata ulipoingia kwa kutumia Google au Apple. Ni tofauti na ufunguo wa API anaotumia mtoa huduma wako wa LLM.",
-    "login_google_unavailable": "Kuingia kwa {provider} hakupatikani katika usakinishaji huu."
+    "login_google_unavailable": "Kuingia kwa {provider} hakupatikani katika usakinishaji huu.",
+    "llm_check_key_needed": "Weka ufunguo wa API ili kukagua mtoaji huyu.",
+    "llm_check_key_ok": "Mtoaji amekubali ufunguo wa API",
+    "llm_check_model_missing": "Muundo huu hautolewi na mtoaji. Chagua mmoja kutoka kwenye orodha.",
+    "llm_check_models_cached": "Inaonyesha miundo iliyohifadhiwa — mtoaji huyu hakujibu, hivyo orodha hii huenda isilingane na anachotoa kwa kweli.",
+    "settings_auth_oauth_session": "Umeingia kwa {provider}",
+    "settings_set_up_agent_title": "Sanidi wakala",
+    "settings_set_up_agent_desc": "Nodi hii inafanya kazi bila wakala. Sanidi mmoja ili kuwezesha mazungumzo, hoja na mipangilio ya wakala."
   },
   "prompts": {
     "dma": {

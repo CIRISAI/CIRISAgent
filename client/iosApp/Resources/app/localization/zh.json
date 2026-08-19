@@ -2342,7 +2342,21 @@
     "accord_remint_step_done": "完成 — 种子已获授权",
     "accord_remint_step_of": "第 {step} 步，共 {total} 步",
     "accord_remint_title": "重铸现有信任根",
-    "login_google_unavailable": "此安装不支持使用 {provider} 登录"
+    "login_google_unavailable": "此安装不支持使用 {provider} 登录",
+    "llm_check_key_needed": "请输入 API 密钥以检查此提供方。",
+    "llm_check_key_ok": "提供方已接受 API 密钥",
+    "llm_check_model_missing": "此提供方不提供该模型。请从列表中选择一个。",
+    "llm_check_models_cached": "正在显示缓存的模型 — 此提供方未响应，因此该列表可能与其实际提供的内容不符。",
+    "settings_auth_oauth_session": "已通过 {provider} 登录",
+    "settings_set_up_agent_title": "设置智能体",
+    "settings_set_up_agent_desc": "此节点未配置智能体。设置一个即可启用对话、推理和智能体设置。",
+    "llm_check_button": "检查密钥并获取模型",
+    "llm_check_state_ok": "已确认可用",
+    "llm_check_state_degraded": "可用，但未经提供商确认",
+    "llm_check_state_failed": "已被提供商拒绝",
+    "settings_auth_local_session": "本地登录会话",
+    "settings_token_info_desc_local": "您使用用户名和密码登录后获得的会话令牌。它用于向此智能体验证您的身份——它不是 CIRIS Services 凭据，也与您的 LLM 提供商所用的 API 密钥无关。",
+    "settings_token_info_desc_oauth": "您在使用 Google 或 Apple 登录时获得的、用于此智能体的登录令牌。它与您的 LLM 提供商所用的 API 密钥是相互独立的。"
   },
   "prompts": {
     "dma": {

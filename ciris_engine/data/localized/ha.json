@@ -2465,7 +2465,14 @@
     "settings_auth_local_session": "Zaman shiga na gida",
     "settings_token_info_desc_local": "Alamar zaman da aka samu daga shigar ku da sunan mai amfani da kalmar sirri. Tana tabbatar da ku ga wannan wakili — ba shaidar CIRIS Services ba ce, kuma ba ta da alaƙa da maɓallin API da mai samar da LLM naku ke amfani da shi.",
     "settings_token_info_desc_oauth": "Alamar shigar ku zuwa wannan wakili, wadda aka samu lokacin da kuka shiga da Google ko Apple. Ta bambanta da maɓallin API da mai samar da LLM naku ke amfani da shi.",
-    "login_google_unavailable": "Shiga tare da {provider} ba ya samuwa a wannan shigarwar."
+    "login_google_unavailable": "Shiga tare da {provider} ba ya samuwa a wannan shigarwar.",
+    "llm_check_key_needed": "Shigar da maɓallin API don duba wannan mai bayarwa.",
+    "llm_check_key_ok": "Mai bayarwa ya karɓi maɓallin API",
+    "llm_check_model_missing": "Mai bayarwa ba ya bayar da wannan samfurin. Zaɓi ɗaya daga jerin.",
+    "llm_check_models_cached": "Ana nuna samfuran da aka adana — wannan mai bayarwa bai amsa ba, don haka wannan jerin bazai yi daidai da abin da yake bayarwa ba.",
+    "settings_auth_oauth_session": "An shiga da {provider}",
+    "settings_set_up_agent_title": "Kafa wakilin",
+    "settings_set_up_agent_desc": "Wannan kumburi yana aiki ba tare da wakili ba. Ka kafa ɗaya don kunna tattaunawa, tunani da saitunan wakili."
   },
   "conscience": {
     "ponder_attempted": "Na yi ƙoƙarin {action}",

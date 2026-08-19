@@ -2700,7 +2700,14 @@
     "llm_check_state_failed": "Nhà cung cấp đã từ chối",
     "settings_auth_local_session": "Phiên đăng nhập cục bộ",
     "settings_token_info_desc_local": "Token phiên từ lần đăng nhập bằng tên người dùng và mật khẩu. Token này xác thực bạn với tác nhân này — đây không phải là thông tin xác thực của CIRIS Services và không liên quan đến khóa API mà nhà cung cấp LLM của bạn sử dụng.",
-    "settings_token_info_desc_oauth": "Token đăng nhập của bạn cho tác nhân này, được cấp khi bạn đăng nhập bằng Google hoặc Apple. Token này tách biệt với khóa API mà nhà cung cấp LLM của bạn sử dụng."
+    "settings_token_info_desc_oauth": "Token đăng nhập của bạn cho tác nhân này, được cấp khi bạn đăng nhập bằng Google hoặc Apple. Token này tách biệt với khóa API mà nhà cung cấp LLM của bạn sử dụng.",
+    "llm_check_key_needed": "Nhập khóa API để kiểm tra nhà cung cấp này.",
+    "llm_check_key_ok": "Nhà cung cấp đã chấp nhận khóa API",
+    "llm_check_model_missing": "Nhà cung cấp không cung cấp mô hình này. Hãy chọn một mô hình trong danh sách.",
+    "llm_check_models_cached": "Đang hiển thị các mô hình đã lưu — nhà cung cấp này không phản hồi, nên danh sách có thể không khớp với những gì họ thực sự cung cấp.",
+    "settings_auth_oauth_session": "Đã đăng nhập bằng {provider}",
+    "settings_set_up_agent_title": "Thiết lập tác nhân",
+    "settings_set_up_agent_desc": "Nút này đang chạy mà không có tác nhân. Hãy thiết lập một tác nhân để bật trò chuyện, suy luận và các cài đặt tác nhân."
   },
   "network": {
     "title": "Mạng",

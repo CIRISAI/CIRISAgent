@@ -502,6 +502,10 @@ fun CIRISApp(
 
     // First-run detection state
     var isFirstRun by remember { mutableStateOf<Boolean?>(null) }
+    // The brain says it still needs setup and holds no config. Drives ClientMode.NODE
+    // (see the gate below) and the "set up the agent" entry point in Settings, which
+    // is the ONLY way out of node mode into a configured agent.
+    var brainUnconfigured by remember { mutableStateOf(false) }
     var checkingFirstRun by remember { mutableStateOf(false) }
 
     // Post-setup RECONFIGURING hold. After /v1/setup/complete the runtime
@@ -892,7 +896,7 @@ fun CIRISApp(
                 // one. Only the brain can answer this, so ask before deciding.
                 // Unreachable/failed probe => false, i.e. no downgrade: the gate
                 // keeps its previous behaviour rather than guessing NODE.
-                val brainUnconfigured = runCatching {
+                brainUnconfigured = runCatching {
                     val s = apiClient.getSetupStatus().data
                     s.setup_required && !s.has_env_file
                 }.getOrDefault(false)
@@ -2228,6 +2232,11 @@ fun CIRISApp(
                     viewModel = settingsViewModel,
                     apiClient = apiClient,
                     secureStorage = secureStorage,
+                    brainUnconfigured = brainUnconfigured,
+                    onSetUpAgent = {
+                        platformLog(TAG, "[INFO] user chose to set up the agent from node mode → Screen.Setup")
+                        currentScreen = Screen.Setup
+                    },
                     onNavigateBack = { currentScreen = Screen.Interact },
                     onLogout = {
                         PlatformLogger.i("CIRISApp", "[onLogout] User initiated logout")
@@ -4295,17 +4304,30 @@ private suspend fun checkFirstRunStatus(
             //
             // So: node-ownership suppresses the CLAIM, never the setup. If the
             // brain has no config, the wizard runs.
-            val brainHasConfig = setupStatus.data.has_env_file
-            if (setupStatus.data.setup_required && brainHasConfig && nodeHasOwner(nodeBaseUrl)) {
-                platformLog("checkFirstRunStatus", "[INFO] brain says setup_required but it HAS config and the NODE has an OWNER → configured, NOT first-run (sign in instead)")
-                return false
-            }
-            if (setupStatus.data.setup_required && !brainHasConfig) {
+            if (setupStatus.data.setup_required && nodeHasOwner(nodeBaseUrl)) {
+                // An OWNED node is not a first run, whether or not the brain is
+                // configured. The two cases diverge AFTER this point:
+                //
+                //   owned + brain configured    -> sign in, full AGENT UI
+                //   owned + brain unconfigured  -> ClientMode.NODE, node UI
+                //
+                // The second is a legitimate state, not a broken agent: the node
+                // works and the cognitive half was never set up. Forcing the wizard
+                // there (which is what I did in the first pass at this) shows setup
+                // to someone who may only want a node.
+                //
+                // It is NOT a dead end. The brain still starts its 10 first-run
+                // services, and Settings offers "set up the agent", which enters the
+                // wizard directly. Deliberately NOT the existing rerun-setup path:
+                // that deletes .env and restarts, and with no .env to delete it
+                // restarts into this same state — a loop.
+                val brainHasConfig = setupStatus.data.has_env_file
                 platformLog(
                     "checkFirstRunStatus",
-                    "[INFO] brain has NO config (.env absent) → setup must run even though the node is owned; " +
-                        "without it the remaining services never start and the agent stays in SETUP",
+                    "[INFO] node has an OWNER → NOT first-run (brain_configured=$brainHasConfig). " +
+                        if (brainHasConfig) "Sign in." else "Brain unconfigured → node mode; set up the agent from Settings.",
                 )
+                return false
             }
             return setupStatus.data.setup_required
         } catch (e: Exception) {

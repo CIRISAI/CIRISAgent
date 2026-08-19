@@ -2342,7 +2342,21 @@
     "accord_remint_step_done": "Tamamlandı — tohum yetkilendirildi",
     "accord_remint_step_of": "Adım {step} / {total}",
     "accord_remint_title": "Mevcut güven kökünü yeniden bas",
-    "login_google_unavailable": "{provider} ile giriş bu kurulumda kullanılamıyor."
+    "login_google_unavailable": "{provider} ile giriş bu kurulumda kullanılamıyor.",
+    "llm_check_key_needed": "Bu sağlayıcıyı denetlemek için bir API anahtarı girin.",
+    "llm_check_key_ok": "API anahtarı sağlayıcı tarafından kabul edildi",
+    "llm_check_model_missing": "Bu model sağlayıcı tarafından sunulmuyor. Listeden birini seçin.",
+    "llm_check_models_cached": "Önbellekteki modeller gösteriliyor — bu sağlayıcı yanıt vermedi, bu nedenle liste gerçekte sunduklarıyla örtüşmeyebilir.",
+    "settings_auth_oauth_session": "{provider} ile oturum açıldı",
+    "settings_set_up_agent_title": "Ajanı kur",
+    "settings_set_up_agent_desc": "Bu düğüm ajan olmadan çalışıyor. Sohbeti, akıl yürütmeyi ve ajan ayarlarını etkinleştirmek için bir ajan kurun.",
+    "llm_check_button": "Anahtarı doğrula ve modelleri getir",
+    "llm_check_state_ok": "Çalıştığı doğrulandı",
+    "llm_check_state_degraded": "Çalışıyor, ancak sağlayıcı tarafından doğrulanmadı",
+    "llm_check_state_failed": "Sağlayıcı bunu reddetti",
+    "settings_auth_local_session": "Yerel giriş oturumu",
+    "settings_token_info_desc_local": "Kullanıcı adı ve şifre ile yaptığınız girişten gelen oturum jetonu. Kimliğinizi bu ajana doğrular — bu bir CIRIS Services kimlik bilgisi değildir ve LLM sağlayıcınızın kullandığı API anahtarıyla ilgisi yoktur.",
+    "settings_token_info_desc_oauth": "Bu ajan için giriş jetonunuz; Google veya Apple ile giriş yaptığınızda alınmıştır. LLM sağlayıcınızın kullandığı API anahtarından ayrıdır."
   },
   "prompts": {
     "dma": {

@@ -2501,7 +2501,9 @@
     "settings_auth_local_session": "Local sign-in session",
     "settings_auth_oauth_session": "Signed in with {provider}",
     "settings_token_info_desc_local": "The session token from your username and password sign-in. It authenticates you to this agent — it is not a CIRIS Services credential, and it is unrelated to the API key your LLM provider uses.",
-    "settings_token_info_desc_oauth": "Your sign-in token for this agent, obtained when you signed in with Google or Apple. It is separate from the API key your LLM provider uses."
+    "settings_token_info_desc_oauth": "Your sign-in token for this agent, obtained when you signed in with Google or Apple. It is separate from the API key your LLM provider uses.",
+    "settings_set_up_agent_title": "Set up the agent",
+    "settings_set_up_agent_desc": "This node is running without an agent. Set one up to enable chat, reasoning and the agent settings."
   },
   "conscience": {
     "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'",

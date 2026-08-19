@@ -2342,7 +2342,21 @@
     "accord_remint_step_done": "पूर्ण — सीड अधिकृत है",
     "accord_remint_step_of": "{total} में से चरण {step}",
     "accord_remint_title": "मौजूदा ट्रस्ट रूट री-मिंट करें",
-    "login_google_unavailable": "{provider} से साइन-इन इस इंस्टॉलेशन पर उपलब्ध नहीं है।"
+    "login_google_unavailable": "{provider} से साइन-इन इस इंस्टॉलेशन पर उपलब्ध नहीं है।",
+    "llm_check_key_needed": "इस प्रदाता की जाँच के लिए एक API कुंजी दर्ज करें।",
+    "llm_check_key_ok": "प्रदाता ने API कुंजी स्वीकार की",
+    "llm_check_model_missing": "यह मॉडल प्रदाता द्वारा उपलब्ध नहीं कराया गया है। सूची में से कोई एक चुनें।",
+    "llm_check_models_cached": "संचित मॉडल दिखाए जा रहे हैं — इस प्रदाता ने उत्तर नहीं दिया, इसलिए यह सूची उसकी वास्तविक उपलब्धता से भिन्न हो सकती है।",
+    "settings_auth_oauth_session": "{provider} से साइन इन किया गया",
+    "settings_set_up_agent_title": "एजेंट सेट करें",
+    "settings_set_up_agent_desc": "यह नोड बिना एजेंट के चल रहा है। बातचीत, तर्कण और एजेंट सेटिंग्स सक्षम करने के लिए एक एजेंट सेट करें।",
+    "llm_check_button": "कुंजी जांचें और मॉडल लाएँ",
+    "llm_check_state_ok": "काम कर रहा है — पुष्टि हो चुकी है",
+    "llm_check_state_degraded": "काम कर रहा है, लेकिन प्रदाता ने इसकी पुष्टि नहीं की",
+    "llm_check_state_failed": "प्रदाता ने इसे अस्वीकार कर दिया",
+    "settings_auth_local_session": "स्थानीय साइन-इन सत्र",
+    "settings_token_info_desc_local": "आपके उपयोगकर्ता नाम और पासवर्ड से साइन इन करने पर मिला सत्र टोकन। यह इस एजेंट के सामने आपकी पहचान प्रमाणित करता है — यह CIRIS Services का क्रेडेंशियल नहीं है, और आपके LLM प्रदाता द्वारा उपयोग की जाने वाली API कुंजी से इसका कोई संबंध नहीं है।",
+    "settings_token_info_desc_oauth": "इस एजेंट के लिए आपका साइन-इन टोकन, जो Google या Apple से साइन इन करने पर मिला। यह आपके LLM प्रदाता द्वारा उपयोग की जाने वाली API कुंजी से अलग है।"
   },
   "prompts": {
     "dma": {

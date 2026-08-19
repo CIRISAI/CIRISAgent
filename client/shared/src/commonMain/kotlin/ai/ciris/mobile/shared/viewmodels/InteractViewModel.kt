@@ -190,6 +190,21 @@ class InteractViewModel(
         // "live" feel on stage-event streams while halving request
         // pressure on endpoints that feed multiple selection kinds.
         private const val SELECTION_POLL_INTERVAL_MS = 2000L
+
+        /**
+         * Tick for selection kinds that cost an HTTP request (CIRISAgent#1073).
+         *
+         * The 2s tick above exists so nucleus shells re-read the SSE ring
+         * buffer and newly-arrived events appear without a manual refresh. That
+         * read is LOCAL and free. The other kinds issue real requests on the
+         * same tick — and BusArc issues THREE, which is 90 req/min against a
+         * server limit of 60, from one selected node.
+         *
+         * Slowing the whole loop would degrade a live view to fix an HTTP
+         * problem, so only the HTTP-backed kinds are slowed. A detail panel
+         * refreshing every 8s is still live; 90 req/min is not sustainable.
+         */
+        private const val SELECTION_HTTP_POLL_INTERVAL_MS = 8000L
     }
 
     // Device attestation callback for triggering Play Integrity at startup
@@ -2308,9 +2323,29 @@ class InteractViewModel(
                 // Nucleus shells read the SSE ring buffer on every tick
                 // too so newly-arrived events show up without a manual
                 // refresh. For HTTP-backed kinds this is the rate cap.
-                kotlinx.coroutines.delay(SELECTION_POLL_INTERVAL_MS)
+                // Local (SSE ring buffer) kinds stay fast because they cost
+                // nothing; HTTP-backed kinds back off. See the constants above.
+                kotlinx.coroutines.delay(
+                    if (isLocallyBackedSelection(kind)) SELECTION_POLL_INTERVAL_MS
+                    else SELECTION_HTTP_POLL_INTERVAL_MS
+                )
             }
         }
+    }
+
+    /**
+     * Does this selection kind resolve from local state rather than the network?
+     *
+     * NucleusShell and SignalChannel read the in-process SSE ring buffer, so
+     * their tick costs nothing and should stay fast. Everything else issues at
+     * least one request per tick.
+     */
+    private fun isLocallyBackedSelection(
+        kind: ai.ciris.mobile.shared.ui.screens.graph.SelectionKind?
+    ): Boolean = when (kind) {
+        is ai.ciris.mobile.shared.ui.screens.graph.SelectionKind.NucleusShell -> true
+        is ai.ciris.mobile.shared.ui.screens.graph.SelectionKind.SignalChannel -> true
+        else -> false
     }
 
     private suspend fun fetchSelectionDetail(

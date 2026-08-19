@@ -186,8 +186,8 @@ jobs:
           # THREE NESTED BOUNDS, innermost first. Each must stay strictly below
           # the next or the inner one can never fire:
           #
-          #   --session-timeout=1320 (22m)  pytest gives up and REPORTS
-          #   timeout ... 1500       (25m)  SIGTERM if pytest itself is wedged
+          #   --session-timeout=2520 (42m)  pytest gives up and REPORTS
+          #   timeout ... 2700       (45m)  SIGTERM if pytest itself is wedged
           #   timeout-minutes: 60           GitHub's backstop (was 30; checkout
           #                                 alone now eats ~12m of the job clock)
           #
@@ -217,15 +217,34 @@ jobs:
           # the run is the one that reports it. Opt-in via env on purpose: a
           # healthy local full-suite run may legitimately outlive any number
           # this job would pick, so the number lives with the job that knows
-          # its budget. Ordering: controller deadline 1380 < SIGTERM 1500 < job 30m.
-          CIRIS_TEST_CONTROLLER_DEADLINE_SECONDS=1380 \
-          timeout --signal=SIGTERM --kill-after=30 1500 \
+          # its budget. Ordering: controller deadline 2580 < SIGTERM 2700 < job 60m.
+          #
+          # RESIZED 2026-08-19 (run 32296077047). Shard 6 tripped the 1380s
+          # deadline at 76% WITH TESTS STILL PASSING, and the stacks it dumped —
+          # the first this bound has ever produced, now that the job backstop no
+          # longer pre-empts it — carried NO ciris_engine or test frames at all.
+          # The only project frames were the watchdog's own `_emit_stacks`,
+          # `_controller_deadline` and `_hang_watchdog`. Nothing was wedged.
+          #
+          # The deadline fires on elapsed time regardless of progress, so its
+          # "a worker is likely wedged in native code" message was a
+          # misdiagnosis. 15k+ tests over 8 shards no longer fit in 23 minutes;
+          # four shards exceeded 20m of test time on the same run. This is a
+          # resize, not a hang fix — there was no hang.
+          #
+          # THE 15-MINUTE GAP TO THE JOB BOUND IS DELIBERATE. The job clock
+          # starts at checkout, which has been observed at ~12 minutes on this
+          # repo. SIGTERM at 45m inside a 60m job leaves room for that; sizing
+          # the inner bounds closer to 60 would recreate the exact failure above,
+          # where the outer bound wins and the inner ones never report.
+          CIRIS_TEST_CONTROLLER_DEADLINE_SECONDS=2580 \
+          timeout --signal=SIGTERM --kill-after=30 2700 \
             pytest tests/ -n 4 --dist=loadgroup \
             --splits 8 --group ${{ matrix.shard }} \
             --splitting-algorithm=least_duration \
             --store-durations --durations-path=test_durations_shard_${{ matrix.shard }} \
             --reruns=2 --reruns-delay=1 --max-worker-restart=4 \
-            --session-timeout=1320 \
+            --session-timeout=2520 \
             --cov=./ --cov-report=xml:coverage-shard-${{ matrix.shard }}.xml
 
       - name: Upload coverage artifact

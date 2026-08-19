@@ -6,7 +6,7 @@ Provides health status and time synchronization information.
 
 import logging
 from datetime import datetime, timezone
-from typing import Annotated, Optional
+from typing import Annotated, Optional, Sequence
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
@@ -40,6 +40,32 @@ logger = logging.getLogger(__name__)
 AuthObserverDep = Annotated[AuthContext, Depends(require_observer)]
 
 router = APIRouter()
+
+
+def _describe_provider_failures(providers: Sequence[object]) -> str:
+    """One short clause naming each provider and its own last complaint.
+
+    The provider already told us what is wrong — "Invalid API Key", "The model
+    `default` does not exist" — and every layer between there and the user
+    replaced it with a generic sentence. This carries it through.
+
+    Best-effort by construction: a provider that exposes no last-error simply
+    contributes its name, which is still more than "all providers".
+    """
+    parts: list[str] = []
+    for sp in providers[:3]:
+        name = getattr(sp, "name", None) or "provider"
+        service = getattr(sp, "instance", sp)
+        reason = ""
+        for attr in ("last_error", "_last_error", "last_failure_reason"):
+            val = getattr(service, attr, None)
+            if val:
+                reason = str(val).strip().splitlines()[0][:120]
+                break
+        parts.append(f"{name}: {reason}" if reason else str(name))
+    if not parts:
+        return ""
+    return f"({'; '.join(parts)})."
 
 
 async def _check_provider_health(service_provider: object) -> bool:
@@ -91,10 +117,28 @@ async def check_llm_availability() -> tuple[bool, list[SystemWarning]]:
             return True, []
 
     logger.debug(f"All {len(llm_providers)} providers unhealthy - degraded_mode=True")
+
+    # SAY WHICH PROVIDER, AND WHAT IT ACTUALLY SAID.
+    #
+    # This used to read "All LLM providers are currently unavailable. Check your
+    # provider settings or network connection." A user whose Groq key had been
+    # revoked was pointed at his network. His real faults, both visible in the
+    # provider's own replies, were:
+    #
+    #   ciris_primary  model=gpt-4o-mini  -> HTTP 401 Invalid API Key
+    #   groq_byok      model=default      -> "The model `default` does not exist"
+    #
+    # Those need opposite responses — rotate a credential vs pick a model — and
+    # a message that names neither sends the reader to a third thing entirely.
+    detail = _describe_provider_failures(llm_providers)
     return False, [
         SystemWarning(
             code="llm_providers_unhealthy",
-            message="All LLM providers are currently unavailable. Check your provider settings or network connection.",
+            message=(
+                f"No LLM provider is answering. {detail} Open LLM settings to fix it."
+                if detail
+                else "No LLM provider is answering. Open LLM settings to check your provider, key and model."
+            ),
             severity="warning",
             action_url="/settings/llm",
         )

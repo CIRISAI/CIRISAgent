@@ -884,6 +884,11 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         # AuthenticationError + other non-BadRequest APIStatusErrors stay non-retryable.
         self.non_retryable_exceptions = (AuthenticationError,)
 
+        #: The provider's own last complaint, surfaced by /v1/system/health so a
+        #: degraded agent can say "Invalid API Key" instead of "check your
+        #: network". Empty until something actually fails.
+        self.last_error: str = ""
+
         api_key = self.openai_config.api_key
         base_url = self.openai_config.base_url
         # An unset model may fall back to OpenAI's default ONLY IF THIS REALLY IS
@@ -2082,11 +2087,20 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                     circuit_breaker_state=self.circuit_breaker.state.value,
                     consecutive_failures=self.circuit_breaker.consecutive_failures,
                 )
+                self.last_error = _root_provider_error(e)
                 _handle_instructor_retry_exception(e, error_context, self.circuit_breaker)
 
         # Generic exception handling
         self._track_error(e)
         self._total_errors += 1
+        # REMEMBER WHAT THE PROVIDER SAID (CIRISAgent#1062 follow-up).
+        #
+        # /v1/system/health reports "no LLM provider is answering" and, before
+        # this, could say nothing about WHY — so a revoked key and an unknown
+        # model produced the same sentence, pointing the reader at their network.
+        # The provider's own words are already unwrapped for the log; keeping the
+        # last one lets the health warning name the actual fault.
+        self.last_error = _root_provider_error(e)
         _handle_generic_llm_exception(
             e, self.model_name, self.openai_config.base_url or "", resp_model_name, self.circuit_breaker
         )

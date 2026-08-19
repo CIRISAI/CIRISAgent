@@ -2,6 +2,9 @@ package ai.ciris.mobile.shared.ui.screens
 
 import ai.ciris.mobile.shared.CIRISBuild
 import ai.ciris.mobile.shared.api.CIRISApiClient
+import ai.ciris.mobile.shared.api.CheckState
+import ai.ciris.mobile.shared.api.checkLlmConfig
+import ai.ciris.mobile.shared.ui.components.LlmCheckRow
 import ai.ciris.mobile.shared.localization.localizedString
 import androidx.compose.foundation.layout.imePadding
 import ai.ciris.mobile.shared.models.ConsentDisclosure
@@ -1004,6 +1007,9 @@ private fun AiStep(
     var isTesting by remember { mutableStateOf(false) }
     var testResult by remember { mutableStateOf<LlmValidationResult?>(null) }
     var availableModels by remember { mutableStateOf<List<ModelInfo>>(emptyList()) }
+
+    /** Shared key/model-list/selected-model verdict (#1062), same as LLM settings. */
+    var configCheck by remember { mutableStateOf<ai.ciris.mobile.shared.api.LlmConfigCheck?>(null) }
     val coroutineScope = rememberCoroutineScope()
 
     // State for local LLM server discovery (finds running servers on network)
@@ -1613,27 +1619,28 @@ private fun AiStep(
                             try {
                                 // Provider is now stored as key directly (e.g., "openai", "local")
                                 val providerId = state.llmProvider
-                                val result = apiClient.validateLlmConfiguration(
+                                // THE SAME CHECK LLM SETTINGS RUNS (#1062).
+                                //
+                                // This used to hand-roll the sequence — validate,
+                                // then list, then decide — while the settings
+                                // screen ran only half of it. Two screens asking
+                                // the same question two different ways is how
+                                // they drifted apart in the first place. Both now
+                                // call checkLlmConfig and get identical verdicts.
+                                val check = apiClient.checkLlmConfig(
                                     provider = providerId,
                                     apiKey = state.llmApiKey,
                                     baseUrl = state.llmBaseUrl.takeIf { it.isNotEmpty() },
-                                    model = state.llmModel.takeIf { it.isNotEmpty() }
+                                    selectedModel = state.llmModel.takeIf { it.isNotEmpty() },
                                 )
-
-                                // If validation succeeded, fetch available models
-                                // THE WIZARD IS WHERE THIS BIT (#1062). A user
-                                // set up Groq while the live query was failing,
-                                // got OpenAI-flavoured cached models, and left
-                                // with a model his provider does not serve.
-                                val modelResult = if (result.valid) {
-                                    apiClient.listModels(
-                                        provider = providerId,
-                                        apiKey = state.llmApiKey,
-                                        baseUrl = state.llmBaseUrl.takeIf { it.isNotEmpty() }
-                                    )
-                                } else null
-                                val models = modelResult?.models ?: emptyList()
-                                val modelsAreLive = modelResult?.isLive == true
+                                configCheck = check
+                                val result = LlmValidationResult(
+                                    valid = check.usable,
+                                    message = check.keyMessage ?: "Connection verified",
+                                    error = check.firstProblem,
+                                )
+                                val models = check.availableModels
+                                val modelsAreLive = check.models == CheckState.OK
 
                                 withContext(Dispatchers.Main) {
                                     testResult = result
@@ -1687,6 +1694,25 @@ private fun AiStep(
             }
 
             // Show test result
+            // THE SAME THREE INDICATORS LLM SETTINGS SHOWS (#1062).
+            //
+            // The single ✓/✗ below collapses three independent facts into one
+            // verdict, and they do not fail together: a valid key with a model
+            // the provider does not serve reads as "✓ connection verified" and
+            // then fails every request. Break them out.
+            configCheck?.let { c ->
+                Spacer(modifier = Modifier.height(12.dp))
+                if (c.key != CheckState.UNKNOWN) {
+                    LlmCheckRow(state = c.key, message = c.keyMessage)
+                }
+                if (c.models != CheckState.UNKNOWN) {
+                    LlmCheckRow(state = c.models, message = c.modelsMessage)
+                }
+                if (c.selectedModel != CheckState.UNKNOWN) {
+                    LlmCheckRow(state = c.selectedModel, message = c.selectedModelMessage)
+                }
+            }
+
             testResult?.let { result ->
                 Spacer(modifier = Modifier.height(12.dp))
                 Surface(

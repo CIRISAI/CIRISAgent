@@ -2458,6 +2458,13 @@
     "accord_remint_step_done": "An gama — an ba da izinin irin",
     "accord_remint_step_of": "Mataki {step} na {total}",
     "accord_remint_title": "Sake ƙirƙirar tushen amincewa da ke akwai",
+    "llm_check_button": "Duba Maɓalli, Samo Samfura",
+    "llm_check_state_ok": "An tabbatar yana aiki",
+    "llm_check_state_degraded": "Yana aiki, amma mai samarwa bai tabbatar da shi ba",
+    "llm_check_state_failed": "Mai samarwa ya ƙi wannan",
+    "settings_auth_local_session": "Zaman shiga na gida",
+    "settings_token_info_desc_local": "Alamar zaman da aka samu daga shigar ku da sunan mai amfani da kalmar sirri. Tana tabbatar da ku ga wannan wakili — ba shaidar CIRIS Services ba ce, kuma ba ta da alaƙa da maɓallin API da mai samar da LLM naku ke amfani da shi.",
+    "settings_token_info_desc_oauth": "Alamar shigar ku zuwa wannan wakili, wadda aka samu lokacin da kuka shiga da Google ko Apple. Ta bambanta da maɓallin API da mai samar da LLM naku ke amfani da shi.",
     "login_google_unavailable": "Shiga tare da {provider} ba ya samuwa a wannan shigarwar."
   },
   "conscience": {

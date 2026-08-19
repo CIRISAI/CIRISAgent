@@ -2342,7 +2342,14 @@
     "accord_remint_step_done": "Concluído — a semente está autorizada",
     "accord_remint_step_of": "Passo {step} de {total}",
     "accord_remint_title": "Recunhar raiz de confiança existente",
-    "login_google_unavailable": "Entrar com {provider} não está disponível nesta instalação."
+    "login_google_unavailable": "Entrar com {provider} não está disponível nesta instalação.",
+    "llm_check_button": "Verificar chave e buscar modelos",
+    "llm_check_state_ok": "Funcionamento confirmado",
+    "llm_check_state_degraded": "Funciona, mas não confirmado pelo provedor",
+    "llm_check_state_failed": "O provedor rejeitou isso",
+    "settings_auth_local_session": "Sessão de login local",
+    "settings_token_info_desc_local": "O token de sessão do seu login com nome de usuário e senha. Ele autentica você neste agente — não é uma credencial do CIRIS Services e não tem relação com a chave API que seu provedor de LLM usa.",
+    "settings_token_info_desc_oauth": "Seu token de login para este agente, obtido quando você entrou com Google ou Apple. Ele é separado da chave API que seu provedor de LLM usa."
   },
   "prompts": {
     "dma": {

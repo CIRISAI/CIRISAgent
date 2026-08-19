@@ -2458,7 +2458,14 @@
     "accord_remint_step_done": "ပြီးပါပြီ — မျိုးစေ့ကို ခွင့်ပြုပြီးဖြစ်သည်",
     "accord_remint_step_of": "အဆင့် {step} / {total}",
     "accord_remint_title": "ရှိပြီးသား ယုံကြည်မှုအမြစ်ကို ပြန်လည်ထုတ်ရန်",
-    "login_google_unavailable": "ဤတပ်ဆင်မှုတွင် {provider} ဖြင့် ဝင်ရောက်၍မရပါ။"
+    "login_google_unavailable": "ဤတပ်ဆင်မှုတွင် {provider} ဖြင့် ဝင်ရောက်၍မရပါ။",
+    "llm_check_button": "API key စစ်ဆေးပြီး မော်ဒယ်များ ရယူရန်",
+    "llm_check_state_ok": "အလုပ်လုပ်ကြောင်း အတည်ပြုပြီး",
+    "llm_check_state_degraded": "အလုပ်လုပ်နေသော်လည်း ပံ့ပိုးသူထံမှ အတည်ပြုချက် မရသေးပါ",
+    "llm_check_state_failed": "ပံ့ပိုးသူက ၎င်းကို ငြင်းပယ်လိုက်သည်",
+    "settings_auth_local_session": "ဒေသတွင်း ဝင်ရောက်မှု စက်ရှင်",
+    "settings_token_info_desc_local": "အသုံးပြုသူအမည်နှင့် စကားဝှက်ဖြင့် ဝင်ရောက်ချိန်တွင် ရရှိသော စက်ရှင် တိုကင် ဖြစ်သည်။ ၎င်းသည် ဤ agent ထံတွင် သင့်အား စစ်မှန်ကြောင်း အတည်ပြုပေးသည် — CIRIS Services ၏ အထောက်အထား မဟုတ်သလို သင်၏ LLM ပံ့ပိုးသူ အသုံးပြုသည့် API key နှင့်လည်း မသက်ဆိုင်ပါ။",
+    "settings_token_info_desc_oauth": "Google သို့မဟုတ် Apple ဖြင့် ဝင်ရောက်ချိန်တွင် ရရှိခဲ့သော ဤ agent အတွက် သင်၏ ဝင်ရောက်မှု တိုကင် ဖြစ်သည်။ ၎င်းသည် သင်၏ LLM ပံ့ပိုးသူ အသုံးပြုသည့် API key နှင့် သီးခြားစီ ဖြစ်သည်။"
   },
   "conscience": {
     "ponder_attempted": "I attempted to {action}",

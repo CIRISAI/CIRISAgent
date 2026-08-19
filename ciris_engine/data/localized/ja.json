@@ -2342,7 +2342,14 @@
     "accord_remint_step_done": "完了 — シードは承認されました",
     "accord_remint_step_of": "ステップ {step} / {total}",
     "accord_remint_title": "既存のトラストルートを再発行",
-    "login_google_unavailable": "このインストールでは{provider}でのサインインは利用できません"
+    "login_google_unavailable": "このインストールでは{provider}でのサインインは利用できません",
+    "llm_check_button": "キーを確認してモデルを取得",
+    "llm_check_state_ok": "動作確認済み",
+    "llm_check_state_degraded": "動作していますが、プロバイダーによる確認は取れていません",
+    "llm_check_state_failed": "プロバイダーに拒否されました",
+    "settings_auth_local_session": "ローカルサインインのセッション",
+    "settings_token_info_desc_local": "ユーザー名とパスワードでサインインしたときに発行されるセッショントークンです。このエージェントに対してあなたを認証するもので、CIRIS Servicesの認証情報ではなく、LLMプロバイダーが使用するAPIキーとも関係ありません。",
+    "settings_token_info_desc_oauth": "GoogleまたはAppleでサインインしたときに取得された、このエージェント用のサインイントークンです。LLMプロバイダーが使用するAPIキーとは別のものです。"
   },
   "prompts": {
     "dma": {

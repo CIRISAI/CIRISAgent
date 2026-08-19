@@ -2342,6 +2342,13 @@
     "accord_remint_step_done": "تم — البذرة مُصرّح بها",
     "accord_remint_step_of": "الخطوة {step} من {total}",
     "accord_remint_title": "إعادة سكّ جذر ثقة قائم",
+    "llm_check_button": "تحقّق من المفتاح واجلب النماذج",
+    "llm_check_state_ok": "مؤكَّد أنه يعمل",
+    "llm_check_state_degraded": "يعمل، لكن المزود لم يؤكّد ذلك",
+    "llm_check_state_failed": "رفض المزود هذا",
+    "settings_auth_local_session": "جلسة تسجيل دخول محلية",
+    "settings_token_info_desc_local": "رمز الجلسة الناتج عن تسجيل دخولك باسم المستخدم وكلمة المرور. يثبت هويتك لدى هذا الوكيل — وهو ليس بيانات اعتماد CIRIS Services، ولا علاقة له بمفتاح API الذي يستخدمه مزود LLM لديك.",
+    "settings_token_info_desc_oauth": "رمز تسجيل الدخول الخاص بك لهذا الوكيل، وقد حصلت عليه عند تسجيل الدخول باستخدام Google أو Apple. وهو منفصل عن مفتاح API الذي يستخدمه مزود LLM لديك.",
     "login_google_unavailable": "تسجيل الدخول باستخدام {provider} غير متاح في هذا التثبيت."
   },
   "prompts": {

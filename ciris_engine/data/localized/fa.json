@@ -2348,6 +2348,13 @@
     "accord_remint_step_done": "انجام شد — بذر مجاز شد",
     "accord_remint_step_of": "گام {step} از {total}",
     "accord_remint_title": "ضرب مجدد ریشهٔ اعتماد موجود",
+    "llm_check_button": "بررسی کلید و دریافت مدل‌ها",
+    "llm_check_state_ok": "تأیید شد و کار می‌کند",
+    "llm_check_state_degraded": "کار می‌کند، اما ارائه‌دهنده آن را تأیید نکرده است",
+    "llm_check_state_failed": "ارائه‌دهنده این را رد کرد",
+    "settings_auth_local_session": "نشست ورود محلی",
+    "settings_token_info_desc_local": "توکن نشستی که از ورود شما با نام کاربری و گذرواژه به دست آمده است. هویت شما را برای این عامل احراز می‌کند — این یک اعتبارنامه CIRIS Services نیست و به کلید API ارائه‌دهنده LLM شما ربطی ندارد.",
+    "settings_token_info_desc_oauth": "توکن ورود شما به این عامل، که هنگام ورود با Google یا Apple دریافت شده است. این توکن از کلید API ارائه‌دهنده LLM شما جداست.",
     "login_google_unavailable": "ورود با {provider} در این نسخه در دسترس نیست."
   },
   "prompts": {

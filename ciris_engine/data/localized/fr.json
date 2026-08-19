@@ -2342,7 +2342,14 @@
     "accord_remint_step_done": "Terminé — la graine est autorisée",
     "accord_remint_step_of": "Étape {step} sur {total}",
     "accord_remint_title": "Re-frapper une racine de confiance existante",
-    "login_google_unavailable": "La connexion avec {provider} n'est pas disponible sur cette installation."
+    "login_google_unavailable": "La connexion avec {provider} n'est pas disponible sur cette installation.",
+    "llm_check_button": "Vérifier la clé et charger les modèles",
+    "llm_check_state_ok": "Fonctionnement confirmé",
+    "llm_check_state_degraded": "Fonctionne, mais non confirmé par le fournisseur",
+    "llm_check_state_failed": "Le fournisseur l'a rejeté",
+    "settings_auth_local_session": "Session de connexion locale",
+    "settings_token_info_desc_local": "Le jeton de session issu de votre connexion par nom d'utilisateur et mot de passe. Il vous authentifie auprès de cet agent — ce n'est pas un identifiant CIRIS Services, et il n'a aucun rapport avec la clé API utilisée par votre fournisseur LLM.",
+    "settings_token_info_desc_oauth": "Votre jeton de connexion pour cet agent, obtenu lors de votre connexion avec Google ou Apple. Il est distinct de la clé API utilisée par votre fournisseur LLM."
   },
   "prompts": {
     "dma": {

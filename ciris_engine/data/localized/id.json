@@ -2458,7 +2458,14 @@
     "accord_remint_step_done": "Selesai — seed telah diotorisasi",
     "accord_remint_step_of": "Langkah {step} dari {total}",
     "accord_remint_title": "Cetak ulang trust root yang ada",
-    "login_google_unavailable": "Masuk dengan {provider} tidak tersedia pada instalasi ini."
+    "login_google_unavailable": "Masuk dengan {provider} tidak tersedia pada instalasi ini.",
+    "llm_check_button": "Periksa kunci & ambil model",
+    "llm_check_state_ok": "Terkonfirmasi berfungsi",
+    "llm_check_state_degraded": "Berfungsi, tetapi belum dikonfirmasi oleh penyedia",
+    "llm_check_state_failed": "Penyedia menolak ini",
+    "settings_auth_local_session": "Sesi masuk lokal",
+    "settings_token_info_desc_local": "Token sesi dari proses masuk dengan nama pengguna dan kata sandi Anda. Token ini mengautentikasi Anda ke agen ini — ini bukan kredensial CIRIS Services, dan tidak ada hubungannya dengan kunci API yang digunakan penyedia LLM Anda.",
+    "settings_token_info_desc_oauth": "Token masuk Anda untuk agen ini, diperoleh saat Anda masuk dengan Google atau Apple. Token ini terpisah dari kunci API yang digunakan penyedia LLM Anda."
   },
   "conscience": {
     "ponder_attempted": "Saya mencoba untuk {action}",

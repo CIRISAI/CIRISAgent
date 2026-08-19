@@ -2342,7 +2342,14 @@
     "accord_remint_step_done": "Готово — зерно авторизовано",
     "accord_remint_step_of": "Крок {step} з {total}",
     "accord_remint_title": "Перекарбувати наявний корінь довіри",
-    "login_google_unavailable": "Вхід через {provider} недоступний у цьому встановленні."
+    "login_google_unavailable": "Вхід через {provider} недоступний у цьому встановленні.",
+    "llm_check_button": "Перевірити ключ і отримати моделі",
+    "llm_check_state_ok": "Працює, підтверджено",
+    "llm_check_state_degraded": "Працює, але не підтверджено провайдером",
+    "llm_check_state_failed": "Відхилено провайдером",
+    "settings_auth_local_session": "Сесія локального входу",
+    "settings_token_info_desc_local": "Токен сесії, отриманий під час входу з іменем користувача та паролем. Він автентифікує вас у цьому агенті — це не облікові дані CIRIS Services, і він не пов'язаний з API-ключем, який використовує ваш провайдер LLM.",
+    "settings_token_info_desc_oauth": "Ваш токен входу для цього агента, отриманий під час входу через Google або Apple. Він відрізняється від API-ключа, який використовує ваш провайдер LLM."
   },
   "prompts": {
     "dma": {

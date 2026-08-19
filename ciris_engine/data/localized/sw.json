@@ -2342,6 +2342,13 @@
     "accord_remint_step_done": "Imekamilika — mbegu imeidhinishwa",
     "accord_remint_step_of": "Hatua ya {step} kati ya {total}",
     "accord_remint_title": "Tengeneza upya mzizi wa uaminifu uliopo",
+    "llm_check_button": "Kagua Ufunguo, Pata Mifano",
+    "llm_check_state_ok": "Imethibitishwa kuwa inafanya kazi",
+    "llm_check_state_degraded": "Inafanya kazi, lakini mtoa huduma hajathibitisha",
+    "llm_check_state_failed": "Mtoa huduma amekataa hii",
+    "settings_auth_local_session": "Kipindi cha kuingia ndani",
+    "settings_token_info_desc_local": "Tokeni ya kipindi kutokana na kuingia kwako kwa jina la mtumiaji na nenosiri. Inakuthibitisha kwa wakala huyu — si kitambulisho cha CIRIS Services, na haihusiani na ufunguo wa API anaotumia mtoa huduma wako wa LLM.",
+    "settings_token_info_desc_oauth": "Tokeni yako ya kuingia kwa wakala huyu, uliyoipata ulipoingia kwa kutumia Google au Apple. Ni tofauti na ufunguo wa API anaotumia mtoa huduma wako wa LLM.",
     "login_google_unavailable": "Kuingia kwa {provider} hakupatikani katika usakinishaji huu."
   },
   "prompts": {

@@ -2342,6 +2342,13 @@
     "accord_remint_step_done": "ተጠናቋል — ዘሩ ጸድቋል",
     "accord_remint_step_of": "ደረጃ {step} ከ{total}",
     "accord_remint_title": "ነባሩን የመተማመኛ ሥር ዳግም ማተም",
+    "llm_check_button": "ቁልፍ ያረጋግጡ እና ሞዴሎችን ያምጡ",
+    "llm_check_state_ok": "እየሠራ መሆኑ ተረጋግጧል",
+    "llm_check_state_degraded": "እየሠራ ነው፣ ነገር ግን በአቅራቢው አልተረጋገጠም",
+    "llm_check_state_failed": "አቅራቢው ይህን ውድቅ አድርጓል",
+    "settings_auth_local_session": "አካባቢያዊ የመግቢያ ክፍለ-ጊዜ",
+    "settings_token_info_desc_local": "በተጠቃሚ ስምዎ እና በይለፍ ቃልዎ ከገቡበት መግቢያ የተገኘ የክፍለ-ጊዜ ማስረጃ። ለዚህ ወኪል ማንነትዎን ያረጋግጣል — የCIRIS Services መግቢያ ማስረጃ አይደለም፣ እና የLLM አቅራቢዎ ከሚጠቀምበት የAPI ቁልፍ ጋር ግንኙነት የለውም።",
+    "settings_token_info_desc_oauth": "በGoogle ወይም በApple ሲገቡ የተገኘ የዚህ ወኪል የመግቢያ ማስረጃዎ። የLLM አቅራቢዎ ከሚጠቀምበት የAPI ቁልፍ የተለየ ነው።",
     "login_google_unavailable": "በ{provider} መግባት በዚህ ጭነት ላይ አይገኝም።"
   },
   "prompts": {

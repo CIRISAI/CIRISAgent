@@ -2342,7 +2342,14 @@
     "accord_remint_step_done": "Fertig – der Seed ist autorisiert",
     "accord_remint_step_of": "Schritt {step} von {total}",
     "accord_remint_title": "Bestehende Vertrauenswurzel neu prägen",
-    "login_google_unavailable": "Die Anmeldung mit {provider} ist in dieser Installation nicht verfügbar."
+    "login_google_unavailable": "Die Anmeldung mit {provider} ist in dieser Installation nicht verfügbar.",
+    "llm_check_button": "Schlüssel prüfen & Modelle laden",
+    "llm_check_state_ok": "Bestätigt funktionsfähig",
+    "llm_check_state_degraded": "Funktioniert, aber nicht vom Anbieter bestätigt",
+    "llm_check_state_failed": "Der Anbieter hat dies abgelehnt",
+    "settings_auth_local_session": "Lokale Anmeldesitzung",
+    "settings_token_info_desc_local": "Das Sitzungstoken aus Ihrer Anmeldung mit Benutzername und Passwort. Es authentifiziert Sie gegenüber diesem Agenten – es ist keine Zugangsberechtigung für CIRIS Services und hat nichts mit dem API-Schlüssel zu tun, den Ihr LLM-Anbieter verwendet.",
+    "settings_token_info_desc_oauth": "Ihr Anmeldetoken für diesen Agenten, das Sie bei der Anmeldung mit Google oder Apple erhalten haben. Es ist unabhängig von dem API-Schlüssel, den Ihr LLM-Anbieter verwendet."
   },
   "prompts": {
     "dma": {

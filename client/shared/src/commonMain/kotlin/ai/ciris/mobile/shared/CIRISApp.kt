@@ -4262,9 +4262,37 @@ private suspend fun checkFirstRunStatus(
             // that runs when nothing is wrong — was the only place it was missing.
             // Re-entering the wizard here would re-claim a node that already has
             // an owner, so this is a correctness fix, not just a UX one.
-            if (setupStatus.data.setup_required && nodeHasOwner(nodeBaseUrl)) {
-                platformLog("checkFirstRunStatus", "[INFO] brain says setup_required but the NODE has an OWNER → configured, NOT first-run (sign in instead)")
+            // ...AND THE BRAIN MUST ALREADY HAVE ITS CONFIG. This is the half I
+            // got wrong in 2.9.26 (CIRISAgent#1075).
+            //
+            // An owned node means DO NOT RE-CLAIM THE NODE. It does not mean the
+            // brain is configured — they are two different stores, which is the
+            // whole point of #1061, and I applied that lesson in one direction
+            // only. Skipping the wizard on node-ownership alone left a brain with
+            // no .env, and the brain's remaining 12 services start ONLY from
+            // POST /v1/setup/complete -> runtime.resume_from_first_run():
+            //
+            //     Config: ~/ciris/.env — NOT FOUND (first run will create it)
+            //     [FIRST-RUN] 10/10 minimal services started
+            //     ...wizard skipped, user signed in...
+            //     cognitiveState=SETUP forever, telemetry/audit/LLM bus absent,
+            //     every /v1/system/*, /v1/audit/* and add-provider call 503.
+            //
+            // The agent could not even be given an LLM provider to escape with.
+            //
+            // So: node-ownership suppresses the CLAIM, never the setup. If the
+            // brain has no config, the wizard runs.
+            val brainHasConfig = setupStatus.data.has_env_file
+            if (setupStatus.data.setup_required && brainHasConfig && nodeHasOwner(nodeBaseUrl)) {
+                platformLog("checkFirstRunStatus", "[INFO] brain says setup_required but it HAS config and the NODE has an OWNER → configured, NOT first-run (sign in instead)")
                 return false
+            }
+            if (setupStatus.data.setup_required && !brainHasConfig) {
+                platformLog(
+                    "checkFirstRunStatus",
+                    "[INFO] brain has NO config (.env absent) → setup must run even though the node is owned; " +
+                        "without it the remaining services never start and the agent stays in SETUP",
+                )
             }
             return setupStatus.data.setup_required
         } catch (e: Exception) {

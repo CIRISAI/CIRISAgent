@@ -2458,7 +2458,14 @@
     "accord_remint_step_done": "เสร็จสิ้น — seed ได้รับอนุมัติแล้ว",
     "accord_remint_step_of": "ขั้นที่ {step} จาก {total}",
     "accord_remint_title": "สร้าง trust root เดิมขึ้นใหม่",
-    "login_google_unavailable": "การเข้าสู่ระบบด้วย {provider} ไม่พร้อมใช้งานในการติดตั้งนี้"
+    "login_google_unavailable": "การเข้าสู่ระบบด้วย {provider} ไม่พร้อมใช้งานในการติดตั้งนี้",
+    "llm_check_button": "ตรวจสอบคีย์และดึงรายการโมเดล",
+    "llm_check_state_ok": "ยืนยันแล้วว่าใช้งานได้",
+    "llm_check_state_degraded": "ใช้งานได้ แต่ผู้ให้บริการยังไม่ได้ยืนยัน",
+    "llm_check_state_failed": "ผู้ให้บริการปฏิเสธรายการนี้",
+    "settings_auth_local_session": "เซสชันการเข้าสู่ระบบในเครื่อง",
+    "settings_token_info_desc_local": "โทเค็นเซสชันจากการเข้าสู่ระบบด้วยชื่อผู้ใช้และรหัสผ่าน ใช้ยืนยันตัวตนของคุณกับเอเจนต์นี้ — ไม่ใช่ข้อมูลรับรองของ CIRIS Services และไม่เกี่ยวข้องกับคีย์ API ที่ผู้ให้บริการ LLM ของคุณใช้",
+    "settings_token_info_desc_oauth": "โทเค็นสำหรับเข้าสู่ระบบเอเจนต์นี้ ได้รับเมื่อคุณเข้าสู่ระบบด้วย Google หรือ Apple โทเค็นนี้แยกจากคีย์ API ที่ผู้ให้บริการ LLM ของคุณใช้"
   },
   "conscience": {
     "ponder_attempted": "I attempted to {action}",

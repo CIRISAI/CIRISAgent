@@ -40,7 +40,30 @@ enum class ClientMode {
  * @param serviceCount the agent service count reported in the health envelope (0 on a node).
  */
 fun clientModeFrom(cognitiveState: String?, serviceCount: Int): ClientMode =
-    if (cognitiveState != null || serviceCount > 0) ClientMode.AGENT else ClientMode.NODE
+    when {
+        // A BRAIN STILL IN SETUP IS NOT A USABLE AGENT (CIRISAgent#1075).
+        //
+        // `cognitive_state` was treated as proof of an agent, and "SETUP" is a
+        // non-null state — so a node whose brain had never completed first-run
+        // was classified AGENT while running 10 of 22 services. Every
+        // AGENT-only poller then fired against services that do not exist yet:
+        //
+        //     listAdapters      503
+        //     getAuditEntries   503   (every 3s, with a full stack trace each time)
+        //     getLlmBusStatus   503
+        //     getLlmProviders   503
+        //     addLlmProvider    503   <- and so the user could not escape
+        //
+        // This gate exists precisely to stop that flood, per the comment at its
+        // call site. It just needed to know that SETUP is not readiness.
+        //
+        // A claimed node with an unconfigured brain is a LEGITIMATE state, not a
+        // broken agent: the node works, the cognitive half is not set up. Run
+        // the node UI, which is what NODE mode is for.
+        cognitiveState.equals("SETUP", ignoreCase = true) && serviceCount == 0 -> ClientMode.NODE
+        cognitiveState != null || serviceCount > 0 -> ClientMode.AGENT
+        else -> ClientMode.NODE
+    }
 
 /**
  * The client build version, used for the node-vs-client VERSION-MISMATCH banner.

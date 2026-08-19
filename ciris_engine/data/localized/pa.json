@@ -2458,7 +2458,14 @@
     "accord_remint_step_done": "ਹੋ ਗਿਆ — ਸੀਡ ਅਧਿਕਾਰਤ ਹੈ",
     "accord_remint_step_of": "{total} ਵਿੱਚੋਂ ਕਦਮ {step}",
     "accord_remint_title": "ਮੌਜੂਦਾ ਟਰੱਸਟ ਰੂਟ ਦੁਬਾਰਾ ਮਿੰਟ ਕਰੋ",
-    "login_google_unavailable": "{provider} ਨਾਲ ਸਾਈਨ-ਇਨ ਇਸ ਇੰਸਟਾਲੇਸ਼ਨ ਵਿੱਚ ਉਪਲਬਧ ਨਹੀਂ ਹੈ।"
+    "login_google_unavailable": "{provider} ਨਾਲ ਸਾਈਨ-ਇਨ ਇਸ ਇੰਸਟਾਲੇਸ਼ਨ ਵਿੱਚ ਉਪਲਬਧ ਨਹੀਂ ਹੈ।",
+    "llm_check_button": "ਕੁੰਜੀ ਜਾਂਚੋ ਅਤੇ ਮਾਡਲ ਲਿਆਓ",
+    "llm_check_state_ok": "ਕੰਮ ਕਰ ਰਿਹਾ ਹੈ — ਪੁਸ਼ਟੀ ਹੋ ਚੁੱਕੀ ਹੈ",
+    "llm_check_state_degraded": "ਕੰਮ ਕਰ ਰਿਹਾ ਹੈ, ਪਰ ਪ੍ਰਦਾਤਾ ਨੇ ਇਸਦੀ ਪੁਸ਼ਟੀ ਨਹੀਂ ਕੀਤੀ",
+    "llm_check_state_failed": "ਪ੍ਰਦਾਤਾ ਨੇ ਇਸਨੂੰ ਰੱਦ ਕਰ ਦਿੱਤਾ",
+    "settings_auth_local_session": "ਸਥਾਨਕ ਸਾਈਨ-ਇਨ ਸੈਸ਼ਨ",
+    "settings_token_info_desc_local": "ਤੁਹਾਡੇ ਉਪਭੋਗਤਾ ਨਾਮ ਅਤੇ ਪਾਸਵਰਡ ਨਾਲ ਸਾਈਨ ਇਨ ਕਰਨ ਤੋਂ ਮਿਲਿਆ ਸੈਸ਼ਨ ਟੋਕਨ। ਇਹ ਇਸ ਏਜੰਟ ਸਾਹਮਣੇ ਤੁਹਾਡੀ ਪਛਾਣ ਪ੍ਰਮਾਣਿਤ ਕਰਦਾ ਹੈ — ਇਹ CIRIS Services ਦਾ ਕ੍ਰੈਡੈਂਸ਼ੀਅਲ ਨਹੀਂ ਹੈ, ਅਤੇ ਇਸਦਾ ਉਸ API ਕੁੰਜੀ ਨਾਲ ਕੋਈ ਸਬੰਧ ਨਹੀਂ ਜੋ ਤੁਹਾਡਾ LLM ਪ੍ਰਦਾਤਾ ਵਰਤਦਾ ਹੈ।",
+    "settings_token_info_desc_oauth": "ਇਸ ਏਜੰਟ ਲਈ ਤੁਹਾਡਾ ਸਾਈਨ-ਇਨ ਟੋਕਨ, ਜੋ Google ਜਾਂ Apple ਨਾਲ ਸਾਈਨ ਇਨ ਕਰਨ ਵੇਲੇ ਮਿਲਿਆ ਸੀ। ਇਹ ਉਸ API ਕੁੰਜੀ ਤੋਂ ਵੱਖਰਾ ਹੈ ਜੋ ਤੁਹਾਡਾ LLM ਪ੍ਰਦਾਤਾ ਵਰਤਦਾ ਹੈ।"
   },
   "conscience": {
     "ponder_attempted": "ਮੈਂ {action} ਕਰਨ ਦੀ ਕੋਸ਼ਿਸ਼ ਕੀਤੀ",

@@ -2342,7 +2342,14 @@
     "accord_remint_step_done": "Fatto — il seed è autorizzato",
     "accord_remint_step_of": "Passo {step} di {total}",
     "accord_remint_title": "Ri-conia una radice di fiducia esistente",
-    "login_google_unavailable": "L'accesso con {provider} non è disponibile in questa installazione."
+    "login_google_unavailable": "L'accesso con {provider} non è disponibile in questa installazione.",
+    "llm_check_button": "Verifica chiave e carica modelli",
+    "llm_check_state_ok": "Funzionamento confermato",
+    "llm_check_state_degraded": "Funziona, ma non confermato dal provider",
+    "llm_check_state_failed": "Il provider lo ha rifiutato",
+    "settings_auth_local_session": "Sessione di accesso locale",
+    "settings_token_info_desc_local": "Il token di sessione ottenuto dal tuo accesso con nome utente e password. Ti autentica presso questo agente — non è una credenziale di CIRIS Services e non ha alcuna relazione con la chiave API usata dal tuo provider LLM.",
+    "settings_token_info_desc_oauth": "Il tuo token di accesso per questo agente, ottenuto quando hai effettuato l'accesso con Google o Apple. È distinto dalla chiave API usata dal tuo provider LLM."
   },
   "prompts": {
     "dma": {

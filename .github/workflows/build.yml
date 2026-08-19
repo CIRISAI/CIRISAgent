@@ -87,7 +87,26 @@ jobs:
   test:
     name: Test (shard ${{ matrix.shard }}/8)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 30 -> 60: THE JOB CLOCK INCLUDES CHECKOUT, AND CHECKOUT GOT SLOW.
+    #
+    # Shard 1 was killed at 30m20s on run 32284797337 having spent ~12 minutes in
+    # actions/checkout before pytest started — the same slow full clone that made
+    # the Repo Size Audit time out the same day. That left the 25-minute test
+    # budget with ~18 minutes of job clock to fit into, so the OUTERMOST bound
+    # fired first.
+    #
+    # Which is exactly the failure the nested-bounds comment below exists to
+    # prevent: when GitHub's backstop wins, the inner bounds never run, so the
+    # hang-stacks artifact they exist to produce is never written. Shard 1
+    # uploaded no stacks and no durations — a self-reporting diagnostic once again
+    # structurally unable to report.
+    #
+    # The inner bounds are UNCHANGED and still correctly ordered
+    # (1380s controller < 1500s SIGTERM < job). Only the backstop moves, so it
+    # goes back to being a backstop rather than the thing that kills the run.
+    # This does not slow a healthy shard: the 25-minute SIGTERM still bounds the
+    # actual test run.
+    timeout-minutes: 60
     permissions:
       contents: read
       pull-requests: read
@@ -150,7 +169,8 @@ jobs:
           # -n 4: 4 parallel workers within each shard
           # --dist=loadgroup: Respect xdist_group markers (keep grouped tests on same worker)
           # timeout 1500 (25 min) MUST stay meaningfully below the job's
-          # timeout-minutes: 30. It was 1800 — exactly equal — and since the job
+          # timeout-minutes (now 60). It was 1800 — exactly equal to the
+          # then-30m job bound — and since the job
           # clock starts at checkout while this one starts here (~2 min later),
           # the job timeout ALWAYS won. The SIGTERM never arrived, so the #956
           # sessionfinish guard and SIGTERM faulthandler could never dump the
@@ -168,7 +188,8 @@ jobs:
           #
           #   --session-timeout=1320 (22m)  pytest gives up and REPORTS
           #   timeout ... 1500       (25m)  SIGTERM if pytest itself is wedged
-          #   timeout-minutes: 30           GitHub's backstop
+          #   timeout-minutes: 60           GitHub's backstop (was 30; checkout
+          #                                 alone now eats ~12m of the job clock)
           #
           # The session bound is the one that actually fixes the 2026-08-02
           # shard-3 hang. Root cause, from the first stacks this hang has ever

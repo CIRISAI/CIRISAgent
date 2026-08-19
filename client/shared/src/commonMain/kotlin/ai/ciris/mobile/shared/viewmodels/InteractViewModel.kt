@@ -154,6 +154,23 @@ class InteractViewModel(
     companion object {
         private const val TAG = "InteractViewModel"
         private const val POLL_INTERVAL_MS = 3000L
+
+        /**
+         * How often the timeline re-reads the audit trail (CIRISAgent#1073).
+         *
+         * This used to ride the 3s message poll, so every tick issued TWO
+         * requests. With the server's default limit of 60 requests/minute, the
+         * message loop alone was 40/min — before status polling (12), trust
+         * polling (12) and selection polling (30). The client was tripping its
+         * own server's rate limiter, and the 429s were visible in a user's log
+         * alongside 171 lines of audit-list chatter.
+         *
+         * Polling it fast bought nothing: `fetchAndAddLatestAction()` already
+         * refreshes the timeline from an SSE push the moment an action occurs,
+         * so this is only a backstop for anything SSE missed. 30s is plenty for
+         * that, and it takes the message loop from 40 req/min to 20.
+         */
+        private const val AUDIT_POLL_INTERVAL_MS = 30000L
         private const val STATUS_POLL_INTERVAL_MS = 5000L
         private const val HEALTH_POLL_INTERVAL_MS = 30000L  // Less frequent health checks
         private const val TRUST_PENDING_POLL_INTERVAL_MS = 5000L  // Fast polling when Play Integrity pending
@@ -1248,8 +1265,15 @@ class InteractViewModel(
             while (isActive) {
                 try {
                     fetchHistory()
-                    // Also fetch audit actions to show in timeline
-                    fetchAuditActions()
+                    // Audit actions are pushed by SSE as they happen; this is a
+                    // slow backstop, NOT the live path. Riding the 3s poll here
+                    // doubled the request rate and tripped the server's own
+                    // rate limiter (#1073).
+                    val nowMs = Clock.System.now().toEpochMilliseconds()
+                    if (nowMs - lastAuditFetchMs >= AUDIT_POLL_INTERVAL_MS) {
+                        lastAuditFetchMs = nowMs
+                        fetchAuditActions()
+                    }
                 } catch (e: Exception) {
                     logError(method, "Message polling failed: ${e::class.simpleName}: ${e.message}")
                 } finally {
@@ -1358,6 +1382,9 @@ class InteractViewModel(
 
     // Track action IDs we've already added to avoid duplicates
     private val addedActionIds = mutableSetOf<String>()
+
+    /** When the audit backstop last ran, so it can be throttled independently. */
+    private var lastAuditFetchMs = 0L
 
     /**
      * Fetch recent audit actions and add them to the chat timeline.

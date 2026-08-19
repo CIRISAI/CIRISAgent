@@ -389,8 +389,7 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
             return result
         except Exception as e:
             logger.error(
-                f"DSDMA {self.domain_name} evaluation failed for thought ID {thought_item.thought_id}: {e}",
-                exc_info=True,
+                f"DSDMA {self.domain_name} evaluation failed for thought ID {thought_item.thought_id}: {e}"
             )
             return DSDMAResult(
                 domain=self.domain_name,

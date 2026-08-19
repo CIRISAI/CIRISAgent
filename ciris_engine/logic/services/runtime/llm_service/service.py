@@ -639,7 +639,13 @@ def _handle_generic_llm_exception(
             resp_model_name,
             (_root_provider_error(error) or error_msg)[:400].replace("\n", " "),
         )
-    raise RuntimeError(f"LLM call failed ({type(error).__name__}): {error_msg[:300]}") from error
+    # The message this raises is re-printed verbatim by the LLM bus and by four
+    # DMA sites, so its shape multiplies. [:300] truncated but did NOT collapse
+    # newlines — 300 characters of XML still spans ~13 physical lines, five
+    # times over. Prefer the provider's actual complaint over the wrapper's
+    # envelope, and keep it on one line.
+    _cause = _root_provider_error(error) or error_msg
+    raise RuntimeError(f"LLM call failed ({type(error).__name__}): {' '.join(_cause.split())[:300]}") from error
 
 
 # Configuration class for LLM services (supports multiple providers)

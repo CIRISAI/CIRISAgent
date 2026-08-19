@@ -351,7 +351,7 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
             return csdma_eval
 
         except Exception as e:
-            logger.error(f"CSDMA evaluation failed for thought ID {thought_item.thought_id}: {e}", exc_info=True)
+            logger.error(f"CSDMA evaluation failed for thought ID {thought_item.thought_id}: {e}")
             return CSDMAResult(
                 plausibility_score=0.0,
                 flags=["LLM_Error", "defer_for_retry"],

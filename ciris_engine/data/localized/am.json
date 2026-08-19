@@ -2356,7 +2356,9 @@
     "llm_check_models_cached": "የተቀመጡ ሞዴሎች እየታዩ ናቸው — ይህ አቅራቢ ስላልመለሰ ይህ ዝርዝር በእውነት ከሚያቀርበው ጋር ላይመሳሰል ይችላል።",
     "settings_auth_oauth_session": "በ{provider} ገብተዋል",
     "settings_set_up_agent_title": "ወኪሉን ያዋቅሩ",
-    "settings_set_up_agent_desc": "ይህ መስቀለኛ ነጥብ ያለ ወኪል እየሠራ ነው። ውይይትን፣ አስተሳሰብንና የወኪል ቅንብሮችን ለማንቃት ወኪል ያዋቅሩ።"
+    "settings_set_up_agent_desc": "ይህ መስቀለኛ ነጥብ ያለ ወኪል እየሠራ ነው። ውይይትን፣ አስተሳሰብንና የወኪል ቅንብሮችን ለማንቃት ወኪል ያዋቅሩ።",
+    "age_range_decline": "መናገር አልፈልግም",
+    "age_range_decline_note": "ከ18 ዓመት በታች ላሉ የምንጠቀመውን ተመሳሳይ ጥበቃ እንተገብራለን። ይህን በኋላ መቀየር ይችላሉ።"
   },
   "prompts": {
     "dma": {

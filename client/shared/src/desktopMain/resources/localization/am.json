@@ -2356,7 +2356,9 @@
     "llm_check_state_failed": "አቅራቢው ይህን ውድቅ አድርጓል",
     "settings_auth_local_session": "አካባቢያዊ የመግቢያ ክፍለ-ጊዜ",
     "settings_token_info_desc_local": "በተጠቃሚ ስምዎ እና በይለፍ ቃልዎ ከገቡበት መግቢያ የተገኘ የክፍለ-ጊዜ ማስረጃ። ለዚህ ወኪል ማንነትዎን ያረጋግጣል — የCIRIS Services መግቢያ ማስረጃ አይደለም፣ እና የLLM አቅራቢዎ ከሚጠቀምበት የAPI ቁልፍ ጋር ግንኙነት የለውም።",
-    "settings_token_info_desc_oauth": "በGoogle ወይም በApple ሲገቡ የተገኘ የዚህ ወኪል የመግቢያ ማስረጃዎ። የLLM አቅራቢዎ ከሚጠቀምበት የAPI ቁልፍ የተለየ ነው።"
+    "settings_token_info_desc_oauth": "በGoogle ወይም በApple ሲገቡ የተገኘ የዚህ ወኪል የመግቢያ ማስረጃዎ። የLLM አቅራቢዎ ከሚጠቀምበት የAPI ቁልፍ የተለየ ነው።",
+    "age_range_decline": "መናገር አልፈልግም",
+    "age_range_decline_note": "ከ18 ዓመት በታች ላሉ የምንጠቀመውን ተመሳሳይ ጥበቃ እንተገብራለን። ይህን በኋላ መቀየር ይችላሉ።"
   },
   "prompts": {
     "dma": {

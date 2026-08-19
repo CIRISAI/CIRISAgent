@@ -2348,7 +2348,7 @@
     "llm_check_model_missing": "Bu model sağlayıcı tarafından sunulmuyor. Listeden birini seçin.",
     "llm_check_models_cached": "Önbellekteki modeller gösteriliyor — bu sağlayıcı yanıt vermedi, bu nedenle liste gerçekte sunduklarıyla örtüşmeyebilir.",
     "settings_auth_oauth_session": "{provider} ile oturum açıldı",
-    "settings_set_up_agent_title": "Ajanı kur",
+    "settings_set_up_agent_title": "Ajan Kurulumu",
     "settings_set_up_agent_desc": "Bu düğüm ajan olmadan çalışıyor. Sohbeti, akıl yürütmeyi ve ajan ayarlarını etkinleştirmek için bir ajan kurun.",
     "llm_check_button": "Anahtarı doğrula ve modelleri getir",
     "llm_check_state_ok": "Çalıştığı doğrulandı",
@@ -2356,7 +2356,9 @@
     "llm_check_state_failed": "Sağlayıcı bunu reddetti",
     "settings_auth_local_session": "Yerel giriş oturumu",
     "settings_token_info_desc_local": "Kullanıcı adı ve şifre ile yaptığınız girişten gelen oturum jetonu. Kimliğinizi bu ajana doğrular — bu bir CIRIS Services kimlik bilgisi değildir ve LLM sağlayıcınızın kullandığı API anahtarıyla ilgisi yoktur.",
-    "settings_token_info_desc_oauth": "Bu ajan için giriş jetonunuz; Google veya Apple ile giriş yaptığınızda alınmıştır. LLM sağlayıcınızın kullandığı API anahtarından ayrıdır."
+    "settings_token_info_desc_oauth": "Bu ajan için giriş jetonunuz; Google veya Apple ile giriş yaptığınızda alınmıştır. LLM sağlayıcınızın kullandığı API anahtarından ayrıdır.",
+    "age_range_decline": "Belirtmek istemiyorum",
+    "age_range_decline_note": "18 yaşın altındakiler için uyguladığımız korumaların aynısını uygularız. Bunu daha sonra değiştirebilirsiniz."
   },
   "prompts": {
     "dma": {

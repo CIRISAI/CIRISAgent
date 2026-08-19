@@ -2707,7 +2707,9 @@
     "llm_check_state_failed": "Nhà cung cấp đã từ chối",
     "settings_auth_local_session": "Phiên đăng nhập cục bộ",
     "settings_token_info_desc_local": "Token phiên từ lần đăng nhập bằng tên người dùng và mật khẩu. Token này xác thực bạn với tác nhân này — đây không phải là thông tin xác thực của CIRIS Services và không liên quan đến khóa API mà nhà cung cấp LLM của bạn sử dụng.",
-    "settings_token_info_desc_oauth": "Token đăng nhập của bạn cho tác nhân này, được cấp khi bạn đăng nhập bằng Google hoặc Apple. Token này tách biệt với khóa API mà nhà cung cấp LLM của bạn sử dụng."
+    "settings_token_info_desc_oauth": "Token đăng nhập của bạn cho tác nhân này, được cấp khi bạn đăng nhập bằng Google hoặc Apple. Token này tách biệt với khóa API mà nhà cung cấp LLM của bạn sử dụng.",
+    "age_range_decline": "Không muốn cho biết",
+    "age_range_decline_note": "Chúng tôi sẽ áp dụng các biện pháp bảo vệ như với người dưới 18 tuổi. Bạn có thể thay đổi sau."
   },
   "network": {
     "title": "Mạng",

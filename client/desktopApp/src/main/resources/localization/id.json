@@ -2472,7 +2472,9 @@
     "llm_check_state_failed": "Penyedia menolak ini",
     "settings_auth_local_session": "Sesi masuk lokal",
     "settings_token_info_desc_local": "Token sesi dari proses masuk dengan nama pengguna dan kata sandi Anda. Token ini mengautentikasi Anda ke agen ini — ini bukan kredensial CIRIS Services, dan tidak ada hubungannya dengan kunci API yang digunakan penyedia LLM Anda.",
-    "settings_token_info_desc_oauth": "Token masuk Anda untuk agen ini, diperoleh saat Anda masuk dengan Google atau Apple. Token ini terpisah dari kunci API yang digunakan penyedia LLM Anda."
+    "settings_token_info_desc_oauth": "Token masuk Anda untuk agen ini, diperoleh saat Anda masuk dengan Google atau Apple. Token ini terpisah dari kunci API yang digunakan penyedia LLM Anda.",
+    "age_range_decline": "Memilih tidak menjawab",
+    "age_range_decline_note": "Kami akan menerapkan perlindungan yang sama seperti untuk pengguna di bawah 18 tahun. Anda dapat mengubahnya nanti."
   },
   "conscience": {
     "ponder_attempted": "Saya mencoba untuk {action}",

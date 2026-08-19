@@ -2472,7 +2472,9 @@
     "llm_check_models_cached": "Menampilkan model tersimpan — penyedia ini tidak merespons, sehingga daftar ini mungkin tidak sesuai dengan yang benar-benar disediakan.",
     "settings_auth_oauth_session": "Masuk dengan {provider}",
     "settings_set_up_agent_title": "Siapkan agen",
-    "settings_set_up_agent_desc": "Node ini berjalan tanpa agen. Siapkan satu agar percakapan, penalaran, dan pengaturan agen dapat digunakan."
+    "settings_set_up_agent_desc": "Node ini berjalan tanpa agen. Siapkan satu agar percakapan, penalaran, dan pengaturan agen dapat digunakan.",
+    "age_range_decline": "Memilih tidak menjawab",
+    "age_range_decline_note": "Kami akan menerapkan perlindungan yang sama seperti untuk pengguna di bawah 18 tahun. Anda dapat mengubahnya nanti."
   },
   "conscience": {
     "ponder_attempted": "Saya mencoba untuk {action}",

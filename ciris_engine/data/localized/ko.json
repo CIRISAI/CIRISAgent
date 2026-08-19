@@ -2356,7 +2356,9 @@
     "llm_check_models_cached": "캐시된 모델을 표시하고 있습니다 — 공급자가 응답하지 않아 이 목록이 실제 제공 내용과 다를 수 있습니다.",
     "settings_auth_oauth_session": "{provider}(으)로 로그인됨",
     "settings_set_up_agent_title": "에이전트 설정",
-    "settings_set_up_agent_desc": "이 노드는 에이전트 없이 실행 중입니다. 대화, 추론 및 에이전트 설정을 사용하려면 에이전트를 설정하십시오."
+    "settings_set_up_agent_desc": "이 노드는 에이전트 없이 실행 중입니다. 대화, 추론 및 에이전트 설정을 사용하려면 에이전트를 설정하십시오.",
+    "age_range_decline": "밝히지 않음",
+    "age_range_decline_note": "18세 미만에게 적용하는 것과 동일한 보호를 적용합니다. 나중에 변경할 수 있습니다."
   },
   "prompts": {
     "dma": {

@@ -2472,7 +2472,9 @@
     "llm_check_state_failed": "Mai samarwa ya ƙi wannan",
     "settings_auth_local_session": "Zaman shiga na gida",
     "settings_token_info_desc_local": "Alamar zaman da aka samu daga shigar ku da sunan mai amfani da kalmar sirri. Tana tabbatar da ku ga wannan wakili — ba shaidar CIRIS Services ba ce, kuma ba ta da alaƙa da maɓallin API da mai samar da LLM naku ke amfani da shi.",
-    "settings_token_info_desc_oauth": "Alamar shigar ku zuwa wannan wakili, wadda aka samu lokacin da kuka shiga da Google ko Apple. Ta bambanta da maɓallin API da mai samar da LLM naku ke amfani da shi."
+    "settings_token_info_desc_oauth": "Alamar shigar ku zuwa wannan wakili, wadda aka samu lokacin da kuka shiga da Google ko Apple. Ta bambanta da maɓallin API da mai samar da LLM naku ke amfani da shi.",
+    "age_range_decline": "Ba na son fada",
+    "age_range_decline_note": "Za mu yi amfani da kariya iri ɗaya da muke amfani da ita ga waɗanda ba su kai shekara 18 ba. Kana iya canza wannan daga baya."
   },
   "conscience": {
     "ponder_attempted": "Na yi ƙoƙarin {action}",

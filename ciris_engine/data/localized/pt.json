@@ -2356,7 +2356,9 @@
     "llm_check_models_cached": "Exibindo modelos em cache — este provedor não respondeu, então esta lista pode não corresponder ao que ele realmente oferece.",
     "settings_auth_oauth_session": "Conectado com {provider}",
     "settings_set_up_agent_title": "Configurar o agente",
-    "settings_set_up_agent_desc": "Este nó está funcionando sem agente. Configure um para habilitar conversa, raciocínio e as configurações do agente."
+    "settings_set_up_agent_desc": "Este nó está funcionando sem agente. Configure um para habilitar conversa, raciocínio e as configurações do agente.",
+    "age_range_decline": "Prefiro não informar",
+    "age_range_decline_note": "Aplicaremos as mesmas proteções que usamos para menores de 18 anos. Você pode alterar isso depois."
   },
   "prompts": {
     "dma": {

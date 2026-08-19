@@ -2356,7 +2356,9 @@
     "llm_check_state_failed": "已被提供商拒绝",
     "settings_auth_local_session": "本地登录会话",
     "settings_token_info_desc_local": "您使用用户名和密码登录后获得的会话令牌。它用于向此智能体验证您的身份——它不是 CIRIS Services 凭据，也与您的 LLM 提供商所用的 API 密钥无关。",
-    "settings_token_info_desc_oauth": "您在使用 Google 或 Apple 登录时获得的、用于此智能体的登录令牌。它与您的 LLM 提供商所用的 API 密钥是相互独立的。"
+    "settings_token_info_desc_oauth": "您在使用 Google 或 Apple 登录时获得的、用于此智能体的登录令牌。它与您的 LLM 提供商所用的 API 密钥是相互独立的。",
+    "age_range_decline": "不愿透露",
+    "age_range_decline_note": "我们将采用与未满 18 岁用户相同的保护措施。您之后可以更改。"
   },
   "prompts": {
     "dma": {

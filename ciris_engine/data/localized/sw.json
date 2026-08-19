@@ -2356,7 +2356,9 @@
     "llm_check_models_cached": "Inaonyesha miundo iliyohifadhiwa — mtoaji huyu hakujibu, hivyo orodha hii huenda isilingane na anachotoa kwa kweli.",
     "settings_auth_oauth_session": "Umeingia kwa {provider}",
     "settings_set_up_agent_title": "Sanidi wakala",
-    "settings_set_up_agent_desc": "Nodi hii inafanya kazi bila wakala. Sanidi mmoja ili kuwezesha mazungumzo, hoja na mipangilio ya wakala."
+    "settings_set_up_agent_desc": "Nodi hii inafanya kazi bila wakala. Sanidi mmoja ili kuwezesha mazungumzo, hoja na mipangilio ya wakala.",
+    "age_range_decline": "Napendelea kutosema",
+    "age_range_decline_note": "Tutatumia ulinzi uleule tunaotumia kwa walio chini ya miaka 18. Unaweza kubadilisha hili baadaye."
   },
   "prompts": {
     "dma": {

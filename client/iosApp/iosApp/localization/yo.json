@@ -2472,7 +2472,9 @@
     "llm_check_state_failed": "Olùpèsè kọ̀ èyí",
     "settings_auth_local_session": "Àkókò ìwọlé àdúgbò",
     "settings_token_info_desc_local": "Àmì àkókò ìṣiṣẹ́ tí ó wá láti ìwọlé rẹ pẹ̀lú orúkọ olùmúlò àti ọ̀rọ̀ àṣírí. Ó ń jẹ́rìí ìdánimọ̀ rẹ fún aṣojú yìí — kì í ṣe ẹ̀rí ìdánimọ̀ CIRIS Services, kò sì ní í ṣe pẹ̀lú bọ́tìnnì API tí olùpèsè LLM rẹ ń lò.",
-    "settings_token_info_desc_oauth": "Àmì ìwọlé rẹ fún aṣojú yìí, tí o gbà nígbà tí o wọlé pẹ̀lú Google tàbí Apple. Ó yàtọ̀ sí bọ́tìnnì API tí olùpèsè LLM rẹ ń lò."
+    "settings_token_info_desc_oauth": "Àmì ìwọlé rẹ fún aṣojú yìí, tí o gbà nígbà tí o wọlé pẹ̀lú Google tàbí Apple. Ó yàtọ̀ sí bọ́tìnnì API tí olùpèsè LLM rẹ ń lò.",
+    "age_range_decline": "Mi ò fẹ́ sọ",
+    "age_range_decline_note": "A ó lo ààbò kan náà tí a ń lò fún àwọn tí kò tí ì pé ọmọ ọdún 18. O lè yí èyí padà lẹ́yìn náà."
   },
   "conscience": {
     "ponder_attempted": "Mo gbìyànjú láti {action}",

@@ -2356,7 +2356,9 @@
     "llm_check_models_cached": "Zwischengespeicherte Modelle — dieser Anbieter hat nicht geantwortet, diese Liste entspricht möglicherweise nicht seinem tatsächlichen Angebot.",
     "settings_auth_oauth_session": "Angemeldet mit {provider}",
     "settings_set_up_agent_title": "Agent einrichten",
-    "settings_set_up_agent_desc": "Dieser Knoten läuft ohne Agent. Richten Sie einen ein, um Chat, Schlussfolgern und die Agent-Einstellungen zu aktivieren."
+    "settings_set_up_agent_desc": "Dieser Knoten läuft ohne Agent. Richten Sie einen ein, um Chat, Schlussfolgern und die Agent-Einstellungen zu aktivieren.",
+    "age_range_decline": "Keine Angabe",
+    "age_range_decline_note": "Wir wenden dieselben Schutzmaßnahmen an wie für unter 18-Jährige. Sie können dies später ändern."
   },
   "prompts": {
     "dma": {

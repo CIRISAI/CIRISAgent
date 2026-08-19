@@ -2356,7 +2356,9 @@
     "llm_check_models_cached": "Modèles en cache — ce fournisseur n'a pas répondu, cette liste ne correspond donc peut-être pas à ce qu'il propose réellement.",
     "settings_auth_oauth_session": "Connecté avec {provider}",
     "settings_set_up_agent_title": "Configurer l'agent",
-    "settings_set_up_agent_desc": "Ce nœud fonctionne sans agent. Configurez-en un pour activer la discussion, le raisonnement et les paramètres de l'agent."
+    "settings_set_up_agent_desc": "Ce nœud fonctionne sans agent. Configurez-en un pour activer la discussion, le raisonnement et les paramètres de l'agent.",
+    "age_range_decline": "Je préfère ne pas répondre",
+    "age_range_decline_note": "Nous appliquerons les mêmes protections que pour les moins de 18 ans. Vous pourrez le modifier plus tard."
   },
   "prompts": {
     "dma": {

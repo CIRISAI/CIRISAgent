@@ -2356,7 +2356,9 @@
     "llm_check_state_failed": "Mtoa huduma amekataa hii",
     "settings_auth_local_session": "Kipindi cha kuingia ndani",
     "settings_token_info_desc_local": "Tokeni ya kipindi kutokana na kuingia kwako kwa jina la mtumiaji na nenosiri. Inakuthibitisha kwa wakala huyu — si kitambulisho cha CIRIS Services, na haihusiani na ufunguo wa API anaotumia mtoa huduma wako wa LLM.",
-    "settings_token_info_desc_oauth": "Tokeni yako ya kuingia kwa wakala huyu, uliyoipata ulipoingia kwa kutumia Google au Apple. Ni tofauti na ufunguo wa API anaotumia mtoa huduma wako wa LLM."
+    "settings_token_info_desc_oauth": "Tokeni yako ya kuingia kwa wakala huyu, uliyoipata ulipoingia kwa kutumia Google au Apple. Ni tofauti na ufunguo wa API anaotumia mtoa huduma wako wa LLM.",
+    "age_range_decline": "Napendelea kutosema",
+    "age_range_decline_note": "Tutatumia ulinzi uleule tunaotumia kwa walio chini ya miaka 18. Unaweza kubadilisha hili baadaye."
   },
   "prompts": {
     "dma": {

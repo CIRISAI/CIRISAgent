@@ -2356,7 +2356,9 @@
     "llm_check_state_failed": "Le fournisseur l'a rejeté",
     "settings_auth_local_session": "Session de connexion locale",
     "settings_token_info_desc_local": "Le jeton de session issu de votre connexion par nom d'utilisateur et mot de passe. Il vous authentifie auprès de cet agent — ce n'est pas un identifiant CIRIS Services, et il n'a aucun rapport avec la clé API utilisée par votre fournisseur LLM.",
-    "settings_token_info_desc_oauth": "Votre jeton de connexion pour cet agent, obtenu lors de votre connexion avec Google ou Apple. Il est distinct de la clé API utilisée par votre fournisseur LLM."
+    "settings_token_info_desc_oauth": "Votre jeton de connexion pour cet agent, obtenu lors de votre connexion avec Google ou Apple. Il est distinct de la clé API utilisée par votre fournisseur LLM.",
+    "age_range_decline": "Je préfère ne pas répondre",
+    "age_range_decline_note": "Nous appliquerons les mêmes protections que pour les moins de 18 ans. Vous pourrez le modifier plus tard."
   },
   "prompts": {
     "dma": {

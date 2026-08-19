@@ -2472,7 +2472,9 @@
     "tool_cap_file_write": "Ó ń kọ tàbí yí àwọn fáìlì padà",
     "tool_cap_network_fetch": "Ó ń kàn sí ìtakùn",
     "tool_cap_request_body": "Ó ń fi àwọn dátà tí o pèsè ránṣẹ́",
-    "tool_disclosure_unavailable": "Irinṣẹ́ yìí kò ṣàlàyé ohun tí ó ń ṣe."
+    "tool_disclosure_unavailable": "Irinṣẹ́ yìí kò ṣàlàyé ohun tí ó ń ṣe.",
+    "age_range_decline": "Mi ò fẹ́ sọ",
+    "age_range_decline_note": "A ó lo ààbò kan náà tí a ń lò fún àwọn tí kò tí ì pé ọmọ ọdún 18. O lè yí èyí padà lẹ́yìn náà."
   },
   "conscience": {
     "ponder_attempted": "Mo gbìyànjú láti {action}",

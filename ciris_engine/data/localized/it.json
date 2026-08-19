@@ -2356,7 +2356,9 @@
     "llm_check_models_cached": "Modelli in cache — questo provider non ha risposto, quindi l'elenco potrebbe non corrispondere a ciò che offre davvero.",
     "settings_auth_oauth_session": "Accesso effettuato con {provider}",
     "settings_set_up_agent_title": "Configura l'agente",
-    "settings_set_up_agent_desc": "Questo nodo funziona senza agente. Configurane uno per abilitare chat, ragionamento e impostazioni dell'agente."
+    "settings_set_up_agent_desc": "Questo nodo funziona senza agente. Configurane uno per abilitare chat, ragionamento e impostazioni dell'agente.",
+    "age_range_decline": "Preferisco non dirlo",
+    "age_range_decline_note": "Applicheremo le stesse protezioni che usiamo per i minori di 18 anni. Puoi modificarlo in seguito."
   },
   "prompts": {
     "dma": {

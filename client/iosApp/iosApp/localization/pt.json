@@ -2356,7 +2356,9 @@
     "llm_check_state_failed": "O provedor rejeitou isso",
     "settings_auth_local_session": "Sessão de login local",
     "settings_token_info_desc_local": "O token de sessão do seu login com nome de usuário e senha. Ele autentica você neste agente — não é uma credencial do CIRIS Services e não tem relação com a chave API que seu provedor de LLM usa.",
-    "settings_token_info_desc_oauth": "Seu token de login para este agente, obtido quando você entrou com Google ou Apple. Ele é separado da chave API que seu provedor de LLM usa."
+    "settings_token_info_desc_oauth": "Seu token de login para este agente, obtido quando você entrou com Google ou Apple. Ele é separado da chave API que seu provedor de LLM usa.",
+    "age_range_decline": "Prefiro não informar",
+    "age_range_decline_note": "Aplicaremos as mesmas proteções que usamos para menores de 18 anos. Você pode alterar isso depois."
   },
   "prompts": {
     "dma": {

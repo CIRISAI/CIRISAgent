@@ -135,12 +135,17 @@ class SetupStepFlowTest {
  */
 class SetupStepValidationTest {
 
+    /** A YOU screen with every blocking field satisfied, age included. */
     private fun filledOutYouScreen() = SetupFormState(
         currentStep = SetupStep.YOU,
         username = "founder",
         userPassword = "correct-horse",
         userPasswordConfirm = "correct-horse",
         federationIdentity = FederationIdentitySetupState(label = "eric-moore"),
+        // The age question is REQUIRED, so a "nothing else blocks" baseline has to
+        // answer it. Adult, because that is the branch with no further obligation:
+        // minor and declined both pull in the §2580 stewardship rule.
+        ageRange = AgeRangeSetupState(selectedBandToken = "adult"),
     )
 
     @Test
@@ -161,10 +166,77 @@ class SetupStepValidationTest {
         assertFalse(state.canProceedFromCurrentStep())
     }
 
+    // ── The age question: required to ANSWER, free to DECLINE ────────────────
+    //
+    // This replaces screenOneDoesNotRequireAnAgeBand, which asserted that a null
+    // band must not block. That test and the required-age branch added in 2.9.22
+    // contradicted each other for three releases without anyone noticing, because
+    // CI does not run this suite (#1074). The contradiction was real and not just
+    // a stale test: AgeRangeSetupState had no way to say "declined", so declining
+    // and never-asked were the same value and no rule could tell them apart.
+    //
+    // Settled policy: the question must be ANSWERED, and "prefer not to say" is a
+    // valid answer that costs the subject nothing. It is not treated as adulthood
+    // — silence never buys adult privileges — so a declining subject gets exactly
+    // the treatment a declared minor gets, stewardship included.
+
     @Test
-    fun screenOneDoesNotRequireAnAgeBand() {
-        // Declining to state an age sets the protective default; it must not trap.
-        assertTrue(filledOutYouScreen().copy(ageRange = AgeRangeSetupState()).canProceedFromCurrentStep())
+    fun theAgeQuestionMustBeAnswered() {
+        val notAsked = filledOutYouScreen().copy(ageRange = AgeRangeSetupState())
+        assertFalse(
+            notAsked.canProceedFromCurrentStep(),
+            "an unanswered age question must block — it seeds the fed-ID and the stewardship gate",
+        )
+        assertTrue(notAsked.getStepValidationError() != null)
+    }
+
+    @Test
+    fun decliningIsAnAnswerAndDoesNotTrap() {
+        // The whole point of the `declined` flag: this state must be reachable and
+        // must not dead-end. Stewardship is requested because declining is treated
+        // as under-18 — see the next test.
+        val declined = filledOutYouScreen().copy(
+            ageRange = AgeRangeSetupState(declined = true),
+            minorStewardship = MinorStewardshipState(requested = true),
+        )
+        assertTrue(
+            declined.canProceedFromCurrentStep(),
+            "declining to state an age is a right; it must never be a dead end",
+        )
+    }
+
+    @Test
+    fun decliningIsTreatedAsAChild() {
+        val declined = filledOutYouScreen().copy(ageRange = AgeRangeSetupState(declined = true))
+        assertTrue(
+            declined.isMinorBand(),
+            "a subject who has not stated an age is treated as a child — silence must never " +
+                "yield adult treatment",
+        )
+    }
+
+    @Test
+    fun decliningCarriesTheSameStewardshipDutyAsADeclaredMinor() {
+        // If declining skipped §2580 it would be a cheaper route to self-claiming
+        // ownership than declaring adult — declining must not be an escape hatch.
+        val declined = filledOutYouScreen().copy(ageRange = AgeRangeSetupState(declined = true))
+        assertFalse(declined.canProceedFromCurrentStep())
+        assertTrue(declined.getStepValidationError() != null)
+    }
+
+    @Test
+    fun declinedIsDistinctFromNotYetAsked() {
+        // The distinction the old model could not express, pinned so it cannot be
+        // collapsed back into a single nullable.
+        assertFalse(AgeRangeSetupState().declined)
+        assertTrue(AgeRangeSetupState(declined = true).declined)
+        assertEquals(null, AgeRangeSetupState(declined = true).selectedBandToken,
+            "declining must NOT be recorded as a self-declared band — the subject never said it")
+    }
+
+    @Test
+    fun aStatedAdultBandIsNotTreatedAsAChild() {
+        assertFalse(filledOutYouScreen().isMinorBand())
     }
 
     @Test

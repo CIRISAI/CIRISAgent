@@ -2244,13 +2244,66 @@ private fun AgeRangeSection(
                     }
                 }
             }
+
+            // PREFER NOT TO SAY — a real, selectable answer.
+            //
+            // The subject has the right not to state an age, and the question is
+            // required, so declining has to be something they can actually choose.
+            // It is NOT a band: nothing is recorded, because writing
+            // `age_self_declared:minor:v1` for someone who never said it would put
+            // a statement they did not make into their own assurance record.
+            //
+            // The consequence is stated on the option itself rather than discovered
+            // afterwards: declining is treated as under-18, stewardship included.
+            // A protection the subject only finds out about after choosing is not
+            // an informed choice.
+            val declineSelected = age.declined
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = if (declineSelected) SetupColors.Primary.copy(alpha = 0.18f) else SetupColors.InfoLight,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp)
+                    .testableClickable("age_band_declined") {
+                        if (!age.inProgress) viewModel.declineAgeRange()
+                    }
+            ) {
+                Row(
+                    verticalAlignment = Alignment.Top,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp)
+                ) {
+                    RadioButton(
+                        selected = declineSelected,
+                        onClick = { if (!age.inProgress) viewModel.declineAgeRange() },
+                        enabled = !age.inProgress,
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column {
+                        Text(
+                            text = localizedString("mobile.age_range_decline"),
+                            color = SetupColors.InfoDark,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium,
+                        )
+                        Text(
+                            text = localizedString("mobile.age_range_decline_note"),
+                            color = SetupColors.TextSecondary,
+                            fontSize = 13.sp,
+                        )
+                    }
+                }
+            }
         }
 
-        // UNDER-18 STEWARDSHIP (CC 0.5.1 §2580). When the founder self-declares
-        // the `minor` band they cannot self-claim ownership; a kind, plain-English
-        // panel explains that an adult must accept responsibility (stewardship),
-        // and lets the minor generate a stewardship request to hand over.
-        if (age.selectedBandToken == "minor") {
+        // UNDER-18 STEWARDSHIP (CC 0.5.1 §2580). A founder treated as under-18
+        // cannot self-claim ownership; a kind, plain-English panel explains that an
+        // adult must accept responsibility (stewardship), and lets them generate a
+        // stewardship request to hand over.
+        //
+        // Keys on isMinorBand(), NOT on the token: a subject who declined to state
+        // an age is treated as a child, and that treatment has to include this or
+        // declining would quietly buy adult privileges.
+        if (state.isMinorBand()) {
             MinorStewardshipCard(viewModel, state)
         }
 

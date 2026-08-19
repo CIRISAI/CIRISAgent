@@ -2355,8 +2355,10 @@
     "llm_check_model_missing": "Bu model sağlayıcı tarafından sunulmuyor. Listeden birini seçin.",
     "llm_check_models_cached": "Önbellekteki modeller gösteriliyor — bu sağlayıcı yanıt vermedi, bu nedenle liste gerçekte sunduklarıyla örtüşmeyebilir.",
     "settings_auth_oauth_session": "{provider} ile oturum açıldı",
-    "settings_set_up_agent_title": "Ajanı kur",
-    "settings_set_up_agent_desc": "Bu düğüm ajan olmadan çalışıyor. Sohbeti, akıl yürütmeyi ve ajan ayarlarını etkinleştirmek için bir ajan kurun."
+    "settings_set_up_agent_title": "Ajan Kurulumu",
+    "settings_set_up_agent_desc": "Bu düğüm ajan olmadan çalışıyor. Sohbeti, akıl yürütmeyi ve ajan ayarlarını etkinleştirmek için bir ajan kurun.",
+    "age_range_decline": "Belirtmek istemiyorum",
+    "age_range_decline_note": "18 yaşın altındakiler için uyguladığımız korumaların aynısını uygularız. Bunu daha sonra değiştirebilirsiniz."
   },
   "prompts": {
     "dma": {

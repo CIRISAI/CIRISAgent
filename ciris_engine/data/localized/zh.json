@@ -2356,7 +2356,9 @@
     "llm_check_models_cached": "正在显示缓存的模型 — 此提供方未响应，因此该列表可能与其实际提供的内容不符。",
     "settings_auth_oauth_session": "已通过 {provider} 登录",
     "settings_set_up_agent_title": "设置智能体",
-    "settings_set_up_agent_desc": "此节点未配置智能体。设置一个即可启用对话、推理和智能体设置。"
+    "settings_set_up_agent_desc": "此节点未配置智能体。设置一个即可启用对话、推理和智能体设置。",
+    "age_range_decline": "不愿透露",
+    "age_range_decline_note": "我们将采用与未满 18 岁用户相同的保护措施。您之后可以更改。"
   },
   "prompts": {
     "dma": {

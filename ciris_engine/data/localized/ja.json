@@ -2356,7 +2356,9 @@
     "llm_check_models_cached": "キャッシュされたモデルを表示しています — このプロバイダーから応答がなかったため、実際に提供される内容と異なる場合があります。",
     "settings_auth_oauth_session": "{provider} でサインイン済み",
     "settings_set_up_agent_title": "エージェントを設定",
-    "settings_set_up_agent_desc": "このノードはエージェントなしで動作しています。チャット、推論、エージェント設定を有効にするにはエージェントを設定してください。"
+    "settings_set_up_agent_desc": "このノードはエージェントなしで動作しています。チャット、推論、エージェント設定を有効にするにはエージェントを設定してください。",
+    "age_range_decline": "回答しない",
+    "age_range_decline_note": "18 歳未満の方と同じ保護を適用します。後から変更できます。"
   },
   "prompts": {
     "dma": {

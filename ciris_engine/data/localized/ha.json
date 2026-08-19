@@ -2472,7 +2472,9 @@
     "llm_check_models_cached": "Ana nuna samfuran da aka adana — wannan mai bayarwa bai amsa ba, don haka wannan jerin bazai yi daidai da abin da yake bayarwa ba.",
     "settings_auth_oauth_session": "An shiga da {provider}",
     "settings_set_up_agent_title": "Kafa wakilin",
-    "settings_set_up_agent_desc": "Wannan kumburi yana aiki ba tare da wakili ba. Ka kafa ɗaya don kunna tattaunawa, tunani da saitunan wakili."
+    "settings_set_up_agent_desc": "Wannan kumburi yana aiki ba tare da wakili ba. Ka kafa ɗaya don kunna tattaunawa, tunani da saitunan wakili.",
+    "age_range_decline": "Ba na son fada",
+    "age_range_decline_note": "Za mu yi amfani da kariya iri ɗaya da muke amfani da ita ga waɗanda ba su kai shekara 18 ba. Kana iya canza wannan daga baya."
   },
   "conscience": {
     "ponder_attempted": "Na yi ƙoƙarin {action}",

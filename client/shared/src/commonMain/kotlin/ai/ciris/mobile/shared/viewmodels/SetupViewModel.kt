@@ -877,6 +877,8 @@ class SetupViewModel(
         _state.value = _state.value.copy(
             ageRange = _state.value.ageRange.copy(
                 selectedBandToken = if (band == AgeBand.MINOR) "minor" else "adult",
+                // Stating a band supersedes a previous decline.
+                declined = false,
                 error = null,
             ),
             // Switching to ADULT clears any pending under-18 stewardship request
@@ -887,6 +889,36 @@ class SetupViewModel(
             } else {
                 _state.value.minorStewardship
             },
+        )
+    }
+
+    /**
+     * The subject declines to state an age. This is a RIGHT, not a refusal to
+     * comply, and it is never punished.
+     *
+     * What it does NOT do is buy adult treatment. A subject who has not told us
+     * they are an adult is treated as a child — [SetupFormState.isMinorBand]
+     * returns true, so the protective defaults and the CC 0.5.1 §2580 stewardship
+     * rule apply exactly as they would to a declared minor. Adult treatment
+     * follows from an adult declaration; silence never yields it.
+     *
+     * Nothing is POSTED. Recording `age_self_declared:minor:v1` here would write a
+     * statement into the subject's own assurance record that they never made, and
+     * age.rs's honesty discipline — self-declared, subject-controlled, never
+     * punitive — is precisely what this surface exists to uphold. The band stays
+     * null so the set_age call is skipped rather than fabricated.
+     */
+    fun declineAgeRange() {
+        PlatformLogger.i(TAG, "[age] subject declined to state an age — treated as minor, nothing recorded")
+        _state.value = _state.value.copy(
+            ageRange = _state.value.ageRange.copy(
+                selectedBandToken = null,
+                declined = true,
+                error = null,
+            ),
+            // Declining lands in the same protective branch as MINOR, so any
+            // stewardship request already generated is KEPT — same reasoning as
+            // re-selecting MINOR above.
         )
     }
 

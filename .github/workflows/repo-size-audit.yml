@@ -21,7 +21,28 @@ jobs:
   size-audit:
     name: Repo Size Audit
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # 5 MINUTES STOPPED BEING ENOUGH TO MEASURE THE THING (2026-08-19).
+    #
+    # The job began failing as "The job has exceeded the maximum execution time
+    # of 5m0s" — inside actions/checkout, not inside any measuring step:
+    #
+    #   git fetch --prune --no-recurse-submodules origin \
+    #       +refs/heads/*:refs/remotes/origin/* +refs/tags/*:...   4m54s
+    #
+    # So the audit was timing out before it could audit, and reporting a red
+    # check that read as "the repo is too big" when it had measured nothing at
+    # all. It passed on some branches and not others purely on runner luck,
+    # because the fetch sits right at the limit.
+    #
+    # The fetch is NOT the thing to shrink. `fetch-depth: 0` is deliberate — a
+    # fresh `git clone` also fetches every branch and tag, so narrowing this
+    # would make size-pack understate exactly the cost this workflow exists to
+    # report. The budget was too small, not the measurement too broad.
+    #
+    # Worth reading as a finding in its own right: a full clone of this repo now
+    # takes ~5 minutes on a warm GitHub runner. That is the number the warn/fail
+    # thresholds below are a proxy for.
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:

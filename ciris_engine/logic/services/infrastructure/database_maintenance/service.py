@@ -1089,8 +1089,36 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
                 logger.info(f"Deleted {deleted_thoughts} stale wakeup thoughts from previous runs")
 
             if stale_task_ids:
+                # CLEAR THE TASK'S OWN CHILDREN FIRST (CIRISAgent#1070).
+                #
+                # The delete was failing on `FOREIGN KEY constraint failed`
+                # every boot, because the collected `stale_thought_ids` are the
+                # thoughts this scan judged stale — not necessarily EVERY thought
+                # holding a reference to the task. Any one it missed pins the
+                # task, and the stale WAKEUP task then survives forever, which is
+                # the state #1069's spinning agents boot into.
+                #
+                # Asking for the task's thoughts by task id removes the guesswork.
+                for task_id in stale_task_ids:
+                    child_ids = [th.thought_id for th in get_thoughts_by_task_id(task_id)]
+                    if child_ids:
+                        freed = delete_thoughts_by_ids(child_ids)
+                        logger.info(
+                            "Deleted %d child thought(s) still referencing stale wakeup task %s",
+                            freed,
+                            task_id,
+                        )
+
                 deleted_tasks = delete_tasks_by_ids(stale_task_ids)
-                logger.info(f"Deleted {deleted_tasks} stale active wakeup tasks from interrupted startups")
+                if deleted_tasks:
+                    logger.info(f"Deleted {deleted_tasks} stale active wakeup task(s) from interrupted startups")
+                else:
+                    logger.error(
+                        "Could NOT delete %d stale active wakeup task(s): %s — they remain ACTIVE and "
+                        "a fresh wakeup will find them again on the next boot",
+                        len(stale_task_ids),
+                        stale_task_ids,
+                    )
 
             if not stale_task_ids and not stale_thought_ids:
                 logger.info("No stale wakeup tasks or thoughts found")

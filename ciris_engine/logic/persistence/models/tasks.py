@@ -671,7 +671,7 @@ def count_tasks(
         return 0
 
 
-def delete_tasks_by_ids(task_ids: List[str]) -> bool:
+def delete_tasks_by_ids(task_ids: List[str]) -> int:
     """Deletes tasks (and cascades thoughts + feedback_mappings) with the given IDs.
 
     Persist's `task_delete` cascades to thoughts via FK. The legacy
@@ -681,7 +681,7 @@ def delete_tasks_by_ids(task_ids: List[str]) -> bool:
     """
     if not task_ids:
         logger.warning("No task IDs provided for deletion.")
-        return False
+        return 0
 
     logger.warning(f"DELETE_OPERATION: delete_tasks_by_ids called with {len(task_ids)} tasks: {task_ids}")
     import traceback
@@ -690,6 +690,7 @@ def delete_tasks_by_ids(task_ids: List[str]) -> bool:
 
     engine = _get_engine()
     deleted_count = 0
+    failed_ids: List[str] = []
     for tid in task_ids:
         try:
             ok = engine.task_delete(tid)
@@ -700,15 +701,39 @@ def delete_tasks_by_ids(task_ids: List[str]) -> bool:
             # some *other* row still references the task — log it honestly
             # rather than masking a stale row as a successful cancel.
             logger.exception(f"Failed to delete task {tid}: {e}")
+            failed_ids.append(tid)
             continue
         if ok:
             deleted_count += 1
 
     if deleted_count > 0:
         logger.info(f"Successfully deleted {deleted_count} task(s) with IDs: {task_ids}.")
-        return True
-    logger.warning(f"No tasks found with IDs: {task_ids} for deletion (or they were already deleted).")
-    return False
+
+    # A FAILURE IS NOT AN ABSENCE (CIRISAgent#1070).
+    #
+    # Every exception above was swallowed into `continue`, so a delete that
+    # ERRORED fell through to the "or they were already deleted" line — telling
+    # an operator the row was gone when it was still there and had refused to go:
+    #
+    #   ERROR   Failed to delete task WAKEUP_SHARED_...: FOREIGN KEY constraint failed
+    #   WARNING No tasks found with IDs: [...] (or they were already deleted).
+    #
+    # Two lines apart, flatly contradicting each other. Say which happened.
+    if failed_ids:
+        logger.error(
+            "%d task(s) could NOT be deleted and are still present: %s "
+            "(see the exception(s) above for why)",
+            len(failed_ids),
+            failed_ids,
+        )
+    elif deleted_count == 0:
+        logger.warning(f"No tasks found with IDs: {task_ids} for deletion (or they were already deleted).")
+
+    # Returns a COUNT, not a bool. It was typed `bool` while two callers already
+    # named the result a count — `orphaned_tasks_deleted_count` and
+    # `deleted_tasks` — and one of them logged it straight into a message,
+    # producing "Deleted False stale active wakeup tasks".
+    return deleted_count
 
 
 def get_tasks_older_than(

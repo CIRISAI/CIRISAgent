@@ -5,6 +5,7 @@ Provides RESTful API and WebSocket interfaces to the CIRIS agent.
 """
 
 import asyncio
+import contextlib
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -1034,6 +1035,43 @@ class ApiPlatform(Service):
         # await still propagates a node-fails ⇒ agent-fails RuntimeError.
         await asyncio.get_event_loop().run_in_executor(None, start_node_fold, self.config.port)
 
+    async def _ensure_server_stopped(self, grace_seconds: float = 10.0) -> None:
+        """Tell uvicorn to exit and make sure its task actually ends.
+
+        Idempotent and bounded, because it runs on the shutdown path from more
+        than one place and must never become a second way to hang. `should_exit`
+        asks politely; if the task has not finished within the grace period it is
+        cancelled outright — a server that will not stop is not a reason to keep
+        the process alive.
+        """
+        server = getattr(self, "_server", None)
+        task = getattr(self, "_server_task", None)
+
+        if server is not None:
+            server.should_exit = True
+
+        if task is None or task.done():
+            return
+
+        try:
+            await asyncio.wait_for(asyncio.shield(task), timeout=grace_seconds)
+        except asyncio.TimeoutError:
+            logger.warning(
+                "API server did not stop within %.0fs of should_exit; cancelling its task "
+                "so the process can exit",
+                grace_seconds,
+            )
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await task
+        except asyncio.CancelledError:
+            # We are already being torn down; the server still must not be left
+            # running, so finish the job rather than propagating immediately.
+            task.cancel()
+            raise
+        except Exception as e:  # pragma: no cover - defensive
+            logger.warning("API server task ended with %s: %s", type(e).__name__, e)
+
     async def stop(self) -> None:
         """Stop the API server."""
         logger.info("Stopping API server...")
@@ -1052,11 +1090,8 @@ class ApiPlatform(Service):
         # Stop tool service
         await self.tool_service.stop()
 
-        # Stop server
-        if self._server:
-            self._server.should_exit = True
-            if self._server_task:
-                await self._server_task
+        # Stop server — bounded, so stop() cannot hang either (#1019).
+        await self._ensure_server_stopped()
 
         await super().stop()
 
@@ -1194,4 +1229,17 @@ class ApiPlatform(Service):
             logger.error(f"API adapter lifecycle error: {e}")
             raise
         finally:
+            # THE PROCESS HAS TO BE ABLE TO EXIT (CIRISAgent#1019).
+            #
+            # This block used to log and nothing else. The uvicorn server task
+            # kept running, so the event loop never drained and the process
+            # never exited — consensual shutdown and forced shutdown alike.
+            # Reproduced on three agents across two hosts, 13 releases after it
+            # was first filed; scout2 is the cleanest case, having negotiated
+            # shutdown in 47s — well inside every timeout — and still never
+            # exited.
+            #
+            # No shutdown timeout can fix a process that never exits, which is
+            # why tuning the 180s bound was the wrong lever.
             logger.info("API adapter lifecycle ending")
+            await self._ensure_server_stopped()

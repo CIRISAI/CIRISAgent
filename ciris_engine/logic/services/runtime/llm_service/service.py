@@ -542,6 +542,41 @@ def _log_instructor_error(
     )
 
 
+def _root_provider_error(error: BaseException) -> str:
+    """Dig the PROVIDER's own words out of a wrapper exception.
+
+    CIRISAgent#1071. `InstructorRetryException` is what a non-OpenAI deployment
+    actually hits, and its str() is often just the class name plus a retry
+    envelope — the provider's real complaint ("model not found", "invalid api
+    key", "max_tokens must be <= 8192") sits one or two links down the
+    __cause__ / __context__ chain, on an openai APIStatusError.
+
+    Without this, the log names the wrapper and the operator learns nothing:
+    which of two configured providers failed, and what it said, is exactly the
+    question the log has to answer.
+    """
+    seen: set[int] = set()
+    cur: BaseException | None = error
+    best = ""
+    while cur is not None and id(cur) not in seen:
+        seen.add(id(cur))
+        status = getattr(cur, "status_code", None)
+        # openai's APIStatusError carries the parsed body; prefer it.
+        body = getattr(cur, "body", None)
+        if isinstance(body, dict):
+            msg = body.get("error", {}).get("message") if isinstance(body.get("error"), dict) else None
+            msg = msg or body.get("message")
+            if msg:
+                return f"HTTP {status} {msg}" if status else str(msg)
+        text = str(cur).strip()
+        if status is not None and text:
+            return f"HTTP {status} {text}"
+        if text and not best:
+            best = text
+        cur = cur.__cause__ or cur.__context__
+    return best
+
+
 def _handle_generic_llm_exception(
     error: Exception,
     model_name: str,
@@ -583,12 +618,26 @@ def _handle_generic_llm_exception(
             f"  Will be retried by LLM bus. Error: {error_msg[:300]}"
         )
     else:
+        # ONE LINE. CIRISAgent#1071: this was a multi-line record, so every log
+        # view that works line-at-a-time — grep, the incidents capture, the
+        # console tail an operator actually reads — showed only
+        #
+        #     LLM UNEXPECTED ERROR - InstructorRetryException.
+        #
+        # and dropped the model, provider and message onto orphaned
+        # continuation lines. Three of those in a row is what a production
+        # operator saw, and it told them nothing about which of two configured
+        # providers had failed.
+        #
+        # The facts that identify the fault go on the first line, and the
+        # provider's own words are dug out of the wrapper's cause chain.
         logger.error(
-            f"LLM UNEXPECTED ERROR - {type(error).__name__}.\n"
-            f"  Model: {model_name}\n"
-            f"  Provider: {base_url or 'default'}\n"
-            f"  Expected Schema: {resp_model_name}\n"
-            f"  Error: {error_msg[:500]}"
+            "LLM CALL FAILED (%s) model=%s provider=%s schema=%s | provider said: %s",
+            type(error).__name__,
+            model_name or "<unset>",
+            base_url or "default",
+            resp_model_name,
+            (_root_provider_error(error) or error_msg)[:400].replace("\n", " "),
         )
     raise RuntimeError(f"LLM call failed ({type(error).__name__}): {error_msg[:300]}") from error
 

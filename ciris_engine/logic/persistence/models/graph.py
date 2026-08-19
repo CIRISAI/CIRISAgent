@@ -60,7 +60,13 @@ def set_persist_engine(engine: Engine, dsn: Optional[str] = None) -> None:
     global _engine, _engine_dsn
     _engine = engine
     _engine_dsn = dsn
-    logger.info("persist engine wired into persistence.models.graph (dsn=%s)", dsn)
+    # REDACT. GHSA-jghc-9g86-xg7c: a PostgreSQL DSN carries live credentials
+    # (postgresql://user:password@host/db) and this line put them on stdout and
+    # into the log file on every boot. SQLite DSNs are just paths, which is why
+    # this went unnoticed — the fleet's Postgres agents were the exposed ones.
+    from ciris_engine.logic.persistence.db.core import _redact_dsn
+
+    logger.info("persist engine wired into persistence.models.graph (dsn=%s)", _redact_dsn(str(dsn)))
 
 
 def _get_engine() -> Engine:

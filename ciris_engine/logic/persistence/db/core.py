@@ -465,7 +465,7 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
     _expected_dsn = _persist_dsn_and_sentinel(_resolved_db_path)[0]
 
     if graph_persistence._engine is not None and graph_persistence._engine_dsn == _expected_dsn:
-        logger.debug("persist engine already wired to %s, skipping re-bootstrap", _expected_dsn)
+        logger.debug("persist engine already wired to %s, skipping re-bootstrap", _redact_dsn(str(_expected_dsn)))
         return
 
     # Resolve the DSN. Postgres takes its own URL; SQLite uses

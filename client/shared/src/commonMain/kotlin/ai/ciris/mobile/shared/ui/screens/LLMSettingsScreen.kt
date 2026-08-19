@@ -27,6 +27,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import ai.ciris.mobile.shared.api.CheckState
+import ai.ciris.mobile.shared.api.checkLlmConfig
+import ai.ciris.mobile.shared.ui.components.LlmCheckRow
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import ai.ciris.mobile.shared.ui.icons.*
@@ -1069,6 +1072,13 @@ private fun AddProviderCard(
     var selectedModel by remember { mutableStateOf<String?>(null) }
     var fetchError by remember { mutableStateOf<String?>(null) }
 
+    /**
+     * Result of the shared key/model check (#1062). Null until the user asks.
+     * Held here rather than in a view-model because this dialog is composing a
+     * provider that does not exist yet — there is nothing to hold it for.
+     */
+    var configCheck by remember { mutableStateOf<ai.ciris.mobile.shared.api.LlmConfigCheck?>(null) }
+
     val coroutineScope = rememberCoroutineScope()
 
     // Filter to cloud providers that need API keys (exclude local/mobile/other)
@@ -1172,6 +1182,11 @@ private fun AddProviderCard(
                     },
                     label = { Text("API Key") },
                     placeholder = { Text("sk-...") },
+                    supportingText = configCheck?.let { c ->
+                        if (c.key != CheckState.UNKNOWN) {
+                            { LlmCheckRow(state = c.key, message = c.keyMessage) }
+                        } else null
+                    },
                     visualTransformation = if (showApiKey) VisualTransformation.None else PasswordVisualTransformation(),
                     trailingIcon = {
                         IconButton(onClick = { showApiKey = !showApiKey }) {
@@ -1198,28 +1213,35 @@ private fun AddProviderCard(
                             fetchError = null
                             coroutineScope.launch {
                                 try {
-                                    val result = apiClient.listModels(
+                                    // ONE shared check for key + model list +
+                                    // selected model (#1062). This screen used
+                                    // to call listModels ONLY — it never
+                                    // validated the key, so a revoked
+                                    // credential showed a full model dropdown
+                                    // and no hint that nothing on it worked.
+                                    val check = apiClient.checkLlmConfig(
                                         provider = selectedProvider,
                                         apiKey = apiKey,
-                                        baseUrl = null
+                                        baseUrl = null,
+                                        selectedModel = selectedModel,
                                     )
-                                    val models = result.models
-                                    // Don't present cached data as the provider's
-                                    // catalogue (#1062) — say so where the user looks.
-                                    if (!result.isLive) {
-                                        fetchError = result.error
-                                            ?: "Could not reach ${selectedProvider}; showing cached models."
-                                    }
-                                    fetchedModels = models
-                                    // Auto-select recommended or first model
-                                    if (models.isNotEmpty()) {
-                                        val best = models.firstOrNull { it.cirisRecommended }
-                                            ?: models.firstOrNull { it.cirisCompatible }
-                                            ?: models.first()
+                                    configCheck = check
+                                    fetchedModels = check.availableModels
+                                    fetchError = check.firstProblem
+
+                                    // Only auto-select from a list the PROVIDER
+                                    // gave us. Choosing a cached model on the
+                                    // user's behalf is what shipped a config
+                                    // that could never work.
+                                    if (check.models == CheckState.OK && check.availableModels.isNotEmpty()) {
+                                        val best = check.availableModels.firstOrNull { it.cirisRecommended }
+                                            ?: check.availableModels.firstOrNull { it.cirisCompatible }
+                                            ?: check.availableModels.first()
                                         selectedModel = best.id
                                     }
                                 } catch (e: Exception) {
-                                    fetchError = e.message ?: "Failed to fetch models"
+                                    fetchError = e.message ?: "Failed to check this provider"
+                                    configCheck = null
                                 } finally {
                                     isFetchingModels = false
                                 }
@@ -1235,7 +1257,10 @@ private fun AddProviderCard(
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(Modifier.width(8.dp))
-                        Text("Fetch Available Models")
+                        // It checks the key as well as listing models now, and
+                        // the label should not undersell that: a user who reads
+                        // "fetch models" does not expect a credential verdict.
+                        Text("Check Key & Fetch Models")
                     }
                 }
 
@@ -1268,6 +1293,19 @@ private fun AddProviderCard(
                 }
 
                 // Model dropdown - show when models are fetched
+                // State of the model list itself, and of the chosen model.
+                // Separate from the key: a valid key with a model the provider
+                // does not serve is a real and common configuration, and it was
+                // exactly one of the two faults in the reported case.
+                configCheck?.let { c ->
+                    if (c.models != CheckState.UNKNOWN) {
+                        LlmCheckRow(state = c.models, message = c.modelsMessage)
+                    }
+                    if (c.selectedModel != CheckState.UNKNOWN) {
+                        LlmCheckRow(state = c.selectedModel, message = c.selectedModelMessage)
+                    }
+                }
+
                 if (fetchedModels.isNotEmpty()) {
                     Spacer(Modifier.height(8.dp))
 

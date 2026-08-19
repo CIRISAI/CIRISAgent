@@ -1585,7 +1585,7 @@
     "pipeline_label_act": "ACT",
     "settings_ciris_auth": "CIRIS Authentication",
     "settings_ciris_access_token": "CIRIS Access Token",
-    "settings_token_info_desc": "Your authentication token for API access. This is automatically managed when you sign in with Google.",
+    "settings_token_info_desc": "Your authentication token for API access. It is managed for you when you sign in with Google or Apple.",
     "settings_opaque_token": "Opaque Token",
     "settings_token_type": "Token Type",
     "settings_token_id": "Token ID",
@@ -2497,7 +2497,11 @@
     "llm_check_model_missing": "This model is not offered by the provider. Pick one from the list.",
     "llm_check_state_ok": "Confirmed working",
     "llm_check_state_degraded": "Working, but not confirmed by the provider",
-    "llm_check_state_failed": "The provider rejected this"
+    "llm_check_state_failed": "The provider rejected this",
+    "settings_auth_local_session": "Local sign-in session",
+    "settings_auth_oauth_session": "Signed in with {provider}",
+    "settings_token_info_desc_local": "The session token from your username and password sign-in. It authenticates you to this agent — it is not a CIRIS Services credential, and it is unrelated to the API key your LLM provider uses.",
+    "settings_token_info_desc_oauth": "Your sign-in token for this agent, obtained when you signed in with Google or Apple. It is separate from the API key your LLM provider uses."
   },
   "conscience": {
     "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'",

@@ -1734,7 +1734,15 @@ fun CIRISApp(
                                     authResponse.access_token
                                 }
 
-                                platformLog(TAG, "[INFO] Got CIRIS access token: ${cirisToken.take(8)}...${cirisToken.takeLast(4)}")
+                                // SAY WHICH TOKEN THIS IS.
+                                //
+                                // This read "Got CIRIS access token", copied from the
+                                // OAuth exchange path where that is true. Here it is a
+                                // LOCAL session bearer from username/password — no
+                                // OAuth, no CIRIS services. A user reading his own log
+                                // reasonably concluded he had a CIRIS-services token he
+                                // had never signed up for.
+                                platformLog(TAG, "[INFO] Local sign-in session token: ${cirisToken.take(8)}...${cirisToken.takeLast(4)}")
 
                                 // Set the token on the API client
                                 apiClient.setAccessToken(cirisToken)

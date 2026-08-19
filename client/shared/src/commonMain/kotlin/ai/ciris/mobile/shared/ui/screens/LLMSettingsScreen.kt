@@ -363,14 +363,28 @@ fun LLMSettingsScreen(
                 // Section 6: Authentication (Collapsible)
                 CollapsibleSection(
                     title = localizedString("mobile.llm_settings_auth"),
-                    subtitle = localizedString("mobile.settings_ciris_access_token"),
+                    // SAY WHICH TOKEN THIS ACTUALLY IS.
+                    //
+                    // This asserted "CIRIS Access Token" unconditionally. On a
+                    // BYOK agent signed in with a username and password there is
+                    // no CIRIS access token anywhere — the value is a local
+                    // session bearer (`sess:wa-…`) and the LLM is reached with
+                    // the user's own provider key. A user reading this screen
+                    // reasonably concluded he was on CIRIS Services and had
+                    // never agreed to it.
+                    subtitle = if (isCirisProxy) {
+                        localizedString("mobile.settings_ciris_access_token")
+                    } else {
+                        localizedString("mobile.settings_auth_local_session")
+                    },
                     icon = CIRISIcons.person,
                     expanded = authExpanded,
                     onToggle = { authExpanded = !authExpanded }
                 ) {
                     AuthenticationContent(
                         apiClient = apiClient,
-                        secureStorage = secureStorage
+                        secureStorage = secureStorage,
+                        isCirisProxy = isCirisProxy,
                     )
                 }
             }
@@ -2587,7 +2601,9 @@ private fun InfoRow(label: String, value: String) {
 @Composable
 private fun AuthenticationContent(
     apiClient: CIRISApiClient,
-    secureStorage: ai.ciris.mobile.shared.platform.SecureStorage
+    secureStorage: ai.ciris.mobile.shared.platform.SecureStorage,
+    /** Whether the CIRIS proxy is actually serving requests — NOT whether it is permitted. */
+    isCirisProxy: Boolean,
 ) {
     var tokenInfo by remember { mutableStateOf<TokenDisplayInfo?>(null) }
     var isLoading by remember { mutableStateOf(true) }
@@ -2611,7 +2627,13 @@ private fun AuthenticationContent(
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         // Explanation
         Text(
-            text = localizedString("mobile.settings_token_info_desc"),
+            // The old copy read "…automatically managed when you sign in with
+            // Google" for every user, including one who had never used OAuth.
+            text = if (isCirisProxy) {
+                localizedString("mobile.settings_token_info_desc_oauth")
+            } else {
+                localizedString("mobile.settings_token_info_desc_local")
+            },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
         )

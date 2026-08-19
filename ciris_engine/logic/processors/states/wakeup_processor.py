@@ -11,7 +11,7 @@ from ciris_engine.logic import persistence
 from ciris_engine.logic.persistence.models import get_identity_for_context
 from ciris_engine.logic.processors.core.base_processor import BaseProcessor
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
-from ciris_engine.logic.utils.jsondict_helpers import get_list, get_str
+from ciris_engine.logic.utils.jsondict_helpers import get_int, get_list, get_str
 from ciris_engine.logic.utils.task_thought_factory import create_task
 from ciris_engine.logic.utils.thought_utils import generate_thought_id
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
@@ -235,12 +235,72 @@ class WakeupProcessor(BaseProcessor):
                     ),
                 )
 
+        processed = result.get("processed_thoughts", 0)
+        # `result` is a JSONDict, so `processed` is a union; get_int narrows it
+        # the way the rest of this module already does.
+        self._note_wakeup_progress(round_number, get_int(result, "processed_thoughts", 0))
+
         return WakeupResult(
-            thoughts_processed=result.get("processed_thoughts", 0),
+            thoughts_processed=processed,
             wakeup_complete=result.get("wakeup_complete", False),
             errors=errors,
             duration_seconds=duration,
         )
+
+    #: Rounds of zero progress before the stall is called out. At ~5s a round
+    #: this is a couple of minutes — long enough not to trip on a slow first
+    #: LLM call, short enough that nobody waits 22 hours to learn something is
+    #: wrong.
+    _STALL_ROUNDS = 30
+
+    def _note_wakeup_progress(self, round_number: int, processed_thoughts: int) -> None:
+        """Say something when WAKEUP stops getting anywhere (CIRISAgent#1069).
+
+        Observed in production: an agent at round 15,938 — one round every ~5s
+        for its entire 22-hour uptime — each round finding 0 PENDING thoughts
+        and processing none of them, never reaching WORK. Nothing in the log
+        said anything was wrong, because nothing was ERRORing: the loop was
+        working exactly as written, on a sequence that could never finish.
+
+        `_check_all_steps_complete` requires every step task to be COMPLETED. A
+        step left in any other status with no thoughts to drive it can never get
+        there, so the processor repeats forever. One way in is a stale ACTIVE
+        wakeup task that could not be deleted at boot (#1070).
+
+        This does not change the outcome — it makes the deadlock legible, naming
+        the steps that are blocking and what state they are actually in. Whether
+        a stalled wakeup should be force-failed rather than spun on is a
+        behavioural decision, deliberately not taken here.
+        """
+        if processed_thoughts > 0:
+            self._stall_rounds = 0
+            self._stall_reported = False
+            return
+
+        self._stall_rounds = getattr(self, "_stall_rounds", 0) + 1
+        if self._stall_rounds < self._STALL_ROUNDS or getattr(self, "_stall_reported", False):
+            return
+
+        blocking = []
+        for step_task in (self.wakeup_tasks or [])[1:]:
+            try:
+                cur = persistence.get_task_by_id(step_task.task_id, step_task.agent_occurrence_id)
+            except Exception:  # pragma: no cover - diagnostics must not raise
+                cur = None
+            status = cur.status.value if cur and hasattr(cur.status, "value") else ("missing" if not cur else str(cur.status))
+            if not cur or cur.status != TaskStatus.COMPLETED:
+                blocking.append(f"{step_task.task_id}={status}")
+
+        logger.error(
+            "WAKEUP IS NOT PROGRESSING: %d consecutive rounds processed 0 thoughts (round %d). "
+            "The sequence completes only when EVERY step task reaches COMPLETED, and these have not: %s. "
+            "The agent will keep repeating this round and will not reach WORK. "
+            "A stale ACTIVE wakeup task that failed to delete at boot (#1070) is one known cause.",
+            self._stall_rounds,
+            round_number,
+            ", ".join(blocking) or "<no step tasks recorded — the sequence was never created>",
+        )
+        self._stall_reported = True
 
     async def _process_wakeup(self, round_number: int, non_blocking: bool = False) -> JSONDict:
         """

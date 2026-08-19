@@ -2342,7 +2342,23 @@
     "accord_remint_step_done": "완료 — 시드가 승인되었습니다",
     "accord_remint_step_of": "{total}단계 중 {step}단계",
     "accord_remint_title": "기존 신뢰 루트 재발행",
-    "login_google_unavailable": "이 설치에서는 {provider} 로그인을 사용할 수 없습니다"
+    "login_google_unavailable": "이 설치에서는 {provider} 로그인을 사용할 수 없습니다",
+    "llm_check_button": "키 확인 및 모델 가져오기",
+    "llm_check_state_ok": "정상 작동 확인됨",
+    "llm_check_state_degraded": "작동하지만 제공업체에서 확인되지 않았습니다",
+    "llm_check_state_failed": "제공업체가 거부했습니다",
+    "settings_auth_local_session": "로컬 로그인 세션",
+    "settings_token_info_desc_local": "사용자 이름과 비밀번호로 로그인할 때 발급된 세션 토큰입니다. 이 에이전트에 대해 사용자를 인증하며, CIRIS Services 자격 증명이 아니고 LLM 제공업체가 사용하는 API 키와도 무관합니다.",
+    "settings_token_info_desc_oauth": "Google 또는 Apple로 로그인할 때 발급된 이 에이전트용 로그인 토큰입니다. LLM 제공업체가 사용하는 API 키와는 별개입니다.",
+    "llm_check_key_needed": "이 공급자를 확인하려면 API 키를 입력하십시오.",
+    "llm_check_key_ok": "공급자가 API 키를 수락했습니다",
+    "llm_check_model_missing": "이 모델은 공급자가 제공하지 않습니다. 목록에서 하나를 선택하십시오.",
+    "llm_check_models_cached": "캐시된 모델을 표시하고 있습니다 — 공급자가 응답하지 않아 이 목록이 실제 제공 내용과 다를 수 있습니다.",
+    "settings_auth_oauth_session": "{provider}(으)로 로그인됨",
+    "settings_set_up_agent_title": "에이전트 설정",
+    "settings_set_up_agent_desc": "이 노드는 에이전트 없이 실행 중입니다. 대화, 추론 및 에이전트 설정을 사용하려면 에이전트를 설정하십시오.",
+    "age_range_decline": "밝히지 않음",
+    "age_range_decline_note": "18세 미만에게 적용하는 것과 동일한 보호를 적용합니다. 나중에 변경할 수 있습니다."
   },
   "prompts": {
     "dma": {

@@ -12,6 +12,15 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+#: Whether the first-run reasoning has already been logged at INFO once.
+#: The decision cannot change without a restart, so repeating it is noise.
+_FIRST_RUN_LOGGED = False
+
+
+def _mark_first_run_logged() -> None:
+    global _FIRST_RUN_LOGGED
+    _FIRST_RUN_LOGGED = True
+
 
 def get_config_paths() -> list[Path]:
     """Get possible configuration file locations in priority order.
@@ -112,7 +121,19 @@ def is_first_run() -> bool:
     """
     from ciris_engine.logic.utils.path_resolution import is_managed
 
-    logger.info("Checking first-run status...")
+    # SAY IT ONCE. CIRISAgent#1073.
+    #
+    # This function is called on nearly every request. In a user's log covering
+    # 3m40s it ran 66 times and emitted FIVE INFO lines each — 330 lines, 12% of
+    # the entire file — to report an answer that had not changed since boot and
+    # could not change without a restart.
+    #
+    # The first pass through logs at INFO exactly as before, so the boot-time
+    # reasoning is fully preserved. Every repeat drops to DEBUG: still there when
+    # someone is debugging this specific decision, invisible when they are
+    # looking for the 401 buried underneath it.
+    _lvl = logging.INFO if not _FIRST_RUN_LOGGED else logging.DEBUG
+    logger.log(_lvl, "Checking first-run status...")
 
     # Managed mode: NEVER first-run (manager handles configuration)
     if is_managed():
@@ -123,11 +144,11 @@ def is_first_run() -> bool:
     from ciris_engine.logic.utils.path_resolution import is_development_mode
 
     dev_mode = is_development_mode()
-    logger.info(f"Running in {'DEVELOPMENT' if dev_mode else 'INSTALLED'} mode (git repo: {dev_mode})")
+    logger.log(_lvl, f"Running in {'DEVELOPMENT' if dev_mode else 'INSTALLED'} mode (git repo: {dev_mode})")
 
     # FORCE first-run mode for testing (e.g., QA runner setup tests)
     force_first_run = os.environ.get("CIRIS_FORCE_FIRST_RUN")
-    logger.info(f"CIRIS_FORCE_FIRST_RUN env var: {force_first_run}")
+    logger.log(_lvl, f"CIRIS_FORCE_FIRST_RUN env var: {force_first_run}")
     if force_first_run:
         logger.info("CIRIS_FORCE_FIRST_RUN is set - forcing first-run mode")
         return True
@@ -135,13 +156,14 @@ def is_first_run() -> bool:
     # Check config files — a file must exist AND contain CIRIS_CONFIGURED="true"
     # File existence alone is not sufficient (file may be a stub after failed wipe)
     config_paths = get_config_paths()
-    logger.info(f"Checking config paths: {[str(p) for p in config_paths]}")
+    logger.log(_lvl, f"Checking config paths: {[str(p) for p in config_paths]}")
     for path in config_paths:
         if path.exists() and path.is_file():
             try:
                 content = path.read_text()
                 if "CIRIS_CONFIGURED" in content and "true" in content.lower():
-                    logger.info(f"Found configured .env at {path} - NOT first run")
+                    logger.log(_lvl, f"Found configured .env at {path} - NOT first run")
+                    _mark_first_run_logged()
                     return False
                 else:
                     logger.info(f"Found .env at {path} but CIRIS_CONFIGURED not set - treating as first run")

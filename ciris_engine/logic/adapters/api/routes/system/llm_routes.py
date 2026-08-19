@@ -843,8 +843,22 @@ async def add_provider(
     telemetry_service = getattr(request.app.state, "telemetry_service", None)
     time_service = getattr(request.app.state, "time_service", None)
 
-    if not telemetry_service or not time_service:
-        raise HTTPException(status_code=503, detail="Required services (telemetry, time) not available")
+    # TELEMETRY IS OPTIONAL — DO NOT GATE ON IT (CIRISAgent#1074).
+    #
+    # This refused the request unless BOTH were present, and TelemetryService is
+    # #9 of 22: it is deliberately NOT in the first-run minimal set (TimeService
+    # … WiseAuthority, 10 services) that serves the setup wizard. So adding an
+    # LLM provider during setup — the one thing setup exists to do — failed with
+    #
+    #     503 Required services (telemetry, time) not available
+    #
+    # while the agent was working exactly as designed.
+    #
+    # And it was never needed: OpenAICompatibleClient declares
+    # `telemetry_service: Optional[...] = None` and guards every use of it. The
+    # only genuinely required service here is time, which is #1 and always up.
+    if not time_service:
+        raise HTTPException(status_code=503, detail="Time service not available")
 
     # Generate provider name if not provided
     provider_name = body.name

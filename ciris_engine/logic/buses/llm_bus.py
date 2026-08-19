@@ -1069,7 +1069,14 @@ class LLMBus(BaseBus[LLMService]):
         )
         self._background_tasks.add(task)
         task.add_done_callback(self._background_tasks.discard)
-        raise RuntimeError(f"All LLM services failed for {handler_name}. Last error: {last_error}")
+        # THE HIGHEST-LEVERAGE STRING IN THE LOG (CIRISAgent#1073).
+        #
+        # `last_error` embedded the full <failed_attempts> envelope, and FOUR
+        # downstream sites re-print this message verbatim — csdma, dsdma_base,
+        # dma_orchestrator and work_processor — so one un-flattened string became
+        # 217 physical lines. Collapsing it here fixes all four at once.
+        _last = " ".join(str(last_error).split())[:300]
+        raise RuntimeError(f"All LLM services failed for {handler_name}. Last error: {_last}")
 
     # Note: This method is not in the protocol but kept for internal use
     async def _generate_structured_sync(

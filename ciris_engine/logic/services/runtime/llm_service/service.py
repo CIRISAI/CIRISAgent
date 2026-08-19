@@ -639,7 +639,13 @@ def _handle_generic_llm_exception(
             resp_model_name,
             (_root_provider_error(error) or error_msg)[:400].replace("\n", " "),
         )
-    raise RuntimeError(f"LLM call failed ({type(error).__name__}): {error_msg[:300]}") from error
+    # The message this raises is re-printed verbatim by the LLM bus and by four
+    # DMA sites, so its shape multiplies. [:300] truncated but did NOT collapse
+    # newlines — 300 characters of XML still spans ~13 physical lines, five
+    # times over. Prefer the provider's actual complaint over the wrapper's
+    # envelope, and keep it on one line.
+    _cause = _root_provider_error(error) or error_msg
+    raise RuntimeError(f"LLM call failed ({type(error).__name__}): {' '.join(_cause.split())[:300]}") from error
 
 
 # Configuration class for LLM services (supports multiple providers)
@@ -883,6 +889,11 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         # because it might not exist. We'll check it at runtime instead.
         # AuthenticationError + other non-BadRequest APIStatusErrors stay non-retryable.
         self.non_retryable_exceptions = (AuthenticationError,)
+
+        #: The provider's own last complaint, surfaced by /v1/system/health so a
+        #: degraded agent can say "Invalid API Key" instead of "check your
+        #: network". Empty until something actually fails.
+        self.last_error: str = ""
 
         api_key = self.openai_config.api_key
         base_url = self.openai_config.base_url
@@ -2082,11 +2093,20 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                     circuit_breaker_state=self.circuit_breaker.state.value,
                     consecutive_failures=self.circuit_breaker.consecutive_failures,
                 )
+                self.last_error = _root_provider_error(e)
                 _handle_instructor_retry_exception(e, error_context, self.circuit_breaker)
 
         # Generic exception handling
         self._track_error(e)
         self._total_errors += 1
+        # REMEMBER WHAT THE PROVIDER SAID (CIRISAgent#1062 follow-up).
+        #
+        # /v1/system/health reports "no LLM provider is answering" and, before
+        # this, could say nothing about WHY — so a revoked key and an unknown
+        # model produced the same sentence, pointing the reader at their network.
+        # The provider's own words are already unwrapped for the log; keeping the
+        # last one lets the health warning name the actual fault.
+        self.last_error = _root_provider_error(e)
         _handle_generic_llm_exception(
             e, self.model_name, self.openai_config.base_url or "", resp_model_name, self.circuit_breaker
         )

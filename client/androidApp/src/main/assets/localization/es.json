@@ -2342,7 +2342,23 @@
     "accord_remint_step_done": "Listo — la semilla está autorizada",
     "accord_remint_step_of": "Paso {step} de {total}",
     "accord_remint_title": "Reacuñar una raíz de confianza existente",
-    "login_google_unavailable": "El inicio de sesión con {provider} no está disponible en esta instalación."
+    "login_google_unavailable": "El inicio de sesión con {provider} no está disponible en esta instalación.",
+    "llm_check_key_needed": "Introduce una clave API para comprobar este proveedor.",
+    "llm_check_key_ok": "Clave API aceptada por el proveedor",
+    "llm_check_model_missing": "Este modelo no lo ofrece el proveedor. Elige uno de la lista.",
+    "llm_check_models_cached": "Mostrando modelos en caché: este proveedor no respondió, así que esta lista puede no coincidir con lo que ofrece realmente.",
+    "settings_auth_oauth_session": "Sesión iniciada con {provider}",
+    "settings_set_up_agent_title": "Configurar el agente",
+    "settings_set_up_agent_desc": "Este nodo funciona sin agente. Configura uno para habilitar el chat, el razonamiento y los ajustes del agente.",
+    "llm_check_button": "Verificar clave y obtener modelos",
+    "llm_check_state_ok": "Funcionamiento confirmado",
+    "llm_check_state_degraded": "Funciona, pero no está confirmado por el proveedor",
+    "llm_check_state_failed": "El proveedor lo ha rechazado",
+    "settings_auth_local_session": "Sesión iniciada localmente",
+    "settings_token_info_desc_local": "El token de sesión de tu inicio de sesión con nombre de usuario y contraseña. Te autentica ante este agente: no es una credencial de CIRIS Services y no tiene relación con la clave API que usa tu proveedor de LLM.",
+    "settings_token_info_desc_oauth": "Tu token de inicio de sesión para este agente, obtenido al iniciar sesión con Google o Apple. Es independiente de la clave API que usa tu proveedor de LLM.",
+    "age_range_decline": "Prefiero no decirlo",
+    "age_range_decline_note": "Aplicaremos las mismas protecciones que usamos para menores de 18 años. Puedes cambiarlo más adelante."
   },
   "prompts": {
     "dma": {

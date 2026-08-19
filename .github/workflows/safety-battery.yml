@@ -261,9 +261,19 @@ jobs:
           max_attempts: 3
           retry_wait_seconds: 15
           shell: bash
+          # BOUND APT'S NETWORK CALLS. apt has no default timeout, so an
+          # unreachable mirror makes `apt-get update` hang until the retry
+          # wrapper's per-attempt timeout kills it — consuming the whole retry
+          # allowance in one attempt. Seen 2026-08-19 on Staged QA (job
+          # 96231479052) and Capture (96232500877): both died at exactly 5m00s
+          # having logged only "Attempt 1". Retries help a command that FAILS,
+          # never one that does not return.
           command: |
-            sudo apt-get update
-            sudo apt-get install -y --no-install-recommends \
+            APT_NET_OPTS=(-o Acquire::Retries=3
+                          -o Acquire::http::Timeout=20
+                          -o Acquire::https::Timeout=20)
+            sudo apt-get update "${APT_NET_OPTS[@]}"
+            sudo apt-get install -y --no-install-recommends "${APT_NET_OPTS[@]}" \
               libtss2-tctildr0 libtss2-esys-3.0.2-0 libtss2-mu-4.0.1-0
       - name: Install dependencies
         # Retry-wrapped per 2.8.11 CI hardening.

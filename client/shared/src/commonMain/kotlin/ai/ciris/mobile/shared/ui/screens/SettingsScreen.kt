@@ -88,6 +88,10 @@ fun SettingsScreen(
     onNavigateToLLMSettings: () -> Unit = {},  // Navigate to LLM Settings screen
     onNavigateToVizSettings: () -> Unit = {},  // Navigate to Visualization Settings screen
     onNavigateToConsent: () -> Unit = {},  // Navigate to Consent management screen
+    // The brain has no config, so the app is running in ClientMode.NODE. Offers the
+    // ONE way out: enter the setup wizard directly (CIRISAgent#1075).
+    brainUnconfigured: Boolean = false,
+    onSetUpAgent: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     // Core state
@@ -238,6 +242,44 @@ fun SettingsScreen(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                // THE WAY OUT OF NODE MODE (CIRISAgent#1075).
+                //
+                // The node is claimed but the brain was never configured, so the app
+                // is in ClientMode.NODE and the agent surfaces are absent. This is a
+                // legitimate state, not a fault — but without an entry point it is a
+                // one-way door: nothing else in the UI can create an agent.
+                //
+                // Goes STRAIGHT to the wizard. Not the rerun-setup path below it,
+                // which deletes .env and restarts — with no .env to delete that
+                // restarts into this same state, a loop.
+                if (brainUnconfigured) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSetUpAgent() }
+                            .testableClickable("btn_set_up_agent") { onSetUpAgent() },
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer
+                        )
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                text = localizedString("mobile.settings_set_up_agent_title"),
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = localizedString("mobile.settings_set_up_agent_desc"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                    }
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+                }
+
                 // Agent Mode section — mirror surface of Network hub mode card.
                 AgentModeSection(apiClient = apiClient)
 

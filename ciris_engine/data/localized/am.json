@@ -2342,7 +2342,23 @@
     "accord_remint_step_done": "ተጠናቋል — ዘሩ ጸድቋል",
     "accord_remint_step_of": "ደረጃ {step} ከ{total}",
     "accord_remint_title": "ነባሩን የመተማመኛ ሥር ዳግም ማተም",
-    "login_google_unavailable": "በ{provider} መግባት በዚህ ጭነት ላይ አይገኝም።"
+    "llm_check_button": "ቁልፍ ያረጋግጡ እና ሞዴሎችን ያምጡ",
+    "llm_check_state_ok": "እየሠራ መሆኑ ተረጋግጧል",
+    "llm_check_state_degraded": "እየሠራ ነው፣ ነገር ግን በአቅራቢው አልተረጋገጠም",
+    "llm_check_state_failed": "አቅራቢው ይህን ውድቅ አድርጓል",
+    "settings_auth_local_session": "አካባቢያዊ የመግቢያ ክፍለ-ጊዜ",
+    "settings_token_info_desc_local": "በተጠቃሚ ስምዎ እና በይለፍ ቃልዎ ከገቡበት መግቢያ የተገኘ የክፍለ-ጊዜ ማስረጃ። ለዚህ ወኪል ማንነትዎን ያረጋግጣል — የCIRIS Services መግቢያ ማስረጃ አይደለም፣ እና የLLM አቅራቢዎ ከሚጠቀምበት የAPI ቁልፍ ጋር ግንኙነት የለውም።",
+    "settings_token_info_desc_oauth": "በGoogle ወይም በApple ሲገቡ የተገኘ የዚህ ወኪል የመግቢያ ማስረጃዎ። የLLM አቅራቢዎ ከሚጠቀምበት የAPI ቁልፍ የተለየ ነው።",
+    "login_google_unavailable": "በ{provider} መግባት በዚህ ጭነት ላይ አይገኝም።",
+    "llm_check_key_needed": "ይህን አቅራቢ ለመፈተሽ የAPI ቁልፍ ያስገቡ።",
+    "llm_check_key_ok": "አቅራቢው የAPI ቁልፉን ተቀብሏል",
+    "llm_check_model_missing": "ይህ ሞዴል በአቅራቢው አይቀርብም። ከዝርዝሩ ውስጥ አንዱን ይምረጡ።",
+    "llm_check_models_cached": "የተቀመጡ ሞዴሎች እየታዩ ናቸው — ይህ አቅራቢ ስላልመለሰ ይህ ዝርዝር በእውነት ከሚያቀርበው ጋር ላይመሳሰል ይችላል።",
+    "settings_auth_oauth_session": "በ{provider} ገብተዋል",
+    "settings_set_up_agent_title": "ወኪሉን ያዋቅሩ",
+    "settings_set_up_agent_desc": "ይህ መስቀለኛ ነጥብ ያለ ወኪል እየሠራ ነው። ውይይትን፣ አስተሳሰብንና የወኪል ቅንብሮችን ለማንቃት ወኪል ያዋቅሩ።",
+    "age_range_decline": "መናገር አልፈልግም",
+    "age_range_decline_note": "ከ18 ዓመት በታች ላሉ የምንጠቀመውን ተመሳሳይ ጥበቃ እንተገብራለን። ይህን በኋላ መቀየር ይችላሉ።"
   },
   "prompts": {
     "dma": {

@@ -2342,7 +2342,23 @@
     "accord_remint_step_done": "Fatto — il seed è autorizzato",
     "accord_remint_step_of": "Passo {step} di {total}",
     "accord_remint_title": "Ri-conia una radice di fiducia esistente",
-    "login_google_unavailable": "L'accesso con {provider} non è disponibile in questa installazione."
+    "login_google_unavailable": "L'accesso con {provider} non è disponibile in questa installazione.",
+    "llm_check_key_needed": "Inserisci una chiave API per verificare questo provider.",
+    "llm_check_key_ok": "Chiave API accettata dal provider",
+    "llm_check_model_missing": "Questo modello non è offerto dal provider. Scegline uno dall'elenco.",
+    "llm_check_models_cached": "Modelli in cache — questo provider non ha risposto, quindi l'elenco potrebbe non corrispondere a ciò che offre davvero.",
+    "settings_auth_oauth_session": "Accesso effettuato con {provider}",
+    "settings_set_up_agent_title": "Configura l'agente",
+    "settings_set_up_agent_desc": "Questo nodo funziona senza agente. Configurane uno per abilitare chat, ragionamento e impostazioni dell'agente.",
+    "llm_check_button": "Verifica chiave e carica modelli",
+    "llm_check_state_ok": "Funzionamento confermato",
+    "llm_check_state_degraded": "Funziona, ma non confermato dal provider",
+    "llm_check_state_failed": "Il provider lo ha rifiutato",
+    "settings_auth_local_session": "Sessione di accesso locale",
+    "settings_token_info_desc_local": "Il token di sessione ottenuto dal tuo accesso con nome utente e password. Ti autentica presso questo agente — non è una credenziale di CIRIS Services e non ha alcuna relazione con la chiave API usata dal tuo provider LLM.",
+    "settings_token_info_desc_oauth": "Il tuo token di accesso per questo agente, ottenuto quando hai effettuato l'accesso con Google o Apple. È distinto dalla chiave API usata dal tuo provider LLM.",
+    "age_range_decline": "Preferisco non dirlo",
+    "age_range_decline_note": "Applicheremo le stesse protezioni che usiamo per i minori di 18 anni. Puoi modificarlo in seguito."
   },
   "prompts": {
     "dma": {

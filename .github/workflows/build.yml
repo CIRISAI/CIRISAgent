@@ -87,7 +87,26 @@ jobs:
   test:
     name: Test (shard ${{ matrix.shard }}/8)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 30 -> 60: THE JOB CLOCK INCLUDES CHECKOUT, AND CHECKOUT GOT SLOW.
+    #
+    # Shard 1 was killed at 30m20s on run 32284797337 having spent ~12 minutes in
+    # actions/checkout before pytest started — the same slow full clone that made
+    # the Repo Size Audit time out the same day. That left the 25-minute test
+    # budget with ~18 minutes of job clock to fit into, so the OUTERMOST bound
+    # fired first.
+    #
+    # Which is exactly the failure the nested-bounds comment below exists to
+    # prevent: when GitHub's backstop wins, the inner bounds never run, so the
+    # hang-stacks artifact they exist to produce is never written. Shard 1
+    # uploaded no stacks and no durations — a self-reporting diagnostic once again
+    # structurally unable to report.
+    #
+    # The inner bounds are UNCHANGED and still correctly ordered
+    # (1380s controller < 1500s SIGTERM < job). Only the backstop moves, so it
+    # goes back to being a backstop rather than the thing that kills the run.
+    # This does not slow a healthy shard: the 25-minute SIGTERM still bounds the
+    # actual test run.
+    timeout-minutes: 60
     permissions:
       contents: read
       pull-requests: read
@@ -150,7 +169,8 @@ jobs:
           # -n 4: 4 parallel workers within each shard
           # --dist=loadgroup: Respect xdist_group markers (keep grouped tests on same worker)
           # timeout 1500 (25 min) MUST stay meaningfully below the job's
-          # timeout-minutes: 30. It was 1800 — exactly equal — and since the job
+          # timeout-minutes (now 60). It was 1800 — exactly equal to the
+          # then-30m job bound — and since the job
           # clock starts at checkout while this one starts here (~2 min later),
           # the job timeout ALWAYS won. The SIGTERM never arrived, so the #956
           # sessionfinish guard and SIGTERM faulthandler could never dump the
@@ -166,9 +186,10 @@ jobs:
           # THREE NESTED BOUNDS, innermost first. Each must stay strictly below
           # the next or the inner one can never fire:
           #
-          #   --session-timeout=1320 (22m)  pytest gives up and REPORTS
-          #   timeout ... 1500       (25m)  SIGTERM if pytest itself is wedged
-          #   timeout-minutes: 30           GitHub's backstop
+          #   --session-timeout=2520 (42m)  pytest gives up and REPORTS
+          #   timeout ... 2700       (45m)  SIGTERM if pytest itself is wedged
+          #   timeout-minutes: 60           GitHub's backstop (was 30; checkout
+          #                                 alone now eats ~12m of the job clock)
           #
           # The session bound is the one that actually fixes the 2026-08-02
           # shard-3 hang. Root cause, from the first stacks this hang has ever
@@ -196,15 +217,34 @@ jobs:
           # the run is the one that reports it. Opt-in via env on purpose: a
           # healthy local full-suite run may legitimately outlive any number
           # this job would pick, so the number lives with the job that knows
-          # its budget. Ordering: controller deadline 1380 < SIGTERM 1500 < job 30m.
-          CIRIS_TEST_CONTROLLER_DEADLINE_SECONDS=1380 \
-          timeout --signal=SIGTERM --kill-after=30 1500 \
+          # its budget. Ordering: controller deadline 2580 < SIGTERM 2700 < job 60m.
+          #
+          # RESIZED 2026-08-19 (run 32296077047). Shard 6 tripped the 1380s
+          # deadline at 76% WITH TESTS STILL PASSING, and the stacks it dumped —
+          # the first this bound has ever produced, now that the job backstop no
+          # longer pre-empts it — carried NO ciris_engine or test frames at all.
+          # The only project frames were the watchdog's own `_emit_stacks`,
+          # `_controller_deadline` and `_hang_watchdog`. Nothing was wedged.
+          #
+          # The deadline fires on elapsed time regardless of progress, so its
+          # "a worker is likely wedged in native code" message was a
+          # misdiagnosis. 15k+ tests over 8 shards no longer fit in 23 minutes;
+          # four shards exceeded 20m of test time on the same run. This is a
+          # resize, not a hang fix — there was no hang.
+          #
+          # THE 15-MINUTE GAP TO THE JOB BOUND IS DELIBERATE. The job clock
+          # starts at checkout, which has been observed at ~12 minutes on this
+          # repo. SIGTERM at 45m inside a 60m job leaves room for that; sizing
+          # the inner bounds closer to 60 would recreate the exact failure above,
+          # where the outer bound wins and the inner ones never report.
+          CIRIS_TEST_CONTROLLER_DEADLINE_SECONDS=2580 \
+          timeout --signal=SIGTERM --kill-after=30 2700 \
             pytest tests/ -n 4 --dist=loadgroup \
             --splits 8 --group ${{ matrix.shard }} \
             --splitting-algorithm=least_duration \
             --store-durations --durations-path=test_durations_shard_${{ matrix.shard }} \
             --reruns=2 --reruns-delay=1 --max-worker-restart=4 \
-            --session-timeout=1320 \
+            --session-timeout=2520 \
             --cov=./ --cov-report=xml:coverage-shard-${{ matrix.shard }}.xml
 
       - name: Upload coverage artifact
@@ -376,6 +416,22 @@ jobs:
         #
         # Retry-wrapped per 2.8.11 CI hardening: apt mirror selection
         # occasionally returns stale package lists or transient 503s.
+        #
+        # A RETRY WRAPPER CANNOT HELP IF ONE ATTEMPT HANGS (2026-08-19, job
+        # 96231479052). Staged QA (all_2) failed here having run for exactly
+        # 5m01s — the per-attempt timeout — and the log shows only "Attempt 1".
+        # Attempts 2 and 3 never happened: the first one consumed the entire
+        # allowance, inside a 55-minute job with plenty of room left.
+        #
+        # The cause is in the log: every azure.archive.ubuntu.com line is `Ign:`.
+        # The mirror was unreachable and apt has NO default network timeout, so
+        # `apt-get update` sat there until the wrapper killed it. Retries only
+        # help a command that FAILS; they do nothing for one that never returns.
+        #
+        # So bound apt's own network calls. A dead mirror now errors in seconds
+        # and the retry does what it was added to do. Acquire::Retries covers the
+        # transient-503 case inside a single attempt, which is cheaper than a
+        # whole new attempt.
         uses: nick-fields/retry@v4
         with:
           timeout_minutes: 5
@@ -383,8 +439,11 @@ jobs:
           retry_wait_seconds: 15
           shell: bash
           command: |
-            sudo apt-get update
-            sudo apt-get install -y --no-install-recommends \
+            APT_NET_OPTS=(-o Acquire::Retries=3
+                          -o Acquire::http::Timeout=20
+                          -o Acquire::https::Timeout=20)
+            sudo apt-get update "${APT_NET_OPTS[@]}"
+            sudo apt-get install -y --no-install-recommends "${APT_NET_OPTS[@]}" \
               libtss2-esys-3.0.2-0t64 \
               libtss2-mu-4.0.1-0t64 \
               libtss2-rc0t64 \

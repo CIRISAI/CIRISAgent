@@ -60,7 +60,13 @@ def _set_service_phase(phase: str) -> None:
     """Set the current service initialization phase for logging."""
     global _current_phase
     _current_phase = phase
-    logger.warning(f"[SERVICES] === {phase} PHASE ===")
+    # INFO, not WARNING (CIRISAgent#1073). Normal startup progress was emitted
+    # at WARNING — 19 messages, 20% of every WARNING in a real user log. An
+    # operator's first move on a broken agent is `grep -E 'WARNING|ERROR'`, and
+    # filling that channel with "MemoryService STARTED" is how a real warning
+    # goes unread. Nothing here reports a problem; the failure paths in this
+    # module keep their levels.
+    logger.info(f"[SERVICES] === {phase} PHASE ===")
     print(f"[SERVICES] === {phase} PHASE ===")
 
 
@@ -102,7 +108,7 @@ def _log_service_started(service_num: int, service_name: str, success: bool = Tr
     phase_prefix = f"[{_current_phase}] " if _current_phase != "STARTUP" else ""
     msg = f"{phase_prefix}[SERVICE {service_num}/{TOTAL_CORE_SERVICES}] {service_name} {status}"
     # Use WARNING level so it shows up in incident logs for easy parsing
-    logger.warning(msg)
+    logger.info(msg)
     # Also print to console/stdout for Android logcat visibility
     print(msg)
 

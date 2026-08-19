@@ -204,7 +204,7 @@ class DMAOrchestrator:
             try:
                 dma_results[name] = await task
             except Exception as e:
-                logger.error(f"DMA '{name}' failed: {e}", exc_info=True)
+                logger.error(f"DMA '{name}' failed: {e}")
                 error = DMAError(dma_name=name, error_message=str(e), error_type=type(e).__name__)
                 self._set_dma_error(errors, name, error)
 
@@ -597,7 +597,7 @@ class DMAOrchestrator:
             for (name, _), outcome in zip(tasks.items(), task_results):
                 cb = self._circuit_breakers.get(name)
                 if isinstance(outcome, Exception):
-                    logger.error(f"DMA '{name}' failed: {outcome}", exc_info=True)
+                    logger.error(f"DMA '{name}' failed: {outcome}")
                     results.errors.append(str(outcome))
                     if cb:
                         cb.record_failure()

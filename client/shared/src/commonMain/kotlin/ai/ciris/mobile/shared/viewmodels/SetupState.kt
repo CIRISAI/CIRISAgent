@@ -372,6 +372,26 @@ data class AgeRangeSetupState(
      *  if not yet selected. Kept as the raw token to avoid leaking the safety
      *  enum into the serializable setup state. */
     val selectedBandToken: String? = null,
+    /**
+     * The subject exercised their right NOT to state an age.
+     *
+     * Distinct from [selectedBandToken] being null, which means "not asked yet".
+     * Before this existed the two were the same value, so "declining sets the
+     * protective default" — which the wizard's own test asserted — had nowhere to
+     * be encoded, and the required-age branch necessarily blocked both.
+     *
+     * Declining is a RIGHT and is never punished. It is also never treated as
+     * adulthood: a subject who has not stated an age is treated as a child, which
+     * is what [SetupFormState.isMinorBand] returns and what the stewardship rule
+     * keys on. Adult treatment follows from an adult declaration, not from silence.
+     *
+     * It is deliberately NOT recorded as `age_self_declared:minor:v1`. That would
+     * put a statement in the subject's own assurance record that they never made,
+     * and age.rs's honesty discipline is the whole point of this surface. Nothing
+     * is posted; the protective treatment is applied locally. Closing that gap
+     * server-side needs a `declined` assurance band — filed upstream.
+     */
+    val declined: Boolean = false,
     val inProgress: Boolean = false,
     /** Set once the local node recorded the self-declared assurance. */
     val recorded: Boolean = false,
@@ -708,7 +728,12 @@ data class SetupFormState(
      * fail-secure skip of the local-node self-claim on COMPLETE.
      */
     fun isMinorBand(): Boolean {
-        return ageRange.selectedBandToken == "minor"
+        // Declining is treated exactly as `minor`, stewardship included. Anything
+        // less would make declining cost the subject their protections, and a
+        // decline that costs you something is not a right — it is a toll. The
+        // difference between the two lives in what is RECORDED, not in how the
+        // subject is treated: see AgeRangeSetupState.declined.
+        return ageRange.selectedBandToken == "minor" || ageRange.declined
     }
 
     /**
@@ -755,12 +780,13 @@ data class SetupFormState(
         // account needs a matching password pair, and a self-declared MINOR must
         // have generated a stewardship request first — that last one is
         // fail-secure (CC 0.5.1 §2580): an under-18 founder must not self-claim.
-        // The age band itself is optional; declining sets the protective default.
+        // The age question must be ANSWERED; "prefer not to say" is an answer.
         SetupStep.YOU -> {
             // Age now leads the YOU step and is REQUIRED — it also seeds the fed-ID
             // and the minor-stewardship gate, so nothing below it can be judged
             // until it's answered.
-            val ageOk = ageRange.selectedBandToken != null
+            // An ANSWER is required, not a band. Declining is an answer.
+            val ageOk = ageRange.selectedBandToken != null || ageRange.declined
             val fedIdOk = federationIdentity.minted ||
                 federationIdentity.admitted ||
                 federationIdentity.isLabelValid()
@@ -841,7 +867,7 @@ data class SetupFormState(
             }
             // Age is the first thing asked now, so its "please choose" is the first
             // reason surfaced when Next is disabled.
-            val ageError = if (ageRange.selectedBandToken == null) {
+            val ageError = if (ageRange.selectedBandToken == null && !ageRange.declined) {
                 LocalizationHelper.getString("setup_validation_age_required")
             } else {
                 null

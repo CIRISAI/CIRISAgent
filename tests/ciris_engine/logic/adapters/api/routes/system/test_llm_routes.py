@@ -876,8 +876,15 @@ class TestAddProviderEndpoint:
         assert "different name" in detail.lower() or "remove it" in detail.lower()
 
     def test_add_provider_missing_services(self, app_with_llm_routes: FastAPI) -> None:
-        """Test that 503 is returned when required services are unavailable."""
-        # Don't set telemetry_service and time_service
+        """503 only when TIME is missing — telemetry is optional (CIRISAgent#1075).
+
+        This used to require both. TelemetryService is #9 of 22 and deliberately
+        absent from the first-run set that serves the setup wizard, so adding an
+        LLM provider — the one thing setup exists to do — failed with "Required
+        services (telemetry, time) not available" while the agent was working
+        exactly as designed, and the user had no way to escape a SETUP-state
+        agent. See the companion test below.
+        """
         app_with_llm_routes.state.telemetry_service = None
         app_with_llm_routes.state.time_service = None
 
@@ -895,7 +902,45 @@ class TestAddProviderEndpoint:
             )
 
         assert response.status_code == 503
-        assert "services" in response.json()["detail"].lower()
+        assert "time" in response.json()["detail"].lower()
+
+    def test_add_provider_works_without_telemetry(self, app_with_llm_routes: FastAPI) -> None:
+        """The setup-wizard case: time present, telemetry absent, must NOT 503.
+
+        OpenAICompatibleClient declares `telemetry_service: Optional[...] = None`
+        and guards every use of it, so nothing here needed telemetry — the gate
+        was simply wrong, and it bricked first-run configuration.
+        """
+        from ciris_engine.logic.registries.base import Priority
+
+        app_with_llm_routes.state.telemetry_service = None  # as during first-run
+        app_with_llm_routes.state.time_service = MagicMock()
+
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth", return_value=True
+        ):
+            with patch("ciris_engine.logic.adapters.api.routes.system.llm_routes.get_global_registry") as mock_registry:
+                mock_reg = MagicMock()
+                mock_reg.get_provider_by_name.return_value = None  # no collision
+                mock_registry.return_value = mock_reg
+                with patch(
+                    "ciris_engine.logic.services.runtime.llm_service.service.OpenAICompatibleClient"
+                ) as mock_client:
+                    mock_client.return_value.start = AsyncMock()
+                    client = TestClient(app_with_llm_routes)
+                    response = client.post(
+                        "/system/llm/providers",
+                        json={
+                            "provider_id": "local",
+                            "name": "setup_time_provider",
+                            "base_url": "http://localhost:11434/v1",
+                        },
+                    )
+
+        assert response.status_code != 503, (
+            "adding a provider must work during first-run, when telemetry is not yet started — "
+            f"got {response.status_code}: {response.text[:200]}"
+        )
 
     def test_add_provider_validates_request(self, app_with_llm_routes: FastAPI) -> None:
         """Test that invalid request body returns 422."""

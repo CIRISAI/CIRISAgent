@@ -502,6 +502,10 @@ fun CIRISApp(
 
     // First-run detection state
     var isFirstRun by remember { mutableStateOf<Boolean?>(null) }
+    // The brain says it still needs setup and holds no config. Drives ClientMode.NODE
+    // (see the gate below) and the "set up the agent" entry point in Settings, which
+    // is the ONLY way out of node mode into a configured agent.
+    var brainUnconfigured by remember { mutableStateOf(false) }
     var checkingFirstRun by remember { mutableStateOf(false) }
 
     // Post-setup RECONFIGURING hold. After /v1/setup/complete the runtime
@@ -886,15 +890,28 @@ fun CIRISApp(
             try {
                 val nodeHealth = apiClient.getNodeHealth(nodeBaseUrl)
                 nodeVersion = nodeHealth.version
+                // Is the brain configured at all? A brain with no config runs 10 of
+                // its 22 services to serve the wizard and reports cognitive_state
+                // "SETUP" — which reads as an agent to a health probe, and is not
+                // one. Only the brain can answer this, so ask before deciding.
+                // Unreachable/failed probe => false, i.e. no downgrade: the gate
+                // keeps its previous behaviour rather than guessing NODE.
+                brainUnconfigured = runCatching {
+                    val s = apiClient.getSetupStatus().data
+                    s.setup_required && !s.has_env_file
+                }.getOrDefault(false)
                 var mode = ai.ciris.mobile.shared.models.clientModeFrom(
-                    nodeHealth.cognitiveState, nodeHealth.serviceCount
+                    nodeHealth.cognitiveState, nodeHealth.serviceCount, brainUnconfigured
                 )
                 if (mode.isNode) {
                     // Bare node health — ask the brain whether it is running on top.
+                    // brainUnconfigured is passed here too: without it this probe
+                    // sees "SETUP" and promotes the half-started brain straight back
+                    // to AGENT, undoing the gate above.
                     runCatching { apiClient.getSystemStatus() }
                         .onSuccess { sys ->
                             mode = ai.ciris.mobile.shared.models.clientModeFrom(
-                                sys.cognitive_state, sys.services_total
+                                sys.cognitive_state, sys.services_total, brainUnconfigured
                             )
                         }
                         .onFailure { e ->
@@ -1734,7 +1751,15 @@ fun CIRISApp(
                                     authResponse.access_token
                                 }
 
-                                platformLog(TAG, "[INFO] Got CIRIS access token: ${cirisToken.take(8)}...${cirisToken.takeLast(4)}")
+                                // SAY WHICH TOKEN THIS IS.
+                                //
+                                // This read "Got CIRIS access token", copied from the
+                                // OAuth exchange path where that is true. Here it is a
+                                // LOCAL session bearer from username/password — no
+                                // OAuth, no CIRIS services. A user reading his own log
+                                // reasonably concluded he had a CIRIS-services token he
+                                // had never signed up for.
+                                platformLog(TAG, "[INFO] Local sign-in session token: ${cirisToken.take(8)}...${cirisToken.takeLast(4)}")
 
                                 // Set the token on the API client
                                 apiClient.setAccessToken(cirisToken)
@@ -2207,6 +2232,11 @@ fun CIRISApp(
                     viewModel = settingsViewModel,
                     apiClient = apiClient,
                     secureStorage = secureStorage,
+                    brainUnconfigured = brainUnconfigured,
+                    onSetUpAgent = {
+                        platformLog(TAG, "[INFO] user chose to set up the agent from node mode → Screen.Setup")
+                        currentScreen = Screen.Setup
+                    },
                     onNavigateBack = { currentScreen = Screen.Interact },
                     onLogout = {
                         PlatformLogger.i("CIRISApp", "[onLogout] User initiated logout")
@@ -4254,8 +4284,49 @@ private suspend fun checkFirstRunStatus(
             // that runs when nothing is wrong — was the only place it was missing.
             // Re-entering the wizard here would re-claim a node that already has
             // an owner, so this is a correctness fix, not just a UX one.
+            // ...AND THE BRAIN MUST ALREADY HAVE ITS CONFIG. This is the half I
+            // got wrong in 2.9.26 (CIRISAgent#1075).
+            //
+            // An owned node means DO NOT RE-CLAIM THE NODE. It does not mean the
+            // brain is configured — they are two different stores, which is the
+            // whole point of #1061, and I applied that lesson in one direction
+            // only. Skipping the wizard on node-ownership alone left a brain with
+            // no .env, and the brain's remaining 12 services start ONLY from
+            // POST /v1/setup/complete -> runtime.resume_from_first_run():
+            //
+            //     Config: ~/ciris/.env — NOT FOUND (first run will create it)
+            //     [FIRST-RUN] 10/10 minimal services started
+            //     ...wizard skipped, user signed in...
+            //     cognitiveState=SETUP forever, telemetry/audit/LLM bus absent,
+            //     every /v1/system/*, /v1/audit/* and add-provider call 503.
+            //
+            // The agent could not even be given an LLM provider to escape with.
+            //
+            // So: node-ownership suppresses the CLAIM, never the setup. If the
+            // brain has no config, the wizard runs.
             if (setupStatus.data.setup_required && nodeHasOwner(nodeBaseUrl)) {
-                platformLog("checkFirstRunStatus", "[INFO] brain says setup_required but the NODE has an OWNER → configured, NOT first-run (sign in instead)")
+                // An OWNED node is not a first run, whether or not the brain is
+                // configured. The two cases diverge AFTER this point:
+                //
+                //   owned + brain configured    -> sign in, full AGENT UI
+                //   owned + brain unconfigured  -> ClientMode.NODE, node UI
+                //
+                // The second is a legitimate state, not a broken agent: the node
+                // works and the cognitive half was never set up. Forcing the wizard
+                // there (which is what I did in the first pass at this) shows setup
+                // to someone who may only want a node.
+                //
+                // It is NOT a dead end. The brain still starts its 10 first-run
+                // services, and Settings offers "set up the agent", which enters the
+                // wizard directly. Deliberately NOT the existing rerun-setup path:
+                // that deletes .env and restarts, and with no .env to delete it
+                // restarts into this same state — a loop.
+                val brainHasConfig = setupStatus.data.has_env_file
+                platformLog(
+                    "checkFirstRunStatus",
+                    "[INFO] node has an OWNER → NOT first-run (brain_configured=$brainHasConfig). " +
+                        if (brainHasConfig) "Sign in." else "Brain unconfigured → node mode; set up the agent from Settings.",
+                )
                 return false
             }
             return setupStatus.data.setup_required

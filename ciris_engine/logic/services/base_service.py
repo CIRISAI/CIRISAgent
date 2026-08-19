@@ -244,4 +244,13 @@ class BaseService(ABC, ServiceProtocol):
         """Track an error for metrics."""
         self._error_count += 1
         self._last_error = str(error)
-        self._logger.error(f"{self.service_name} error: {error}")
+        # ONE LINE, ALWAYS (CIRISAgent#1073).
+        #
+        # This printed str(error) unbounded under a per-service logger. An
+        # instructor InstructorRetryException stringifies to a full
+        # <failed_attempts> XML envelope, so 13 identical 401s became 325
+        # physical lines here alone — and this hook is generic, so ANY service
+        # whose exception has a multi-line repr does the same thing.
+        # Truncating and flattening here protects all of them at once.
+        _flat = " ".join(str(error).split())
+        self._logger.error("%s error: %s", self.service_name, _flat[:300])

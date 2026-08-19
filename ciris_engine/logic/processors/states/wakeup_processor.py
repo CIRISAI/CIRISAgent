@@ -499,12 +499,37 @@ class WakeupProcessor(BaseProcessor):
                     logger.debug(f"Found existing thought {thought.thought_id} for processing")
 
     def _check_all_steps_complete(self) -> bool:
-        """Check if all wakeup steps are complete without blocking."""
+        """Check if all wakeup steps are complete without blocking.
+
+        A REJECTED step keeps the agent in WAKEUP — deliberately, and loudly
+        (#1069 / #1077). It already did so before this change, but only as a
+        side effect of not being COMPLETED, which is the same branch a step that
+        has not run yet takes. Those two are not the same thing: one resolves by
+        waiting and one never will, and the log said `debug` for both.
+
+        Rejection is an ANSWER. An agent that declined to affirm its own identity
+        has not failed to finish waking up; it finished, and the answer was no.
+        Entering WORK anyway would mean acting on an authorisation it explicitly
+        withheld, so the refusal is the correct behaviour — it just has to be a
+        decision the code makes on purpose rather than one it falls into.
+        """
         if not self.wakeup_tasks or len(self.wakeup_tasks) < 2:
             return False
 
         for step_task in self.wakeup_tasks[1:]:
             current_task = persistence.get_task_by_id(step_task.task_id, step_task.agent_occurrence_id)
+            if current_task and current_task.status == TaskStatus.REJECTED:
+                if not getattr(self, "_rejection_reported", False):
+                    self._rejection_reported = True
+                    logger.error(
+                        "WAKEUP STEP REJECTED: %s. The agent will NOT enter WORK — a rejected step is "
+                        "terminal, not pending, and does not resolve by waiting. /v1/system/health "
+                        "reports cognitive_state=WAKEUP_ERROR with a wakeup_step_rejected warning. "
+                        "If the step was rejected because persist refused to record the status, see "
+                        "CIRISAgent#1077.",
+                        step_task.task_id,
+                    )
+                return False
             if not current_task or current_task.status != TaskStatus.COMPLETED:
                 logger.debug(
                     f"Step {step_task.task_id} not yet complete (status: {current_task.status if current_task else 'missing'})"

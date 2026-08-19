@@ -335,6 +335,71 @@ def _claim_persistence_warnings(request: Request) -> list[SystemWarning]:
     ]
 
 
+def _rejected_wakeup_warnings(request: Request) -> list[SystemWarning]:
+    """A REJECTED wakeup step is terminal, and the agent must not pass it.
+
+    Reported from production (#1069 / #1077): all three wakeup step tasks were
+    REJECTED, `ciris_persist` refused to record `rejected` as a task status
+    though `TaskStatus.REJECTED` is valid in the Python enum, and the agent spun
+    one empty WAKEUP round every ~5s for its entire 22-hour uptime. A step that
+    is rejected but cannot be RECORDED as rejected is neither complete nor
+    terminal, which is exactly the spin.
+
+    The wakeup processor already refuses to reach WORK — `_check_all_steps_complete`
+    demands COMPLETED and a rejected step never gets there — but it refuses by
+    ACCIDENT, as "not yet complete", which is indistinguishable from a boot still
+    in progress. The health surface said `cognitive_state: WAKEUP` and
+    `status: healthy` throughout, which is the same absence-reads-as-success
+    shape #943 fixed one level up.
+
+    Rejection is a DECISION, not a delay. An agent that declined to affirm its
+    own identity has not failed to finish waking up; it has finished, and the
+    answer was no. That has to be visible as its own condition rather than
+    inferred from a round counter nobody is watching.
+    """
+    try:
+        from ciris_engine.logic.persistence.models.tasks import get_all_tasks
+        from ciris_engine.logic.services.lifecycle.scheduler.service import WAKEUP_STEP_PREFIXES
+        from ciris_engine.logic.utils.occurrence_utils import get_current_occurrence_id
+
+        tasks = get_all_tasks(occurrence_id=get_current_occurrence_id()) or []
+    except Exception as e:  # pragma: no cover - a health probe must never raise
+        logger.debug(f"Could not check wakeup steps: {e}")
+        return []
+
+    rejected = []
+    for task in tasks:
+        task_id = str(getattr(task, "task_id", "") or "")
+        if not task_id.startswith(WAKEUP_STEP_PREFIXES):
+            continue
+        status = getattr(task, "status", None)
+        if str(getattr(status, "value", status)).lower() != "rejected":
+            continue
+        rejected.append(task_id.split("_")[0])
+
+    if not rejected:
+        return []
+
+    steps = ", ".join(sorted(set(rejected)))
+    logger.error(
+        "WAKEUP STEP REJECTED: %s. The agent will not enter WORK and is reporting "
+        "cognitive_state=WAKEUP_ERROR. This is a decision, not a delay — it does not "
+        "resolve by waiting. See CIRISAgent#1069 / #1077.",
+        steps,
+    )
+    return [
+        SystemWarning(
+            code="wakeup_step_rejected",
+            message=(
+                f"The agent rejected a wakeup step ({steps}) and will not enter WORK. "
+                "This does not resolve by waiting — a rejected step is terminal."
+            ),
+            severity="error",
+            action_url="/system",
+        )
+    ]
+
+
 def _stale_shared_task_warnings(request: Request) -> list[SystemWarning]:
     """A shared task stuck ACTIVE across days (#1018, seen again in #1057).
 
@@ -404,6 +469,7 @@ async def collect_system_warnings(request: Request) -> tuple[bool, list[SystemWa
     warnings.extend(_adapter_load_failure_warnings(request))
     warnings.extend(_occurrence_warnings(request))
     warnings.extend(_stale_shared_task_warnings(request))
+    warnings.extend(_rejected_wakeup_warnings(request))
     warnings.extend(_claim_persistence_warnings(request))
     return not has_working_llm, warnings
 
@@ -431,6 +497,21 @@ async def get_system_health(request: Request) -> SuccessResponse[SystemHealthRes
 
     # Determine overall system status
     status = determine_overall_status(init_complete, processor_healthy, services)
+
+    # A REJECTED WAKEUP STEP IS ITS OWN COGNITIVE STATE (#1069 / #1077).
+    #
+    # The processor stays in WAKEUP and never reaches WORK, which is correct —
+    # but it reports plain `WAKEUP`, identical to a boot still in progress. In
+    # production that read as normal for 22 hours while the agent span one empty
+    # round every ~5s. The distinction matters because the two need opposite
+    # responses: a boot resolves by waiting, and a rejection never does.
+    #
+    # So the state says so. `degraded_mode` is set alongside it because the agent
+    # is running without having completed the sequence that authorises it to
+    # work — the same "not doing the job it says it is" that flag already means.
+    if any(w.code == "wakeup_step_rejected" for w in warnings):
+        cognitive_state = "WAKEUP_ERROR"
+        degraded_mode = True
 
     # AN AGENT WITH NO WAY TO TALK TO ANYONE IS NOT HEALTHY (#1057).
     #

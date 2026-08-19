@@ -1758,6 +1758,79 @@ class CIRISApiClient(
     }
 
     /**
+     * Attach an OAuth identity to an existing certificate — `POST
+     * {localNodeUrl}/v1/self/oauth-link`.
+     *
+     * CIRISServer#432, the client half. The node has routed this all along
+     * (`src/auth/oauth_link.rs`), and nothing called it: the generated SDK
+     * targets `/v1/users/{userId}/oauth-links`, which the node does not route,
+     * so the one surface that could fix a locally-claimed node was unreachable.
+     * That is the original field report — a node claimed with a username and
+     * password could never have Google attached to it.
+     *
+     * PASS [email], not [externalId], for a human. Nobody can look up their own
+     * Google `sub`; an address is the handle a person actually holds. The node
+     * writes it to the cert as a provisioning slot and stamps the verified
+     * provider pair on the next successful sign-in, after which the address
+     * stops being load-bearing.
+     *
+     * Owner-gated (SYSTEM_ADMIN + FullAccess) and it refuses a delegated
+     * session, because this writes a stored row that would outlive an in-memory
+     * grant. Refusals carry a `reason_id`, so "not signed in" and "signed in but
+     * not the owner" are answers a UI can tell apart.
+     *
+     * @param waId certificate to link; omit for the node's ROOT (the owner),
+     *   which is the case this exists for.
+     */
+    suspend fun linkOAuthIdentity(
+        provider: String,
+        email: String? = null,
+        externalId: String? = null,
+        waId: String? = null,
+        localNodeUrl: String = LOCAL_NODE_URL,
+        token: String? = accessToken,
+    ): OAuthLinkResult {
+        val method = "linkOAuthIdentity"
+        logInfo(method, "POST $localNodeUrl/v1/self/oauth-link provider=$provider by=${if (email != null) "email" else "external_id"}")
+        val client = federationHttpClient()
+        return try {
+            val body = buildJsonObject {
+                put("provider", provider)
+                waId?.let { put("wa_id", it) }
+                email?.let { put("email", it) }
+                externalId?.let { put("external_id", it) }
+            }
+            val response = client.post("$localNodeUrl/v1/self/oauth-link") {
+                token?.let { header("Authorization", "Bearer $it") }
+                contentType(ContentType.Application.Json)
+                setBody(body.toString())
+            }
+            val raw = response.bodyAsText()
+            val obj = try { Json.parseToJsonElement(raw).jsonObject } catch (_: Exception) { null }
+            if (!response.status.isSuccess()) {
+                // Carry the node's reason_id through — it is the difference
+                // between "sign in" and "sign in as the owner".
+                val reason = obj?.get("reason_id")?.jsonPrimitive?.contentOrNull
+                val detail = obj?.get("error")?.jsonPrimitive?.contentOrNull
+                    ?: obj?.get("detail")?.jsonPrimitive?.contentOrNull
+                throw RuntimeException(detail ?: "Could not link $provider (${response.status})", null).also {
+                    logError(method, "status=${response.status} reason_id=${reason ?: "<none>"} body=${raw.take(200)}")
+                }
+            }
+            OAuthLinkResult(
+                provider = obj?.get("provider")?.jsonPrimitive?.contentOrNull ?: provider,
+                linked = obj?.get("linked")?.jsonPrimitive?.booleanOrNull ?: false,
+                isPrimary = obj?.get("is_primary")?.jsonPrimitive?.booleanOrNull ?: false,
+            )
+        } catch (e: Exception) {
+            logException(method, e, "localNodeUrl=$localNodeUrl")
+            throw e
+        } finally {
+            client.close()
+        }
+    }
+
+    /**
      * Register a peer on [nodeUrl] and emit this node's consent:replication
      * grant scoped to [PeeringRequest.attestationPrefixes]. Owner/admin-gated
      * server-side.
@@ -13140,6 +13213,18 @@ data class PartnershipStatusData(
 /**
  * System warning that requires user attention.
  */
+/**
+ * Outcome of [CIRISApiClient.linkOAuthIdentity].
+ *
+ * [linked] is false for a re-link, which is a no-op — the node says so rather
+ * than reporting a success indistinguishable from the first time.
+ */
+data class OAuthLinkResult(
+    val provider: String,
+    val linked: Boolean,
+    val isPrimary: Boolean,
+)
+
 data class SystemWarning(
     val code: String,
     val message: String,

@@ -103,13 +103,13 @@ def _get_auto_loaded_adapters(service_registry: Any, seen_adapter_ids: set[str])
             logger.info("[AUTO_LOADED] %s has %d providers", service_type, len(providers))
             for idx, provider_info in enumerate(providers):
                 metadata = provider_info.get("metadata", {})
-                logger.info("[AUTO_LOADED]   provider[%d] metadata=%s", idx, metadata)
+                logger.debug("[AUTO_LOADED]   provider[%d] metadata=%s", idx, metadata)
                 if not metadata.get("auto_loaded"):
-                    logger.info("[AUTO_LOADED]   provider[%d] SKIPPED - no auto_loaded flag", idx)
+                    logger.debug("[AUTO_LOADED]   provider[%d] SKIPPED - no auto_loaded flag", idx)
                     continue
                 adapter_name = metadata.get("adapter", "unknown")
                 adapter_id = f"{adapter_name}_auto"
-                logger.info("[AUTO_LOADED]   provider[%d] adapter_name=%s adapter_id=%s", idx, adapter_name, adapter_id)
+                logger.debug("[AUTO_LOADED]   provider[%d] adapter_name=%s adapter_id=%s", idx, adapter_name, adapter_id)
                 if adapter_id not in seen_adapter_ids:
                     seen_adapter_ids.add(adapter_id)
                     auto_adapters.append(_create_auto_adapter_info(adapter_name, service_type))

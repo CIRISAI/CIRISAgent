@@ -1071,7 +1071,7 @@ async def get_history(
     channels_to_query = _build_channels_to_query(auth, request)
     channel_id = f"api_{auth.user_id}"
 
-    logger.info(f"History query for user {auth.user_id} with role {auth.role}, channels: {channels_to_query}")
+    logger.debug(f"History query for user {auth.user_id} with role {auth.role}, channels: {channels_to_query}")
 
     # Check for mock message history first
     message_history = getattr(request.app.state, "message_history", None)
@@ -1398,12 +1398,12 @@ async def _fetch_messages_from_channels(comm_service: Any, channels_to_query: Li
     fetched_messages = []
     for channel in channels_to_query:
         try:
-            logger.info(f"Fetching messages from channel: {channel}")
+            logger.debug(f"Fetching messages from channel: {channel}")
             if comm_service is None:
                 logger.warning("Communication service is not available")
                 continue
             channel_messages = await comm_service.fetch_messages(channel, limit=fetch_limit)
-            logger.info(f"Retrieved {len(channel_messages)} messages from {channel}")
+            logger.debug(f"Retrieved {len(channel_messages)} messages from {channel}")
             fetched_messages.extend(channel_messages)
         except Exception as e:
             logger.warning(f"Failed to fetch from channel {channel}: {e}")

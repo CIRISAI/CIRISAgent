@@ -40,6 +40,9 @@ def _cleanup_old_logs(log_path: Path, prefix: str, keep_count: int = 5) -> None:
         pass  # Cleanup is best-effort
 
 
+from ciris_engine.logic.utils.log_dedup import RepeatCollapsingFilter
+
+
 def setup_basic_logging(
     level: int = logging.INFO,
     log_format: str = DEFAULT_LOG_FORMAT,
@@ -105,6 +108,10 @@ def setup_basic_logging(
         win_console.setup()
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setFormatter(formatter)
+        # Collapse identical consecutive lines (see log_dedup). The first
+        # occurrence always emits and the count is always reported, so this
+        # removes repetition without removing information.
+        console_handler.addFilter(RepeatCollapsingFilter())
         target_logger.addHandler(console_handler)
 
     if log_to_file:
@@ -128,6 +135,9 @@ def setup_basic_logging(
             encoding="utf-8",
         )
         file_handler.setFormatter(formatter)
+        # Same collapsing on the file: latest.log is the artefact users send us,
+        # and it is the one that most needs to be readable end to end.
+        file_handler.addFilter(RepeatCollapsingFilter())
         target_logger.addHandler(file_handler)
 
         # Symlink where permitted, hardlink or a pointer file where not. On

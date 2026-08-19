@@ -564,7 +564,7 @@ def _add_new_graph_entry(
     logger: Any,
 ) -> None:
     """Add a new graph entry to merged results."""
-    logger.info(f"[AUDIT API]   Adding new entry with id={entry_id}")
+    logger.debug(f"[AUDIT API]   Adding new entry with id={entry_id}")
     if entry_id not in merged:
         merged[entry_id] = _MergedAuditEntry(entry=_convert_audit_entry(entry), sources=["graph"])
         seen_timestamps.add(dedup_key)

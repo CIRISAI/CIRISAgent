@@ -561,7 +561,7 @@ class RuntimeAdapterManager(AdapterManagerInterface):
         Returns:
             List of adapter information dictionaries
         """
-        logger.info(
+        logger.debug(
             "[ADAPTER_MGR_LIST] Starting list_adapters, loaded_adapters has %d entries: %s",
             len(self.loaded_adapters),
             list(self.loaded_adapters.keys()),

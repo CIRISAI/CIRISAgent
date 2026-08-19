@@ -104,9 +104,14 @@ jobs:
           retry_wait_seconds: 15
           shell: bash
           command: |
-            if ! sudo apt-get install -y libtss2-esys0 libtss2-tctildr0 libtss2-mu0; then
-              if ! sudo apt-get install -y libtss2-esys-3.0.2-0 libtss2-tctildr0 libtss2-mu-4.0.1-0; then
-                sudo apt-get install -y libtss2-esys-3.0.2-0t64 libtss2-tctildr0t64 libtss2-mu-4.0.1-0t64
+            # Bounded network calls — see the note in build.yml's TPM2 step:
+            # an unreachable mirror otherwise hangs a whole retry attempt.
+            APT_NET_OPTS=(-o Acquire::Retries=3
+                          -o Acquire::http::Timeout=20
+                          -o Acquire::https::Timeout=20)
+            if ! sudo apt-get install -y "${APT_NET_OPTS[@]}" libtss2-esys0 libtss2-tctildr0 libtss2-mu0; then
+              if ! sudo apt-get install -y "${APT_NET_OPTS[@]}" libtss2-esys-3.0.2-0 libtss2-tctildr0 libtss2-mu-4.0.1-0; then
+                sudo apt-get install -y "${APT_NET_OPTS[@]}" libtss2-esys-3.0.2-0t64 libtss2-tctildr0t64 libtss2-mu-4.0.1-0t64
               fi
             fi
 

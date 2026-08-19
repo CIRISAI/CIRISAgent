@@ -416,6 +416,22 @@ jobs:
         #
         # Retry-wrapped per 2.8.11 CI hardening: apt mirror selection
         # occasionally returns stale package lists or transient 503s.
+        #
+        # A RETRY WRAPPER CANNOT HELP IF ONE ATTEMPT HANGS (2026-08-19, job
+        # 96231479052). Staged QA (all_2) failed here having run for exactly
+        # 5m01s — the per-attempt timeout — and the log shows only "Attempt 1".
+        # Attempts 2 and 3 never happened: the first one consumed the entire
+        # allowance, inside a 55-minute job with plenty of room left.
+        #
+        # The cause is in the log: every azure.archive.ubuntu.com line is `Ign:`.
+        # The mirror was unreachable and apt has NO default network timeout, so
+        # `apt-get update` sat there until the wrapper killed it. Retries only
+        # help a command that FAILS; they do nothing for one that never returns.
+        #
+        # So bound apt's own network calls. A dead mirror now errors in seconds
+        # and the retry does what it was added to do. Acquire::Retries covers the
+        # transient-503 case inside a single attempt, which is cheaper than a
+        # whole new attempt.
         uses: nick-fields/retry@v4
         with:
           timeout_minutes: 5
@@ -423,8 +439,11 @@ jobs:
           retry_wait_seconds: 15
           shell: bash
           command: |
-            sudo apt-get update
-            sudo apt-get install -y --no-install-recommends \
+            APT_NET_OPTS=(-o Acquire::Retries=3
+                          -o Acquire::http::Timeout=20
+                          -o Acquire::https::Timeout=20)
+            sudo apt-get update "${APT_NET_OPTS[@]}"
+            sudo apt-get install -y --no-install-recommends "${APT_NET_OPTS[@]}" \
               libtss2-esys-3.0.2-0t64 \
               libtss2-mu-4.0.1-0t64 \
               libtss2-rc0t64 \

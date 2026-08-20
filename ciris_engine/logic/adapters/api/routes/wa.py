@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Annotated, NoReturn, Optional, TypeVar, cast
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
 
 from ciris_engine.protocols.services.governance.wise_authority import WiseAuthorityServiceProtocol
@@ -173,6 +173,53 @@ async def resolve_deferral(
     Requires AUTHORITY role.
     """
     wa_service = get_wa_service(request)
+
+    # JURISDICTION IS CHECKED HERE, NOT ONLY IN THE SERVICE (NULLWORKS RC3 / F1).
+    #
+    # `require_authority` gates on ROLE alone. That was the entire finding: an
+    # authority holder can be structurally over-broad for a decision domain, and
+    # the RC3 retest reproduced resource-invariant authorization at exactly this
+    # boundary. The service-layer fix landed alongside this one, but this handler
+    # never called it — so the surface an auditor actually hits stayed
+    # role-only, and closing F1 without this would have been closing it on paper.
+    #
+    # The resource is the deferral's DOMAIN (MEDICAL / FINANCIAL / LEGAL / ...),
+    # which is the taxonomy the deferral rail already routes on via
+    # `DeferralContext.domain_hint`. That makes `resolve_deferrals:medical` a
+    # sayable scope and a medical authority resolving a financial deferral a
+    # denial — the auditors' own example.
+    #
+    # A deferral with NO domain keeps the pre-existing role-only answer rather
+    # than being denied: most deferrals carry no domain_hint today, and denying
+    # them would take the whole human-resolution path down. Under-specified, not
+    # unenforced — and the denial below says which it was.
+    _domain = None
+    try:
+        for _pd in await wa_service.get_pending_deferrals():
+            if _pd.deferral_id == deferral_id:
+                _domain = (_pd.context or {}).get("domain_hint") or (_pd.metadata or {}).get("domain_hint")
+                break
+    except Exception as exc:  # pragma: no cover - jurisdiction lookup must not 500 the route
+        logger.warning("Could not read domain for deferral %s: %s", deferral_id, exc)
+
+    if _domain:
+        _decision = await wa_service.authorize(auth.user_id, "resolve_deferrals", str(_domain).lower())
+        if not _decision.authorized:
+            logger.warning(
+                "JURISDICTION DENIED: %s may not resolve %s deferral %s (%s; required scope %s)",
+                auth.user_id,
+                _domain,
+                deferral_id,
+                _decision.reason.value if _decision.reason else "no reason",
+                _decision.required_scope or "-",
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    f"Not authorized to resolve a {_domain} deferral. Role permits the action; "
+                    f"jurisdiction does not. Required scope: {_decision.required_scope or f'resolve_deferrals:{str(_domain).lower()}'}."
+                ),
+            )
 
     try:
         # SIGN THE DECISION (#944). This used to be

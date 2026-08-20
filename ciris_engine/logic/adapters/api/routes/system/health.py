@@ -95,55 +95,184 @@ def _breaker_state(service_provider: object) -> str:
     return str(getattr(state, "value", state) or "").lower()
 
 
-def _llm_breaker_warnings(providers: Sequence[object]) -> list[SystemWarning]:
-    """Escalate by what the user can actually do about it.
+def _provider_last_error(service_provider: object) -> str:
+    """The provider's own last complaint, verbatim and first line only."""
+    service = getattr(service_provider, "instance", service_provider)
+    for attr in ("last_error", "_last_error", "last_failure_reason"):
+        val = getattr(service, attr, None)
+        if val:
+            return str(val).strip().splitlines()[0][:200]
+    return ""
 
-    One failed call is noise; the same model failing until its breaker opens is a
-    configuration fact; every breaker being open is an outage. Those are three
-    different sentences and three different responses, and the health surface
-    used to collapse them into "all providers unavailable".
 
-    Every level names the MODEL and the PROVIDER, because that pair is what the
-    user has to change, and links to the settings card that changes it — a
-    warning that describes a problem without a route to the control is a report,
-    not a fix.
+def _provider_role(index: int) -> str:
+    """Primary / Secondary / Fallback, from registry order.
+
+    The registry sorts by priority, so position IS the role. An operator reading
+    "a provider failed" cannot tell whether their main route is down or a spare
+    is; naming the role is the difference between "act now" and "note it".
     """
-    open_ones = [sp for sp in providers if _breaker_state(sp) == "open"]
-    if not open_ones:
-        return []
+    return {0: "Primary", 1: "Secondary"}.get(index, "Fallback")
 
-    if len(open_ones) == len(providers):
-        # Every route is shut. Say so once, as an outage, rather than emitting
-        # one identical warning per provider — N copies of the same sentence is
-        # how a warnings array becomes something people stop reading.
-        named = ", ".join(
-            f"{_provider_model(sp)} on {getattr(sp, 'name', None) or 'provider'}" for sp in open_ones[:3]
+
+def _retry_seconds(service_provider: object) -> int:
+    """How long until the breaker lets a call through again."""
+    cb = getattr(service_provider, "circuit_breaker", None)
+    cfg = getattr(cb, "config", None)
+    val = getattr(cfg, "recovery_timeout", None)
+    return int(val) if isinstance(val, (int, float)) and val > 0 else 10
+
+
+def _provider_fault_code(service_provider: object) -> str:
+    """The provider's STRUCTURED fault slug, captured where the exception lived."""
+    service = getattr(service_provider, "instance", service_provider)
+    return str(getattr(service, "last_fault_code", "") or "").strip().lower()
+
+
+def _fault_warning(
+    lang: str, role: str, name: str, model: str, err: str, fault: str = ""
+) -> Optional[SystemWarning]:
+    """Turn the provider's OWN words into the one instruction that fixes it.
+
+    A wrong model and a rejected key are both "the provider refused us", and they
+    need opposite actions — pick a different model, or paste a different key.
+    Reporting them identically makes the user guess, and this is exactly the
+    surface where guessing costs them the whole agent (CIRISAgent#1078).
+
+    Only faults whose remedy we are SURE of get their own message. Anything else
+    falls through to the generic provider-failed line rather than inventing an
+    instruction that might send the reader somewhere wrong.
+    """
+    # PREFER THE PROVIDER'S OWN CODE. `fault` is captured at the LLM service,
+    # where the openai APIStatusError still exists and `body.error.code` is
+    # readable. Falling back to substrings makes every vendor's wording, in every
+    # locale, load-bearing — and the first one to say "unknown model" instead of
+    # "does not exist" silently stops being diagnosed.
+    #
+    # The text fallback stays for providers that return no structured code, but
+    # it is second, not first.
+    if fault == "model_not_found":
+        return SystemWarning(
+            code="llm_model_not_found",
+            message=get_string(lang, "status.llm_model_not_found", provider=name, model=model),
+            severity="error",
+            action_url="/settings/llm",
         )
-        return [
+    if fault == "invalid_api_key":
+        return SystemWarning(
+            code="llm_key_rejected",
+            message=get_string(lang, "status.llm_key_rejected", provider=name, model=model),
+            severity="error",
+            action_url="/settings/llm",
+        )
+    if fault:
+        # Structured, but not one we have an instruction for. Say nothing
+        # specific rather than guess — the generic line below still fires.
+        return None
+
+    low = err.lower()
+    if "does not exist" in low or "model_not_found" in low or "unknown model" in low:
+        return SystemWarning(
+            code="llm_model_not_found",
+            message=get_string(lang, "status.llm_model_not_found", provider=name, model=model),
+            severity="error",
+            action_url="/settings/llm",
+        )
+    if "invalid api key" in low or "401" in low or "unauthorized" in low or "authentication" in low:
+        return SystemWarning(
+            code="llm_key_rejected",
+            message=get_string(lang, "status.llm_key_rejected", provider=name, model=model),
+            severity="error",
+            action_url="/settings/llm",
+        )
+    return None
+
+
+def _llm_breaker_warnings(providers: Sequence[object]) -> list[SystemWarning]:
+    """Escalate from "here is the fix" to "nothing works, here is when it retries".
+
+    One failed call is noise. A named fault with a known remedy is a to-do. A
+    breaker opening is a route lost. Every breaker open is an outage. Those are
+    four different sentences and four different responses, and the health surface
+    used to collapse them into "all providers unavailable" — which named neither
+    the model nor the provider, so it pointed the reader at nothing they could
+    change.
+
+    Every level names the PROVIDER and the MODEL, because that pair is what the
+    user edits, and links to the card that edits it. The outage level also says
+    when the system will retry by itself, so nobody sits refreshing a dead screen
+    wondering whether it is on them.
+    """
+    lang = get_preferred_language()
+    warnings: list[SystemWarning] = []
+    open_ones: list[tuple[int, object]] = []
+
+    for i, sp in enumerate(providers):
+        name = getattr(sp, "name", None) or "provider"
+        model = _provider_model(sp)
+        role = _provider_role(i)
+        err = _provider_last_error(sp)
+        state = _breaker_state(sp)
+
+        # The actionable fault, if we can name the remedy with confidence.
+        fault_code = _provider_fault_code(sp)
+        fault = _fault_warning(lang, role, name, model, err, fault_code) if (err or fault_code) else None
+        if fault:
+            warnings.append(fault)
+
+        if state == "open":
+            open_ones.append((i, sp))
+            # A breaker open is a lost route, and worth saying even when the
+            # fault above already told them what to fix — the fault explains
+            # WHY, this explains that the agent has stopped trying.
+            warnings.append(
+                SystemWarning(
+                    code="llm_provider_circuit_open",
+                    message=get_string(
+                        lang,
+                        "status.llm_provider_circuit_open",
+                        role=role,
+                        provider=name,
+                        model=model,
+                    ),
+                    severity="warning",
+                    action_url="/settings/llm",
+                )
+            )
+        elif err and not fault:
+            # Failing, breaker still closed, and we could not name the remedy.
+            # Say the provider failed and repeat its own words rather than
+            # inventing an instruction.
+            warnings.append(
+                SystemWarning(
+                    code="llm_provider_failed",
+                    message=get_string(
+                        lang,
+                        "status.llm_provider_failed",
+                        role=role,
+                        provider=name,
+                        model=model,
+                        detail=err,
+                    ),
+                    severity="warning",
+                    action_url="/settings/llm",
+                )
+            )
+
+    # Nothing left. This is the one the user acts on, so it carries the retry
+    # interval: an outage you know self-heals in 10s is a wait, and one you do
+    # not know about is a support ticket.
+    if providers and len(open_ones) == len(providers):
+        retry = _retry_seconds(open_ones[0][1])
+        warnings.append(
             SystemWarning(
-                code="llm_all_circuits_open",
-                message=get_string(get_preferred_language(), "status.llm_all_circuits_open", named=named),
+                code="llm_all_providers_failed",
+                message=get_string(lang, "status.llm_all_providers_failed", seconds=retry),
                 severity="error",
                 action_url="/settings/llm",
             )
-        ]
-
-    # Some routes remain. Name each dead one; the agent still works, so this is a
-    # warning rather than an error.
-    return [
-        SystemWarning(
-            code="llm_provider_circuit_open",
-            message=get_string(
-                get_preferred_language(),
-                "status.llm_provider_circuit_open",
-                model=_provider_model(sp),
-                provider=getattr(sp, "name", None) or "provider",
-            ),
-            severity="warning",
-            action_url="/settings/llm",
         )
-        for sp in open_ones[:3]
-    ]
+    return warnings
 
 
 async def _check_provider_health(service_provider: object) -> bool:

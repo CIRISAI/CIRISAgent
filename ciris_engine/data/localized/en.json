@@ -98,8 +98,11 @@
     "offline": "Offline",
     "success": "Success",
     "all_operational": "All systems operational",
-    "llm_provider_circuit_open": "Repeated failures on {model} at {provider} — circuit breaker open, so this provider is no longer being called. Check its key and model in LLM settings.",
-    "llm_all_circuits_open": "All LLM circuit breakers are open — no operational LLM provider ({named}). Check your provider, key and model in LLM settings."
+    "llm_provider_circuit_open": "{role} LLM provider ({provider} / {model}) circuit breaker is open — it is no longer being called.",
+    "llm_model_not_found": "{provider} does not have the model ‘{model}’. Open LLM Settings and choose a model it supports.",
+    "llm_key_rejected": "{provider} rejected the API key used for ‘{model}’. Open LLM Settings and update the key.",
+    "llm_provider_failed": "{role} LLM provider ({provider} / {model}) has failed: {detail}",
+    "llm_all_providers_failed": "All LLM providers have failed. Add a working provider in LLM Settings — the system retries automatically every {seconds}s."
   },
   "prompts": {
     "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================",

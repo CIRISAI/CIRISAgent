@@ -40,17 +40,24 @@ class TestEscalation:
         assert w.severity == "warning"
         assert w.action_url == "/settings/llm"
 
-    def test_all_open_is_one_outage_not_n_warnings(self):
+    def test_all_open_emits_exactly_one_outage_line(self):
         ws = _llm_breaker_warnings(
             [_provider("groq_byok", "llama3", "open"), _provider("ciris_primary", "gpt-4o-mini", "open")]
         )
-        # N copies of the same sentence is how a warnings array stops being read.
-        assert len(ws) == 1
-        w = ws[0]
-        assert w.code == "llm_all_circuits_open"
-        assert w.severity == "error"
-        assert "llama3" in w.message and "gpt-4o-mini" in w.message
-        assert w.action_url == "/settings/llm"
+        # The original form of this test asserted len(ws) == 1, guarding against
+        # "N copies of the same sentence is how a warnings array stops being
+        # read." That concern is still right, but the guard was wrong: the ladder
+        # now emits DISTINCT per-provider lines (which model, which fault, which
+        # remedy) plus one outage line. Repetition was the problem, not count —
+        # so the invariant is that the OUTAGE sentence appears exactly once, not
+        # that the array is length one.
+        outage = [w for w in ws if w.code == "llm_all_providers_failed"]
+        assert len(outage) == 1, "the outage verdict must be stated once, not per provider"
+        assert outage[0].severity == "error"
+        assert outage[0].action_url == "/settings/llm"
+        # And no two warnings may carry the same sentence.
+        messages = [w.message for w in ws]
+        assert len(messages) == len(set(messages)), f"duplicate warning text: {messages}"
 
     def test_half_open_is_not_open(self):
         # HALF_OPEN is the breaker testing recovery — reporting it as an outage
@@ -68,6 +75,7 @@ class TestItNeverGuesses:
             name="mystery", instance=SimpleNamespace(), circuit_breaker=SimpleNamespace(state="open")
         )
         ws = _llm_breaker_warnings([sp])
-        assert len(ws) == 1
-        assert "mystery" in ws[0].message
-        assert "unknown model" in ws[0].message
+        assert ws, "a provider with an open breaker must still be reported"
+        joined = " ".join(w.message for w in ws)
+        assert "mystery" in joined
+        assert "unknown model" in joined

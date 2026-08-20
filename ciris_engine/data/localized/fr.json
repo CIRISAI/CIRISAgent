@@ -2653,7 +2653,9 @@
     "online": "En ligne",
     "offline": "Hors ligne",
     "success": "Succès",
-    "all_operational": "Tous les systèmes opérationnels"
+    "all_operational": "Tous les systèmes opérationnels",
+    "llm_provider_circuit_open": "Échecs répétés sur {model} chez {provider} — le disjoncteur est ouvert, ce fournisseur n'est donc plus appelé. Vérifiez sa clé API et son modèle dans les paramètres LLM.",
+    "llm_all_circuits_open": "Tous les disjoncteurs sont ouverts — aucun fournisseur LLM opérationnel ({named}). Vérifiez votre fournisseur, votre clé API et votre modèle dans les paramètres LLM."
   },
   "status_offline": "Hors ligne",
   "status_pending": "En attente",

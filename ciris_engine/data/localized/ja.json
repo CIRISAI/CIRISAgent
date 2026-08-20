@@ -2622,7 +2622,9 @@
     "offline": "[EN] Offline",
     "online": "[EN] Online",
     "pending": "[EN] Pending",
-    "success": "[EN] Success"
+    "success": "[EN] Success",
+    "llm_provider_circuit_open": "{provider} の {model} で障害が繰り返し発生したため、サーキットブレーカーが作動し、このプロバイダーの呼び出しを停止しました。LLM設定でAPIキーとモデルをご確認ください。",
+    "llm_all_circuits_open": "すべてのLLMサーキットブレーカーが作動しており、利用できるLLMプロバイダーがありません（{named}）。LLM設定でプロバイダー、APIキー、モデルをご確認ください。"
   },
   "status_offline": "オフライン",
   "status_pending": "保留中",

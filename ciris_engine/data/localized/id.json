@@ -97,7 +97,9 @@
     "online": "Online",
     "offline": "Offline",
     "success": "Berhasil",
-    "all_operational": "Semua sistem berjalan normal"
+    "all_operational": "Semua sistem berjalan normal",
+    "llm_provider_circuit_open": "Kegagalan berulang pada {model} di {provider} — pemutus sirkuit terbuka, sehingga penyedia ini tidak lagi dipanggil. Periksa kunci API dan modelnya di Pengaturan LLM.",
+    "llm_all_circuits_open": "Semua pemutus sirkuit LLM terbuka — tidak ada penyedia LLM yang berfungsi ({named}). Periksa penyedia, kunci API, dan model Anda di Pengaturan LLM."
   },
   "prompts": {
     "dma": {

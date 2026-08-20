@@ -2622,7 +2622,9 @@
     "online": "በመስመር ላይ",
     "offline": "ከመስመር ውጭ",
     "success": "ስኬታማ",
-    "all_operational": "ሁሉም ስርዓቶች በአገልግሎት ላይ"
+    "all_operational": "ሁሉም ስርዓቶች በአገልግሎት ላይ",
+    "llm_provider_circuit_open": "በ{provider} ላይ {model} ደጋግሞ ወድቋል — የወረዳ ማቋረጫው ተከፍቷል፤ ስለዚህ ከእንግዲህ ወደዚህ አቅራቢ ጥያቄ አይላክም። ቁልፉንና ሞዴሉን በLLM ቅንብሮች ውስጥ ያረጋግጡ።",
+    "llm_all_circuits_open": "ሁሉም የLLM ወረዳ ማቋረጫዎች ተከፍተዋል — የሚሠራ የLLM አቅራቢ የለም ({named})። አቅራቢዎን፣ ቁልፍዎንና ሞዴልዎን በLLM ቅንብሮች ውስጥ ያረጋግጡ።"
   },
   "status_offline": "ከመስመር ውጭ",
   "status_pending": "በመጠባበቅ ላይ",

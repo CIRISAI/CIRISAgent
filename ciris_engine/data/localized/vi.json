@@ -617,7 +617,9 @@
     "offline": "Ngoại Tuyến",
     "online": "Trực Tuyến",
     "pending": "Đang Chờ",
-    "success": "Thành Công"
+    "success": "Thành Công",
+    "llm_provider_circuit_open": "Lỗi lặp lại nhiều lần với {model} tại {provider} — bộ ngắt mạch đã mở nên nhà cung cấp này không còn được gọi nữa. Vui lòng kiểm tra khóa API và mô hình của nhà cung cấp này trong Cài đặt LLM.",
+    "llm_all_circuits_open": "Tất cả bộ ngắt mạch LLM đều đã mở — không có nhà cung cấp LLM nào hoạt động ({named}). Vui lòng kiểm tra nhà cung cấp, khóa API và mô hình của bạn trong Cài đặt LLM."
   },
   "status_offline": "Ngoại Tuyến",
   "status_pending": "Đang Chờ",

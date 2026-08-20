@@ -2622,7 +2622,9 @@
     "online": "Mtandaoni",
     "offline": "Nje ya mtandao",
     "success": "Mafanikio",
-    "all_operational": "Mifumo yote inafanya kazi"
+    "all_operational": "Mifumo yote inafanya kazi",
+    "llm_provider_circuit_open": "{model} kwenye {provider} imeshindwa mara kwa mara — kivunja mzunguko kimefunguka, kwa hivyo mtoa huduma huyu hatumiwi tena. Angalia ufunguo na modeli yake katika Mipangilio ya LLM.",
+    "llm_all_circuits_open": "Vivunja mzunguko vyote vya LLM vimefunguka — hakuna mtoa huduma wa LLM anayefanya kazi ({named}). Angalia mtoa huduma, ufunguo na modeli katika Mipangilio ya LLM."
   },
   "status_offline": "Nje ya Mtandao",
   "status_pending": "Inasubiri",

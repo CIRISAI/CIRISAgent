@@ -2622,7 +2622,9 @@
     "online": "متصل",
     "offline": "غير متصل",
     "success": "نجاح",
-    "all_operational": "جميع الأنظمة تعمل"
+    "all_operational": "جميع الأنظمة تعمل",
+    "llm_provider_circuit_open": "تكرر فشل {model} لدى {provider} — قاطع الدائرة مفتوح، ولم تعد تُرسل أي طلبات إلى هذا المزود. تحقق من مفتاحه ونموذجه في إعدادات LLM.",
+    "llm_all_circuits_open": "جميع قواطع دوائر LLM مفتوحة — لا يوجد أي مزود LLM يعمل ({named}). تحقق من المزود والمفتاح والنموذج في إعدادات LLM."
   },
   "status_offline": "غير متصل",
   "status_pending": "معلق",

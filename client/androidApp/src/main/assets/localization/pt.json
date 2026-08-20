@@ -2653,7 +2653,9 @@
     "online": "Online",
     "offline": "Offline",
     "success": "Sucesso",
-    "all_operational": "Todos os sistemas operacionais"
+    "all_operational": "Todos os sistemas operacionais",
+    "llm_provider_circuit_open": "Falhas repetidas com {model} em {provider} — o disjuntor está aberto, portanto este provedor não está mais sendo chamado. Verifique a chave API e o modelo desse provedor nas configurações de LLM.",
+    "llm_all_circuits_open": "Todos os disjuntores estão abertos — nenhum provedor de LLM operacional ({named}). Verifique seu provedor, sua chave API e seu modelo nas configurações de LLM."
   },
   "status_offline": "Offline",
   "status_pending": "Pendente",

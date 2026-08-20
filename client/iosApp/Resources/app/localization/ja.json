@@ -1281,7 +1281,7 @@
     "tickets_automated": "自動",
     "tickets_urgent": "緊急",
     "tickets_types_title": "データプライバシーリクエストタイプ",
-    "tickets_create": "チケットを作成",
+    "tickets_create": "{type}を作成",
     "tickets_deadline": "このリクエストには{days}日の期限があります",
     "tickets_email": "メール *",
     "tickets_user_id": "ユーザー識別子",

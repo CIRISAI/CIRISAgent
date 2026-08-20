@@ -2518,7 +2518,7 @@
   "audit_questions": "Tambayoyi",
   "audit_result": "Sakamako",
   "audit_security": "Tsaro",
-  "audit_showing": "Ana nuna shigarwar {start}-{end} na {total}",
+  "audit_showing": "Ana nuna shigarwa {count}",
   "audit_signature": "Sa Hannu",
   "audit_tool_execution": "Aiwatar da Kayan Aiki",
   "audit_try_filters": "Yi amfani da tacewa don taƙaita sakamakon",

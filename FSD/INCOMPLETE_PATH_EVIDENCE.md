@@ -47,6 +47,40 @@ It does not claim nothing is lost. Specifically:
   that never dispatched, and only *approximately* true for one killed between
   dispatch and result.
 
+## The invariant this rests on (CC 1.13.6)
+
+The normative statement now lives in the Covenant, **CC 1.13.6** (rc4, `5cc022a`).
+This FSD is the agent-side companion and must not diverge from it; where they
+differ, CC is authoritative.
+
+CC reduces the whole safety argument to **one attackable invariant**:
+
+> **Absence of an `ACTION_RESULT` asserts that no external effect occurred.**
+> Every effect-producing path must emit one.
+
+That is the load-bearing sentence, and it is better than the framing this document
+originally carried. It converts the audit question from *"are in-flight traces
+retained?"* — where the answer is "no, deliberately", and a passing project test
+merely confirms the spec — into *"is `ACTION_RESULT` emission total?"*, which is
+**falsifiable by a single counterexample**.
+
+If the invariant holds, `orphan_sweep` can only ever discard deliberation that
+produced nothing, and any counterexample is a defect in the **emission path**,
+never in the purge.
+
+CC also records the privacy half, which this document had understated: retained
+deliberation would be a permanent archive of unexecuted thought — the humans in a
+conversation at their most exposed, what was contemplated and never said — with no
+accountability weight in exchange, and quiet pressure against the
+considering-and-rejecting that CC 1.9 requires. **Ephemerality here is a privacy
+property, not a hole in one.**
+
+Marked in CC as a **named wager, not a verified property**, with the totality test
+filed as **#93** (a dye test over every effect-producing path — SPEAK, every TOOL
+call, every adapter — including the adversarial legs: exception mid-dispatch,
+cancellation after the side effect, adapter crash after send, shutdown race during
+the final sweep). `CLM-trace-anchor` stays staged until that test exists.
+
 ## The second evidence plane, and the open verification
 
 Traces are not the only durable record. `base_handler._audit_log` writes an audit
@@ -64,6 +98,10 @@ stands unmet in that specific sense:
 > demonstrate an equivalent durable evidence plane and test it end to end."
 
 ## Next step
+
+Superseded in framing by **#93** (the emission-totality dye test), which is the
+stronger question. The audit-plane check below remains useful as the fallback if
+the invariant is falsified.
 
 Test the audit plane end to end for the interrupted-dispatch case. Two outcomes:
 

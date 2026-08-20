@@ -899,6 +899,34 @@ async def add_provider(
     }
     internal_priority = priority_mapping.get(body.priority, InternalPriority.FALLBACK)
 
+    # "default" IS NOT A MODEL (CIRISAgent#1078).
+    #
+    # This endpoint substituted the literal string "default" whenever the caller
+    # omitted a model, then handed it to the provider as if it were real. Seen on
+    # a Windows install running 2.9.24, five times per thought:
+    #
+    #   Error code: 404 - {'error': {'message': 'The model `default` does not
+    #   exist or you do not have access to it.', 'code': 'model_not_found'}}
+    #
+    # Every DMA failed, the agent could not process a single message, and the
+    # only clue was buried inside an instructor <failed_attempts> block.
+    #
+    # Same class as the cross-vendor `gpt-4o-mini` default removed in 2.9.27: an
+    # invented placeholder standing in for "unknown", posted to a provider as
+    # though the user had chosen it. A provider with no model cannot ever work,
+    # so refusing at the door beats storing a value guaranteed to 404 — and the
+    # refusal names the fix, which the 404 never did.
+    if not (body.model or "").strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"No model specified for provider '{body.provider_id}'. A model name is required — "
+                "there is no usable default, and storing one would fail at every call with "
+                "'model_not_found'. Pick a model the provider actually serves; "
+                "GET /v1/system/llm/models lists them."
+            ),
+        )
+
     try:
         # For local servers, use "local" as the API key (convention for local inference)
         api_key = body.api_key
@@ -908,7 +936,7 @@ async def add_provider(
         # Create config
         llm_config = OpenAIConfig(
             base_url=body.base_url,
-            model_name=body.model or "default",
+            model_name=body.model,
             api_key=api_key or "",
             instructor_mode="JSON",
             timeout_seconds=30,
@@ -932,7 +960,7 @@ async def add_provider(
             capabilities=[LLMCapabilities.CALL_LLM_STRUCTURED],
             metadata={
                 "provider": body.provider_id,
-                "model": body.model or "default",
+                "model": body.model,
                 "base_url": body.base_url,
                 "added_at_runtime": True,
             },
@@ -944,7 +972,7 @@ async def add_provider(
         provider_config = LLMProviderConfig(
             provider_id=body.provider_id,
             base_url=body.base_url,
-            model=body.model or "default",
+            model=body.model,
             api_key=body.api_key or "",
             priority=body.priority.value,
         )

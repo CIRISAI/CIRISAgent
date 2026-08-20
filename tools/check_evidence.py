@@ -27,6 +27,8 @@ from __future__ import annotations
 import ast
 import csv
 import re
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -92,12 +94,41 @@ def resolve(pointer: str) -> str | None:
     return None
 
 
+def _issue_states(refs: set[str]) -> dict[str, str]:
+    """Ask GitHub whether each ``REPO#issue`` is still open.
+
+    NETWORK-OPTIONAL BY DESIGN. Returns ``{}`` when `gh` is missing or
+    unauthenticated, which makes this check a CI-only reinforcement rather than a
+    local hard dependency. A developer without `gh` still gets the shape checks;
+    they simply do not get this one, and the summary line says so rather than
+    implying it ran.
+    """
+    if not refs or shutil.which("gh") is None:
+        return {}
+    states: dict[str, str] = {}
+    for ref in sorted(refs):
+        repo, _, num = ref.partition("#")
+        try:
+            out = subprocess.run(
+                ["gh", "issue", "view", num, "--repo", f"CIRISAI/{repo}", "--json", "state", "-q", ".state"],
+                capture_output=True,
+                text=True,
+                timeout=20,
+            )
+        except Exception:  # pragma: no cover - a consistency check must not break the build on flake
+            continue
+        if out.returncode == 0 and out.stdout.strip():
+            states[ref] = out.stdout.strip().upper()
+    return states
+
+
 def main() -> int:
     if not MANIFEST.exists():
         print(f"FAIL: manifest missing: {MANIFEST}", file=sys.stderr)
         return 1
     errors: list[str] = []
     resolved = skipped = declared_open = 0
+    open_refs: set[str] = set()
     with MANIFEST.open() as f:
         reader = csv.reader((ln for ln in f if not ln.startswith("#")), delimiter="\t")
         header = next(reader, None)
@@ -127,6 +158,7 @@ def main() -> int:
                     )
                 else:
                     declared_open += 1
+                    open_refs.add(pointer)
                 continue
 
             if repo != "CIRISAgent" or pointer in ("", "—"):
@@ -138,11 +170,38 @@ def main() -> int:
             else:
                 resolved += 1
 
+    # A CLOSED ISSUE BEHIND AN `open` ROW IS A LIE IN THE OTHER DIRECTION
+    # (CIRISAgent#1002, and NULLWORKS RC3 finding F7).
+    #
+    # The shape check above proves the row POINTS somewhere. It cannot tell
+    # whether the gap it declares still exists. A row saying "this control is
+    # open, see #942" after #942 was fixed understates the system — the same
+    # class of defect as prose overstating it, and harder to notice because
+    # nothing about it looks stale.
+    #
+    # F7's recommendation was to put compliance text under exact-pin consistency
+    # checks so claims cannot drift BEHIND or AHEAD of code. This is the behind
+    # half; `resolve()` above is the ahead half.
+    states = _issue_states(open_refs)
+    if states:
+        for ref, state in sorted(states.items()):
+            if state != "OPEN":
+                errors.append(
+                    f"[{ref}]: row declares status=open, but the issue is {state}. "
+                    "Either the gap closed and the row should move to impl/staged, or the "
+                    "issue was closed prematurely."
+                )
+    checked_note = (
+        f", {len(states)} issue states checked"
+        if states
+        else ", issue states NOT checked (gh unavailable)"
+    )
+
     for e in errors:
         print(f"FAIL: {e}", file=sys.stderr)
     print(
         f"cc_impl.tsv: {resolved} in-repo pointers resolved, {declared_open} declared gaps, "
-        f"{skipped} skipped, {len(errors)} failed"
+        f"{skipped} skipped, {len(errors)} failed{checked_note}"
     )
     return 1 if errors else 0
 

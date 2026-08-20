@@ -49,6 +49,21 @@ jobs:
       - name: Localization value-integrity ratchet (repaired classes stay repaired)
         run: python tools/dev/check_localization_integrity.py --fail-on placeholder-corrupt
 
+      # Compliance evidence must not drift behind or ahead of the code
+      # (CIRISAgent#1002; NULLWORKS RC3 finding F7). `resolve()` proves an
+      # `impl` row still points at a real symbol — claims cannot run AHEAD of
+      # code. The issue-state check proves an `open` row's gap still exists —
+      # claims cannot lag BEHIND it either, which is the harder half to notice
+      # because a stale gap declaration does not look stale.
+      #
+      # GH_TOKEN is passed so the issue-state half actually runs here; it is
+      # network-optional and silently skips locally, so CI is the place it is
+      # guaranteed to execute.
+      - name: Compliance evidence consistency (exact-pin, both directions)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python tools/check_evidence.py
+
       # D27: runtime code must not depend on its own .md (outside L4 attestation
       # tree). Stdlib-only AST gate, no deps. CIRISAgent#807.
       - name: D27 runtime .md-reference gate

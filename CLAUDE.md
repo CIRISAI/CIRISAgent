@@ -426,33 +426,58 @@ ToolInfo(
 Financial and destructive tools MUST have:
 ```python
 dma_guidance=ToolDMAGuidance(
-    requires_approval=True,  # PROMPT TEXT ONLY — does NOT gate execution (#942)
-    min_confidence=0.95,     # currently has no reader at all (#942)
+    requires_approval=True,  # REAL GATE since #942 — see below
+    min_confidence=0.95,     # still has no reader at all
     ethical_considerations="...",
 )
 ```
 
-⚠️ **`requires_approval` is not a control. Do not rely on it.** It has two read
-sites and neither one blocks anything:
-`ciris_engine/logic/dma/tsaspdma.py:247` appends the line
-`**⚠️ Requires wise authority approval**` to the action-selection prompt, and
-`ciris_engine/logic/services/tool/tool_disclosure.py:118` adds a
-`REQUIRES_APPROVAL` label to the first-run consent disclosure. No handler, no
-bus, no conscience and no deferral path reads the field. **A model that selects
-`send_money` executes `send_money`.** Making the field load-bearing is
-[#942](https://github.com/CIRISAI/CIRISAgent/issues/942).
+✅ **`requires_approval` IS a control (since #942).** A tool that declares it may
+only execute under a task whose `TaskEnvelope` was **issued by an approval
+authority** (`WISE_AUTHORITY`/`NODE_OWNER`) and **names that tool**. Otherwise
+`ThoughtProcessor._enforce_tool_approval`
+(`logic/processors/core/thought_processor/main.py`) rewrites the action to
+`DEFER` on the Wisdom-Based Deferral rail, carrying the tool name and a
+structured description so the human sees what they are approving.
 
-`min_confidence` is weaker still: nothing reads it, not even the prompt
-renderer. `_format_dma_guidance` renders `when_not_to_use`,
-`ethical_considerations`, `prerequisite_actions` and `requires_approval` — not
-`min_confidence` and not `followup_actions`.
+The shape of the control, because it is easy to assume something weaker or
+stronger than what is implemented:
 
-What actually constrains a consequential tool today is **semantic and
-model-mediated**: the conscience layer reviewing the selected action, `DEFER`
-as a real action routing to a Wise Authority, and the guidance prose itself
-arguing against misuse. Those are real; they are not deterministic. The one
-deterministic gate that exists on any consequential path is the budget envelope
-on spend (`FSD/BUDGET_ENVELOPE.md`). See `FSD/THREAT_MODEL_2.9.7.md`.
+- **Approval is issuance, never widening.** `TaskEnvelope` is frozen and has no
+  widening method. When a human approves the deferral,
+  `WiseAuthorityService.resolve_deferral` completes the original task and mints
+  a `WISE_AUTHORITY` envelope naming exactly the approved tool onto the **new**
+  `[WA GUIDANCE]` task. Nothing is ever relaxed in place.
+- **Absence is denial.** No envelope, a `DEPLOYMENT_RESOLVED` envelope (even one
+  that enumerates the tool — the resolver grants everything the deployment
+  enabled), or an approval envelope naming a *different* tool all mean "not
+  approved".
+- **The grant is per-tool, per-task — not per-invocation.** The follow-up task
+  re-reasons from scratch and may call the approved tool with different
+  arguments. A ceiling, not a transaction.
+- **Time is not approval.** An expiring `defer_until` reactivates the deferred
+  task so the agent may *reconsider* (the #865/#934 liveness repair), but the
+  resurrected row still holds only the envelope it always had, so the gate
+  denies and defers again. A WA resolution also outranks a still-running timer:
+  `_reactivate_deferred_task` refuses to resurrect a task already COMPLETED /
+  FAILED / REJECTED. See NULLWORKS RC3 finding F2 and
+  `tests/ciris_engine/logic/infrastructure/authorization/test_timed_deferral_is_not_approval.py`.
+- **Not gated:** tools declaring no `dma_guidance` at all, notably Discord
+  `kick`/`ban`. Standing ruling on `ToolCapability.MODERATE_CHANNEL` — their
+  control is the conscience layer judging the specific content, and a static
+  envelope must not preempt that judgement.
+
+`min_confidence` is still inert: nothing reads it, not even the prompt renderer.
+`_format_dma_guidance` renders `when_not_to_use`, `ethical_considerations`,
+`prerequisite_actions` and `requires_approval` — not `min_confidence` and not
+`followup_actions`.
+
+Beyond `requires_approval`, what constrains a consequential tool is **semantic
+and model-mediated**: the conscience layer reviewing the selected action, `DEFER`
+routing to a Wise Authority, and the guidance prose itself. Those are real but
+not deterministic. The deterministic gates are the #942 approval gate above and
+the budget envelope on spend (`FSD/BUDGET_ENVELOPE.md`). `FSD/THREAT_MODEL_2.9.7.md`
+is a dated snapshot that predates #942 — its §4.1 no longer describes the code.
 
 **Reference Implementations:**
 - `ciris_adapters/sample_adapter/` - Complete template

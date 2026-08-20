@@ -12,13 +12,13 @@ import asyncio
 import logging
 import re
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, FrozenSet, List, Optional
 
 from ciris_engine.logic.persistence import add_thought
 from ciris_engine.logic.services.base_scheduled_service import BaseScheduledService
 from ciris_engine.protocols.services import ServiceProtocol as TaskSchedulerServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
-from ciris_engine.schemas.runtime.enums import ServiceType, ThoughtStatus, ThoughtType
+from ciris_engine.schemas.runtime.enums import ServiceType, TaskStatus, ThoughtStatus, ThoughtType
 from ciris_engine.schemas.runtime.extended import ScheduledTask, ScheduledTaskInfo, ShutdownContext
 from ciris_engine.schemas.runtime.models import FinalAction, Thought
 from ciris_engine.schemas.services.core import ServiceCapabilities
@@ -81,6 +81,22 @@ WAKEUP_STEP_PREFIXES = (
 # the count and quarantine immediately — retrying a constraint violation can never
 # succeed (~80k futile re-fires observed on one production agent over 8 weeks).
 DEAD_LETTER_THRESHOLD = 3
+
+# Task statuses that mean this deferral has ALREADY BEEN ANSWERED, so an
+# expiring timer must not resurrect the row (NULLWORKS RC3 finding F2).
+#
+# `WiseAuthorityService.resolve_deferral` marks the original deferred task
+# COMPLETED for BOTH outcomes — an approval and a rejection — records the
+# outcome on the row, and (only when approved) carries the work forward on a
+# NEW `[WA GUIDANCE]` task that holds the freshly issued approval envelope.
+# Without this set, a stale one-time timer firing after a human answered would
+# flip that COMPLETED row back to ACTIVE and re-pend its thought: a rejection
+# silently re-entering the pipeline, or an approval re-run on the old task,
+# which by construction does NOT hold the approval envelope. Time may prompt
+# reconsideration; it must never overturn — or stand in for — a human's answer.
+RESOLVED_TASK_STATUSES: FrozenSet[TaskStatus] = frozenset(
+    {TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.REJECTED}
+)
 
 
 class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
@@ -281,13 +297,43 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
         it never inserts a thought FK'd to the synthetic scheduled-task id
         (the #934 `FOREIGN KEY constraint failed` loop that kept a production
         agent spinning ~933k empty wakeup rounds over 55 days).
+
+        **What the timer grants, and what it does not** (NULLWORKS RC3, F2).
+        Two things are easy to conflate here and are deliberately kept apart:
+
+        * *Reconsideration* — the agent may look at this work again. That is
+          exactly what an expiring `defer_until` buys, and it is why this method
+          sets the task ACTIVE rather than PENDING (see (1) below).
+        * *Execution* — the deferred consequential action may proceed. A timer
+          buys none of this, and nothing on this path grants it.
+
+        The separation holds structurally rather than by a flag checked here,
+        which is why there is no approval bit in this method to look for:
+
+        * A tool declaring ``ToolDMAGuidance(requires_approval=True)`` executes
+          only when the **task's** ``TaskEnvelope`` was issued by an approval
+          authority (``WISE_AUTHORITY``/``NODE_OWNER``) and names that tool —
+          ``ThoughtProcessor._enforce_tool_approval`` ->
+          ``authorization.tool_approval.envelope_approves_tool``. Absence of an
+          envelope is denial; a DEPLOYMENT_RESOLVED envelope is denial even when
+          it enumerates the tool.
+        * Approval is **issuance, never widening**. ``TaskEnvelope`` is frozen
+          and has no widening method, and the only producer of an approval
+          envelope is ``WiseAuthorityService.resolve_deferral``, which mints it
+          onto the **new** ``[WA GUIDANCE]`` task it creates when a human says
+          yes — never onto the row this method touches.
+
+        So a task resurrected by the clock alone re-enters the pipeline holding
+        exactly the envelope it already had, which is not an approval; the gate
+        denies the tool and defers again. The clock buys another round of
+        thinking. Only a human buys the action. Locked by
+        ``tests/ciris_engine/logic/infrastructure/authorization/test_timed_deferral_is_not_approval.py``.
         """
         from ciris_engine.logic.persistence import (
             get_task_by_id_any_occurrence,
             update_task_status,
             update_thought_status,
         )
-        from ciris_engine.schemas.runtime.enums import TaskStatus
 
         safe_deferred_id = _sanitize_for_log(deferred_task_id)
         logger.info(f"Reactivating deferred task {safe_deferred_id}")
@@ -306,6 +352,24 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
                 root_cause = "deferred task row no longer exists — nothing to reactivate"
             self._dead_letter_task(task, root_cause)
             return False
+
+        # (0) A human's answer outranks the clock (NULLWORKS RC3 F2). If the WA
+        # resolved this deferral while the timer was still running, the task row
+        # is already COMPLETED with its outcome recorded — approved work moved on
+        # to a fresh [WA GUIDANCE] task, rejected work stopped. Flipping that row
+        # back to ACTIVE would let an expiring timer re-open a question a human
+        # has closed, and re-pend the very thought a WA refused. Not a
+        # dead-letter: the deferral was answered, so the one-time scheduled task
+        # retires normally on the caller's happy path.
+        if deferred_task.status in RESOLVED_TASK_STATUSES:
+            resolved_status = getattr(deferred_task.status, "value", deferred_task.status)
+            logger.info(
+                f"Reactivate {safe_deferred_id}: skipped — task is already "
+                f"{_sanitize_for_log(str(resolved_status), 32)}, which means this deferral was "
+                "resolved before the timer expired. A timer does not re-open a question a "
+                "wise authority already answered."
+            )
+            return True
 
         occurrence_id = deferred_task.agent_occurrence_id
 

@@ -265,7 +265,19 @@ class CIRISBillingProvider(CreditGateProtocol):
             self._update_fallback_state(region)
             return response, "SUCCESS", "", ""
 
-        except (httpx.ConnectTimeout, asyncio.TimeoutError):
+        # EVERY TIMEOUT IS A REASON TO TRY THE OTHER REGION (CIRISAgent#1079).
+        #
+        # This caught httpx.ConnectTimeout only. httpx.ReadTimeout is NOT a
+        # subclass of it — they are siblings under httpx.TimeoutException — so a
+        # read timeout fell past this branch into the RequestError branch below,
+        # which returned "FATAL", and FATAL returns from the region loop WITHOUT
+        # trying EU-fallback. Scout timed out against US-primary and the EU
+        # region it exists for was never contacted.
+        #
+        # A timeout says the region did not answer in time. That is the precise
+        # condition a second region exists to survive, and it says nothing at all
+        # about whether the other one would answer.
+        except (httpx.TimeoutException, asyncio.TimeoutError):
             logger.warning("[BILLING] [FAIL] %s TIMEOUT: %s timed out after %.1fs", region, base_url, self._timeout_seconds)
             return None, "RETRY", "TIMEOUT", f"Timed out after {self._timeout_seconds}s"
 
@@ -284,8 +296,14 @@ class CIRISBillingProvider(CreditGateProtocol):
             # tolerate an exception that says nothing about itself; the class
             # name is the only fact available and is worth more than a bare colon.
             detail = f"{type(exc).__name__}: {exc}".strip() if str(exc) else type(exc).__name__
-            logger.error("[BILLING] [FAIL] %s NETWORK_ERROR: %s - %s", region, base_url, detail)
-            return None, "FATAL", "NETWORK_ERROR", detail
+            logger.warning("[BILLING] [FAIL] %s NETWORK_ERROR: %s - %s", region, base_url, detail)
+            # RETRY, not FATAL. FATAL means "this will fail identically against
+            # every region", and almost no transport error qualifies: the regions
+            # are different hosts on different networks. Marking these fatal made
+            # one unreachable region look like a total outage, which is the exact
+            # failure the fallback was built to prevent. If EU fails too, the loop
+            # ends and _summarize_errors reports both — nothing is swallowed.
+            return None, "RETRY", "NETWORK_ERROR", detail
 
     def _update_fallback_state(self, region: str) -> None:
         """Update fallback state based on which region succeeded."""

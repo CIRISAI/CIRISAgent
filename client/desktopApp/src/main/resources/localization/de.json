@@ -2622,7 +2622,9 @@
     "online": "Online",
     "offline": "Offline",
     "success": "Erfolg",
-    "all_operational": "Alle Systeme funktionsfähig"
+    "all_operational": "Alle Systeme funktionsfähig",
+    "llm_provider_circuit_open": "Wiederholte Fehler mit {model} bei {provider} — der Circuit-Breaker ist offen, daher wird dieser Anbieter nicht mehr aufgerufen. Prüfen Sie API-Schlüssel und Modell dieses Anbieters in den LLM-Einstellungen.",
+    "llm_all_circuits_open": "Alle Circuit-Breaker sind offen — kein LLM-Anbieter ist einsatzbereit ({named}). Prüfen Sie Anbieter, API-Schlüssel und Modell in den LLM-Einstellungen."
   },
   "status_offline": "Offline",
   "status_pending": "Ausstehend",

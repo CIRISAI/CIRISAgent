@@ -97,7 +97,9 @@
     "online": "Kan layi",
     "offline": "Ba kan layi",
     "success": "Nasara",
-    "all_operational": "Dukkan tsarin suna aiki"
+    "all_operational": "Dukkan tsarin suna aiki",
+    "llm_provider_circuit_open": "{model} a {provider} ya kasa aiki sau da yawa — mai katse da'ira ya buɗe, don haka ba a ƙara tuntuɓar wannan mai samarwa ba. Duba maɓallinsa da samfurinsa a Saitunan LLM.",
+    "llm_all_circuits_open": "Duk masu katse da'ira na LLM sun buɗe — babu wani mai samar da LLM da ke aiki ({named}). Duba mai samarwa, maɓalli da samfuri a Saitunan LLM."
   },
   "prompts": {
     "dma": {

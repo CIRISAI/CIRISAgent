@@ -2622,7 +2622,9 @@
     "online": "Çevrimiçi",
     "offline": "Çevrimdışı",
     "success": "Başarılı",
-    "all_operational": "Tüm sistemler çalışıyor"
+    "all_operational": "Tüm sistemler çalışıyor",
+    "llm_provider_circuit_open": "{provider} üzerindeki {model} modelinde tekrarlanan hatalar — Circuit Breaker açık, bu nedenle bu sağlayıcı artık çağrılmıyor. Sağlayıcının API anahtarını ve modelini LLM ayarlarından kontrol edin.",
+    "llm_all_circuits_open": "Tüm Circuit Breaker'lar açık — çalışan hiçbir LLM sağlayıcısı yok ({named}). LLM ayarlarından sağlayıcınızı, API anahtarınızı ve modelinizi kontrol edin."
   },
   "status_offline": "Çevrimdışı",
   "status_pending": "Beklemede",

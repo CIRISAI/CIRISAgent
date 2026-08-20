@@ -151,7 +151,7 @@
     "ponder_concern_memorize_scope": "ضمیر کی تشویش: MEMORIZE {scope} — یقینی بنائیں کہ یہ مناسب ہے",
     "ponder_concern_forget_scope": "ضمیر کی تشویش: FORGET {scope} — یہ عمل ناقابلِ واپسی ہے",
     "ponder_concern_high_stakes": "ضمیر کی تشویش: اہم صورتحال کا پتہ چلا — محتاط غور و فکر ضروری ہے",
-    "retry_header": "**ضمیر کی نگراني سے تجاوز کی ہدایت:**",
+    "retry_header": "**ضمیر کی نگرانی سے تجاوز کی ہدایت:**",
     "retry_intro": "{action} کی آپ کی پچھلی کوشش رد کر دی گئی کیونکہ: {reason}",
     "retry_alternatives_header": "IRIS-E کے ذریعے درج کردہ متبادل (اگر آپ دوبارہ بولیں تو انہیں Pivot لہجوں کے طور پر استعمال کریں):",
     "retry_uncertainties_label": "شکوک و شبہات",
@@ -2622,7 +2622,9 @@
     "online": "آن لائن",
     "offline": "آف لائن",
     "success": "کامیابی",
-    "all_operational": "تمام نظام درست کام کر رہے ہیں"
+    "all_operational": "تمام نظام درست کام کر رہے ہیں",
+    "llm_provider_circuit_open": "{provider} پر {model} ماڈل بار بار ناکام ہو رہا ہے — سرکٹ بریکر کھل گیا ہے، اس لیے اب اس فراہم کنندہ کو کال نہیں کیا جا رہا۔ LLM ترتیبات میں اس کی API کلید اور ماڈل کی جانچ کریں۔",
+    "llm_all_circuits_open": "تمام LLM سرکٹ بریکر کھلے ہیں — کوئی فعال LLM فراہم کنندہ دستیاب نہیں ({named})۔ LLM ترتیبات میں اپنا فراہم کنندہ، API کلید اور ماڈل کی جانچ کریں۔"
   },
   "status_offline": "آف لائن",
   "status_pending": "[EN] Pending",

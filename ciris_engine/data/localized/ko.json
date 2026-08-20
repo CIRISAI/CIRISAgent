@@ -2622,7 +2622,9 @@
     "online": "온라인",
     "offline": "오프라인",
     "success": "성공",
-    "all_operational": "모든 시스템이 작동 중입니다."
+    "all_operational": "모든 시스템이 작동 중입니다.",
+    "llm_provider_circuit_open": "{provider}의 {model}에서 오류가 반복되어 회로 차단기가 열렸으며, 이 공급자는 더 이상 호출되지 않습니다. LLM 설정에서 해당 API 키와 모델을 확인하십시오.",
+    "llm_all_circuits_open": "모든 LLM 회로 차단기가 열려 있어 사용 가능한 LLM 공급자가 없습니다({named}). LLM 설정에서 공급자, API 키, 모델을 확인하십시오."
   },
   "status_offline": "오프라인",
   "status_pending": "대기 중",

@@ -131,14 +131,44 @@ class APIToolService(BaseService, ToolService):
         # delegate here. This tool takes a model-authored `url` AND model-authored
         # `headers`, so it is a credential-presentation surface as much as a fetch
         # surface — one grant otherwise covers every target and every credential
-        # the model can spell. The guard does not address the headers half; that
-        # is #941 item 3 (ToolDMAGuidance / envelope-deny by default).
+        # the model can spell.
         from ciris_engine.logic.utils.url_guard import validate_url_for_ssrf  # noqa: PLC0415
 
         is_valid, _ = validate_url_for_ssrf(url)
         if not is_valid:
             logger.warning(f"[SSRF] api_tools._curl: refused {method} to {url!r}")
             return {"error": f"URL refused by SSRF guard: {url}"}
+
+        # THE HEADERS HALF (#941 item 3), which the URL guard does not address.
+        #
+        # The SSRF guard decides WHERE the request may go. It says nothing about
+        # WHAT is presented on arrival, and these headers are model-authored. A
+        # model that can write `Authorization: Bearer <anything it has seen>` to
+        # an allowed host has a credential-egress channel that no URL check
+        # closes — the destination is legitimate, which is precisely what makes
+        # it useful for exfiltration.
+        #
+        # DENY BY DEFAULT, because the safe set is the one we can enumerate and
+        # the dangerous set is not: a header carrying a credential can be spelled
+        # in ways an allowlist of "bad" names will not have thought of. Nothing
+        # in the tool's stated purpose — fetch a URL, post a body — requires the
+        # caller to authenticate as anyone, so refusing costs the legitimate use
+        # nothing and names what it refused.
+        _DENIED = {"authorization", "proxy-authorization", "cookie", "x-api-key", "api-key", "x-auth-token"}
+        _offending = sorted(h for h in headers if str(h).strip().lower() in _DENIED)
+        if _offending:
+            logger.warning(
+                "[SSRF] api_tools._curl: refused %s to %r — model-authored credential header(s): %s",
+                method,
+                url,
+                ", ".join(_offending),
+            )
+            return {
+                "error": (
+                    f"Refused: credential-bearing header(s) {', '.join(_offending)} may not be set by a tool call. "
+                    "This tool fetches URLs; it does not authenticate as anyone."
+                )
+            }
 
         try:
             async with aiohttp.ClientSession() as session:

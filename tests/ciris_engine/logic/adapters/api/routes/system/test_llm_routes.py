@@ -821,6 +821,7 @@ class TestAddProviderEndpoint:
                         "/system/llm/providers",
                         json={
                             "provider_id": "local",
+                            "model": "llama3",
                             "base_url": "http://192.168.1.100:11434/v1",
                             # No name provided
                         },
@@ -863,6 +864,7 @@ class TestAddProviderEndpoint:
                     "/system/llm/providers",
                     json={
                         "provider_id": "local",
+                        "model": "llama3",
                         "name": "existing_provider",
                         "base_url": "http://localhost:11434/v1",
                     },
@@ -896,6 +898,7 @@ class TestAddProviderEndpoint:
                 "/system/llm/providers",
                 json={
                     "provider_id": "local",
+                    "model": "llama3",
                     "name": "test",
                     "base_url": "http://localhost:11434/v1",
                 },
@@ -932,6 +935,7 @@ class TestAddProviderEndpoint:
                         "/system/llm/providers",
                         json={
                             "provider_id": "local",
+                            "model": "llama3",
                             "name": "setup_time_provider",
                             "base_url": "http://localhost:11434/v1",
                         },
@@ -941,6 +945,41 @@ class TestAddProviderEndpoint:
             "adding a provider must work during first-run, when telemetry is not yet started — "
             f"got {response.status_code}: {response.text[:200]}"
         )
+
+    def test_add_provider_refuses_an_empty_model(self, app_with_llm_routes: FastAPI) -> None:
+        """"default" is not a model (CIRISAgent#1078).
+
+        This endpoint used to substitute the literal string "default" when the
+        caller omitted a model, and then post it to the provider as if the user
+        had chosen it. On a Windows install running 2.9.24 that produced, five
+        times per thought:
+
+            Error code: 404 - {'error': {'message': 'The model `default` does not
+            exist or you do not have access to it.', 'code': 'model_not_found'}}
+
+        Every DMA failed and the agent could not process a single message. The
+        only evidence was inside an instructor <failed_attempts> block.
+
+        A provider with no model can never answer, so it is refused at the door
+        with a message that names the fix — which the 404 never did.
+        """
+        app_with_llm_routes.state.time_service = MagicMock()
+
+        with patch(
+            "ciris_engine.logic.adapters.api.routes.system.llm_routes._is_setup_allowed_without_auth", return_value=True
+        ):
+            client = TestClient(app_with_llm_routes)
+            for missing in ({}, {"model": ""}, {"model": "   "}):
+                response = client.post(
+                    "/system/llm/providers",
+                    json={"provider_id": "local", "name": "t", "base_url": "http://localhost:11434/v1", **missing},
+                )
+                assert response.status_code == 400, f"expected refusal for {missing!r}, got {response.status_code}"
+                detail = response.json()["detail"]
+                assert "model" in detail.lower()
+                assert "default" not in detail.split("'model_not_found'")[0].replace(
+                    "there is no usable default", ""
+                ), "the refusal must not offer a fake default as though it were usable"
 
     def test_add_provider_validates_request(self, app_with_llm_routes: FastAPI) -> None:
         """Test that invalid request body returns 422."""
@@ -956,6 +995,7 @@ class TestAddProviderEndpoint:
                 "/system/llm/providers",
                 json={
                     "provider_id": "local",
+                    "model": "llama3",
                     # No base_url
                 },
             )
@@ -993,6 +1033,7 @@ class TestAddProviderEndpoint:
                             "/system/llm/providers",
                             json={
                                 "provider_id": "local",
+                                "model": "llama3",
                                 "name": f"provider_{priority}",
                                 "base_url": "http://localhost:11434/v1",
                                 "priority": priority,

@@ -265,7 +265,19 @@ class CIRISBillingProvider(CreditGateProtocol):
             self._update_fallback_state(region)
             return response, "SUCCESS", "", ""
 
-        except (httpx.ConnectTimeout, asyncio.TimeoutError):
+        # EVERY TIMEOUT IS A REASON TO TRY THE OTHER REGION (CIRISAgent#1079).
+        #
+        # This caught httpx.ConnectTimeout only. httpx.ReadTimeout is NOT a
+        # subclass of it — they are siblings under httpx.TimeoutException — so a
+        # read timeout fell past this branch into the RequestError branch below,
+        # which returned "FATAL", and FATAL returns from the region loop WITHOUT
+        # trying EU-fallback. Scout timed out against US-primary and the EU
+        # region it exists for was never contacted.
+        #
+        # A timeout says the region did not answer in time. That is the precise
+        # condition a second region exists to survive, and it says nothing at all
+        # about whether the other one would answer.
+        except (httpx.TimeoutException, asyncio.TimeoutError):
             logger.warning("[BILLING] [FAIL] %s TIMEOUT: %s timed out after %.1fs", region, base_url, self._timeout_seconds)
             return None, "RETRY", "TIMEOUT", f"Timed out after {self._timeout_seconds}s"
 
@@ -274,9 +286,24 @@ class CIRISBillingProvider(CreditGateProtocol):
             return None, "RETRY", "CONNECTION_ERROR", str(exc)
 
         except httpx.RequestError as exc:
-            error_detail = f"NETWORK_ERROR:{type(exc).__name__}: {exc}"
-            logger.error("[BILLING] [FAIL] %s NETWORK_ERROR: %s - %s", region, base_url, error_detail)
-            return None, "FATAL", error_detail, ""
+            # RETURN A BARE CATEGORY, like the TIMEOUT and CONNECTION_ERROR
+            # branches above. This one used to pack the category, the exception
+            # class AND the exception text into the error_type slot, and every
+            # layer downstream then prefixed it again — which is how a user was
+            # shown "NETWORK_ERROR:NETWORK_ERROR:ReadTimeout:".
+            #
+            # str(httpx.ReadTimeout()) is EMPTY, so the detail also has to
+            # tolerate an exception that says nothing about itself; the class
+            # name is the only fact available and is worth more than a bare colon.
+            detail = f"{type(exc).__name__}: {exc}".strip() if str(exc) else type(exc).__name__
+            logger.warning("[BILLING] [FAIL] %s NETWORK_ERROR: %s - %s", region, base_url, detail)
+            # RETRY, not FATAL. FATAL means "this will fail identically against
+            # every region", and almost no transport error qualifies: the regions
+            # are different hosts on different networks. Marking these fatal made
+            # one unreachable region look like a total outage, which is the exact
+            # failure the fallback was built to prevent. If EU fails too, the loop
+            # ends and _summarize_errors reports both — nothing is swallowed.
+            return None, "RETRY", "NETWORK_ERROR", detail
 
     def _update_fallback_state(self, region: str) -> None:
         """Update fallback state based on which region succeeded."""
@@ -475,20 +502,20 @@ class CIRISBillingProvider(CreditGateProtocol):
                     "[CREDIT_SPEND] ✗ TIMEOUT for %s - billing service unreachable",
                     cache_key,
                 )
-                return CreditSpendResult(succeeded=False, reason=f"TIMEOUT:{error_type}")
+                return CreditSpendResult(succeeded=False, reason=self._failure_reason("TIMEOUT", error_type))
             elif error_type.startswith("CONNECTION_ERROR"):
                 logger.error(
                     "[CREDIT_SPEND] ✗ CONNECTION_ERROR for %s - cannot connect to billing",
                     cache_key,
                 )
-                return CreditSpendResult(succeeded=False, reason=f"CONNECTION_ERROR:{error_type}")
+                return CreditSpendResult(succeeded=False, reason=self._failure_reason("CONNECTION_ERROR", error_type))
             else:
                 logger.error(
                     "[CREDIT_SPEND] ✗ NETWORK_ERROR for %s - %s",
                     cache_key,
                     error_type,
                 )
-                return CreditSpendResult(succeeded=False, reason=f"NETWORK_ERROR:{error_type}")
+                return CreditSpendResult(succeeded=False, reason=self._failure_reason("NETWORK_ERROR", error_type))
 
         assert response is not None
 
@@ -776,6 +803,19 @@ class CIRISBillingProvider(CreditGateProtocol):
         except ValueError:
             return response.text
 
+    @staticmethod
+    def _failure_reason(error_category: str, detail: str) -> str:
+        """One legible sentence, with the category kept for operators.
+
+        All three spend branches used to build `f"{CATEGORY}:{error_type}"`, and
+        error_type was already the category — so even the TIMEOUT path emitted
+        "TIMEOUT:TIMEOUT". Nothing parses this string; it is read by humans.
+        """
+        _d = (detail or "").strip().strip(":").strip()
+        if _d.startswith(error_category):
+            _d = _d[len(error_category) :].strip().strip(":").strip()
+        return f"{error_category}{': ' + _d if _d else ''}"
+
     def _handle_failure(self, error_category: str, detail: str) -> CreditCheckResult:
         """Handle a billing failure and return appropriate CreditCheckResult.
 
@@ -787,7 +827,24 @@ class CIRISBillingProvider(CreditGateProtocol):
         - NO_CREDITS: User has no credits available
         - HTTP_xxx: Unexpected HTTP status code
         """
-        reason = f"{error_category}:{detail}"
+        # NEVER PREFIX A DETAIL THAT ALREADY CARRIES THE CATEGORY. `detail` is
+        # sometimes the raw error_type, which for the network branch WAS the
+        # category — so this line produced "NETWORK_ERROR:NETWORK_ERROR:...".
+        # Callers put `reason` straight in front of a user (agent.py renders
+        # "Message blocked: {reason}"), so it has to read as a sentence, not as
+        # a colon-separated audit of which layer touched it last.
+        _HUMAN = {
+            "TIMEOUT": "the billing service did not respond in time",
+            "CONNECTION_ERROR": "could not connect to the billing service",
+            "NETWORK_ERROR": "network error while contacting the billing service",
+            "AUTH_EXPIRED": "the billing session expired",
+            "NO_CREDITS": "no credits available",
+        }
+        _detail = (detail or "").strip().strip(":").strip()
+        if _detail.startswith(error_category):
+            _detail = _detail[len(error_category) :].strip().strip(":").strip()
+        _human = _HUMAN.get(error_category, error_category)
+        reason = f"{_human} ({error_category}{': ' + _detail if _detail else ''})"
         if self._fail_open:
             logger.warning(
                 "[BILLING] FAIL_OPEN engaged - allowing request despite error: %s",

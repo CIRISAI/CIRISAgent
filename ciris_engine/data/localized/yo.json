@@ -97,7 +97,9 @@
     "online": "Lórí Ìkànnì",
     "offline": "Kò Sí Lórí Ìkànnì",
     "success": "Àṣeyọrí",
-    "all_operational": "Gbogbo ètò ń ṣiṣẹ́ dáradára"
+    "all_operational": "Gbogbo ètò ń ṣiṣẹ́ dáradára",
+    "llm_provider_circuit_open": "{model} ní {provider} ti kùnà léraléra — adènà ìyíká ti ṣí, nítorí náà a kò tún ń rán ìbéèrè sí olùpèsè yìí mọ́. Ṣàyẹ̀wò kọ́kọ́rọ́ àti àwòṣe rẹ̀ nínú Àwọn ètò LLM.",
+    "llm_all_circuits_open": "Gbogbo àwọn adènà ìyíká LLM ti ṣí — kò sí olùpèsè LLM tí ó ń ṣiṣẹ́ ({named}). Ṣàyẹ̀wò olùpèsè, kọ́kọ́rọ́ àti àwòṣe rẹ nínú Àwọn ètò LLM."
   },
   "prompts": {
     "dma": {

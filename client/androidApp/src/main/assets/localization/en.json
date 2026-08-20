@@ -97,7 +97,9 @@
     "online": "Online",
     "offline": "Offline",
     "success": "Success",
-    "all_operational": "All systems operational"
+    "all_operational": "All systems operational",
+    "llm_provider_circuit_open": "Repeated failures on {model} at {provider} — circuit breaker open, so this provider is no longer being called. Check its key and model in LLM settings.",
+    "llm_all_circuits_open": "All LLM circuit breakers are open — no operational LLM provider ({named}). Check your provider, key and model in LLM settings."
   },
   "prompts": {
     "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================",

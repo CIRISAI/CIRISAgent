@@ -6,6 +6,7 @@ Provides type-safe structures for WA authentication and authorization.
 
 from datetime import datetime
 from enum import Enum
+from fnmatch import fnmatchcase
 from typing import Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -466,6 +467,133 @@ class WAPermission(BaseModel):
     model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
+# ---------------------------------------------------------------------------
+# Resource-scoped authorization  (NULLWORKS RC3 finding F1 / test MULTI-AUTH-01)
+# ---------------------------------------------------------------------------
+#
+# The retest reproduced *resource-invariant authorization*: a WA was granted a
+# decision regardless of which resource or domain the decision was about.
+# ``WiseAuthorityService.check_authorization`` took a ``resource`` argument and
+# never read it — the body branched on ``wa.role`` alone — so an AUTHORITY
+# minted to adjudicate one narrow domain adjudicated *every* domain, and the
+# only trace of that was a bare ``True``/``False`` with no record of what had
+# been demanded or what the WA actually held.
+#
+# Routing or domain affinity is not decision-specific human jurisdiction. The
+# types below make the resource load-bearing in the decision, and make the
+# resulting refusal readable by whoever has to debug it.
+
+
+WILDCARD_RESOURCE_PATTERNS = frozenset({"*", "any"})
+"""Resource patterns that mean "every resource".
+
+``any`` is not glob syntax — it is the spelling this codebase already mints.
+Every WA created by ``logic/runtime/service_initializer.py``,
+``routes/setup/complete.py`` and ``infrastructure/sub_services/wa_cli_bootstrap.py``
+carries scopes shaped like ``read:any`` / ``write:any``. If ``any`` did not keep
+meaning "unrestricted", the first enforcement pass would narrow every
+certificate already in the field, which is how a control gets reverted instead
+of kept.
+"""
+
+
+def scope_grants(scope: str, action: str, resource: str) -> bool:
+    """Does one scope string grant ``action`` over ``resource``?
+
+    The grammar is the one already in use on ``WACertificate.scopes_json``:
+    ``"<action>:<resource-pattern>"`` — ``read:any``, ``write:message``,
+    ``wa:approve``, ``resolve_deferral:medical_*``. The resource half is matched
+    with :func:`fnmatch.fnmatchcase`, so ``medical_*`` and ``org/acme/*`` behave
+    the way an operator writing them into a certificate would expect (note that
+    ``*`` spans separators — ``org/*`` matches ``org/acme/case-1``), and the
+    match is case-sensitive because these are identifiers, not prose.
+
+    Two deliberate refusals, both of which are the finding:
+
+    * **A bare scope with no colon grants no resource jurisdiction.** A
+      certificate holding ``"resolve_deferrals"`` names an action and names no
+      domain. Reading that as "…therefore every domain" is precisely the
+      inference that made an authority resource-invariant. Breadth stays
+      expressible — it is spelled ``resolve_deferrals:any`` — but it now has to
+      be *written down* by whoever minted the certificate rather than inferred
+      by the gate.
+    * **An empty resource pattern grants nothing.** ``"read:"`` is a malformed
+      scope, and a malformed scope must not widen access (the same least-
+      privilege rule ``persistence/stores/authentication_store.py`` applies when
+      a ``scopes`` column fails to decode).
+
+    ``"*"`` on its own is honoured as a full grant: it is what root-equivalent
+    fixtures and bootstrap certificates use, and it is unambiguous.
+    """
+    scope = scope.strip()
+    if not scope:
+        return False
+    if scope == "*":
+        return True
+
+    action_part, separator, resource_pattern = scope.partition(":")
+    if not separator:
+        # Action named, domain unnamed — see the docstring. Not a grant.
+        return False
+    if action_part.strip() not in ("*", action):
+        return False
+
+    resource_pattern = resource_pattern.strip()
+    if not resource_pattern:
+        return False
+    if resource_pattern in WILDCARD_RESOURCE_PATTERNS:
+        return True
+    return fnmatchcase(resource, resource_pattern)
+
+
+class AuthorizationDenialReason(str, Enum):
+    """Why an authorization was refused. Named so the refusal says which gate bit.
+
+    A bare ``False`` is what let F1 sit in the code unnoticed: the caller could
+    not tell "this WA does not exist" from "this role may never do that" from
+    "this authority is real and powerful but holds no jurisdiction over *this*
+    resource". Those need different responses from an operator, so they get
+    different names.
+    """
+
+    WA_NOT_FOUND = "wa_not_found"
+    ROLE_FORBIDS_ACTION = "role_forbids_action"
+    SCOPE_ABSENT = "scope_absent"
+
+
+class AuthorizationDecision(BaseModel):
+    """The result of an authorization check, with the reasoning attached.
+
+    Carries both halves of the comparison that was made — ``required_scope``
+    (what this decision demanded) and ``held_scopes`` (what the WA actually
+    presented) — so a refused approval can be diagnosed from a log line or a
+    test assertion without re-deriving the check by hand.
+    """
+
+    allowed: bool = Field(..., description="Whether the action is authorized")
+    reason: Optional[AuthorizationDenialReason] = Field(None, description="Denial reason code (None when allowed)")
+    message: str = Field(..., description="Human-readable explanation naming the binding gate")
+    wa_id: str = Field(..., description="WA the decision was made about")
+    role: Optional[WARole] = Field(None, description="Role held by the WA (None when no certificate was found)")
+    action: str = Field(..., description="Action that was requested")
+    resource: Optional[str] = Field(
+        None, description="Resource the action was requested against, if the caller named one"
+    )
+    scope_enforced: bool = Field(
+        False,
+        description=(
+            "True when the resource scope gate actually ran. False means the caller named no resource, "
+            "so this decision rests on the role gate alone — see WiseAuthorityService.authorize()."
+        ),
+    )
+    required_scope: Optional[str] = Field(
+        None, description="Scope string that would have permitted this decision (None when no scope was demanded)"
+    )
+    held_scopes: List[str] = Field(default_factory=list, description="Scopes the WA presented")
+
+    model_config = ConfigDict(extra="forbid", defer_build=True)
+
+
 __all__ = [
     "WARole",
     "TokenType",
@@ -485,4 +613,8 @@ __all__ = [
     "WisdomAdvice",
     "DeferralApprovalContext",
     "WAPermission",
+    "AuthorizationDecision",
+    "AuthorizationDenialReason",
+    "WILDCARD_RESOURCE_PATTERNS",
+    "scope_grants",
 ]

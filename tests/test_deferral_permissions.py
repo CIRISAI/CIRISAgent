@@ -15,6 +15,7 @@ from ciris_engine.logic.services.governance.wise_authority import WiseAuthorityS
 from ciris_engine.schemas.services.authority.wise_authority import DeferralResolution, PendingDeferral
 from ciris_engine.schemas.services.authority_core import (
     AuthorizationContext,
+    AuthorizationDenialReason,
     DeferralResponse,
     JWTSubType,
     TokenType,
@@ -88,13 +89,18 @@ class TestDeferralPermissions:
         import json
 
         return {
+            # Breadth is now spelled out. Before F1 was fixed these scopes read
+            # `["resolve_deferrals", "modify_deferrals"]` — an action named and
+            # no domain named — and the gate inferred "…therefore every domain".
+            # That inference IS the finding. A WA that really is authorized
+            # everywhere says `:any`; nothing infers it on the WA's behalf.
             "wa-2025-06-28-AUTH01": WACertificate(
                 wa_id="wa-2025-06-28-AUTH01",
                 name="Full Authority",
                 role=WARole.AUTHORITY,
                 pubkey="authority_pubkey_base64url",
                 jwt_kid="auth01_kid",
-                scopes_json=json.dumps(["resolve_deferrals", "modify_deferrals"]),
+                scopes_json=json.dumps(["resolve_deferral:any", "modify_deferral:any"]),
                 created_at=datetime.now(timezone.utc),
             ),
             "wa-2025-06-28-OBSR01": WACertificate(
@@ -130,7 +136,11 @@ class TestDeferralPermissions:
                 role=WARole.AUTHORITY,
                 pubkey="limited_pubkey_base64url",
                 jwt_kid="limt01_kid",
-                scopes_json=json.dumps(["resolve_deferrals:medical_*"]),
+                # Was `resolve_deferrals:medical_*` — plural, and so matching no
+                # action anyone actually requests. It went unnoticed because
+                # nothing read scopes at all; the fixture described an intent the
+                # code never consulted.
+                scopes_json=json.dumps(["resolve_deferral:medical_*"]),
                 created_at=datetime.now(timezone.utc),
             ),
         }
@@ -235,7 +245,15 @@ class TestDeferralPermissions:
     async def test_resource_specific_permissions(
         self, wa_service: WiseAuthorityService, mock_memory_service: AsyncMock
     ) -> None:
-        """Test permissions limited to specific resources."""
+        """Resource scope decides, not role alone (NULLWORKS RC3 F1 / MULTI-AUTH-01).
+
+        This is the test that used to record the vulnerability. It asserted that
+        a WA scoped to `medical_*` could resolve a *financial* deferral, with the
+        comment "Resource-specific permissions are not yet implemented" — an
+        accurate description of the code and an inversion of what the fixture
+        said the WA was for. The authority is unchanged; only the resource
+        differs; the answers must differ with it.
+        """
         # Limited authority can only resolve medical deferrals
         is_authorized_medical = await wa_service.check_authorization(
             wa_id="wa_limited_authority", action="resolve_deferral", resource="medical_defer_001"
@@ -245,11 +263,8 @@ class TestDeferralPermissions:
             wa_id="wa_limited_authority", action="resolve_deferral", resource="financial_defer_001"
         )
 
-        # Currently, WiseAuthorityService only checks role-based permissions
-        # AUTHORITY role can resolve any deferral regardless of resource
-        # Resource-specific permissions are not yet implemented
         assert is_authorized_medical is True
-        assert is_authorized_financial is True  # Changed to match actual behavior
+        assert is_authorized_financial is False
 
     @pytest.mark.asyncio
     async def test_grant_permission(self, wa_service: WiseAuthorityService) -> None:
@@ -318,7 +333,10 @@ class TestDeferralPermissions:
                 role=role,
                 pubkey=f"key_{i}_base64url",
                 jwt_kid=f"kid_{i}",
-                scopes_json='["resolve_deferrals"]' if role == WARole.AUTHORITY else '["view_deferrals"]',
+                # `:any` because this test is about concurrency, not jurisdiction —
+                # these authorities are deliberately scoped everywhere so the only
+                # thing the assertions can be measuring is the role split.
+                scopes_json='["resolve_deferral:any"]' if role == WARole.AUTHORITY else '["view_deferrals"]',
                 created_at=datetime.now(timezone.utc),
             )
 
@@ -550,6 +568,237 @@ class TestDeferralAuditTrail:
         # This would be logged in the audit system
         assert unauthorized_attempt["reason"] == "insufficient_permissions"
         assert unauthorized_attempt["details"]["required_role"] == "AUTHORITY"
+
+
+class TestScopeGrantsGrammar:
+    """Unit tests for the scope string grammar (pure function, no service)."""
+
+    @pytest.mark.parametrize(
+        "scope,action,resource,expected",
+        [
+            # Narrow domain grant: the glob is the jurisdiction.
+            ("resolve_deferral:medical_*", "resolve_deferral", "medical_defer_001", True),
+            ("resolve_deferral:medical_*", "resolve_deferral", "financial_defer_001", False),
+            ("resolve_deferral:org/acme/*", "resolve_deferral", "org/acme/case-1", True),
+            ("resolve_deferral:org/acme/*", "resolve_deferral", "org/other/case-1", False),
+            # `any` is the spelling already minted across this codebase and has
+            # to keep meaning "unrestricted" or every field certificate narrows.
+            ("read:any", "read", "literally_anything", True),
+            ("resolve_deferral:*", "resolve_deferral", "anything", True),
+            ("*", "resolve_deferral", "anything", True),
+            ("*:medical_*", "resolve_deferral", "medical_1", True),
+            # The action half is load-bearing too: breadth on one action is not
+            # breadth on another. A WA minted `read:any, write:any` (which is
+            # what service_initializer mints) holds no deferral jurisdiction.
+            ("write:any", "resolve_deferral", "defer_1", False),
+            # A bare scope names an action and no domain. Reading it as "every
+            # domain" is exactly the inference that produced the finding.
+            ("resolve_deferral", "resolve_deferral", "medical_1", False),
+            # Malformed scopes must not widen access.
+            ("read:", "read", "x", False),
+            ("   ", "read", "x", False),
+            # Identifiers, not prose: matching is case-sensitive.
+            ("resolve_deferral:Medical_*", "resolve_deferral", "medical_1", False),
+        ],
+    )
+    def test_scope_grants(self, scope: str, action: str, resource: str, expected: bool) -> None:
+        from ciris_engine.schemas.services.authority_core import scope_grants
+
+        assert scope_grants(scope, action, resource) is expected
+
+
+class TestResourceScopedAuthorization:
+    """NULLWORKS RC3 finding F1 / MULTI-AUTH-01 regression tests.
+
+    The finding: routing or domain affinity is not decision-specific human
+    jurisdiction, and the final authority gate must reject an otherwise powerful
+    authority who lacks scope for the specific decision. Before the fix,
+    `check_authorization` accepted a `resource` argument and never read it, so
+    every assertion in this class would have returned True.
+    """
+
+    @staticmethod
+    def _cert(wa_id: str, role: WARole, scopes: List[str], name: str = "Test WA") -> WACertificate:
+        import json
+
+        return WACertificate(
+            wa_id=wa_id,
+            name=name,
+            role=role,
+            pubkey=f"{wa_id}_pubkey_base64url",
+            jwt_kid=f"{wa_id}_kid",
+            scopes_json=json.dumps(scopes),
+            created_at=datetime.now(timezone.utc),
+        )
+
+    @pytest.fixture
+    def certs(self) -> Dict[str, WACertificate]:
+        return {
+            # A real, powerful authority — scoped to one domain only.
+            "wa-2025-06-28-MEDIC1": self._cert(
+                "wa-2025-06-28-MEDIC1", WARole.AUTHORITY, ["resolve_deferral:medical_*"], "Medical Authority"
+            ),
+            # An authority minted the way service_initializer.py mints them.
+            # Broad-sounding, and holding no deferral jurisdiction whatsoever.
+            "wa-2025-06-28-BROAD1": self._cert(
+                "wa-2025-06-28-BROAD1", WARole.AUTHORITY, ["read:any", "write:any"], "Broad Authority"
+            ),
+            # An authority genuinely authorized everywhere, spelled out.
+            "wa-2025-06-28-GLOBL1": self._cert(
+                "wa-2025-06-28-GLOBL1", WARole.AUTHORITY, ["resolve_deferral:any"], "Global Authority"
+            ),
+            "wa-2025-06-28-ROOT01": self._cert("wa-2025-06-28-ROOT01", WARole.ROOT, [], "Root"),
+        }
+
+    @pytest.fixture
+    def wa_service(self, certs: Dict[str, WACertificate]) -> WiseAuthorityService:
+        auth_service = AsyncMock()
+        auth_service.bootstrap_if_needed = AsyncMock()
+
+        async def mock_get_wa(wa_id: str) -> Optional[WACertificate]:
+            return certs.get(wa_id)
+
+        auth_service.get_wa = mock_get_wa
+
+        time_service = Mock()
+        time_service.now = Mock(return_value=datetime.now(timezone.utc))
+
+        return WiseAuthorityService(time_service=time_service, auth_service=auth_service, db_path=":memory:")
+
+    @pytest.mark.asyncio
+    async def test_authority_without_scope_for_domain_is_denied(self, wa_service: WiseAuthorityService) -> None:
+        """The medical authority has no jurisdiction over a financial decision."""
+        allowed = await wa_service.check_authorization(
+            "wa-2025-06-28-MEDIC1", "resolve_deferral", "financial_defer_001"
+        )
+        assert allowed is False
+
+    @pytest.mark.asyncio
+    async def test_authority_with_scope_for_domain_is_allowed(self, wa_service: WiseAuthorityService) -> None:
+        """Same authority, same action, in-scope resource: allowed."""
+        allowed = await wa_service.check_authorization(
+            "wa-2025-06-28-MEDIC1", "resolve_deferral", "medical_defer_001"
+        )
+        assert allowed is True
+
+    @pytest.mark.asyncio
+    async def test_authorization_is_not_resource_invariant(self, wa_service: WiseAuthorityService) -> None:
+        """MULTI-AUTH-01 proper: identical WA and action, differing only in resource.
+
+        Before the fix both calls returned True — the resource argument was
+        accepted and discarded. That equality is the whole finding, so assert on
+        the inequality directly rather than only on the two values.
+        """
+        in_scope = await wa_service.check_authorization(
+            "wa-2025-06-28-MEDIC1", "resolve_deferral", "medical_defer_001"
+        )
+        out_of_scope = await wa_service.check_authorization(
+            "wa-2025-06-28-MEDIC1", "resolve_deferral", "financial_defer_001"
+        )
+        assert in_scope != out_of_scope
+
+    @pytest.mark.asyncio
+    async def test_broadly_scoped_authority_lacks_decision_specific_jurisdiction(
+        self, wa_service: WiseAuthorityService
+    ) -> None:
+        """`read:any` + `write:any` is breadth, not deferral jurisdiction.
+
+        This is the "otherwise powerful authority" case in the finding's own
+        words. The role gate passes — AUTHORITY may resolve deferrals — and the
+        WA still holds no scope naming this decision.
+        """
+        decision = await wa_service.authorize("wa-2025-06-28-BROAD1", "resolve_deferral", "medical_defer_001")
+        assert decision.allowed is False
+        assert decision.reason is AuthorizationDenialReason.SCOPE_ABSENT
+
+    @pytest.mark.asyncio
+    async def test_explicit_global_scope_still_works(self, wa_service: WiseAuthorityService) -> None:
+        """Breadth remains expressible — it just has to be written down."""
+        allowed = await wa_service.check_authorization("wa-2025-06-28-GLOBL1", "resolve_deferral", "anything_at_all")
+        assert allowed is True
+
+    @pytest.mark.asyncio
+    async def test_root_is_never_scope_gated(self, wa_service: WiseAuthorityService) -> None:
+        """ROOT holds no scopes at all here and still acts — it is the recovery path.
+
+        If ROOT could be locked out by a bad scope set, the operator who fixes
+        bad scope sets would be locked out by them too.
+        """
+        decision = await wa_service.authorize("wa-2025-06-28-ROOT01", "resolve_deferral", "financial_defer_001")
+        assert decision.allowed is True
+        assert decision.held_scopes == []
+
+    @pytest.mark.asyncio
+    async def test_denial_is_inspectable(self, wa_service: WiseAuthorityService) -> None:
+        """A bare `False` is what let this sit in the code. The denial must say why.
+
+        Whoever debugs a refused approval must be able to read which scope was
+        demanded and which the WA actually held, without re-deriving the check.
+        """
+        decision = await wa_service.authorize("wa-2025-06-28-MEDIC1", "resolve_deferral", "financial_defer_001")
+
+        assert decision.allowed is False
+        assert decision.reason is AuthorizationDenialReason.SCOPE_ABSENT
+        assert decision.scope_enforced is True
+        assert decision.required_scope == "resolve_deferral:financial_defer_001"
+        assert decision.held_scopes == ["resolve_deferral:medical_*"]
+        assert decision.role is WARole.AUTHORITY
+        # The message names both halves of the comparison that failed.
+        assert "financial_defer_001" in decision.message
+        assert "resolve_deferral:medical_*" in decision.message
+
+    @pytest.mark.asyncio
+    async def test_role_denial_is_distinguishable_from_scope_denial(
+        self, wa_service: WiseAuthorityService
+    ) -> None:
+        """`May never do this` and `may, but not here` need different names."""
+        decision = await wa_service.authorize("wa-2025-06-28-MEDIC1", "mint_wa", "medical_defer_001")
+        assert decision.allowed is False
+        assert decision.reason is AuthorizationDenialReason.ROLE_FORBIDS_ACTION
+
+    @pytest.mark.asyncio
+    async def test_missing_certificate_is_distinguishable(self, wa_service: WiseAuthorityService) -> None:
+        decision = await wa_service.authorize("wa-2025-06-28-NOBODY", "resolve_deferral", "medical_defer_001")
+        assert decision.allowed is False
+        assert decision.reason is AuthorizationDenialReason.WA_NOT_FOUND
+        assert decision.role is None
+
+    @pytest.mark.asyncio
+    async def test_unnamed_resource_falls_back_to_the_role_gate_and_says_so(
+        self, wa_service: WiseAuthorityService
+    ) -> None:
+        """`resource=None` keeps the pre-existing decision — visibly.
+
+        Denying on a missing resource would deny every caller alive today (the
+        protocol defaults it to None, `request_approval` reads it from metadata
+        that is usually absent, the Discord adapter never sets it), so silence
+        keeps the role-only answer. What changed is that the omission is now a
+        readable fact instead of being indistinguishable from a jurisdiction
+        check that ran and passed.
+        """
+        decision = await wa_service.authorize("wa-2025-06-28-BROAD1", "resolve_deferral", None)
+
+        assert decision.allowed is True  # unchanged from pre-fix behaviour
+        assert decision.scope_enforced is False
+        assert decision.required_scope is None
+        assert "named no resource" in decision.message
+
+        # And the same WA IS refused the moment a caller names the resource.
+        allowed = await wa_service.check_authorization("wa-2025-06-28-BROAD1", "resolve_deferral", "medical_defer_001")
+        assert allowed is False
+
+    @pytest.mark.asyncio
+    async def test_garbled_scope_set_does_not_widen_access(self, wa_service: WiseAuthorityService) -> None:
+        """A scopes column that fails to decode means "no scopes", never "allow".
+
+        `authentication_store` documents rows in the wild whose `scopes` value
+        is a JSON string rather than a list. Least privilege applies here too.
+        """
+        broken = Mock()
+        broken.role = WARole.AUTHORITY
+        broken.scopes = '["resolve_deferral:any"]'  # a str, not a list
+
+        assert wa_service._held_scopes(broken) == []
 
 
 if __name__ == "__main__":

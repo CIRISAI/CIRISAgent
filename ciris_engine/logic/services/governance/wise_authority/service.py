@@ -25,6 +25,8 @@ from ciris_engine.schemas.runtime.enums import ServiceType, TaskStatus
 from ciris_engine.schemas.runtime.models import TaskContext
 from ciris_engine.schemas.services.authority.wise_authority import PendingDeferral
 from ciris_engine.schemas.services.authority_core import (
+    AuthorizationDecision,
+    AuthorizationDenialReason,
     DeferralApprovalContext,
     DeferralRequest,
     DeferralResponse,
@@ -35,11 +37,21 @@ from ciris_engine.schemas.services.authority_core import (
     WARole,
     deferral_resolution_record,
     is_unverifiable_legacy_signature,
+    scope_grants,
 )
 from ciris_engine.schemas.services.context import GuidanceContext
 from ciris_engine.schemas.services.core import ServiceStatus
 
 logger = logging.getLogger(__name__)
+
+# Actions an AUTHORITY may never take: minting is the one privilege reserved to
+# ROOT, because a WA able to mint WAs can manufacture its own jurisdiction and
+# every downstream scope check becomes advisory.
+MINTING_ACTIONS = frozenset({"mint_wa", "create_wa", "bootstrap_root"})
+
+# The complete set an OBSERVER may take. Unchanged from the original role gate —
+# hoisted out of the function body only so the two gates read as data.
+OBSERVER_ACTIONS = frozenset({"read", "send_message", "observe", "get_status"})
 
 
 class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
@@ -113,6 +125,7 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
         """Get list of actions this service provides."""
         return [
             # Authorization
+            "authorize",
             "check_authorization",
             "request_approval",
             # Guidance
@@ -262,28 +275,197 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
 
     # ========== Authorization Operations ==========
 
-    async def check_authorization(self, wa_id: str, action: str, resource: Optional[str] = None) -> bool:
-        """Check if a WA is authorized for an action on a resource.
+    @staticmethod
+    def _held_scopes(wa: object) -> List[str]:
+        """The WA's scope list, normalized, never raising.
 
-        Simple role-based authorization:
-        - ROOT: Can do everything
-        - AUTHORITY: Can approve/reject deferrals, provide guidance (no minting)
-        - OBSERVER: Can only read and send messages
+        ``WACertificate.scopes`` decodes ``scopes_json`` on every access, and the
+        rows behind it are known to carry historical shapes — see
+        ``persistence/stores/authentication_store.py``, where a doubly-encoded
+        ``scopes`` column yields a *string* where the schema promises a list.
+        A scope set that fails to decode must resolve to "no scopes", never to
+        "unknown, so allow": this gate is the thing standing between a broad
+        authority and a decision it has no jurisdiction over, and it is the one
+        place where a parse failure absolutely must not widen access.
+        """
+        try:
+            raw = wa.scopes  # type: ignore[attr-defined]
+        except Exception:  # pragma: no cover - defensive; malformed scopes_json
+            return []
+        if isinstance(raw, str) or not isinstance(raw, (list, tuple, set, frozenset)):
+            return []
+        return [str(scope) for scope in raw]
+
+    async def authorize(self, wa_id: str, action: str, resource: Optional[str] = None) -> AuthorizationDecision:
+        """Decide whether a WA may take ``action`` on ``resource``, inspectably.
+
+        Two gates, in order. Both must pass.
+
+        **Gate 1 — role.** What kind of decision may this WA make at all?
+        ROOT everything, AUTHORITY everything but minting, OBSERVER a fixed read
+        set. Unchanged from what shipped.
+
+        **Gate 2 — scope.** Does this WA hold jurisdiction over *this* resource?
+        This gate is new, and it is finding F1 (NULLWORKS RC3, MULTI-AUTH-01).
+        Before it, ``check_authorization`` accepted a ``resource`` argument and
+        never read it, so an AUTHORITY minted to adjudicate one domain
+        adjudicated every domain. Routing or domain affinity is not
+        decision-specific human jurisdiction; a powerful authority holding no
+        scope for the decision in front of it has to be refused.
+
+        ROOT skips gate 2 deliberately. ROOT is the recovery path — the identity
+        you authenticate as when scopes are wrong, a certificate was minted
+        badly, or the domain taxonomy itself needs repair. A gate that can lock
+        out the operator who repairs gates is a gate that gets disabled.
+
+        **What ``resource=None`` means, and why it is not a denial.**
+
+        "No resource specified" is *not* the same fact as "no scope required".
+        It means the **caller** did not say what is at stake. Silence is
+        under-specification, not evidence of harmlessness, so nothing here
+        invents a resource to check against or reads the omission as a grant of
+        domain jurisdiction.
+
+        But denying on silence would deny essentially every caller alive today:
+        the protocol defaults ``resource`` to ``None``, ``request_approval``
+        pulls it from ``context.metadata`` where it is usually absent, and the
+        Discord adapter never sets it. Shipping that would take the deferral
+        path down on the first call, and a control that gets reverted the
+        morning after it lands protects nothing. So:
+
+            resource is None  ->  the decision rests on the role gate alone,
+                                  exactly as it did before this change. Never
+                                  weaker than what shipped; never stronger.
+
+        What *is* different is that the omission is no longer invisible. The
+        returned decision carries ``scope_enforced=False`` and says so in
+        ``message``, so a caller that skipped naming its resource is findable in
+        logs and assertable in tests, instead of being indistinguishable from a
+        scope check that actually ran and passed. Every such call site is a bug
+        in the caller, and this is the field that lets us enumerate them before
+        tightening the default.
         """
         wa = await self.auth_service.get_wa(wa_id)
         if not wa:
-            return False
+            return AuthorizationDecision(
+                allowed=False,
+                reason=AuthorizationDenialReason.WA_NOT_FOUND,
+                message=f"No WA certificate found for '{wa_id}'",
+                wa_id=wa_id,
+                action=action,
+                resource=resource,
+            )
 
-        # Check role permissions
-        if wa.role == WARole.ROOT:
-            # Root can do anything
-            return True
-        elif wa.role == WARole.AUTHORITY:
-            # Authority can do most things except mint WAs
-            return action not in ["mint_wa", "create_wa", "bootstrap_root"]
-        else:  # wa.role == WARole.OBSERVER
-            # Observer can only read and send messages
-            return action in ["read", "send_message", "observe", "get_status"]
+        role = wa.role
+        held_scopes = self._held_scopes(wa)
+
+        # --- Gate 1: role ----------------------------------------------------
+        if role == WARole.ROOT:
+            return AuthorizationDecision(
+                allowed=True,
+                message=f"ROOT '{wa_id}' is unconditionally authorized for '{action}' (recovery path)",
+                wa_id=wa_id,
+                role=role,
+                action=action,
+                resource=resource,
+                held_scopes=held_scopes,
+            )
+
+        if role == WARole.AUTHORITY:
+            role_allows = action not in MINTING_ACTIONS
+        else:  # OBSERVER
+            role_allows = action in OBSERVER_ACTIONS
+
+        if not role_allows:
+            return AuthorizationDecision(
+                allowed=False,
+                reason=AuthorizationDenialReason.ROLE_FORBIDS_ACTION,
+                message=f"Role {role.value} may not perform '{action}'",
+                wa_id=wa_id,
+                role=role,
+                action=action,
+                resource=resource,
+                held_scopes=held_scopes,
+            )
+
+        # --- Gate 2: resource scope ------------------------------------------
+        if resource is None:
+            return AuthorizationDecision(
+                allowed=True,
+                message=(
+                    f"Role {role.value} permits '{action}'; caller named no resource, "
+                    "so no jurisdiction check was possible (role gate only)"
+                ),
+                wa_id=wa_id,
+                role=role,
+                action=action,
+                resource=None,
+                scope_enforced=False,
+                held_scopes=held_scopes,
+            )
+
+        required_scope = f"{action}:{resource}"
+        if not any(scope_grants(scope, action, resource) for scope in held_scopes):
+            return AuthorizationDecision(
+                allowed=False,
+                reason=AuthorizationDenialReason.SCOPE_ABSENT,
+                message=(
+                    f"Role {role.value} permits '{action}', but WA '{wa_id}' holds no scope "
+                    f"covering resource '{resource}'. Required: a scope granting '{required_scope}'; "
+                    f"held: {held_scopes}"
+                ),
+                wa_id=wa_id,
+                role=role,
+                action=action,
+                resource=resource,
+                scope_enforced=True,
+                required_scope=required_scope,
+                held_scopes=held_scopes,
+            )
+
+        return AuthorizationDecision(
+            allowed=True,
+            message=f"WA '{wa_id}' holds scope for '{action}' on '{resource}'",
+            wa_id=wa_id,
+            role=role,
+            action=action,
+            resource=resource,
+            scope_enforced=True,
+            required_scope=required_scope,
+            held_scopes=held_scopes,
+        )
+
+    async def check_authorization(self, wa_id: str, action: str, resource: Optional[str] = None) -> bool:
+        """Check if a WA is authorized for an action on a resource.
+
+        Boolean face of :meth:`authorize`, kept because it is the protocol
+        signature every adapter implements. The reasoning is not thrown away
+        when it collapses to a bool — a denial is logged with the scope that was
+        demanded and the scopes the WA actually held, because "an approval was
+        refused and nobody could see why" is the condition that let this gate
+        stay decorative for as long as it did. Callers that need the reasoning
+        as a value should call :meth:`authorize` directly.
+        """
+        decision = await self.authorize(wa_id, action, resource)
+
+        if not decision.allowed:
+            logger.warning(
+                "WA authorization DENIED [%s]: %s",
+                decision.reason.value if decision.reason else "unspecified",
+                decision.message,
+            )
+        elif not decision.scope_enforced:
+            # INFO, not WARNING: this is the behaviour that already shipped, so
+            # it is not itself an incident, and check_authorization sits on the
+            # deferral path where a per-call warning would train operators to
+            # filter the log. The fact is carried structurally on the decision
+            # for anything that wants to assert on it.
+            logger.info(
+                "WA authorization allowed WITHOUT a jurisdiction check (caller named no resource): %s",
+                decision.message,
+            )
+
+        return decision.allowed
 
     async def request_approval(self, action: str, context: DeferralApprovalContext) -> bool:
         """Request approval for an action - may defer to human.
@@ -291,20 +473,37 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
         Returns True if immediately approved (e.g., requester is ROOT),
         False if deferred to human WA.
         """
-        # Check if requester can self-approve
-        can_self_approve = await self.check_authorization(
-            context.requester_id, action, context.metadata.get("resource") if context.metadata else None
-        )
+        # Check if requester can self-approve.
+        #
+        # Uses authorize() rather than check_authorization() so the *reason* for
+        # a refusal survives into the deferral below. A human opening this
+        # deferral needs to know whether it reached them because the requester's
+        # role forbids the action outright or because the requester is a real
+        # authority who simply holds no jurisdiction over this resource — those
+        # are different situations and they want different answers.
+        resource = context.metadata.get("resource") if context.metadata else None
+        decision = await self.authorize(context.requester_id, action, resource)
 
-        if can_self_approve:
-            logger.info(f"Action {action} auto-approved for {context.requester_id}")
+        if decision.allowed:
+            logger.info(f"Action {action} auto-approved for {context.requester_id}: {decision.message}")
             return True
+
+        logger.info(
+            "Action %s not self-approvable for %s [%s]: %s",
+            action,
+            context.requester_id,
+            decision.reason.value if decision.reason else "unspecified",
+            decision.message,
+        )
 
         # Create a deferral for human approval
         deferral_context = {
             "action": action,
             "requester": context.requester_id,
+            "authorization_denial_reason": decision.reason.value if decision.reason else "unspecified",
         }
+        if decision.required_scope:
+            deferral_context["required_scope"] = decision.required_scope
         # Flatten action params into context
         for key, value in context.action_params.items():
             deferral_context[f"param_{key}"] = str(value)

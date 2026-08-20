@@ -34,6 +34,8 @@ from .schemas import (
     SystemWarning,
 )
 
+from ciris_engine.logic.utils.localization import get_preferred_language, get_string
+
 logger = logging.getLogger(__name__)
 
 # Type alias for authenticated observer dependency (S8410 compliance)
@@ -66,6 +68,82 @@ def _describe_provider_failures(providers: Sequence[object]) -> str:
     if not parts:
         return ""
     return f"({'; '.join(parts)})."
+
+
+def _provider_model(service_provider: object) -> str:
+    """The model this provider is actually configured to call, if it says."""
+    service = getattr(service_provider, "instance", service_provider)
+    for path in ("model_name", "model"):
+        val = getattr(service, path, None)
+        if val:
+            return str(val)
+    cfg = getattr(service, "openai_config", None) or getattr(service, "config", None)
+    for path in ("model_name", "model"):
+        val = getattr(cfg, path, None)
+        if val:
+            return str(val)
+    meta = getattr(service_provider, "metadata", None)
+    if isinstance(meta, dict) and meta.get("model"):
+        return str(meta["model"])
+    return "unknown model"
+
+
+def _breaker_state(service_provider: object) -> str:
+    """"open" / "half_open" / "closed" / "" when the provider exposes no breaker."""
+    cb = getattr(service_provider, "circuit_breaker", None)
+    state = getattr(cb, "state", None)
+    return str(getattr(state, "value", state) or "").lower()
+
+
+def _llm_breaker_warnings(providers: Sequence[object]) -> list[SystemWarning]:
+    """Escalate by what the user can actually do about it.
+
+    One failed call is noise; the same model failing until its breaker opens is a
+    configuration fact; every breaker being open is an outage. Those are three
+    different sentences and three different responses, and the health surface
+    used to collapse them into "all providers unavailable".
+
+    Every level names the MODEL and the PROVIDER, because that pair is what the
+    user has to change, and links to the settings card that changes it — a
+    warning that describes a problem without a route to the control is a report,
+    not a fix.
+    """
+    open_ones = [sp for sp in providers if _breaker_state(sp) == "open"]
+    if not open_ones:
+        return []
+
+    if len(open_ones) == len(providers):
+        # Every route is shut. Say so once, as an outage, rather than emitting
+        # one identical warning per provider — N copies of the same sentence is
+        # how a warnings array becomes something people stop reading.
+        named = ", ".join(
+            f"{_provider_model(sp)} on {getattr(sp, 'name', None) or 'provider'}" for sp in open_ones[:3]
+        )
+        return [
+            SystemWarning(
+                code="llm_all_circuits_open",
+                message=get_string(get_preferred_language(), "status.llm_all_circuits_open", named=named),
+                severity="error",
+                action_url="/settings/llm",
+            )
+        ]
+
+    # Some routes remain. Name each dead one; the agent still works, so this is a
+    # warning rather than an error.
+    return [
+        SystemWarning(
+            code="llm_provider_circuit_open",
+            message=get_string(
+                get_preferred_language(),
+                "status.llm_provider_circuit_open",
+                model=_provider_model(sp),
+                provider=getattr(sp, "name", None) or "provider",
+            ),
+            severity="warning",
+            action_url="/settings/llm",
+        )
+        for sp in open_ones[:3]
+    ]
 
 
 async def _check_provider_health(service_provider: object) -> bool:
@@ -130,6 +208,14 @@ async def check_llm_availability() -> tuple[bool, list[SystemWarning]]:
     #
     # Those need opposite responses — rotate a credential vs pick a model — and
     # a message that names neither sends the reader to a third thing entirely.
+    # Breaker state first: it says WHY the provider stopped answering, and
+    # whether anything is left. If it produced a verdict, that verdict is the
+    # message — appending the generic "no provider is answering" underneath
+    # would restate it less precisely.
+    breaker = _llm_breaker_warnings(llm_providers)
+    if breaker:
+        return False, breaker
+
     detail = _describe_provider_failures(llm_providers)
     return False, [
         SystemWarning(

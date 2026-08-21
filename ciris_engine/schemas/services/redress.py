@@ -339,12 +339,31 @@ class ActionRef(BaseModel):
         holding `tt:...` and the action came back UNCHALLENGED — the one
         answer this type exists to make impossible.
 
-        The pair is the identity every representation carries, so it is the
-        canonical one. The audit anchor is not discarded: it remains on the
-        model, `is_chain_anchored` still reports it, and it is what a verifier
-        checks. It is simply not the grouping key.
+        The pair is therefore preferred WHENEVER IT IS PRESENT, on both the
+        strong and the weak form, so the two spellings of one action agree.
+
+        It is not preferred unconditionally. The validator accepts an
+        audit-only reference, and keying those on the pair yields
+        ``tt:None:None`` for every one of them — so two entirely unrelated
+        audit-only actions would collide and a redress recorded for one could
+        govern the other. That is a worse failure than the one being fixed:
+        the first makes a redress invisible, this one makes it apply to the
+        wrong action. Audit-only references keep the anchor as their key.
+
+        The residue is honest and irreducible: an audit-only reference and a
+        pair reference to the same action still do not match. An audit-only
+        reference carries nothing to reconcile them WITH — the pair is simply
+        not there — so no keying scheme could relate them. What matters is
+        that nothing silently collides.
         """
-        return f"tt:{self.task_id}:{self.thought_id}"
+        has_pair = bool((self.task_id or "").strip()) and bool((self.thought_id or "").strip())
+        if has_pair:
+            return f"tt:{self.task_id}:{self.thought_id}"
+        if (self.audit_entry_id or "").strip():
+            return f"audit:{self.audit_entry_id}"
+        # The validator should make this unreachable; do not let it degrade into
+        # a shared constant that silently groups unrelated actions together.
+        raise ValueError("ActionRef carries neither a task/thought pair nor an audit anchor")
 
 
 class RedressAuthority(BaseModel):

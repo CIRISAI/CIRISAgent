@@ -302,3 +302,160 @@ class TestOAuthAuthoritiesAreLookedUpByCertificate:
         )
         resolved = await resolve_certificate_id(request, SimpleNamespace(user_id="google:unknown"))
         assert resolved == "google:unknown"
+
+
+class TestAuditOnlyRefsDoNotAliasEachOther:
+    """The regression the first identity_key fix introduced.
+
+    Canonicalizing unconditionally on the task/thought pair fixed the
+    strong-vs-weak mismatch but gave EVERY audit-only reference the key
+    `tt:None:None`. That is the worse of the two failures: the original bug
+    made a redress invisible, this one would make a redress recorded for one
+    action govern an unrelated one. The earlier tests missed it because every
+    fixture they built carried the pair.
+    """
+
+    def _ref(self, **kw):
+        from ciris_engine.schemas.services.redress import ActionRef
+
+        return ActionRef(**kw)
+
+    def test_two_audit_only_refs_do_not_collide(self) -> None:
+        a = self._ref(audit_entry_id="ae-1", audit_entry_hash="h-1")
+        b = self._ref(audit_entry_id="ae-2", audit_entry_hash="h-2")
+        assert a.identity_key != b.identity_key
+
+    def test_strong_and_weak_still_agree(self) -> None:
+        strong = self._ref(audit_entry_id="ae-1", audit_entry_hash="h-1", task_id="t1", thought_id="th1")
+        weak = self._ref(task_id="t1", thought_id="th1")
+        assert strong.identity_key == weak.identity_key, "the original aliasing bug must stay fixed"
+
+    def test_a_ref_with_neither_identity_refuses_to_produce_a_key(self) -> None:
+        """Rather than degrading into a constant that groups unrelated actions."""
+        from ciris_engine.schemas.services.redress import ActionRef
+
+        try:
+            ref = ActionRef()
+        except Exception:
+            return  # validator refuses it outright — also fine
+        with pytest.raises(ValueError):
+            _ = ref.identity_key
+
+
+class TestATimerCannotOverturnAnAnswerItRacedWith:
+    """F2 under concurrency.
+
+    The status check and the ACTIVE write are not atomic, and the substrate
+    exposes no conditional status update. What makes it recoverable is that the
+    two writers touch different columns: resolve_deferral upserts status AND
+    context, update_task_status writes status only. So a resolution that lands
+    mid-window survives the clobber in context and can be detected afterwards.
+    """
+
+    def _task(self, resolution=None):
+        from types import SimpleNamespace
+
+        deferral = {"resolution": resolution} if resolution is not None else {}
+        return SimpleNamespace(context={"deferral": deferral})
+
+    def test_the_signed_resolution_record_is_recognised(self) -> None:
+        from ciris_engine.logic.services.lifecycle.scheduler.service import _has_recorded_resolution
+
+        assert _has_recorded_resolution(self._task(resolution={"signed_at": "2026-08-21T00:00:00Z"})) is True
+
+    def test_an_unanswered_deferral_is_not(self) -> None:
+        from types import SimpleNamespace
+
+        from ciris_engine.logic.services.lifecycle.scheduler.service import _has_recorded_resolution
+
+        assert _has_recorded_resolution(self._task()) is False
+        assert _has_recorded_resolution(SimpleNamespace(context={})) is False
+        assert _has_recorded_resolution(SimpleNamespace(context=None)) is False
+        assert _has_recorded_resolution(SimpleNamespace()) is False
+
+    def test_a_resolution_landing_mid_window_is_restored_not_clobbered(self, monkeypatch) -> None:
+        """Drive the actual race rather than asserting on source order.
+
+        First read sees DEFERRED with no answer, so the timer proceeds and
+        writes ACTIVE. Between those, a WA resolves: the second read sees the
+        signed record their upsert left in context. The timer must put the
+        resolved status back and retire WITHOUT re-pending the thought.
+        """
+        from types import SimpleNamespace
+
+        from ciris_engine.logic import persistence
+        from ciris_engine.logic.services.lifecycle.scheduler.service import TaskSchedulerService
+        from ciris_engine.schemas.runtime.enums import TaskStatus
+
+        calls: list = []
+        reads = {"n": 0}
+
+        def fake_get(task_id: str):
+            reads["n"] += 1
+            if reads["n"] == 1:
+                return SimpleNamespace(
+                    status=TaskStatus.DEFERRED, agent_occurrence_id="occ-1", context={"deferral": {}}
+                )
+            # A wise authority answered inside the read->write window. Their
+            # upsert wrote status AND context; our status-only write clobbered
+            # the status, but their record survives and is how we find out.
+            return SimpleNamespace(
+                status=TaskStatus.ACTIVE,
+                agent_occurrence_id="occ-1",
+                context={"deferral": {"resolution": {"signed_at": "2026-08-21T00:00:00Z"}}},
+            )
+
+        monkeypatch.setattr(persistence, "get_task_by_id_any_occurrence", fake_get)
+        monkeypatch.setattr(
+            persistence, "update_task_status", lambda t, s, o: (calls.append(("task", s)), True)[1]
+        )
+        monkeypatch.setattr(
+            persistence,
+            "update_thought_status",
+            lambda **kw: (calls.append(("thought", kw.get("status"))), True)[1],
+        )
+
+        service = TaskSchedulerService.__new__(TaskSchedulerService)
+        scheduled = SimpleNamespace(task_id="sched-1", origin_thought_id="th-1")
+
+        assert service._reactivate_deferred_task(scheduled, "task-1") is True
+
+        assert not any(kind == "thought" for kind, _ in calls), (
+            "the refused thought must NOT be re-pended — that is the harm a status rewrite "
+            f"cannot undo. calls={calls}"
+        )
+        assert calls[-1] == ("task", TaskStatus.COMPLETED), (
+            f"the human's answer must be restored, got {calls}"
+        )
+
+
+class TestFirstRunCallersAreToldTheyCanAct:
+    def test_health_consults_the_same_first_run_gate_the_llm_routes_use(self) -> None:
+        from ciris_engine.logic.adapters.api.routes.system.health import _is_first_run_setup
+
+        assert callable(_is_first_run_setup)
+        src = (REPO / "ciris_engine/logic/adapters/api/routes/system/health.py").read_text()
+        assert "_is_first_run_setup() or getattr(auth" in src, (
+            "First-run setup is unauthenticated BUT _require_setup_or_admin allows it, so the "
+            "setup user may configure a provider. Telling them an administrator must do it "
+            "strands them in the exact state (fresh boot, no provider) this warning fires in."
+        )
+
+
+class TestA401MustReadAsAStatusCode:
+    @pytest.mark.parametrize(
+        "text,is_key_rejection",
+        [
+            ("HTTP 401 Invalid API Key", True),
+            ("http/401", True),
+            ("status: 401", True),
+            ("error code 401", True),
+            # The false positive: a 400 whose body happens to contain 401.
+            ("HTTP 400 bad request: 401 tokens exceeds limit", False),
+            ("context length 401", False),
+        ],
+    )
+    def test_only_a_real_status_counts(self, text: str, is_key_rejection: bool) -> None:
+        from ciris_engine.logic.adapters.api.routes.system.health import _HTTP_401
+
+        assert (_HTTP_401.search(text.lower()) is not None) is is_key_rejection

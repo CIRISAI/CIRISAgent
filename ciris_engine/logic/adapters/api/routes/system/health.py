@@ -5,6 +5,7 @@ Provides health status and time synchronization information.
 """
 
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Annotated, Optional, Sequence
 
@@ -132,6 +133,24 @@ def _provider_fault_code(service_provider: object) -> str:
     return str(getattr(service, "last_fault_code", "") or "").strip().lower()
 
 
+# "HTTP 401", "http/401", "status 401", "code: 401" — a status, not a token count.
+_HTTP_401 = re.compile(r"\b(?:http|https|status|code|error)\b[^0-9a-z]{0,4}401\b")
+
+
+def _is_first_run_setup() -> bool:
+    """Is this a first-run boot, where LLM settings are open without auth?
+
+    Mirrors the gate the LLM routes themselves use, so the health warning and
+    the route it links to cannot disagree about who may act.
+    """
+    try:
+        from ciris_engine.logic.setup.first_run import is_first_run
+
+        return bool(is_first_run())
+    except Exception:  # pragma: no cover - never fail health on this
+        return False
+
+
 def _fault_warning(
     lang: str, role: str, name: str, model: str, err: str, fault: str = "", can_manage: bool = True
 ) -> Optional[SystemWarning]:
@@ -194,7 +213,16 @@ def _fault_warning(
     low = err.lower()
     if "does not exist" in low or "model_not_found" in low or "unknown model" in low:
         return _warn("llm_model_not_found", "llm_model_not_found")
-    if "invalid api key" in low or "401" in low or "unauthorized" in low or "authentication" in low:
+    # A bare "401" ANYWHERE is not evidence of a rejected key: a provider
+    # reporting `HTTP 400 ... 401 tokens` would send the user to replace a
+    # credential that is fine, while the real fault goes unnamed. Require either
+    # authentication-specific wording or a 401 that reads as a status code.
+    if (
+        "invalid api key" in low
+        or "unauthorized" in low
+        or "authentication" in low
+        or _HTTP_401.search(low) is not None
+    ):
         return _warn("llm_key_rejected", "llm_key_rejected")
     return None
 
@@ -744,7 +772,13 @@ async def get_system_health(request: Request, auth: OptionalAuthDep = None) -> S
     # LLM management is admin-only, so an observer must not be handed an
     # instruction (or a link) they cannot act on. Derived from the CALLER's role,
     # never assumed.
-    _can_manage = getattr(auth, "role", None) in (
+    # First-run setup is intentionally unauthenticated, and BOTH LLM
+    # configuration routes allow it: _require_setup_or_admin returns early
+    # while is_first_run(). So the setup user may configure a provider even
+    # though `auth` is None — telling them "an administrator needs to do this"
+    # and hiding the link would strand them in exactly the state (fresh boot,
+    # no provider) where this warning fires most.
+    _can_manage = _is_first_run_setup() or getattr(auth, "role", None) in (
         UserRole.ADMIN,
         UserRole.AUTHORITY,
         UserRole.SYSTEM_ADMIN,

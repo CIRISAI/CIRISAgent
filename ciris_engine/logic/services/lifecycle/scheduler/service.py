@@ -99,6 +99,34 @@ RESOLVED_TASK_STATUSES: FrozenSet[TaskStatus] = frozenset(
 )
 
 
+def _has_recorded_resolution(task: object) -> bool:
+    """Did a wise authority already answer this deferral?
+
+    Reads the SIGNED resolution record that
+    ``WiseAuthorityService.resolve_deferral`` writes into
+    ``context["deferral"]["resolution"]``.
+
+    Status alone cannot answer this under concurrency, but the record can, and
+    the asymmetry is what makes it reliable: ``update_task_status`` writes ONLY
+    the status column, never context. So if this timer clobbers a resolution
+    that landed mid-window, the WA's record is still sitting there afterwards
+    and says so. The marker is monotonic — once written it is never removed —
+    which is exactly the property a status field lacks.
+    """
+    context = getattr(task, "context", None)
+    if context is None:
+        return False
+    if not isinstance(context, dict):
+        context = getattr(context, "model_dump", lambda: {})() or {}
+    if not isinstance(context, dict):
+        return False
+    deferral = context.get("deferral")
+    if not isinstance(deferral, dict):
+        return False
+    resolution = deferral.get("resolution")
+    return bool(resolution)
+
+
 class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
     """
     Manages scheduled tasks and integrates with the DEFER system.
@@ -361,7 +389,7 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
         # has closed, and re-pend the very thought a WA refused. Not a
         # dead-letter: the deferral was answered, so the one-time scheduled task
         # retires normally on the caller's happy path.
-        if deferred_task.status in RESOLVED_TASK_STATUSES:
+        if deferred_task.status in RESOLVED_TASK_STATUSES or _has_recorded_resolution(deferred_task):
             resolved_status = getattr(deferred_task.status, "value", deferred_task.status)
             logger.info(
                 f"Reactivate {safe_deferred_id}: skipped — task is already "
@@ -381,6 +409,34 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
         # and the agent kept spinning empty rounds (#934 layer B).
         if not update_task_status(deferred_task_id, TaskStatus.ACTIVE, occurrence_id):
             raise RuntimeError(f"failed to set deferred task {deferred_task_id} ACTIVE")
+
+        # (1a) LOST-RACE REPAIR. The check above is a read; this is the write;
+        # they are not one atomic step, and on a horizontally scaled deployment
+        # a WA can answer in between. The substrate offers no conditional
+        # status update — `engine.task_update_status` takes no expected value —
+        # so this cannot be a compare-and-set at this tier (upstream ask: a
+        # conditional task_update_status, the same shape as the existing
+        # task_try_claim_shared).
+        #
+        # It can still be made safe, because the two writers touch DIFFERENT
+        # columns: resolve_deferral upserts status AND context, while
+        # update_task_status writes status alone. So a resolution that landed
+        # inside the window survives our clobber in context, and finding it
+        # here means we lost. Put the answer back and retire the timer.
+        #
+        # Deliberately BEFORE the thought is re-pended: re-pending a thought a
+        # WA refused is the actual harm, and it is the step that cannot be
+        # undone by rewriting a status.
+        raced_task = get_task_by_id_any_occurrence(deferred_task_id)
+        if raced_task is not None and _has_recorded_resolution(raced_task):
+            update_task_status(deferred_task_id, TaskStatus.COMPLETED, occurrence_id)
+            logger.warning(
+                f"Reactivate {safe_deferred_id}: a wise authority answered while this timer was "
+                "firing. Restored the resolved status and retired the timer without re-pending "
+                "the thought — a timer does not overturn a human's answer, and losing a race "
+                "does not make it one."
+            )
+            return True
 
         # (2) Thought: re-pend the deferred thought. Setting the task ACTIVE
         # alone is NOT enough — get_tasks_needing_seed_thought only seeds

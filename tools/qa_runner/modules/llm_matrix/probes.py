@@ -257,6 +257,55 @@ class ProbeExecutor:
 
     # ── listing probe ──────────────────────────────────────────────────────
 
+    async def _list_models_direct(
+        self, sdk: str, api_key: str, base_url: Optional[str]
+    ) -> Tuple[bool, Optional[BaseException]]:
+        """Ask the provider's models endpoint directly — NO model named.
+
+        Shares the product's lister, so a provider envelope quirk is learned
+        once. Together's bare-array /models previously fooled the product into
+        showing a cached catalogue AND fooled this probe into reporting a dead
+        key — the same quirk, two wrong conclusions, because each had its own
+        copy of the call.
+        """
+        from ciris_engine.logic.services.runtime.llm_service.model_listing import list_model_ids
+
+        try:
+            await list_model_ids(sdk, api_key, base_url, timeout=self.timeout)
+        except BaseException as exc:  # noqa: BLE001 - the classifier reads the exception
+            return False, exc
+        return True, None
+
+    async def run_credential_probe(
+        self, cell: MatrixCell, spec: ProviderSpec, api_key: str
+    ) -> LLMProbeOutcome:
+        """Is this CREDENTIAL valid? Answered without naming a model.
+
+        Liveness used to be established with a minimal completion, which cannot
+        be asked without naming a model — so a decommissioned model reported as
+        a bad key. That happened: Groq's cheap_model was retired, the preflight
+        got 404, and a perfectly live credential was classified OTHER and its
+        whole column skipped.
+
+        That is the same defect this harness exists to find, one level up. The
+        wizard fabricates a model when the user chose none; the probe fabricated
+        one when the question did not need one at all. Authentication and model
+        availability are different questions, and a probe that conflates them
+        cannot answer either cleanly.
+
+        /models answers it with no model: 200 means the key works, 401 means it
+        does not, and a retired model cannot make a live key look dead.
+        """
+        started = time.monotonic()
+        self.live_call_count += 1
+        ok, exc = await self._list_models_direct(spec.sdk, api_key, cell.base_url)
+        elapsed_ms = (time.monotonic() - started) * 1000.0
+
+        if ok:
+            return LLMProbeOutcome(succeeded=True, http_status=200, latency_ms=elapsed_ms)
+        outcome, _ = self._capture_failure(exc, cell, None, elapsed_ms)  # type: ignore[arg-type]
+        return outcome
+
     async def run_models_list(self, cell: MatrixCell, api_key: str) -> Tuple[LLMProbeOutcome, ListModelsResponse]:
         """Call the PRODUCT's listing path and record what a user would see.
 

@@ -63,10 +63,17 @@ class TestAFailedListingSaysWhy:
 
 
 class TestGoogleListingActuallyIterates:
-    """`AsyncModels.list()` returns a COROUTINE, not an async iterable."""
+    """`AsyncModels.list()` returns a COROUTINE, not an async iterable.
+
+    The invariant now lives in the shared lister — the three per-provider copies
+    were collapsed into one so a provider quirk is learned once. Asserting on
+    the shared module rather than the old wrapper is the point of that move.
+    """
 
     def test_the_pager_is_awaited_before_iterating(self) -> None:
-        src = inspect.getsource(llm_validation._google_models_to_list)
+        from ciris_engine.logic.services.runtime.llm_service import model_listing
+
+        src = inspect.getsource(model_listing._list_google)
         assert "await client.aio.models.list" in src, (
             "without the await this raises \"'async for' requires an object with __aiter__ "
             "method, got coroutine\" on every call — Google's listing failed 100% of the time"
@@ -74,7 +81,9 @@ class TestGoogleListingActuallyIterates:
         assert "async for model in pager" in src
 
     @pytest.mark.asyncio
-    async def test_it_collects_models_from_the_resolved_pager(self) -> None:
+    async def test_it_collects_models_from_the_resolved_pager(self, monkeypatch) -> None:
+        from ciris_engine.logic.services.runtime.llm_service import model_listing
+
         class Model:
             def __init__(self, name): self.name = name
 
@@ -88,11 +97,21 @@ class TestGoogleListingActuallyIterates:
             async def list(self, config=None):  # coroutine, exactly like the SDK
                 return Pager()
 
-        class Client:
-            aio = type("Aio", (), {"models": Models()})()
+        class Aio:
+            models = Models()
 
-        got = await llm_validation._google_models_to_list(Client())
-        assert [m.name for m in got] == ["models/gemini-3.6-flash"]
+        class Client:
+            aio = Aio()
+
+        import sys, types
+        fake = types.ModuleType("google.genai")
+        fake.Client = lambda api_key=None: Client()
+        monkeypatch.setitem(sys.modules, "google.genai", fake)
+        google_pkg = sys.modules.get("google") or types.ModuleType("google")
+        monkeypatch.setattr(google_pkg, "genai", fake, raising=False)
+        monkeypatch.setitem(sys.modules, "google", google_pkg)
+
+        assert await model_listing._list_google("k") == ["models/gemini-3.6-flash"]
 
 
 class TestANonStandardModelsEnvelopeStillLists:

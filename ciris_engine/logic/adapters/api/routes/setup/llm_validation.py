@@ -13,6 +13,12 @@ from ciris_engine.config.model_capabilities import get_model_capabilities
 
 from .models import ListModelsResponse, LiveModelInfo, LLMProvider, LLMValidationRequest, LLMValidationResponse
 from ciris_engine.logic.utils.log_sanitizer import sanitize_for_log
+from ciris_engine.logic.services.runtime.llm_service.model_listing import (
+    SDK_ANTHROPIC,
+    SDK_GOOGLE,
+    SDK_OPENAI,
+    list_model_ids,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -459,103 +465,29 @@ async def _validate_llm_connection(config: LLMValidationRequest) -> LLMValidatio
 
 async def _list_models_openai_compatible(api_key: str, base_url: Optional[str]) -> List[LiveModelInfo]:
     """Query models from an OpenAI-compatible API endpoint."""
-    from openai import AsyncOpenAI
-
-    client_kwargs: Dict[str, Any] = {"api_key": api_key or "local", "timeout": _LIST_MODELS_TIMEOUT}
-    if base_url:
-        client_kwargs["base_url"] = base_url
-
-    client = AsyncOpenAI(**client_kwargs)
-
-    # Together answers /models with a BARE JSON ARRAY where the OpenAI SDK
-    # expects {"data": [...]}, so the SDK's own parse raises
-    # "'list' object has no attribute '_set_private_attributes'" — Together's
-    # live listing failed 100% of the time on a valid key, and the wizard
-    # silently showed cached models. Confirmed live by the conformance matrix.
-    #
-    # Fall back to the raw response and read the array directly. Not
-    # Together-specific by name: any OpenAI-compatible endpoint that answers
-    # this shape now works, and the SDK path is still preferred when it parses.
-    try:
-        models_page = await asyncio.wait_for(client.models.list(), timeout=_LIST_MODELS_TIMEOUT)
-        entries: List[Any] = list(models_page.data)
-    except AttributeError:
-        logger.info(
-            "[LIST_MODELS] %s returned a non-standard /models envelope; reading the raw array",
-            sanitize_for_log(base_url or "default"),
-        )
-        raw = await asyncio.wait_for(
-            client.get("/models", cast_to=object), timeout=_LIST_MODELS_TIMEOUT
-        )
-        payload = raw.get("data") if isinstance(raw, dict) else raw
-        entries = list(payload) if isinstance(payload, list) else []
-
-    result: List[LiveModelInfo] = []
-    for model in entries:
-        model_id = getattr(model, "id", None) or (model.get("id") if isinstance(model, dict) else None)
-        if not model_id:
-            continue
-        result.append(LiveModelInfo(id=str(model_id), display_name=str(model_id), source="live"))
-    return result
+    ids = await asyncio.wait_for(
+        list_model_ids(SDK_OPENAI, api_key, base_url, timeout=_LIST_MODELS_TIMEOUT),
+        timeout=_LIST_MODELS_TIMEOUT,
+    )
+    return [LiveModelInfo(id=i, display_name=i, source="live") for i in ids]
 
 
 async def _list_models_anthropic(api_key: str) -> List[LiveModelInfo]:
     """Query models from the Anthropic API using the native SDK."""
-    import anthropic
-
-    client = anthropic.AsyncAnthropic(api_key=api_key)
-    result: List[LiveModelInfo] = []
-
-    page = await asyncio.wait_for(client.models.list(limit=100), timeout=_LIST_MODELS_TIMEOUT)
-    for model in page.data:
-        display = getattr(model, "display_name", model.id)
-        result.append(LiveModelInfo(id=model.id, display_name=display, source="live"))
-
-    while page.has_next_page():
-        page = await asyncio.wait_for(page.get_next_page(), timeout=_LIST_MODELS_TIMEOUT)
-        for model in page.data:
-            display = getattr(model, "display_name", model.id)
-            result.append(LiveModelInfo(id=model.id, display_name=display, source="live"))
-
-    return result
-
-
-async def _google_models_to_list(client: Any) -> List[Any]:
-    """Collect Google models into a list (helper to work with asyncio.wait_for).
-
-    ``AsyncModels.list()`` returns a COROUTINE that resolves to the async
-    pager — it is not itself an async iterable. Without the await this raised
-    "'async for' requires an object with __aiter__ method, got coroutine" on
-    every single call, so Google's live listing failed 100% of the time even
-    with a valid key, and the wizard silently showed cached models instead.
-    Confirmed live by the provider conformance matrix.
-    """
-    pager = await client.aio.models.list(config={"query_base": True})
-    result = []
-    async for model in pager:
-        result.append(model)
-    return result
+    ids = await asyncio.wait_for(
+        list_model_ids(SDK_ANTHROPIC, api_key, timeout=_LIST_MODELS_TIMEOUT),
+        timeout=_LIST_MODELS_TIMEOUT,
+    )
+    return [LiveModelInfo(id=i, display_name=i, source="live") for i in ids]
 
 
 async def _list_models_google(api_key: str) -> List[LiveModelInfo]:
     """Query models from Google AI using the google-genai SDK."""
-    try:
-        from google import genai
-
-        client = genai.Client(api_key=api_key)
-        raw_models = await asyncio.wait_for(_google_models_to_list(client), timeout=_LIST_MODELS_TIMEOUT)
-
-        result: List[LiveModelInfo] = []
-        for model in raw_models:
-            model_name = model.name or ""
-            # Strip "models/" prefix that Google returns
-            model_id = model_name.replace("models/", "") if model_name.startswith("models/") else model_name
-            display = getattr(model, "display_name", None) or model_id
-            result.append(LiveModelInfo(id=model_id, display_name=display, source="live"))
-        return result
-    except ImportError:
-        # Fall back to OpenAI-compatible endpoint
-        return await _list_models_openai_compatible(api_key, "https://generativelanguage.googleapis.com/v1beta/openai/")
+    ids = await asyncio.wait_for(
+        list_model_ids(SDK_GOOGLE, api_key, timeout=_LIST_MODELS_TIMEOUT),
+        timeout=_LIST_MODELS_TIMEOUT,
+    )
+    return [LiveModelInfo(id=i, display_name=i, source="live") for i in ids]
 
 
 async def _list_models_ollama(base_url: str) -> List[LiveModelInfo]:

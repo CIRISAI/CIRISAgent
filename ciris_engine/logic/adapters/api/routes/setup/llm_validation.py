@@ -285,6 +285,7 @@ def _get_provider_base_url(provider: str, base_url: Optional[str]) -> Optional[s
 async def _validate_openai_compatible(config: LLMValidationRequest) -> LLMValidationResponse:
     """Validate OpenAI-compatible API connection."""
     from openai import AsyncOpenAI
+    from ciris_engine.logic.services.runtime.llm_service.service import build_request_extra_body
 
     # Build client configuration
     client_kwargs: Dict[str, Any] = {"api_key": config.api_key or "local"}
@@ -299,12 +300,26 @@ async def _validate_openai_compatible(config: LLMValidationRequest) -> LLMValida
     client = AsyncOpenAI(**client_kwargs)
     model_to_test = config.model or "gpt-3.5-turbo"
 
+    # SAME request shaping as the pipeline (CIRISAgent Lane A). Validating with a
+    # bare completion asked the provider a different question than the agent will
+    # actually ask, so setup could bless a configuration the pipeline then
+    # refused. With zero-data-retention that gap inverts the guarantee: omitting
+    # the policy makes validation MORE likely to succeed, so a privacy-
+    # constrained user would be told their setup works precisely because the
+    # check dropped the constraint they asked for.
+    extra_body = build_request_extra_body(
+        resolved_base_url or "",
+        model_to_test,
+        require_zero_data_retention=config.require_zero_data_retention,
+    )
+
     # Try max_tokens first, fall back to max_completion_tokens for reasoning models
     try:
         await client.chat.completions.create(
             model=model_to_test,
             messages=[{"role": "user", "content": "Hi"}],
             max_tokens=1,
+            extra_body=extra_body,
         )
     except Exception as token_err:
         error_str = str(token_err).lower()
@@ -314,6 +329,7 @@ async def _validate_openai_compatible(config: LLMValidationRequest) -> LLMValida
                 model=model_to_test,
                 messages=[{"role": "user", "content": "Hi"}],
                 max_completion_tokens=1,
+                extra_body=extra_body,
             )
         else:
             raise

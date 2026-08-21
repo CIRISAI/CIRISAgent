@@ -152,6 +152,41 @@ def _build_ciris_proxy_metadata(
         )
 
 
+def build_request_extra_body(
+    base_url: str,
+    model_name: str,
+    *,
+    require_zero_data_retention: bool = True,
+) -> Dict[str, Any]:
+    """The ``extra_body`` an outbound completion carries, for ANY caller.
+
+    One definition, two callers: the pipeline builds on top of this, and setup
+    validation now sends the same thing. That shared-ness is the point, not an
+    optimisation.
+
+    The setup wizard previously constructed a bare ``AsyncOpenAI`` and sent a
+    plain completion — no reasoning-off extras, and no data policy. So it could
+    report "Connection successful!" for a configuration the pipeline would then
+    refuse, because the two were not asking the provider the same question. With
+    zero-data-retention that divergence is worse than confusing: validation would
+    succeed precisely BECAUSE it omitted the guardrail the real request carries,
+    telling a user their privacy-constrained setup works when it does not.
+
+    Callers with extra per-request context (the CIRIS proxy's task/thought
+    metadata) add it on top; they do not fork this.
+    """
+    extra_body: Dict[str, Any] = OpenAICompatibleClient._build_reasoning_off_extras(base_url, model_name or "")
+
+    if "openrouter.ai" in base_url:
+        provider_config = _build_openrouter_provider_config(
+            require_zero_data_retention=require_zero_data_retention
+        )
+        if provider_config.order or provider_config.ignore or provider_config.data_collection:
+            extra_body["provider"] = provider_config.model_dump(exclude_defaults=True, exclude_none=True)
+
+    return extra_body
+
+
 def _build_openrouter_provider_config(require_zero_data_retention: bool = True) -> OpenRouterProviderConfig:
     """Build provider config for OpenRouter requests.
 
@@ -1917,24 +1952,19 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         extra_kwargs: Dict[str, Any] = {}
         base_url = self.openai_config.base_url or ""
 
-        # Per-endpoint reasoning-off dispatch — see _build_reasoning_off_extras.
-        extra_body: Dict[str, Any] = self._build_reasoning_off_extras(base_url, self.model_name or "")
+        # Shared with setup validation — see build_request_extra_body. The
+        # `data_collection` guard lives in there, because a ZDR-only config must
+        # still emit the provider block; omitting it from that condition would
+        # let the promise exist on the model and never reach the wire.
+        extra_body: Dict[str, Any] = build_request_extra_body(
+            base_url,
+            self.model_name or "",
+            require_zero_data_retention=self.openai_config.require_zero_data_retention,
+        )
 
         if "ciris.ai" in base_url or "ciris-services" in base_url:
             metadata = _build_ciris_proxy_metadata(task_id, thought_id, retry_state, resp_model_name)
             extra_body["metadata"] = metadata.model_dump()
-        elif "openrouter.ai" in base_url:
-            provider_config = _build_openrouter_provider_config(
-                require_zero_data_retention=self.openai_config.require_zero_data_retention
-            )
-            # `data_collection` MUST be in this condition. It gates whether the
-            # provider block is emitted at all, so omitting it here would let the
-            # field exist on the model, be set from config, and still never reach
-            # the wire — a promise that type-checks, tests green on the config
-            # object, and is absent from the request. That is precisely the shape
-            # of the original defect, one layer further in.
-            if provider_config.order or provider_config.ignore or provider_config.data_collection:
-                extra_body["provider"] = provider_config.model_dump(exclude_defaults=True, exclude_none=True)
         elif self._is_local_endpoint(base_url):
             logger.debug(
                 f"[LOCAL_LLM] Disabled model reasoning for model={self.model_name} "

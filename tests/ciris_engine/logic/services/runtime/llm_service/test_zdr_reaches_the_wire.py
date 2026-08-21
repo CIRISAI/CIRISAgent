@@ -86,7 +86,15 @@ class TestTheEmitGuardCannotSwallowIt:
         )
 
     def test_the_guard_names_data_collection(self) -> None:
-        src = inspect.getsource(OpenAICompatibleClient._build_extra_kwargs)
+        """Wherever the guard lives, it must name the field.
+
+        It moved from _build_extra_kwargs into the shared builder when setup
+        validation started using the same code — so this looks it up rather than
+        pinning a location, and would fail if it split back into two.
+        """
+        from ciris_engine.logic.services.runtime.llm_service.service import build_request_extra_body
+
+        src = inspect.getsource(build_request_extra_body)
         guard = next(l for l in src.splitlines() if "provider_config.order" in l and "if " in l)
         assert "data_collection" in guard, f"emit guard would drop a ZDR-only config: {guard.strip()}"
 
@@ -127,3 +135,50 @@ class TestNonOpenRouterProvidersAreUnaffected:
         which is why the catalogue records it per endpoint."""
         body = _extra_body(_client("https://api.groq.com/openai/v1", zdr=True))
         assert "provider" not in body
+
+
+class TestSetupAndPipelineAskTheProviderTheSameQuestion:
+    """The divergence that let setup bless what the pipeline refused.
+
+    Setup validation used to build a bare AsyncOpenAI and send a plain
+    completion — no reasoning-off extras, no data policy. So "Connection
+    successful!" was an answer to a different question than the one the agent
+    would go on to ask.
+
+    With ZDR that gap inverts the guarantee. Omitting the policy makes
+    validation MORE likely to succeed, so a user who asked for zero retention
+    would be told their configuration works precisely because the check dropped
+    the constraint they requested.
+    """
+
+    def test_both_paths_produce_the_same_extra_body(self) -> None:
+        from ciris_engine.logic.services.runtime.llm_service.service import build_request_extra_body
+
+        pipeline = _extra_body(_client(OPENROUTER, zdr=True))
+        setup = build_request_extra_body(OPENROUTER, "meta-llama/llama-4-scout", require_zero_data_retention=True)
+        assert pipeline == setup, (
+            "setup validation and the pipeline must send the same request shaping, or setup can "
+            f"pass on a configuration the pipeline refuses.\n  pipeline={pipeline}\n  setup={setup}"
+        )
+
+    def test_validation_actually_attaches_it_to_the_call(self) -> None:
+        """Building the body and forgetting to send it is the same bug again."""
+        import inspect
+
+        from ciris_engine.logic.adapters.api.routes.setup import llm_validation
+
+        src = inspect.getsource(llm_validation._validate_openai_compatible)
+        assert "build_request_extra_body" in src, "validation must use the shared builder"
+        assert src.count("extra_body=extra_body") >= 2, (
+            "both the max_tokens attempt AND the max_completion_tokens retry must carry it — "
+            "a reasoning model would otherwise validate without the policy"
+        )
+
+    def test_the_validation_request_carries_the_users_choice(self) -> None:
+        from ciris_engine.logic.adapters.api.routes.setup.models import LLMValidationRequest
+
+        assert "require_zero_data_retention" in LLMValidationRequest.model_fields
+        req = LLMValidationRequest(provider="openrouter", api_key="k")
+        assert req.require_zero_data_retention is True, (
+            "a caller that omits the field must get the protective posture, not the permissive one"
+        )

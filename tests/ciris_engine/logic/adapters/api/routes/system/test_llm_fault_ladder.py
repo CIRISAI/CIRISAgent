@@ -102,3 +102,40 @@ class TestItDoesNotOverreach:
         # is how people learn to ignore warnings.
         ws = _llm_breaker_warnings([_p("a", "m", "half_open")])
         assert "llm_provider_circuit_open" not in _codes(ws)
+
+
+class TestObserversAreNotHandedControlsTheyLack:
+    """LLM management is admin-only; /v1/system/health is observer-gated.
+
+    So an ordinary user sees these warnings. Telling them to "Open LLM Settings
+    and update the key" points them at a screen `_require_setup_or_admin` will
+    refuse — which reads as the product being broken twice, and teaches people
+    that the guidance in warnings is not to be trusted.
+
+    The FACT is the same for everyone, and they are entitled to it: the agent
+    cannot answer, and why. Only the REMEDY changes.
+    """
+
+    def test_an_observer_gets_the_fact_without_a_dead_link(self):
+        ws = _llm_breaker_warnings(FRANCESCO, can_manage=False)
+        for w in ws:
+            assert w.action_url is None, f"{w.code} links an observer at an admin-only screen"
+
+    def test_an_observer_is_told_who_can_fix_it(self):
+        ws = _llm_breaker_warnings(FRANCESCO, can_manage=False)
+        m = _msg(ws, "llm_model_not_found")
+        assert "administrator" in m.lower()
+        # still names the actual fault — an observer is not kept in the dark
+        assert "groq_byok" in m and "default" in m
+
+    def test_an_admin_still_gets_the_actionable_form(self):
+        ws = _llm_breaker_warnings(FRANCESCO, can_manage=True)
+        assert _msg(ws, "llm_model_not_found").count("Open LLM Settings") == 1
+        assert all(w.action_url == "/settings/llm" for w in ws)
+
+    def test_the_outage_line_differs_too(self):
+        admin = _msg(_llm_breaker_warnings(FRANCESCO, True), "llm_all_providers_failed")
+        obs = _msg(_llm_breaker_warnings(FRANCESCO, False), "llm_all_providers_failed")
+        assert admin != obs
+        # both must still say when it retries — that is not privileged information
+        assert "10" in admin and "10" in obs

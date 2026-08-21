@@ -36,6 +36,8 @@ from .schemas import (
 
 from ciris_engine.logic.utils.localization import get_preferred_language, get_string
 
+from ciris_engine.schemas.api.auth import UserRole
+
 logger = logging.getLogger(__name__)
 
 # Type alias for authenticated observer dependency (S8410 compliance)
@@ -130,7 +132,7 @@ def _provider_fault_code(service_provider: object) -> str:
 
 
 def _fault_warning(
-    lang: str, role: str, name: str, model: str, err: str, fault: str = ""
+    lang: str, role: str, name: str, model: str, err: str, fault: str = "", can_manage: bool = True
 ) -> Optional[SystemWarning]:
     """Turn the provider's OWN words into the one instruction that fixes it.
 
@@ -139,56 +141,64 @@ def _fault_warning(
     Reporting them identically makes the user guess, and this is exactly the
     surface where guessing costs them the whole agent (CIRISAgent#1078).
 
+    ONE CONSTRUCTOR FOR BOTH DETECTION PATHS. The structured signal and the text
+    fallback used to build their SystemWarning separately, and the first change
+    that touched only one of them (role-awareness) silently shipped an admin-only
+    instruction to observers down the fallback path. Detection may differ;
+    the message must not.
+
+    DO NOT HAND SOMEONE AN INSTRUCTION THEY CANNOT CARRY OUT. LLM management is
+    admin-only (`_require_setup_or_admin`: "regular users cannot modify
+    settings"), but /v1/system/health is observer-gated — so an ordinary user
+    sees these warnings too. Telling them to "Open LLM Settings" points them at a
+    screen the API will refuse, which reads as the product being broken twice.
+    The FACT is the same for everyone and they are entitled to it; only the
+    REMEDY changes, and an observer gets no action_url — a link to a control you
+    do not have is not a courtesy.
+
     Only faults whose remedy we are SURE of get their own message. Anything else
-    falls through to the generic provider-failed line rather than inventing an
-    instruction that might send the reader somewhere wrong.
+    returns None and falls through to the generic provider-failed line rather
+    than inventing an instruction that might send the reader somewhere wrong.
     """
+
+    def _warn(code: str, key: str) -> SystemWarning:
+        return SystemWarning(
+            code=code,
+            message=get_string(
+                lang,
+                f"status.{key}" if can_manage else f"status.{key}_observer",
+                provider=name,
+                model=model,
+            ),
+            severity="error",
+            action_url="/settings/llm" if can_manage else None,
+        )
+
     # PREFER THE PROVIDER'S OWN CODE. `fault` is captured at the LLM service,
     # where the openai APIStatusError still exists and `body.error.code` is
     # readable. Falling back to substrings makes every vendor's wording, in every
     # locale, load-bearing — and the first one to say "unknown model" instead of
     # "does not exist" silently stops being diagnosed.
-    #
-    # The text fallback stays for providers that return no structured code, but
-    # it is second, not first.
     if fault == "model_not_found":
-        return SystemWarning(
-            code="llm_model_not_found",
-            message=get_string(lang, "status.llm_model_not_found", provider=name, model=model),
-            severity="error",
-            action_url="/settings/llm",
-        )
+        return _warn("llm_model_not_found", "llm_model_not_found")
     if fault == "invalid_api_key":
-        return SystemWarning(
-            code="llm_key_rejected",
-            message=get_string(lang, "status.llm_key_rejected", provider=name, model=model),
-            severity="error",
-            action_url="/settings/llm",
-        )
+        return _warn("llm_key_rejected", "llm_key_rejected")
     if fault:
         # Structured, but not one we have an instruction for. Say nothing
-        # specific rather than guess — the generic line below still fires.
+        # specific rather than guess — the generic line still fires.
         return None
 
+    # Text fallback, for providers that return no structured code. Second, never
+    # first, and it builds through the SAME constructor above.
     low = err.lower()
     if "does not exist" in low or "model_not_found" in low or "unknown model" in low:
-        return SystemWarning(
-            code="llm_model_not_found",
-            message=get_string(lang, "status.llm_model_not_found", provider=name, model=model),
-            severity="error",
-            action_url="/settings/llm",
-        )
+        return _warn("llm_model_not_found", "llm_model_not_found")
     if "invalid api key" in low or "401" in low or "unauthorized" in low or "authentication" in low:
-        return SystemWarning(
-            code="llm_key_rejected",
-            message=get_string(lang, "status.llm_key_rejected", provider=name, model=model),
-            severity="error",
-            action_url="/settings/llm",
-        )
+        return _warn("llm_key_rejected", "llm_key_rejected")
     return None
 
 
-def _llm_breaker_warnings(providers: Sequence[object]) -> list[SystemWarning]:
+def _llm_breaker_warnings(providers: Sequence[object], can_manage: bool = True) -> list[SystemWarning]:
     """Escalate from "here is the fix" to "nothing works, here is when it retries".
 
     One failed call is noise. A named fault with a known remedy is a to-do. A
@@ -216,7 +226,11 @@ def _llm_breaker_warnings(providers: Sequence[object]) -> list[SystemWarning]:
 
         # The actionable fault, if we can name the remedy with confidence.
         fault_code = _provider_fault_code(sp)
-        fault = _fault_warning(lang, role, name, model, err, fault_code) if (err or fault_code) else None
+        fault = (
+            _fault_warning(lang, role, name, model, err, fault_code, can_manage)
+            if (err or fault_code)
+            else None
+        )
         if fault:
             warnings.append(fault)
 
@@ -236,7 +250,7 @@ def _llm_breaker_warnings(providers: Sequence[object]) -> list[SystemWarning]:
                         model=model,
                     ),
                     severity="warning",
-                    action_url="/settings/llm",
+                    action_url="/settings/llm" if can_manage else None,
                 )
             )
         elif err and not fault:
@@ -255,7 +269,7 @@ def _llm_breaker_warnings(providers: Sequence[object]) -> list[SystemWarning]:
                         detail=err,
                     ),
                     severity="warning",
-                    action_url="/settings/llm",
+                    action_url="/settings/llm" if can_manage else None,
                 )
             )
 
@@ -267,9 +281,13 @@ def _llm_breaker_warnings(providers: Sequence[object]) -> list[SystemWarning]:
         warnings.append(
             SystemWarning(
                 code="llm_all_providers_failed",
-                message=get_string(lang, "status.llm_all_providers_failed", seconds=retry),
+                message=get_string(
+                    lang,
+                    "status.llm_all_providers_failed" if can_manage else "status.llm_all_providers_failed_observer",
+                    seconds=retry,
+                ),
                 severity="error",
-                action_url="/settings/llm",
+                action_url="/settings/llm" if can_manage else None,
             )
         )
     return warnings
@@ -299,7 +317,7 @@ async def _check_provider_health(service_provider: object) -> bool:
     return False
 
 
-async def check_llm_availability() -> tuple[bool, list[SystemWarning]]:
+async def check_llm_availability(can_manage: bool = True) -> tuple[bool, list[SystemWarning]]:
     """Check LLM provider availability and return (has_working_llm, warnings)."""
     from ciris_engine.logic.registries.base import get_global_registry
     from ciris_engine.schemas.runtime.enums import ServiceType
@@ -341,7 +359,7 @@ async def check_llm_availability() -> tuple[bool, list[SystemWarning]]:
     # whether anything is left. If it produced a verdict, that verdict is the
     # message — appending the generic "no provider is answering" underneath
     # would restate it less precisely.
-    breaker = _llm_breaker_warnings(llm_providers)
+    breaker = _llm_breaker_warnings(llm_providers, can_manage)
     if breaker:
         return False, breaker
 
@@ -669,13 +687,15 @@ def _stale_shared_task_warnings(request: Request) -> list[SystemWarning]:
     ]
 
 
-async def collect_system_warnings(request: Request) -> tuple[bool, list[SystemWarning]]:
+async def collect_system_warnings(
+    request: Request, can_manage: bool = True
+) -> tuple[bool, list[SystemWarning]]:
     """Collect system-level warnings and check degraded mode.
 
     Returns (degraded_mode, warnings) tuple. degraded_mode is True when NO
     working LLM is available.
     """
-    has_working_llm, llm_warnings = await check_llm_availability()
+    has_working_llm, llm_warnings = await check_llm_availability(can_manage)
     warnings = llm_warnings.copy()
     warnings.extend(await _adapter_reauth_warnings(request))
     warnings.extend(_hardware_trust_warnings(request))
@@ -708,7 +728,15 @@ async def get_system_health(request: Request) -> SuccessResponse[SystemHealthRes
     processor_healthy = await check_processor_health(request)
 
     # Collect system warnings and check degraded mode
-    degraded_mode, warnings = await collect_system_warnings(request)
+    # LLM management is admin-only, so an observer must not be handed an
+    # instruction (or a link) they cannot act on. Derived from the CALLER's role,
+    # never assumed.
+    _can_manage = getattr(auth, "role", None) in (
+        UserRole.ADMIN,
+        UserRole.AUTHORITY,
+        UserRole.SYSTEM_ADMIN,
+    )
+    degraded_mode, warnings = await collect_system_warnings(request, _can_manage)
 
     # Determine overall system status
     status = determine_overall_status(init_complete, processor_healthy, services)

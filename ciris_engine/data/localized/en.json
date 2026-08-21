@@ -102,7 +102,10 @@
     "llm_model_not_found": "{provider} does not have the model ‘{model}’. Open LLM Settings and choose a model it supports.",
     "llm_key_rejected": "{provider} rejected the API key used for ‘{model}’. Open LLM Settings and update the key.",
     "llm_provider_failed": "{role} LLM provider ({provider} / {model}) has failed: {detail}",
-    "llm_all_providers_failed": "All LLM providers have failed. Add a working provider in LLM Settings — the system retries automatically every {seconds}s."
+    "llm_all_providers_failed": "All LLM providers have failed. Add a working provider in LLM Settings — the system retries automatically every {seconds}s.",
+    "llm_model_not_found_observer": "{provider} does not have the model ‘{model}’. An administrator needs to change it in LLM Settings.",
+    "llm_key_rejected_observer": "{provider} rejected the API key used for ‘{model}’. An administrator needs to update it in LLM Settings.",
+    "llm_all_providers_failed_observer": "All LLM providers have failed, so the agent cannot answer. An administrator needs to add a working provider. The system retries automatically every {seconds}s."
   },
   "prompts": {
     "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================",

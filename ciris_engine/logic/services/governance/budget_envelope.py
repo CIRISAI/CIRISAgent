@@ -76,7 +76,7 @@ def canonical_grant_payload(grant: GrantedBudget) -> bytes:
     """
     payload: Dict[str, Any] = grant.model_dump(mode="json", exclude={"signature"})
     try:
-        from ciris_verify import jcs_canonicalize  # substrate-provided canonicalizer
+        from ciris_adapters.ciris_verify.ffi_bindings import jcs_canonicalize  # substrate-provided canonicalizer
 
         canonical: bytes = jcs_canonicalize(json.dumps(payload, ensure_ascii=False))
         return canonical

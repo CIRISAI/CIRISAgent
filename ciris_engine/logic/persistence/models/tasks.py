@@ -278,6 +278,54 @@ def _list_with_filter(
 # ---------------------------------------------------------------------------
 
 
+def get_task_raw_context(task_id: str) -> Dict[str, Any]:
+    """The task's PERSISTED context dict, before materialization drops most of it.
+
+    ``_persist_row_to_task`` builds a ``TaskContext`` out of seven named fields
+    (channel_id, user_id, correlation_id, parent_task_id, agent_occurrence_id,
+    preferred_language, envelope). Everything else the row carries is silently
+    discarded — including the signed deferral resolution that
+    ``WiseAuthorityService.resolve_deferral`` writes to
+    ``context["deferral"]["resolution"]``.
+
+    So a caller that needs to know whether a wise authority has ANSWERED cannot
+    learn it from a ``Task``: the marker is real in the database and absent
+    from the object. Reading the row is the only way to see it, and this
+    function exists so that fact is stated once instead of being rediscovered
+    as a guard that silently never fires.
+
+    Returns an empty dict when the task is missing or the context is
+    unreadable — callers treat "no marker" as "not answered", which is the
+    conservative direction for every current caller.
+    """
+    try:
+        # _get_engine() RAISES when persistence is not bootstrapped, so it has to
+        # be inside the guard, not above it. Before this helper existed the
+        # caller read an attribute off an already-loaded Task and touched no
+        # database at all; leaving the lookup unguarded turned a path that never
+        # needed persistence into one that hard-fails without it — which is a
+        # regression in reach, not just in tests. "No engine" means "no marker
+        # visible", and the caller then falls back to the status check exactly
+        # as it did before.
+        engine = _get_engine()
+        raw = engine.task_get(task_id)
+    except Exception as e:
+        logger.debug(f"Raw context unavailable for task {task_id}: {e}")
+        return {}
+    if raw is None:
+        return {}
+    row = json.loads(raw) if isinstance(raw, str) else raw
+    if not isinstance(row, dict):
+        return {}
+    ctx = row.get("context")
+    if isinstance(ctx, str):
+        try:
+            ctx = json.loads(ctx)
+        except (ValueError, TypeError):
+            return {}
+    return ctx if isinstance(ctx, dict) else {}
+
+
 def get_task_by_id_any_occurrence(task_id: str) -> Optional[Task]:
     """Get a task by ID without filtering by occurrence_id."""
     engine = _get_engine()

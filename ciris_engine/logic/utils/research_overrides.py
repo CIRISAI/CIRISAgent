@@ -659,7 +659,7 @@ def compute_manifest_digest(raw: Dict[str, Any]) -> str:
     """
     import hashlib
 
-    from ciris_verify import jcs_canonicalize  # substrate-provided canonicalizer
+    from ciris_adapters.ciris_verify.ffi_bindings import jcs_canonicalize  # substrate-provided canonicalizer
 
     canonical: bytes = jcs_canonicalize(json.dumps(raw, ensure_ascii=False, sort_keys=True))
     return "sha256:" + hashlib.sha256(canonical).hexdigest()
@@ -802,11 +802,7 @@ def _bundle_has(bundle: Dict[str, Any], key: str) -> bool:
         if not isinstance(node, dict):
             return False
         node = node.get(segment)
-    return (
-        isinstance(node, dict)
-        and bool(node)
-        and all(isinstance(v, str) and v for v in node.values())
-    )
+    return isinstance(node, dict) and bool(node) and all(isinstance(v, str) and v for v in node.values())
 
 
 def _yaml_present_fields(path: Path, allowed: FrozenSet[str]) -> Set[str]:
@@ -1096,9 +1092,7 @@ def get_active_overrides() -> Optional[ResearchOverrideManifest]:
     except json.JSONDecodeError as exc:
         raise ResearchOverrideError(f"{manifest_path} is not valid JSON: {exc}") from exc
 
-    manifest = ResearchOverrideManifest(
-        **raw, manifest_path=str(path), manifest_digest=compute_manifest_digest(raw)
-    )
+    manifest = ResearchOverrideManifest(**raw, manifest_path=str(path), manifest_digest=compute_manifest_digest(raw))
     _validate_manifest(manifest)
 
     _active = manifest

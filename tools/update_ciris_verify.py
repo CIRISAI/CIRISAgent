@@ -76,6 +76,7 @@ IOS_TARGETS = {
     "simulator": "aarch64-apple-ios-sim",
 }
 
+
 def run_cmd(cmd: list[str], check: bool = True) -> subprocess.CompletedProcess:
     """Run a command and return the result."""
     print(f"  $ {' '.join(cmd)}")
@@ -211,7 +212,6 @@ def update_android_binaries(extract_dir: Path, checksums: dict[str, str]) -> Non
         dest_dir.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src_file, dest_file)
         print(f"  -> Copied to {dest_file.relative_to(REPO_ROOT)}")
-
 
 
 # ---------------------------------------------------------------------------
@@ -857,7 +857,14 @@ def update_python_bindings(version: str, tmpdir: Path, ios: bool = True) -> None
         # should `from ciris_verify import ...` directly — the upstream
         # PyPI package is the canonical surface, our vendored layer is for
         # the FFI-loader patches only.
-        AGENT_MANAGED = {"client.py", "__init__.py"}
+        # _jcs.py carries the CIRISAgent#917 substrate-first loader patch:
+        # _candidate_paths() tries ciris_server.verify_ffi_path() BEFORE the
+        # standalone-wheel layout, which is what let the ciris-verify pin be
+        # dropped in 2.9.29. The upstream copy searches the standalone wheel
+        # ONLY, so re-vendoring it would silently reintroduce a hard
+        # ciris-verify dependency at the producer's signing-bytes path — the
+        # exact regression class as the __init__.py verify_tree note below.
+        AGENT_MANAGED = {"client.py", "__init__.py", "_jcs.py"}
 
         # Deleted in the 2.9.7 DRY cut (CIRISAgent#896): every capability
         # these upstream helpers provided has a verified substrate symbol in

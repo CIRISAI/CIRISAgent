@@ -1,8 +1,8 @@
 # Build Information
-Code Hash: 93333c89493f
-Build Time: 2026-08-16T18:39:07.836468
-Git Commit: 53bc1374b3d4f8a3544b5ab1fd68cd7b48ef24a9
-Git Branch: fix/claim-pin-file-and-ciris-home
+Code Hash: 5870b556d0ca
+Build Time: 2026-08-21T10:11:03.202518
+Git Commit: 65a0f925534add5d4f6822a93e549cbbd16edb12
+Git Branch: fix/2.9.29-nullworks-rc3-findings
 
 This hash is a SHA-256 of all Python source files in the repository.
 It provides a deterministic version identifier based on the actual code content.

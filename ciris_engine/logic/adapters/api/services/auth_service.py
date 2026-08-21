@@ -172,23 +172,17 @@ class APIAuthService:
                 # this load. Flipping it True here would permanently suppress
                 # the reload and accept revoked service tokens until process
                 # restart (codex P1).
-                logger.warning(
-                    "[AUTH] persist engine not wired yet — revocation load will retry on next auth call"
-                )
+                logger.warning("[AUTH] persist engine not wired yet — revocation load will retry on next auth call")
                 self._revoked_service_tokens = set()
                 return
 
             raw = engine.service_token_revocation_list()
             parsed = json.loads(raw) if isinstance(raw, (bytes, str)) else (raw or [])
             self._revoked_service_tokens = {
-                str(row.get("token_hash"))
-                for row in parsed
-                if isinstance(row, dict) and row.get("token_hash")
+                str(row.get("token_hash")) for row in parsed if isinstance(row, dict) and row.get("token_hash")
             }
             self._revoked_tokens_loaded = True
-            logger.info(
-                f"[AUTH] Loaded {len(self._revoked_service_tokens)} revoked service tokens from persist"
-            )
+            logger.info(f"[AUTH] Loaded {len(self._revoked_service_tokens)} revoked service tokens from persist")
         except Exception as e:
             logger.error(f"[AUTH] Failed to load revoked tokens: {type(e).__name__}: {e}")
             # Initialize empty set on error to avoid blocking startup
@@ -1213,12 +1207,14 @@ class APIAuthService:
             if engine is None:
                 logger.warning("[AUTH] persist engine not wired — revocation in-memory only")
             else:
-                payload = json.dumps({
-                    "token_hash": token_hash,
-                    "revoked_at": datetime.now(timezone.utc).isoformat(),
-                    "revoked_by": revoked_by,
-                    "reason": reason,
-                })
+                payload = json.dumps(
+                    {
+                        "token_hash": token_hash,
+                        "revoked_at": datetime.now(timezone.utc).isoformat(),
+                        "revoked_by": revoked_by,
+                        "reason": reason,
+                    }
+                )
                 engine.service_token_revocation_record(payload)
         except Exception as e:
             logger.error(f"[AUTH] Failed to persist revocation: {type(e).__name__}: {e}")
@@ -1388,11 +1384,40 @@ class APIAuthService:
             user.api_role = APIRole.OBSERVER
 
     async def _update_existing_wa(self, user_id: str, wa_role: WARole) -> None:
-        """Update existing WA certificate."""
+        """Update existing WA certificate.
+
+        A promotion has to carry jurisdiction with it. The new-certificate path
+        issues ``resolve_deferral:any`` alongside the AUTHORITY role; this path
+        used to change only the role, so an OBSERVER promoted to AUTHORITY was
+        refused every domain-tagged deferral by the F1 gate until the process
+        restarted and the bootstrap backfill ran. A role change that does not
+        take effect until a restart is not a role change.
+
+        Uses the SAME predicate as that backfill, so the two cannot disagree
+        about what counts as already holding jurisdiction — and so a
+        deliberately narrow grant (``resolve_deferral:medical_*``) is left
+        alone rather than widened to ``:any`` on the next promotion.
+        """
         if not self._auth_service:
             return
+
+        from ciris_engine.logic.services.infrastructure.authentication.service import (
+            AuthenticationService,
+        )
+
+        permissions: Optional[List[str]] = None
+        if wa_role in (WARole.AUTHORITY, WARole.ROOT):
+            existing = await self._auth_service.get_wa(user_id)
+            held = list(getattr(existing, "scopes", None) or []) if existing else []
+            if not AuthenticationService._holds_deferral_jurisdiction(held):
+                permissions = held + ["resolve_deferral:any"]
+
         await self._auth_service.update_wa(
-            user_id, updates=WAUpdate(role=wa_role.value if hasattr(wa_role, "value") else str(wa_role))
+            user_id,
+            updates=WAUpdate(
+                role=wa_role.value if hasattr(wa_role, "value") else str(wa_role),
+                permissions=permissions,
+            ),
         )
         logger.debug(f"[AUTH DEBUG] Updated existing WA {user_id} to role {wa_role}")
 
@@ -1400,20 +1425,40 @@ class APIAuthService:
         """Create email for WA certificate."""
         return user_name + "@ciris.local" if "@" not in user_name else user_name
 
-    def _get_wa_permissions(self, user: User) -> List[str]:
-        """Get permissions for WA certificate."""
+    def _get_wa_permissions(self, user: User, wa_role: Optional[WARole] = None) -> List[str]:
+        """Get permissions for WA certificate.
+
+        Two grammars live in this list and both are load-bearing:
+
+        * ``wa.<thing>`` are API PERMISSIONS, checked by the route decorators.
+        * ``<action>:<resource-pattern>`` are certificate SCOPES, checked by
+          ``scope_grants`` when a resource is named.
+
+        ``wa.resolve_deferral`` is the first kind and grants no jurisdiction —
+        it has no colon, so ``scope_grants`` treats it as naming an action and
+        no domain, which is deliberate (a bare scope must not be read as "every
+        domain"). An authority holding only that was refused every
+        domain-tagged deferral by the F1 gate. AUTHORITY therefore also gets the
+        scope-grammar form.
+        """
         base_permissions = self.get_permissions_for_role(user.api_role)
-        return base_permissions + [
+        permissions = base_permissions + [
             "wa.resolve_deferral",  # Critical for deferral resolution
             "wa.mint",  # Allow WA to mint others
         ]
+        if wa_role in (WARole.AUTHORITY, WARole.ROOT):
+            # `:any` is the status quo ante — role-only breadth — made explicit
+            # so an operator can narrow it (resolve_deferral:medical_*) instead
+            # of it being inferred by the gate.
+            permissions.append("resolve_deferral:any")
+        return permissions
 
     async def _create_new_wa_for_oauth_user(self, user: User, user_id: str, wa_role: WARole) -> str:
         """Create new WA certificate for OAuth user and return the wa_id."""
         if not self._auth_service:
             raise ValueError("Authentication service not available")
 
-        wa_permissions = self._get_wa_permissions(user)
+        wa_permissions = self._get_wa_permissions(user, wa_role)
 
         # Create WA certificate with proper wa_id format, but link to OAuth user
         import json

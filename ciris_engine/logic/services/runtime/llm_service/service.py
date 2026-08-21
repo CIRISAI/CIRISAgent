@@ -6,7 +6,6 @@ Supports native SDKs for:
 - Google (Gemini models)
 """
 
-from urllib.parse import urlparse
 import json
 import logging
 import os
@@ -14,6 +13,7 @@ import re
 import time
 from enum import Enum
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, Type, Union, cast
+from urllib.parse import urlparse
 
 import instructor
 from openai import (
@@ -81,8 +81,12 @@ def _coalesce_consecutive_roles(messages: List[MessageDict]) -> List[MessageDict
             # If either side is a list (multimodal), concatenate as a list;
             # otherwise join strings with a blank line.
             if isinstance(prev_content, list) or isinstance(curr_content, list):
-                prev_list = prev_content if isinstance(prev_content, list) else [{"type": "text", "text": str(prev_content)}]
-                curr_list = curr_content if isinstance(curr_content, list) else [{"type": "text", "text": str(curr_content)}]
+                prev_list = (
+                    prev_content if isinstance(prev_content, list) else [{"type": "text", "text": str(prev_content)}]
+                )
+                curr_list = (
+                    curr_content if isinstance(curr_content, list) else [{"type": "text", "text": str(curr_content)}]
+                )
                 merged = prev_list + curr_list
             else:
                 merged = f"{prev_content}\n\n{curr_content}"
@@ -176,9 +180,7 @@ def _build_openrouter_provider_config() -> OpenRouterProviderConfig:
     return config
 
 
-def _try_recover_missing_brace(
-    exc: Exception, resp_model: Type[BaseModel]
-) -> Optional[Tuple[BaseModel, Any]]:
+def _try_recover_missing_brace(exc: Exception, resp_model: Type[BaseModel]) -> Optional[Tuple[BaseModel, Any]]:
     """Recover from the Llama-family JSON-mode dropped-prefix bug: model
     emits a JSON body that's missing its leading characters. Two distinct
     variants observed on `meta-llama/llama-4-scout` via OpenRouter
@@ -542,6 +544,62 @@ def _log_instructor_error(
     )
 
 
+def _root_provider_fault(error: BaseException) -> str:
+    """The provider's own STRUCTURED fault code, not our reading of its prose.
+
+    Returns a stable slug — ``model_not_found`` / ``invalid_api_key`` /
+    ``rate_limited`` / ``insufficient_quota`` — or "" when the provider did not
+    say something we can act on with confidence.
+
+    WHY NOT MATCH THE MESSAGE TEXT. The health surface turns this into an
+    instruction ("choose a different model" vs "update your key"), and those are
+    opposite actions. Deriving that from substrings means every provider's
+    wording, in every locale, is load-bearing — and the first vendor who writes
+    "unknown model" instead of "does not exist" silently stops being diagnosed.
+    OpenAI-compatible APIs already hand us ``body.error.code``; Groq returned
+    ``model_not_found`` verbatim in the 2.9.27 field report.
+
+    STATUS CODE ALONE IS NOT ENOUGH, and this is the trap worth naming: a 404
+    from an OpenAI-compatible endpoint means "we could not find that" — which is
+    a missing MODEL if the body says so, and a wrong BASE URL if it does not.
+    Treating every 404 as a bad model would tell a user with a typo'd endpoint to
+    go change their model, which is confidently wrong and worse than silence. So
+    404 only yields ``model_not_found`` when the body's own code or message says
+    the model is what was missing.
+    """
+    seen: set[int] = set()
+    cur: BaseException | None = error
+    while cur is not None and id(cur) not in seen:
+        seen.add(id(cur))
+        body = getattr(cur, "body", None)
+        code = ""
+        message = ""
+        if isinstance(body, dict):
+            err = body.get("error")
+            if isinstance(err, dict):
+                code = str(err.get("code") or "").strip().lower()
+                message = str(err.get("message") or "").strip().lower()
+        status = getattr(cur, "status_code", None)
+
+        # The provider named it. Trust that over anything we infer.
+        if code in ("model_not_found", "invalid_api_key", "rate_limit_exceeded", "insufficient_quota"):
+            return {"rate_limit_exceeded": "rate_limited"}.get(code, code)
+
+        # 401 is unambiguous across OpenAI-compatible vendors: the credential was
+        # refused. No body needed.
+        if status == 401 or isinstance(cur, AuthenticationError):
+            return "invalid_api_key"
+        if status == 429:
+            return "rate_limited"
+        # 404 ONLY counts as a missing model when the body says the model is what
+        # was missing. Otherwise it is very likely a wrong base_url.
+        if status == 404 and "model" in message:
+            return "model_not_found"
+
+        cur = cur.__cause__ or cur.__context__
+    return ""
+
+
 def _root_provider_error(error: BaseException) -> str:
     """Dig the PROVIDER's own words out of a wrapper exception.
 
@@ -894,6 +952,12 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         #: degraded agent can say "Invalid API Key" instead of "check your
         #: network". Empty until something actually fails.
         self.last_error: str = ""
+
+        #: The provider's STRUCTURED fault code for that same failure
+        #: (``model_not_found`` / ``invalid_api_key`` / ...), so the health
+        #: surface can pick the right instruction without re-reading prose.
+        #: See :func:`_root_provider_fault` for why the text is not enough.
+        self.last_fault_code: str = ""
 
         api_key = self.openai_config.api_key
         base_url = self.openai_config.base_url
@@ -1890,9 +1954,9 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             "172.16.",
             ".local",
             ":11434",  # Ollama
-            ":8080",   # llama.cpp
-            ":1234",   # LM Studio
-            ":8000",   # vLLM
+            ":8080",  # llama.cpp
+            ":1234",  # LM Studio
+            ":8000",  # vLLM
         )
         return any(indicator in base_url_lower for indicator in local_indicators)
 
@@ -2003,6 +2067,16 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         """Handle authentication errors (401)."""
         self._track_error(e)
         self._total_errors += 1
+        # Record the fault HERE too. This handler is a SIBLING of `except
+        # Exception`, so it is matched first and never reaches
+        # _handle_general_exception — recording only there left the two most
+        # user-visible faults (a rejected key, a provider outage) invisible to
+        # the health ladder, and left a stale earlier code on screen: correct
+        # the model and then present a bad key, and the UI still says "change
+        # the model". _root_provider_fault returns "" when it cannot name the
+        # fault, which correctly falls back to the provider's own words.
+        self.last_error = _root_provider_error(e)
+        self.last_fault_code = _root_provider_fault(e)
         base_url = self.openai_config.base_url or ""
 
         if "ciris.ai" in base_url:
@@ -2028,6 +2102,16 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         """Handle provider-specific errors (connection, rate limit, internal server)."""
         self._track_error(e)
         self._total_errors += 1
+        # Record the fault HERE too. This handler is a SIBLING of `except
+        # Exception`, so it is matched first and never reaches
+        # _handle_general_exception — recording only there left the two most
+        # user-visible faults (a rejected key, a provider outage) invisible to
+        # the health ladder, and left a stale earlier code on screen: correct
+        # the model and then present a bad key, and the UI still says "change
+        # the model". _root_provider_fault returns "" when it cannot name the
+        # fault, which correctly falls back to the provider's own words.
+        self.last_error = _root_provider_error(e)
+        self.last_fault_code = _root_provider_fault(e)
 
         error_details = {
             "error_type": type(e).__name__,
@@ -2094,6 +2178,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                     consecutive_failures=self.circuit_breaker.consecutive_failures,
                 )
                 self.last_error = _root_provider_error(e)
+                self.last_fault_code = _root_provider_fault(e)
                 _handle_instructor_retry_exception(e, error_context, self.circuit_breaker)
 
         # Generic exception handling
@@ -2107,6 +2192,15 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         # The provider's own words are already unwrapped for the log; keeping the
         # last one lets the health warning name the actual fault.
         self.last_error = _root_provider_error(e)
+        # …AND the structured slug, on EVERY failure, not just the instructor one.
+        # These two are read as a pair: health prefers last_fault_code over
+        # substring-matching last_error. Refreshing only half means a provider
+        # whose first failure was `model_not_found` and whose current failure is a
+        # timeout keeps telling the user to change the model — the remedy would
+        # describe an outage that is already over while the live one goes unnamed.
+        # _root_provider_fault returns "" when it cannot name the fault, which is
+        # the correct way to say "no structured verdict, fall back to the words".
+        self.last_fault_code = _root_provider_fault(e)
         _handle_generic_llm_exception(
             e, self.model_name, self.openai_config.base_url or "", resp_model_name, self.circuit_breaker
         )

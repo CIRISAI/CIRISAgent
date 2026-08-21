@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Annotated, NoReturn, Optional, TypeVar, cast
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
 
 from ciris_engine.protocols.services.governance.wise_authority import WiseAuthorityServiceProtocol
@@ -63,6 +63,45 @@ def get_wa_service(request: Request) -> WiseAuthorityServiceProtocol:
             ).model_dump(mode="json"),
         )
     return cast(WiseAuthorityServiceProtocol, request.app.state.wise_authority_service)
+
+
+async def resolve_certificate_id(request: Request, auth: AuthContext) -> str:
+    """Map the authenticated caller onto the WA CERTIFICATE id.
+
+    These are not the same identifier, and the jurisdiction gate needs the
+    certificate one because ``WiseAuthorityService.authorize()`` resolves it
+    with an exact ``get_wa()`` lookup.
+
+    * Password / API-key auth already carries it: ``_handle_password_auth``
+      sets ``user_id=user.wa_id``.
+    * Ingress / OAuth auth does NOT. ``dependencies/auth.py`` builds
+      ``user_id`` as ``"{provider}:{external_id}"`` while the certificate is
+      stored under a generated ``wa-YYYY-MM-DD-XXXXXX`` id and merely LINKED
+      to that OAuth identity via ``oauth_provider`` / ``oauth_external_id``.
+      Passing the external identity straight through made every OAuth
+      authority a ``WA_NOT_FOUND`` and therefore a 403 on every domain-tagged
+      deferral.
+
+    Returns the caller's id unchanged when it cannot be mapped: the gate then
+    reports WA_NOT_FOUND naming that id, which is diagnosable, rather than
+    this helper inventing a certificate.
+    """
+    user_id = (auth.user_id or "").strip()
+    if ":" not in user_id:
+        return user_id
+
+    provider, _, external_id = user_id.partition(":")
+    auth_service = getattr(request.app.state, "authentication_service", None)
+    if auth_service is None or not hasattr(auth_service, "get_wa_by_oauth"):
+        return user_id
+
+    try:
+        cert = await auth_service.get_wa_by_oauth(provider, external_id)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("Could not resolve WA certificate for %s: %s", user_id, exc)
+        return user_id
+
+    return str(cert.wa_id) if cert is not None else user_id
 
 
 # TypeVar for generic response wrapper (Python 3.10 compatible)
@@ -174,6 +213,86 @@ async def resolve_deferral(
     """
     wa_service = get_wa_service(request)
 
+    # JURISDICTION IS CHECKED HERE, NOT ONLY IN THE SERVICE (NULLWORKS RC3 / F1).
+    #
+    # `require_authority` gates on ROLE alone. That was the entire finding: an
+    # authority holder can be structurally over-broad for a decision domain, and
+    # the RC3 retest reproduced resource-invariant authorization at exactly this
+    # boundary. The service-layer fix landed alongside this one, but this handler
+    # never called it — so the surface an auditor actually hits stayed
+    # role-only, and closing F1 without this would have been closing it on paper.
+    #
+    # The resource is the deferral's DOMAIN (MEDICAL / FINANCIAL / LEGAL / ...),
+    # which is the taxonomy the deferral rail already routes on via
+    # `DeferralContext.domain_hint`, prefixed onto the deferral id. That is the
+    # shape `scope_grants` matches with fnmatchcase, so a certificate reading
+    # `resolve_deferral:medical_*` covers `medical_defer_001` and a medical
+    # authority resolving a financial deferral is a denial — the auditors' own
+    # example. The action is SINGULAR `resolve_deferral`: that is the spelling
+    # every certificate fixture and every other caller uses, and the plural was
+    # already caught once inside the service (see the note at
+    # tests/test_deferral_permissions.py, "plural, and so matching no action
+    # anyone actually requests"). Requesting the plural here would have denied
+    # every correctly scoped authority instead of the wrong ones.
+    #
+    # Two failure modes that look alike and must not be treated alike:
+    #
+    #   no domain on the deferral -> role-only, as before. Most deferrals carry
+    #       no domain_hint today and denying them takes the whole human-
+    #       resolution path down. Under-specified, not unenforced.
+    #   domain could not be READ  -> refuse. A transient persistence failure
+    #       must not be a way to resolve a MEDICAL deferral without
+    #       jurisdiction; "we could not check" is not "there was nothing to
+    #       check". Fail closed, and say it is a lookup failure so an operator
+    #       retries rather than hunting a permissions ghost.
+    _domain = None
+    try:
+        for _pd in await wa_service.get_pending_deferrals():
+            if _pd.deferral_id == deferral_id:
+                # PendingDeferral.context is Dict[str, str] with default_factory=dict —
+                # never None, and there is no `metadata` field. The WA service copies
+                # every stored deferral-context key into it unfiltered, so the
+                # domain_hint wise_bus writes (wise_bus.py:275) arrives here.
+                _domain = _pd.context.get("domain_hint")
+                break
+    except Exception as exc:
+        logger.warning(  # NOSONAR - deferral_id sanitized via sanitize_for_log()
+            "JURISDICTION UNVERIFIABLE: could not read domain for deferral %s: %s",
+            sanitize_for_log(deferral_id),
+            exc,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "Cannot verify jurisdiction for this deferral right now, so it cannot be resolved. "
+                "This is a lookup failure, not a permissions decision — please retry."
+            ),
+        ) from exc
+
+    if _domain:
+        _scope_resource = f"{str(_domain).lower()}_{deferral_id}"
+        _wa_id = await resolve_certificate_id(request, auth)
+        _decision = await wa_service.authorize(_wa_id, "resolve_deferral", _scope_resource)
+        if not _decision.allowed:
+            logger.warning(  # NOSONAR - all user-controlled values sanitized via sanitize_for_log()
+                "JURISDICTION DENIED: %s (caller %s) may not resolve %s deferral %s (%s; required scope %s)",
+                sanitize_for_log(_wa_id),
+                sanitize_for_log(auth.user_id or ""),
+                sanitize_for_log(str(_domain)),
+                sanitize_for_log(deferral_id),
+                _decision.reason.value if _decision.reason else "no reason",
+                sanitize_for_log(_decision.required_scope or "-"),
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    f"Not authorized to resolve a {_domain} deferral. Role permits the action; "
+                    f"jurisdiction does not. Required scope: "
+                    f"{_decision.required_scope or f'resolve_deferral:{str(_domain).lower()}_*'}."
+                ),
+            )
+
     try:
         # SIGN THE DECISION (#944). This used to be
         # f"api_{auth.user_id}_{timestamp}" — an identifier and a clock reading,
@@ -243,9 +362,7 @@ async def resolve_deferral(
                 status_code=503,
             )
         try:
-            deferral_response = await auth_service.sign_deferral_resolution(
-                deferral_id, deferral_response, signed_at
-            )
+            deferral_response = await auth_service.sign_deferral_resolution(deferral_id, deferral_response, signed_at)
         except Exception as exc:
             logger.error(f"Refusing to record an unsigned deferral resolution for {sanitize_for_log(deferral_id)}")
             raise_wa_error(f"Cannot resolve deferral: signing failed ({type(exc).__name__})", status_code=503)

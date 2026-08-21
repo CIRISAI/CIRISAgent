@@ -121,10 +121,14 @@ class TaskCompleteHandler(BaseActionHandler):
             self.logger.info(f"Task {task_id} is a persistent task. Not marking as COMPLETED.")
             return
 
-        # Check for pending thoughts
-        self._verify_no_pending_thoughts(task_id, thought_id)
-
-        # Get task with correct occurrence_id
+        # Resolve the task FIRST: the obligation guard below has to query siblings
+        # in the task's OWN occurrence, and only the task record knows which that
+        # is. get_thoughts_by_task_id filters agent_occurrence_id by equality with
+        # a "default" default, so running the guard before this lookup silently
+        # returned zero siblings for every task claimed by another occurrence —
+        # i.e. the guard held only on single-occurrence deployments, and a
+        # horizontally-scaled agent could still complete a task while a human
+        # owed an answer on a DEFERRED sibling.
         from ciris_engine.logic.persistence.models.tasks import get_task_by_id_any_occurrence
 
         task = get_task_by_id_any_occurrence(task_id)
@@ -135,9 +139,10 @@ class TaskCompleteHandler(BaseActionHandler):
         task_occurrence_id = task.agent_occurrence_id
         self.logger.debug(f"Marking task {task_id} as COMPLETED with occurrence_id={task_occurrence_id}")
 
-        task_updated = persistence.update_task_status(
-            task_id, TaskStatus.COMPLETED, task_occurrence_id
-        )
+        # Check for pending thoughts, in the occurrence that owns the task.
+        self._verify_no_pending_thoughts(task_id, thought_id, task_occurrence_id)
+
+        task_updated = persistence.update_task_status(task_id, TaskStatus.COMPLETED, task_occurrence_id)
 
         if not task_updated:
             self.logger.error(f"Failed to update status for parent task {task_id} to COMPLETED.")
@@ -150,24 +155,81 @@ class TaskCompleteHandler(BaseActionHandler):
         # Handle post-completion tasks
         await self._handle_post_completion(task, task_id, task_occurrence_id, result)
 
-    def _verify_no_pending_thoughts(self, task_id: str, current_thought_id: str) -> None:
-        """Verify no pending/processing thoughts exist before completing task."""
-        pending = persistence.get_thoughts_by_task_id(task_id)
-        pending_or_processing = [
-            t.thought_id
-            for t in pending
-            if t.thought_id != current_thought_id
-            and getattr(t, "status", None) in {ThoughtStatus.PENDING, ThoughtStatus.PROCESSING}
-        ]
+    #: Sibling states that mean AN OBLIGATION IS STILL OUTSTANDING, so the task
+    #: cannot honestly be called complete.
+    #:
+    #: Keyed on what the state MEANS, not on which names the predicate happened
+    #: to list (NULLWORKS RC3 finding F4). The guard used to name PENDING and
+    #: PROCESSING only, so a DEFERRED sibling — a thought whose disposition was
+    #: handed to a human who has not answered yet — coexisted with a COMPLETED
+    #: write. Their COMPLETE-01 campaign reproduced exactly that.
+    #:
+    #: DEFERRED is the case that matters. `defer_handler` sets it when a decision
+    #: is escalated to a Wise Authority; it means "a human owes an answer". A task
+    #: that reports COMPLETED while a human is still holding one of its questions
+    #: is making a false statement about itself, and every downstream consumer —
+    #: audit, telemetry, the operator reading a dashboard — inherits it.
+    #:
+    #: FAILED is deliberately NOT here, and that is a judgement worth stating.
+    #: A failed thought is settled: it will not proceed, and nobody owes anything.
+    #: Blocking on it would strand tasks forever with no resolution path, since
+    #: nothing re-opens a FAILED thought. It is recorded on the completion instead
+    #: (see below), so the completion is honest about being qualified rather than
+    #: clean — which is the part that was actually missing.
+    _OBLIGATION_OUTSTANDING = {
+        ThoughtStatus.PENDING,
+        ThoughtStatus.PROCESSING,
+        ThoughtStatus.DEFERRED,
+    }
 
-        if pending_or_processing:
+    def _verify_no_pending_thoughts(
+        self, task_id: str, current_thought_id: str, occurrence_id: str = "default"
+    ) -> None:
+        """Refuse completion while any sibling obligation is unresolved.
+
+        ``occurrence_id`` must be the TASK's occurrence, not the ambient one:
+        thoughts inherit it from their task, and the persistence filter is an
+        equality match. Defaulting it here would reintroduce the single-
+        occurrence-only bug for any caller that forgets to pass it.
+        """
+        siblings = [
+            t
+            for t in persistence.get_thoughts_by_task_id(task_id, occurrence_id=occurrence_id)
+            if t.thought_id != current_thought_id
+        ]
+        outstanding = [t.thought_id for t in siblings if getattr(t, "status", None) in self._OBLIGATION_OUTSTANDING]
+
+        if outstanding:
+            deferred = [t.thought_id for t in siblings if getattr(t, "status", None) == ThoughtStatus.DEFERRED]
+            # Name the DEFERRED ones separately: they need a human, not a retry,
+            # and telling an operator to look for "a handler that failed" when the
+            # truth is "a person has not answered" sends them to the wrong place.
+            detail = (
+                f" Of these, {len(deferred)} are DEFERRED and awaiting a Wise Authority " f"resolution: {deferred}."
+                if deferred
+                else " This indicates a handler failed to properly complete thought processing."
+            )
             error_msg = (
                 f"CRITICAL: Task {task_id} cannot be marked complete - "
-                f"has {len(pending_or_processing)} thoughts still pending/processing: {pending_or_processing}. "
-                f"This indicates a handler failed to properly complete thought processing."
+                f"has {len(outstanding)} thoughts with unresolved obligations: {outstanding}.{detail}"
             )
             self.logger.error(error_msg)
             raise RuntimeError(error_msg)
+
+        # Settled, but not silently. A task completing over failed sub-thoughts is
+        # a QUALIFIED completion; saying so is the difference between a record that
+        # is true and one that is merely not false.
+        failed = [t.thought_id for t in siblings if getattr(t, "status", None) == ThoughtStatus.FAILED]
+        if failed:
+            self.logger.warning(
+                "Task %s is completing with %d FAILED sibling thought(s): %s. Completion is allowed "
+                "because a FAILED thought is settled and nothing re-opens it, but this is a qualified "
+                "completion — if those thoughts carried mandatory obligations, the obligation is now "
+                "unmet and unrecorded anywhere else.",
+                task_id,
+                len(failed),
+                failed,
+            )
 
     async def _handle_post_completion(
         self, task: Task, task_id: str, task_occurrence_id: str, result: ActionSelectionDMAResult

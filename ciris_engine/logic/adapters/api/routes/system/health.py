@@ -5,18 +5,22 @@ Provides health status and time synchronization information.
 """
 
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Annotated, Optional, Sequence
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 
 from ciris_engine.constants import CIRIS_VERSION
+from ciris_engine.logic.utils.localization import get_preferred_language, get_string
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
+from ciris_engine.schemas.api.auth import UserRole
 from ciris_engine.schemas.api.responses import SuccessResponse
 from ciris_engine.schemas.api.telemetry import TimeSyncStatus
 
 from ...constants import ERROR_TIME_SERVICE_NOT_AVAILABLE
-from ...dependencies.auth import AuthContext, require_observer
+from ...dependencies.auth import AuthContext, optional_auth, require_observer
+from ...services.auth_service import APIAuthService
 from .helpers import (
     check_initialization_status,
     check_processor_health,
@@ -33,8 +37,6 @@ from .schemas import (
     SystemTimeResponse,
     SystemWarning,
 )
-
-from ciris_engine.logic.utils.localization import get_preferred_language, get_string
 
 logger = logging.getLogger(__name__)
 
@@ -89,61 +91,255 @@ def _provider_model(service_provider: object) -> str:
 
 
 def _breaker_state(service_provider: object) -> str:
-    """"open" / "half_open" / "closed" / "" when the provider exposes no breaker."""
+    """ "open" / "half_open" / "closed" / "" when the provider exposes no breaker."""
     cb = getattr(service_provider, "circuit_breaker", None)
     state = getattr(cb, "state", None)
     return str(getattr(state, "value", state) or "").lower()
 
 
-def _llm_breaker_warnings(providers: Sequence[object]) -> list[SystemWarning]:
-    """Escalate by what the user can actually do about it.
+def _provider_last_error(service_provider: object) -> str:
+    """The provider's own last complaint, verbatim and first line only."""
+    service = getattr(service_provider, "instance", service_provider)
+    for attr in ("last_error", "_last_error", "last_failure_reason"):
+        val = getattr(service, attr, None)
+        if val:
+            return str(val).strip().splitlines()[0][:200]
+    return ""
 
-    One failed call is noise; the same model failing until its breaker opens is a
-    configuration fact; every breaker being open is an outage. Those are three
-    different sentences and three different responses, and the health surface
-    used to collapse them into "all providers unavailable".
 
-    Every level names the MODEL and the PROVIDER, because that pair is what the
-    user has to change, and links to the settings card that changes it — a
-    warning that describes a problem without a route to the control is a report,
-    not a fix.
+def _provider_role(index: int) -> str:
+    """Primary / Secondary / Fallback, from registry order.
+
+    The registry sorts by priority, so position IS the role. An operator reading
+    "a provider failed" cannot tell whether their main route is down or a spare
+    is; naming the role is the difference between "act now" and "note it".
     """
-    open_ones = [sp for sp in providers if _breaker_state(sp) == "open"]
-    if not open_ones:
-        return []
+    return {0: "Primary", 1: "Secondary"}.get(index, "Fallback")
 
-    if len(open_ones) == len(providers):
-        # Every route is shut. Say so once, as an outage, rather than emitting
-        # one identical warning per provider — N copies of the same sentence is
-        # how a warnings array becomes something people stop reading.
-        named = ", ".join(
-            f"{_provider_model(sp)} on {getattr(sp, 'name', None) or 'provider'}" for sp in open_ones[:3]
-        )
-        return [
-            SystemWarning(
-                code="llm_all_circuits_open",
-                message=get_string(get_preferred_language(), "status.llm_all_circuits_open", named=named),
-                severity="error",
-                action_url="/settings/llm",
-            )
-        ]
 
-    # Some routes remain. Name each dead one; the agent still works, so this is a
-    # warning rather than an error.
-    return [
-        SystemWarning(
-            code="llm_provider_circuit_open",
+def _retry_seconds(service_provider: object) -> int:
+    """How long until the breaker lets a call through again."""
+    cb = getattr(service_provider, "circuit_breaker", None)
+    cfg = getattr(cb, "config", None)
+    val = getattr(cfg, "recovery_timeout", None)
+    return int(val) if isinstance(val, (int, float)) and val > 0 else 10
+
+
+def _provider_fault_code(service_provider: object) -> str:
+    """The provider's STRUCTURED fault slug, captured where the exception lived."""
+    service = getattr(service_provider, "instance", service_provider)
+    return str(getattr(service, "last_fault_code", "") or "").strip().lower()
+
+
+# "HTTP 401", "http/401", "status 401", "code: 401" — a status, not a token count.
+_HTTP_401 = re.compile(r"\b(?:http|https|status|code|error)\b[^0-9a-z]{0,4}401\b")
+
+
+async def _identify_caller(
+    request: Request, authorization: Optional[str] = Header(None)
+) -> Optional[AuthContext]:
+    """Identify the caller if possible, and NEVER fail if not.
+
+    Deliberately not ``OptionalAuthDep``. That resolves ``optional_auth``,
+    whose nested ``Depends(get_auth_service)`` raises 500 when
+    ``app.state.auth_service`` is missing — and the supported standalone path
+    in app.py calls ``create_app()`` with no runtime, which skips
+    ``_initialize_app_state`` entirely. Using it here would make
+    /v1/system/health 500 before the handler ran, in precisely the
+    uninitialized state the endpoint exists to REPORT, and would fail the
+    container healthcheck that probes it.
+
+    "Optional" has to mean optional all the way down: an unidentified caller
+    is an observer, never an error.
+    """
+    auth_service = getattr(request.app.state, "auth_service", None)
+    if not isinstance(auth_service, APIAuthService):
+        return None
+    try:
+        return await optional_auth(request, authorization, auth_service)
+    except Exception:  # pragma: no cover - health must answer regardless
+        return None
+
+
+def _is_first_run_setup() -> bool:
+    """Is this a first-run boot, where LLM settings are open without auth?
+
+    Mirrors the gate the LLM routes themselves use, so the health warning and
+    the route it links to cannot disagree about who may act.
+    """
+    try:
+        from ciris_engine.logic.setup.first_run import is_first_run
+
+        return bool(is_first_run())
+    except Exception:  # pragma: no cover - never fail health on this
+        return False
+
+
+def _fault_warning(
+    lang: str, role: str, name: str, model: str, err: str, fault: str = "", can_manage: bool = True
+) -> Optional[SystemWarning]:
+    """Turn the provider's OWN words into the one instruction that fixes it.
+
+    A wrong model and a rejected key are both "the provider refused us", and they
+    need opposite actions — pick a different model, or paste a different key.
+    Reporting them identically makes the user guess, and this is exactly the
+    surface where guessing costs them the whole agent (CIRISAgent#1078).
+
+    ONE CONSTRUCTOR FOR BOTH DETECTION PATHS. The structured signal and the text
+    fallback used to build their SystemWarning separately, and the first change
+    that touched only one of them (role-awareness) silently shipped an admin-only
+    instruction to observers down the fallback path. Detection may differ;
+    the message must not.
+
+    DO NOT HAND SOMEONE AN INSTRUCTION THEY CANNOT CARRY OUT. LLM management is
+    admin-only (`_require_setup_or_admin`: "regular users cannot modify
+    settings"), but /v1/system/health is observer-gated — so an ordinary user
+    sees these warnings too. Telling them to "Open LLM Settings" points them at a
+    screen the API will refuse, which reads as the product being broken twice.
+    The FACT is the same for everyone and they are entitled to it; only the
+    REMEDY changes, and an observer gets no action_url — a link to a control you
+    do not have is not a courtesy.
+
+    Only faults whose remedy we are SURE of get their own message. Anything else
+    returns None and falls through to the generic provider-failed line rather
+    than inventing an instruction that might send the reader somewhere wrong.
+    """
+
+    def _warn(code: str, key: str) -> SystemWarning:
+        return SystemWarning(
+            code=code,
             message=get_string(
-                get_preferred_language(),
-                "status.llm_provider_circuit_open",
-                model=_provider_model(sp),
-                provider=getattr(sp, "name", None) or "provider",
+                lang,
+                f"status.{key}" if can_manage else f"status.{key}_observer",
+                provider=name,
+                model=model,
             ),
-            severity="warning",
-            action_url="/settings/llm",
+            severity="error",
+            action_url="/settings/llm" if can_manage else None,
         )
-        for sp in open_ones[:3]
-    ]
+
+    # PREFER THE PROVIDER'S OWN CODE. `fault` is captured at the LLM service,
+    # where the openai APIStatusError still exists and `body.error.code` is
+    # readable. Falling back to substrings makes every vendor's wording, in every
+    # locale, load-bearing — and the first one to say "unknown model" instead of
+    # "does not exist" silently stops being diagnosed.
+    if fault == "model_not_found":
+        return _warn("llm_model_not_found", "llm_model_not_found")
+    if fault == "invalid_api_key":
+        return _warn("llm_key_rejected", "llm_key_rejected")
+    if fault:
+        # Structured, but not one we have an instruction for. Say nothing
+        # specific rather than guess — the generic line still fires.
+        return None
+
+    # Text fallback, for providers that return no structured code. Second, never
+    # first, and it builds through the SAME constructor above.
+    low = err.lower()
+    if "does not exist" in low or "model_not_found" in low or "unknown model" in low:
+        return _warn("llm_model_not_found", "llm_model_not_found")
+    # A bare "401" ANYWHERE is not evidence of a rejected key: a provider
+    # reporting `HTTP 400 ... 401 tokens` would send the user to replace a
+    # credential that is fine, while the real fault goes unnamed. Require either
+    # authentication-specific wording or a 401 that reads as a status code.
+    if (
+        "invalid api key" in low
+        or "unauthorized" in low
+        or "authentication" in low
+        or _HTTP_401.search(low) is not None
+    ):
+        return _warn("llm_key_rejected", "llm_key_rejected")
+    return None
+
+
+def _llm_breaker_warnings(providers: Sequence[object], can_manage: bool = True) -> list[SystemWarning]:
+    """Escalate from "here is the fix" to "nothing works, here is when it retries".
+
+    One failed call is noise. A named fault with a known remedy is a to-do. A
+    breaker opening is a route lost. Every breaker open is an outage. Those are
+    four different sentences and four different responses, and the health surface
+    used to collapse them into "all providers unavailable" — which named neither
+    the model nor the provider, so it pointed the reader at nothing they could
+    change.
+
+    Every level names the PROVIDER and the MODEL, because that pair is what the
+    user edits, and links to the card that edits it. The outage level also says
+    when the system will retry by itself, so nobody sits refreshing a dead screen
+    wondering whether it is on them.
+    """
+    lang = get_preferred_language()
+    warnings: list[SystemWarning] = []
+    open_ones: list[tuple[int, object]] = []
+
+    for i, sp in enumerate(providers):
+        name = getattr(sp, "name", None) or "provider"
+        model = _provider_model(sp)
+        role = _provider_role(i)
+        err = _provider_last_error(sp)
+        state = _breaker_state(sp)
+
+        # The actionable fault, if we can name the remedy with confidence.
+        fault_code = _provider_fault_code(sp)
+        fault = _fault_warning(lang, role, name, model, err, fault_code, can_manage) if (err or fault_code) else None
+        if fault:
+            warnings.append(fault)
+
+        if state == "open":
+            open_ones.append((i, sp))
+            # A breaker open is a lost route, and worth saying even when the
+            # fault above already told them what to fix — the fault explains
+            # WHY, this explains that the agent has stopped trying.
+            warnings.append(
+                SystemWarning(
+                    code="llm_provider_circuit_open",
+                    message=get_string(
+                        lang,
+                        "status.llm_provider_circuit_open",
+                        role=role,
+                        provider=name,
+                        model=model,
+                    ),
+                    severity="warning",
+                    action_url="/settings/llm" if can_manage else None,
+                )
+            )
+        elif err and not fault:
+            # Failing, breaker still closed, and we could not name the remedy.
+            # Say the provider failed and repeat its own words rather than
+            # inventing an instruction.
+            warnings.append(
+                SystemWarning(
+                    code="llm_provider_failed",
+                    message=get_string(
+                        lang,
+                        "status.llm_provider_failed",
+                        role=role,
+                        provider=name,
+                        model=model,
+                        detail=err,
+                    ),
+                    severity="warning",
+                    action_url="/settings/llm" if can_manage else None,
+                )
+            )
+
+    # Nothing left. This is the one the user acts on, so it carries the retry
+    # interval: an outage you know self-heals in 10s is a wait, and one you do
+    # not know about is a support ticket.
+    if providers and len(open_ones) == len(providers):
+        retry = _retry_seconds(open_ones[0][1])
+        warnings.append(
+            SystemWarning(
+                code="llm_all_providers_failed",
+                message=get_string(
+                    lang,
+                    "status.llm_all_providers_failed" if can_manage else "status.llm_all_providers_failed_observer",
+                    seconds=retry,
+                ),
+                severity="error",
+                action_url="/settings/llm" if can_manage else None,
+            )
+        )
+    return warnings
 
 
 async def _check_provider_health(service_provider: object) -> bool:
@@ -170,7 +366,7 @@ async def _check_provider_health(service_provider: object) -> bool:
     return False
 
 
-async def check_llm_availability() -> tuple[bool, list[SystemWarning]]:
+async def check_llm_availability(can_manage: bool = True) -> tuple[bool, list[SystemWarning]]:
     """Check LLM provider availability and return (has_working_llm, warnings)."""
     from ciris_engine.logic.registries.base import get_global_registry
     from ciris_engine.schemas.runtime.enums import ServiceType
@@ -183,9 +379,12 @@ async def check_llm_availability() -> tuple[bool, list[SystemWarning]]:
         return False, [
             SystemWarning(
                 code="no_llm_provider",
-                message="No LLM provider configured. Add a provider in LLM Settings to enable AI features.",
+                message=get_string(
+                    get_preferred_language(),
+                    "status.no_llm_provider" if can_manage else "status.no_llm_provider_observer",
+                ),
                 severity="error",
-                action_url="/settings/llm",
+                action_url="/settings/llm" if can_manage else None,
             )
         ]
 
@@ -212,21 +411,32 @@ async def check_llm_availability() -> tuple[bool, list[SystemWarning]]:
     # whether anything is left. If it produced a verdict, that verdict is the
     # message — appending the generic "no provider is answering" underneath
     # would restate it less precisely.
-    breaker = _llm_breaker_warnings(llm_providers)
+    breaker = _llm_breaker_warnings(llm_providers, can_manage)
     if breaker:
         return False, breaker
 
+    # Same role rule as the ladder above: an observer is told what is wrong and
+    # who fixes it, never handed a link to a control the settings API will
+    # refuse them. This branch and the no-provider branch above are the two
+    # most common states — first boot, and a provider failing with no recorded
+    # error — so getting the role wrong here is what a non-admin user would
+    # actually hit.
+    lang = get_preferred_language()
     detail = _describe_provider_failures(llm_providers)
+    if detail:
+        key = (
+            "status.llm_providers_unhealthy_detail" if can_manage else "status.llm_providers_unhealthy_detail_observer"
+        )
+        message = get_string(lang, key, detail=detail)
+    else:
+        key = "status.llm_providers_unhealthy" if can_manage else "status.llm_providers_unhealthy_observer"
+        message = get_string(lang, key)
     return False, [
         SystemWarning(
             code="llm_providers_unhealthy",
-            message=(
-                f"No LLM provider is answering. {detail} Open LLM settings to fix it."
-                if detail
-                else "No LLM provider is answering. Open LLM settings to check your provider, key and model."
-            ),
+            message=message,
             severity="warning",
-            action_url="/settings/llm",
+            action_url="/settings/llm" if can_manage else None,
         )
     ]
 
@@ -278,7 +488,6 @@ def _hardware_trust_warnings(request: Request) -> list[SystemWarning]:
     except Exception as e:
         logger.debug(f"Could not check hardware trust degradation: {e}")
     return []
-
 
 
 def _adapter_load_failure_warnings(request: Request) -> list[SystemWarning]:
@@ -540,13 +749,13 @@ def _stale_shared_task_warnings(request: Request) -> list[SystemWarning]:
     ]
 
 
-async def collect_system_warnings(request: Request) -> tuple[bool, list[SystemWarning]]:
+async def collect_system_warnings(request: Request, can_manage: bool = True) -> tuple[bool, list[SystemWarning]]:
     """Collect system-level warnings and check degraded mode.
 
     Returns (degraded_mode, warnings) tuple. degraded_mode is True when NO
     working LLM is available.
     """
-    has_working_llm, llm_warnings = await check_llm_availability()
+    has_working_llm, llm_warnings = await check_llm_availability(can_manage)
     warnings = llm_warnings.copy()
     warnings.extend(await _adapter_reauth_warnings(request))
     warnings.extend(_hardware_trust_warnings(request))
@@ -561,7 +770,9 @@ async def collect_system_warnings(request: Request) -> tuple[bool, list[SystemWa
 
 
 @router.get("/health")
-async def get_system_health(request: Request) -> SuccessResponse[SystemHealthResponse]:
+async def get_system_health(
+    request: Request, auth: Optional[AuthContext] = Depends(_identify_caller)
+) -> SuccessResponse[SystemHealthResponse]:
     """
     Overall system health.
 
@@ -579,7 +790,21 @@ async def get_system_health(request: Request) -> SuccessResponse[SystemHealthRes
     processor_healthy = await check_processor_health(request)
 
     # Collect system warnings and check degraded mode
-    degraded_mode, warnings = await collect_system_warnings(request)
+    # LLM management is admin-only, so an observer must not be handed an
+    # instruction (or a link) they cannot act on. Derived from the CALLER's role,
+    # never assumed.
+    # First-run setup is intentionally unauthenticated, and BOTH LLM
+    # configuration routes allow it: _require_setup_or_admin returns early
+    # while is_first_run(). So the setup user may configure a provider even
+    # though `auth` is None — telling them "an administrator needs to do this"
+    # and hiding the link would strand them in exactly the state (fresh boot,
+    # no provider) where this warning fires most.
+    _can_manage = _is_first_run_setup() or getattr(auth, "role", None) in (
+        UserRole.ADMIN,
+        UserRole.AUTHORITY,
+        UserRole.SYSTEM_ADMIN,
+    )
+    degraded_mode, warnings = await collect_system_warnings(request, _can_manage)
 
     # Determine overall system status
     status = determine_overall_status(init_complete, processor_healthy, services)
@@ -649,9 +874,7 @@ async def get_federation_address(_auth: AuthObserverDep) -> SuccessResponse[Fede
     from ciris_engine.logic.runtime import edge_runtime
 
     if not edge_runtime.is_available():
-        return SuccessResponse(
-            data=FederationAddressResponse(available=False, key_id=None, edge_version=None)
-        )
+        return SuccessResponse(data=FederationAddressResponse(available=False, key_id=None, edge_version=None))
 
     key_id = edge_runtime.get_federation_address()
     edge_version: Optional[str] = None

@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 
 from ciris_engine.logic import persistence
+from ciris_engine.logic.infrastructure.authorization.tool_approval import pending_tool_from_deferral_context
 from ciris_engine.logic.infrastructure.handlers.base_handler import BaseActionHandler
 from ciris_engine.logic.infrastructure.handlers.shared_helpers import parse_iso_timestamp
 from ciris_engine.logic.utils.localization import get_preferred_language, get_string
@@ -78,7 +79,40 @@ class DeferHandler(BaseActionHandler):
     async def _schedule_time_based_deferral(
         self, defer_params: DeferParams, thought: Thought, follow_up_info: str
     ) -> str:
-        """Schedule a time-based deferral. Returns updated follow_up_info."""
+        """Schedule a time-based deferral. Returns updated follow_up_info.
+
+        A deferral that is *waiting on a human approval* never gets a timer
+        (NULLWORKS RC3, F2). See the guard below.
+        """
+        # An approval-required deferral is not timer-resumable. The approval gate
+        # builds its deferral with `defer_until=None` for exactly this reason
+        # (`tool_approval.build_approval_deferral`), but these `DeferParams` can
+        # also come straight from the model, which is free to set BOTH a
+        # pending-approval context and a `defer_until`. Arming a timer for one
+        # would assert, in the scheduler, that the passage of time is a route
+        # back to this work — the reconsideration/execution conflation F2 is
+        # about — and would leave a scheduled row whose only apparent purpose is
+        # to resume something a human has not answered.
+        #
+        # This is defence in depth, not the load-bearing control: even with a
+        # timer, the re-run task holds no approval envelope, so
+        # `ThoughtProcessor._enforce_tool_approval` denies the tool and defers
+        # again. What the guard buys is that the *state* is honest — nothing in
+        # the system is scheduled to bring approval-required work back on its own.
+        pending_tool = pending_tool_from_deferral_context(defer_params.context)
+        if pending_tool:
+            logger.info(
+                "DEFER %s awaits wise-authority approval of tool '%s' — no reactivation timer "
+                "armed (requested defer_until=%s). Only an affirmative resolution resumes this work.",
+                thought.thought_id,
+                pending_tool,
+                defer_params.defer_until,
+            )
+            return (
+                f"Deferred thought {thought.thought_id} pending wise-authority approval of tool "
+                f"'{pending_tool}'; no reactivation timer armed. Reason: {defer_params.reason}"
+            )
+
         scheduler_service = self._get_task_scheduler_service()
         if not scheduler_service:
             return follow_up_info

@@ -45,15 +45,43 @@ class TestHealthStaysReachableWithoutCredentials:
         )
 
     def test_auth_is_optional_so_an_unauthenticated_probe_still_works(self) -> None:
-        auth_param = inspect.signature(get_system_health).parameters["auth"]
-        assert auth_param.default is None, (
-            "auth must default to None. A required dependency would 401 the Docker healthcheck "
-            "and take the container down."
-        )
         hint = get_type_hints(get_system_health, include_extras=True).get("auth")
         assert "Optional" in str(hint) or "None" in str(
             hint
-        ), f"auth must be Optional so optional_auth can return None for an anonymous probe; got {hint!r}"
+        ), f"auth must be Optional so an anonymous probe resolves to None; got {hint!r}"
+
+    @pytest.mark.asyncio
+    async def test_identifying_the_caller_cannot_fail_the_endpoint(self) -> None:
+        """The dependency must not require an auth service to exist.
+
+        OptionalAuthDep looked right and was wrong: it resolves optional_auth,
+        whose nested Depends(get_auth_service) raises 500 when
+        app.state.auth_service is missing. app.py's supported standalone path
+        calls create_app() with no runtime, which skips _initialize_app_state
+        entirely — so /v1/system/health would have 500'd before the handler
+        ran, in exactly the uninitialized state it exists to REPORT, and the
+        container healthcheck probing it would have failed.
+        """
+        from types import SimpleNamespace
+
+        from ciris_engine.logic.adapters.api.routes.system.health import _identify_caller
+
+        no_service = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace()))
+        assert await _identify_caller(no_service, None) is None
+
+        wrong_type = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(auth_service="nope")))
+        assert await _identify_caller(wrong_type, None) is None
+
+    def test_health_binds_the_failure_proof_dependency(self) -> None:
+        """Assert on what the handler USES, not on what its comments mention."""
+        from ciris_engine.logic.adapters.api.routes.system.health import _identify_caller
+
+        default = inspect.signature(get_system_health).parameters["auth"].default
+        assert getattr(default, "dependency", None) is _identify_caller, (
+            "health must resolve its caller through _identify_caller. OptionalAuthDep "
+            "hard-depends on get_auth_service, which 500s when the auth service is absent — "
+            f"health must degrade to 'unidentified caller', never to an error. got {default!r}"
+        )
 
 
 class TestAuthorizationDecisionFieldNames:

@@ -339,11 +339,22 @@ class TestDegradedMode:
         # Mock the actual LLM service that throws on health check
         mock_service = MagicMock()
         mock_service.is_healthy = AsyncMock(side_effect=Exception("Connection refused"))
+        # A MagicMock answers to EVERY attribute, so `last_error` and
+        # `last_fault_code` would arrive truthy — and the fault ladder would
+        # dutifully report a named provider failure quoting a Mock repr. Pin
+        # them to what a provider that has recorded nothing actually carries,
+        # so this exercises the generic fallthrough it is testing rather than a
+        # fault the fixture invented.
+        mock_service.last_error = ""
+        mock_service._last_error = ""
+        mock_service.last_failure_reason = ""
+        mock_service.last_fault_code = ""
 
         # Wrap in ServiceProvider-like structure
         mock_service_provider = MagicMock()
         mock_service_provider.name = "test_provider"
         mock_service_provider.instance = mock_service
+        mock_service_provider.circuit_breaker = None
 
         mock_registry = MagicMock()
         mock_registry._services = {ServiceType.LLM: [mock_service_provider]}

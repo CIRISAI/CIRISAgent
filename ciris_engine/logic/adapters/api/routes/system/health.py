@@ -9,7 +9,7 @@ import re
 from datetime import datetime, timezone
 from typing import Annotated, Optional, Sequence
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 
 from ciris_engine.constants import CIRIS_VERSION
 from ciris_engine.logic.utils.localization import get_preferred_language, get_string
@@ -19,8 +19,8 @@ from ciris_engine.schemas.api.responses import SuccessResponse
 from ciris_engine.schemas.api.telemetry import TimeSyncStatus
 
 from ...constants import ERROR_TIME_SERVICE_NOT_AVAILABLE
-from ...dependencies.auth import AuthContext, require_observer
-from .._common import OptionalAuthDep
+from ...dependencies.auth import AuthContext, optional_auth, require_observer
+from ...services.auth_service import APIAuthService
 from .helpers import (
     check_initialization_status,
     check_processor_health,
@@ -133,6 +133,32 @@ def _provider_fault_code(service_provider: object) -> str:
 
 # "HTTP 401", "http/401", "status 401", "code: 401" — a status, not a token count.
 _HTTP_401 = re.compile(r"\b(?:http|https|status|code|error)\b[^0-9a-z]{0,4}401\b")
+
+
+async def _identify_caller(
+    request: Request, authorization: Optional[str] = Header(None)
+) -> Optional[AuthContext]:
+    """Identify the caller if possible, and NEVER fail if not.
+
+    Deliberately not ``OptionalAuthDep``. That resolves ``optional_auth``,
+    whose nested ``Depends(get_auth_service)`` raises 500 when
+    ``app.state.auth_service`` is missing — and the supported standalone path
+    in app.py calls ``create_app()`` with no runtime, which skips
+    ``_initialize_app_state`` entirely. Using it here would make
+    /v1/system/health 500 before the handler ran, in precisely the
+    uninitialized state the endpoint exists to REPORT, and would fail the
+    container healthcheck that probes it.
+
+    "Optional" has to mean optional all the way down: an unidentified caller
+    is an observer, never an error.
+    """
+    auth_service = getattr(request.app.state, "auth_service", None)
+    if not isinstance(auth_service, APIAuthService):
+        return None
+    try:
+        return await optional_auth(request, authorization, auth_service)
+    except Exception:  # pragma: no cover - health must answer regardless
+        return None
 
 
 def _is_first_run_setup() -> bool:
@@ -744,7 +770,9 @@ async def collect_system_warnings(request: Request, can_manage: bool = True) -> 
 
 
 @router.get("/health")
-async def get_system_health(request: Request, auth: OptionalAuthDep = None) -> SuccessResponse[SystemHealthResponse]:
+async def get_system_health(
+    request: Request, auth: Optional[AuthContext] = Depends(_identify_caller)
+) -> SuccessResponse[SystemHealthResponse]:
     """
     Overall system health.
 

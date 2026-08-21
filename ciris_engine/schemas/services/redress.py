@@ -50,7 +50,7 @@ Four schema-level properties, one per requirement in the finding:
 from __future__ import annotations
 
 from enum import Enum
-from typing import Dict, FrozenSet, Iterable, List, Optional, Sequence, Tuple, Union
+from typing import Callable, Dict, FrozenSet, Iterable, List, Optional, Sequence, Tuple, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -552,8 +552,32 @@ class RedressAdmission(BaseModel):
         return self
 
 
-def admit_redress(record: RedressRecord) -> RedressAdmission:
+def admit_redress(
+    record: RedressRecord,
+    *,
+    verified_deferral: Optional[DeferralVerification] = None,
+) -> RedressAdmission:
     """Decide whether ``record`` may change what stands. Fail-closed.
+
+    ``verified_deferral`` is the verdict the CALLER obtained by loading the
+    deferral named in ``authority.authorizing_deferral_id`` and checking its
+    signature. It is keyword-only and required in substance: omit it and the
+    record is refused, never admitted.
+
+    This is the whole trust boundary, so it is worth being blunt about why it
+    is shaped this way. ``record.authority.verification`` is a field on a model
+    that anything able to construct or deserialize a ``RedressRecord`` can set
+    to ``VERIFIED``. A gate that reads it is not checking a signature; it is
+    asking the record whether the record is trustworthy, and a self-attested
+    correction would then govern effective state. Phase 2 is specified as
+    handing a ``RedressRecord`` to this function, so that mistake was one
+    honest refactor away from being made — the signature now makes it
+    impossible to call this without stating an independently derived verdict.
+
+    The record's own claim is not ignored, it is CROSS-CHECKED: if it disagrees
+    with what the caller actually verified, the record is refused rather than
+    quietly overridden. Disagreement means the record is lying or stale, and
+    both are reasons to stop.
 
     Only ``WA_DEFERRAL_RESOLUTION`` authority whose signature actually verified
     is admitted. ``UNSIGNED`` is refused here even though
@@ -588,7 +612,34 @@ def admit_redress(record: RedressRecord) -> RedressAdmission:
             detail="No deferral named, so there is nothing whose signature could be checked.",
         )
 
-    if auth.verification is DeferralVerification.FAILED:
+    # No independently derived verdict — the caller did not check the deferral,
+    # so nothing here has been established. Refuse.
+    if verified_deferral is None:
+        return RedressAdmission(
+            redress_id=record.redress_id,
+            admitted=False,
+            refusal=RedressRefusalReason.AUTHORITY_UNVERIFIED,
+            detail=(
+                f"Deferral {auth.authorizing_deferral_id} was not independently verified by the "
+                "caller. The record's own `verification` field is a claim, not a check."
+            ),
+        )
+
+    # The record's claim must agree with what was actually checked. A record
+    # asserting VERIFIED over a deferral that did not verify is refused on the
+    # stronger ground of the two.
+    if verified_deferral is not auth.verification:
+        return RedressAdmission(
+            redress_id=record.redress_id,
+            admitted=False,
+            refusal=RedressRefusalReason.AUTHORITY_VERIFICATION_FAILED,
+            detail=(
+                f"Deferral {auth.authorizing_deferral_id}: the record claims "
+                f"{auth.verification.value} but verification returned {verified_deferral.value}."
+            ),
+        )
+
+    if verified_deferral is DeferralVerification.FAILED:
         return RedressAdmission(
             redress_id=record.redress_id,
             admitted=False,
@@ -596,7 +647,7 @@ def admit_redress(record: RedressRecord) -> RedressAdmission:
             detail=f"Deferral {auth.authorizing_deferral_id} carries a signature that did not verify.",
         )
 
-    if auth.verification is not DeferralVerification.VERIFIED:
+    if verified_deferral is not DeferralVerification.VERIFIED:
         return RedressAdmission(
             redress_id=record.redress_id,
             admitted=False,
@@ -672,6 +723,8 @@ def _sort_key(record: RedressRecord) -> Tuple[str, str]:
 def resolve_effective_state(
     target: ActionRef,
     records: Iterable[RedressRecord],
+    *,
+    verify_deferral: Optional[Callable[[RedressRecord], DeferralVerification]] = None,
 ) -> ActionEffectiveState:
     """Answer "what stands now?" for ``target``.
 
@@ -688,6 +741,13 @@ def resolve_effective_state(
     Admission runs *inside* this function rather than being the caller's job.
     That is the whole point: there is no way to call this and accidentally let
     an unauthorized correction count.
+
+    ``verify_deferral`` loads the deferral a record names and returns what its
+    signature actually says. Omitting it does NOT mean "trust the records" — it
+    means nothing was verified, so every record is refused and the answer is
+    UNCHALLENGED. That is the safe default for a reader that has no way to
+    check: it reports that nothing has been established, never that a
+    correction stands.
     """
     key = target.identity_key
     mine: Sequence[RedressRecord] = [r for r in records if r.target.identity_key == key]
@@ -695,7 +755,10 @@ def resolve_effective_state(
     admitted: List[RedressRecord] = []
     refused: List[RedressAdmission] = []
     for record in sorted(mine, key=_sort_key):
-        verdict = admit_redress(record)
+        verdict = admit_redress(
+            record,
+            verified_deferral=verify_deferral(record) if verify_deferral is not None else None,
+        )
         if verdict.admitted:
             admitted.append(record)
         else:
@@ -767,7 +830,9 @@ def redress_authorization_payload(record: RedressRecord, signed_at: str) -> Dict
     }
 
 
-def redress_audit_event_data(record: RedressRecord) -> AuditEventData:
+def redress_audit_event_data(
+    record: RedressRecord, *, verified_deferral: Optional[DeferralVerification] = None
+) -> AuditEventData:
     """Flatten a redress record for the append-only, hash-chained audit log.
 
     Reuses :class:`~ciris_engine.schemas.services.graph.audit.AuditEventData`
@@ -798,7 +863,7 @@ def redress_audit_event_data(record: RedressRecord) -> AuditEventData:
         "authority_basis": record.authority.basis.value,
         "authority_wa_id": record.authority.wa_id,
         "authority_verification": record.authority.verification.value,
-        "admitted": admit_redress(record).admitted,
+        "admitted": admit_redress(record, verified_deferral=verified_deferral).admitted,
     }
     ceg = record.disposition.ceg_primitive
     if ceg is not None:

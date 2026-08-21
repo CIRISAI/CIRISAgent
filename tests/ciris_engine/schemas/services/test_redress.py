@@ -52,6 +52,15 @@ TARGET = ActionRef(
 )
 
 
+def _as_checked(record):
+    """A verifier that agrees with what the record claims.
+
+    Stands in for "the caller loaded the deferral and its signature said X".
+    Tests that care about the DISAGREEMENT case pass a different verifier —
+    see TestARecordCannotVouchForItself.
+    """
+    return record.authority.verification
+
 def verified_authority(**over: object) -> RedressAuthority:
     kwargs = dict(
         basis=RedressAuthorityBasis.WA_DEFERRAL_RESOLUTION,
@@ -96,7 +105,7 @@ class TestRedressIsNotUndo:
         """
         record = make_record(disposition=RedressDisposition.RETRACTED)
         assert record.external_effect_undone is False
-        state = resolve_effective_state(TARGET, [record])
+        state = resolve_effective_state(TARGET, [record], verify_deferral=_as_checked)
         assert state.standing is ActionStanding.RETRACTED
         assert state.external_effect_undone is False
 
@@ -147,7 +156,7 @@ class TestOriginalRecordIsPreserved:
             statement="On review the original figure was right; the retraction was mistaken.",
             amends="rd-1",
         )
-        state = resolve_effective_state(TARGET, [first, second])
+        state = resolve_effective_state(TARGET, [first, second], verify_deferral=_as_checked)
         assert state.standing is ActionStanding.UPHELD
         assert state.chain == ("rd-1", "rd-2"), "the mistaken retraction stays in the record"
 
@@ -161,7 +170,7 @@ class TestOriginalRecordIsPreserved:
 
 class TestAuthorityIsCheckedNotAssumed:
     def test_verified_wa_deferral_authority_is_admitted(self) -> None:
-        assert admit_redress(make_record()).admitted is True
+        assert admit_redress(make_record(), verified_deferral=DeferralVerification.VERIFIED).admitted is True
 
     def test_unsigned_authority_is_refused(self) -> None:
         """No redress row predates signing, so there is no legacy debt here.
@@ -169,20 +178,26 @@ class TestAuthorityIsCheckedNotAssumed:
         ``resolve_deferral`` tolerates UNSIGNED for rows written before #944.
         This ledger starts after it, so it starts strict.
         """
-        verdict = admit_redress(make_record(authority=verified_authority(verification=DeferralVerification.UNSIGNED)))
+        verdict = admit_redress(
+            make_record(authority=verified_authority(verification=DeferralVerification.UNSIGNED)),
+            verified_deferral=DeferralVerification.UNSIGNED,
+        )
         assert verdict.admitted is False
         assert verdict.refusal is RedressRefusalReason.AUTHORITY_UNVERIFIED
 
     def test_failed_signature_is_refused_and_named_distinctly(self) -> None:
         """A forgery and a migration gap must not be reported as each other."""
-        verdict = admit_redress(make_record(authority=verified_authority(verification=DeferralVerification.FAILED)))
+        verdict = admit_redress(
+            make_record(authority=verified_authority(verification=DeferralVerification.FAILED)),
+            verified_deferral=DeferralVerification.FAILED,
+        )
         assert verdict.admitted is False
         assert verdict.refusal is RedressRefusalReason.AUTHORITY_VERIFICATION_FAILED
 
     def test_wa_direct_is_refused_rather_than_silently_admitted(self) -> None:
         """Representable so the refusal has a name; not usable."""
         direct = RedressAuthority(basis=RedressAuthorityBasis.WA_DIRECT, wa_id=WA_ID)
-        verdict = admit_redress(make_record(authority=direct))
+        verdict = admit_redress(make_record(authority=direct), verified_deferral=DeferralVerification.VERIFIED)
         assert verdict.admitted is False
         assert verdict.refusal is RedressRefusalReason.AUTHORITY_BASIS_NOT_IMPLEMENTED
 
@@ -209,14 +224,14 @@ class TestAuthorityIsCheckedNotAssumed:
     def test_refused_records_cannot_change_what_stands(self) -> None:
         """The load-bearing assertion of the whole module."""
         forged = make_record(authority=verified_authority(verification=DeferralVerification.FAILED))
-        state = resolve_effective_state(TARGET, [forged])
+        state = resolve_effective_state(TARGET, [forged], verify_deferral=_as_checked)
         assert state.standing is ActionStanding.UNCHALLENGED
         assert state.governing_redress_id is None
 
     def test_refused_records_stay_visible(self) -> None:
         """Refusing is not deleting — a failed correction attempt is a fact."""
         forged = make_record(authority=verified_authority(verification=DeferralVerification.FAILED))
-        state = resolve_effective_state(TARGET, [forged])
+        state = resolve_effective_state(TARGET, [forged], verify_deferral=_as_checked)
         assert len(state.refused) == 1
         assert state.refused[0].redress_id == "rd-1"
         assert state.refused[0].refusal is RedressRefusalReason.AUTHORITY_VERIFICATION_FAILED
@@ -231,7 +246,7 @@ class TestAuthorityIsCheckedNotAssumed:
             disposition=RedressDisposition.UPHELD,
             authority=verified_authority(verification=DeferralVerification.UNSIGNED),
         )
-        state = resolve_effective_state(TARGET, [good, bad])
+        state = resolve_effective_state(TARGET, [good, bad], verify_deferral=_as_checked)
         assert state.standing is ActionStanding.RETRACTED, "the later unverified record must not win"
 
 
@@ -268,7 +283,7 @@ class TestLinkage:
     def test_records_for_other_actions_are_ignored(self) -> None:
         other = ActionRef(audit_entry_id="ae-other", task_id="task-9", thought_id="th-9")
         elsewhere = make_record(redress_id="rd-elsewhere", target=other)
-        assert resolve_effective_state(TARGET, [elsewhere]).standing is ActionStanding.UNCHALLENGED
+        assert resolve_effective_state(TARGET, [elsewhere], verify_deferral=_as_checked).standing is ActionStanding.UNCHALLENGED
 
     def test_superseded_must_name_what_replaced_it(self) -> None:
         """ "Read the other thing instead" is useless without the other thing."""
@@ -286,7 +301,7 @@ class TestLinkage:
             delivered=True,
         )
         record = make_record(disposition=RedressDisposition.SUPERSEDED, compensating_action=follow_up)
-        state = resolve_effective_state(TARGET, [record])
+        state = resolve_effective_state(TARGET, [record], verify_deferral=_as_checked)
         assert state.standing is ActionStanding.SUPERSEDED
         assert state.compensating_action is not None
         assert state.compensating_action.action.identity_key == "tt:task-1:th-2"
@@ -307,7 +322,7 @@ class TestLinkage:
 class TestCurrentEffectiveState:
     def test_no_records_means_unchallenged_not_upheld(self) -> None:
         """The distinction the whole ledger exists to preserve."""
-        state = resolve_effective_state(TARGET, [])
+        state = resolve_effective_state(TARGET, [], verify_deferral=_as_checked)
         assert state.standing is ActionStanding.UNCHALLENGED
         assert state.reviewed is False
         assert state.endorsed is True
@@ -316,6 +331,7 @@ class TestCurrentEffectiveState:
         state = resolve_effective_state(
             TARGET,
             [make_record(disposition=RedressDisposition.UPHELD, grounds=RedressGrounds.HARM_REPORTED)],
+            verify_deferral=_as_checked,
         )
         assert state.standing is ActionStanding.UPHELD
         assert state.reviewed is True
@@ -328,7 +344,7 @@ class TestCurrentEffectiveState:
             recorded_at="2026-08-20T10:05:00+00:00",
             disposition=RedressDisposition.WITHDRAWN,
         )
-        state = resolve_effective_state(TARGET, [late, early])  # deliberately out of order
+        state = resolve_effective_state(TARGET, [late, early], verify_deferral=_as_checked)  # deliberately out of order
         assert state.governing_redress_id == "rd-2"
         assert state.standing is ActionStanding.WITHDRAWN
 
@@ -342,7 +358,7 @@ class TestCurrentEffectiveState:
             grounds=RedressGrounds.NEW_EVIDENCE,
             statement="Context: the source has since published a correction.",
         )
-        state = resolve_effective_state(TARGET, [retraction, note])
+        state = resolve_effective_state(TARGET, [retraction, note], verify_deferral=_as_checked)
         assert state.standing is ActionStanding.RETRACTED
         assert state.governing_redress_id == "rd-1"
         assert state.annotations == ("Context: the source has since published a correction.",)
@@ -353,7 +369,7 @@ class TestCurrentEffectiveState:
             grounds=RedressGrounds.NEW_EVIDENCE,
             statement="Accurate but incomplete.",
         )
-        state = resolve_effective_state(TARGET, [note])
+        state = resolve_effective_state(TARGET, [note], verify_deferral=_as_checked)
         assert state.standing is ActionStanding.UNCHALLENGED
         assert state.reviewed is True, "an annotation means somebody looked"
         assert state.chain == ("rd-1",)
@@ -362,6 +378,7 @@ class TestCurrentEffectiveState:
         state = resolve_effective_state(
             TARGET,
             [make_record(disposition=RedressDisposition.WITHDRAWN, grounds=RedressGrounds.CONSENT_WITHDRAWN)],
+            verify_deferral=_as_checked,
         )
         assert state.standing is ActionStanding.WITHDRAWN
         assert state.endorsed is False
@@ -370,19 +387,19 @@ class TestCurrentEffectiveState:
         """Clock skew across occurrences is real; determinism is the floor."""
         a = make_record(redress_id="rd-a", disposition=RedressDisposition.UPHELD)
         b = make_record(redress_id="rd-b", disposition=RedressDisposition.WITHDRAWN)
-        assert resolve_effective_state(TARGET, [a, b]).governing_redress_id == "rd-b"
-        assert resolve_effective_state(TARGET, [b, a]).governing_redress_id == "rd-b"
+        assert resolve_effective_state(TARGET, [a, b], verify_deferral=_as_checked).governing_redress_id == "rd-b"
+        assert resolve_effective_state(TARGET, [b, a], verify_deferral=_as_checked).governing_redress_id == "rd-b"
 
     def test_state_is_recomputed_not_cached(self) -> None:
         """Adding a record changes the answer with no invalidation step."""
         first = make_record(redress_id="rd-1")
-        state_one = resolve_effective_state(TARGET, [first])
+        state_one = resolve_effective_state(TARGET, [first], verify_deferral=_as_checked)
         second = make_record(
             redress_id="rd-2",
             recorded_at="2026-08-20T13:00:00+00:00",
             disposition=RedressDisposition.UPHELD,
         )
-        state_two = resolve_effective_state(TARGET, [first, second])
+        state_two = resolve_effective_state(TARGET, [first, second], verify_deferral=_as_checked)
         assert state_one.standing is ActionStanding.RETRACTED
         assert state_two.standing is ActionStanding.UPHELD
 
@@ -402,7 +419,7 @@ class TestVocabulary:
         for disposition in BINDING_DISPOSITIONS:
             # SUPERSEDED is the one disposition that cannot stand alone.
             extra = {"compensating_action": replacement} if disposition is RedressDisposition.SUPERSEDED else {}
-            state = resolve_effective_state(TARGET, [make_record(disposition=disposition, **extra)])
+            state = resolve_effective_state(TARGET, [make_record(disposition=disposition, **extra)], verify_deferral=_as_checked)
             assert state.standing.value == disposition.value
 
     def test_retraction_family_maps_to_the_ceg_primitives(self) -> None:
@@ -528,3 +545,62 @@ class TestTheStrongAndWeakRefsAgree:
         strong = ActionRef(audit_entry_id="ae-1", audit_entry_hash="h-1", task_id="task-1", thought_id="th-1")
         assert strong.is_chain_anchored is True
         assert ActionRef(task_id="task-1", thought_id="th-1").is_chain_anchored is False
+
+
+class TestARecordCannotVouchForItself:
+    """The trust boundary admit_redress actually defends.
+
+    `authority.verification` is a field on a model that anything able to
+    construct or deserialize a RedressRecord can set to VERIFIED. A gate that
+    reads it is not checking a signature — it is asking the record whether the
+    record is trustworthy. Phase 2 is specified as handing a RedressRecord to
+    admit_redress, so this was one honest refactor away from letting a
+    self-attested correction govern effective state.
+    """
+
+    def test_a_self_attested_record_is_refused_without_an_independent_verdict(self) -> None:
+        from ciris_engine.schemas.services.redress import admit_redress
+
+        forged = make_record(authority=verified_authority(verification=DeferralVerification.VERIFIED))
+        verdict = admit_redress(forged)  # caller checked nothing
+        assert verdict.admitted is False
+        assert verdict.refusal is RedressRefusalReason.AUTHORITY_UNVERIFIED
+
+    def test_a_record_claiming_more_than_verification_found_is_refused(self) -> None:
+        from ciris_engine.schemas.services.redress import admit_redress
+
+        lying = make_record(authority=verified_authority(verification=DeferralVerification.VERIFIED))
+        verdict = admit_redress(lying, verified_deferral=DeferralVerification.FAILED)
+        assert verdict.admitted is False
+        assert verdict.refusal is RedressRefusalReason.AUTHORITY_VERIFICATION_FAILED
+        assert "claims" in (verdict.detail or "")
+
+    def test_the_verdict_parameter_is_keyword_only(self) -> None:
+        """So it can never be supplied by accident through positional drift."""
+        import inspect
+
+        from ciris_engine.schemas.services.redress import admit_redress
+
+        param = inspect.signature(admit_redress).parameters["verified_deferral"]
+        assert param.kind is inspect.Parameter.KEYWORD_ONLY
+
+
+class TestAReaderThatCannotVerifyReportsNothingStands:
+    """Omitting the verifier must not mean "trust the records"."""
+
+    def test_no_verifier_yields_unchallenged_not_a_governed_answer(self) -> None:
+        retraction = make_record(disposition=RedressDisposition.RETRACTED)
+        state = resolve_effective_state(TARGET, [retraction])  # nothing checked
+        assert state.standing is ActionStanding.UNCHALLENGED, (
+            "A reader with no way to verify must report that nothing has been established, "
+            "never that a correction stands. Defaulting to trust would let an unverified "
+            "record govern effective state simply because the caller was lazy."
+        )
+        assert state.governing_redress_id is None
+        assert state.reviewed is False
+        assert state.refused, "and it must say the records were refused, not silently drop them"
+
+    def test_the_same_records_govern_once_verified(self) -> None:
+        retraction = make_record(disposition=RedressDisposition.RETRACTED)
+        state = resolve_effective_state(TARGET, [retraction], verify_deferral=_as_checked)
+        assert state.standing is ActionStanding.RETRACTED

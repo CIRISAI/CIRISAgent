@@ -347,37 +347,51 @@ class TestATimerCannotOverturnAnAnswerItRacedWith:
     exposes no conditional status update. What makes it recoverable is that the
     two writers touch different columns: resolve_deferral upserts status AND
     context, update_task_status writes status only. So a resolution that lands
-    mid-window survives the clobber in context and can be detected afterwards.
+    mid-window survives the clobber in context.
+
+    The catch that made the first version of this guard DEAD: that marker is
+    only in the persisted row. _persist_row_to_task materializes TaskContext
+    from seven named fields and drops `deferral`, so a check that read a Task
+    object was always False in production while its unit test — which built its
+    own fixture — passed.
     """
 
-    def _task(self, resolution=None):
-        from types import SimpleNamespace
+    def test_the_materialized_task_really_does_drop_the_marker(self) -> None:
+        """The fact the guard has to be written around. If this ever fails,
+        TaskContext gained the field and the raw-row read can be simplified."""
+        from ciris_engine.schemas.runtime.models import TaskContext
 
-        deferral = {"resolution": resolution} if resolution is not None else {}
-        return SimpleNamespace(context={"deferral": deferral})
+        assert "deferral" not in TaskContext.model_fields, (
+            "TaskContext now carries `deferral`; _has_recorded_resolution could read the "
+            "materialized Task again. Until then it MUST read the row."
+        )
 
-    def test_the_signed_resolution_record_is_recognised(self) -> None:
+    def test_the_marker_is_read_from_the_raw_row(self, monkeypatch) -> None:
+        from ciris_engine.logic import persistence
         from ciris_engine.logic.services.lifecycle.scheduler.service import _has_recorded_resolution
 
-        assert _has_recorded_resolution(self._task(resolution={"signed_at": "2026-08-21T00:00:00Z"})) is True
+        monkeypatch.setattr(
+            persistence,
+            "get_task_raw_context",
+            lambda tid: {"deferral": {"resolution": {"signed_at": "2026-08-21T00:00:00Z"}}},
+        )
+        assert _has_recorded_resolution("task-1") is True
 
-    def test_an_unanswered_deferral_is_not(self) -> None:
-        from types import SimpleNamespace
-
+    def test_an_unanswered_deferral_is_not_mistaken_for_one(self, monkeypatch) -> None:
+        from ciris_engine.logic import persistence
         from ciris_engine.logic.services.lifecycle.scheduler.service import _has_recorded_resolution
 
-        assert _has_recorded_resolution(self._task()) is False
-        assert _has_recorded_resolution(SimpleNamespace(context={})) is False
-        assert _has_recorded_resolution(SimpleNamespace(context=None)) is False
-        assert _has_recorded_resolution(SimpleNamespace()) is False
+        for ctx in ({}, {"deferral": {}}, {"deferral": None}, {"other": 1}):
+            monkeypatch.setattr(persistence, "get_task_raw_context", lambda tid, c=ctx: c)
+            assert _has_recorded_resolution("task-1") is False, ctx
 
     def test_a_resolution_landing_mid_window_is_restored_not_clobbered(self, monkeypatch) -> None:
-        """Drive the actual race rather than asserting on source order.
+        """Drive the actual race.
 
         First read sees DEFERRED with no answer, so the timer proceeds and
-        writes ACTIVE. Between those, a WA resolves: the second read sees the
-        signed record their upsert left in context. The timer must put the
-        resolved status back and retire WITHOUT re-pending the thought.
+        writes ACTIVE. Between those a WA resolves: their upsert leaves a signed
+        record in the ROW. The timer must put the resolved status back and
+        retire WITHOUT re-pending the thought.
         """
         from types import SimpleNamespace
 
@@ -386,25 +400,29 @@ class TestATimerCannotOverturnAnAnswerItRacedWith:
         from ciris_engine.schemas.runtime.enums import TaskStatus
 
         calls: list = []
-        reads = {"n": 0}
+        answered = {"yet": False}
 
-        def fake_get(task_id: str):
-            reads["n"] += 1
-            if reads["n"] == 1:
-                return SimpleNamespace(
-                    status=TaskStatus.DEFERRED, agent_occurrence_id="occ-1", context={"deferral": {}}
-                )
-            # A wise authority answered inside the read->write window. Their
-            # upsert wrote status AND context; our status-only write clobbered
-            # the status, but their record survives and is how we find out.
-            return SimpleNamespace(
-                status=TaskStatus.ACTIVE,
-                agent_occurrence_id="occ-1",
-                context={"deferral": {"resolution": {"signed_at": "2026-08-21T00:00:00Z"}}},
-            )
+        monkeypatch.setattr(
+            persistence,
+            "get_task_by_id_any_occurrence",
+            lambda tid: SimpleNamespace(status=TaskStatus.DEFERRED, agent_occurrence_id="occ-1"),
+        )
 
-        monkeypatch.setattr(persistence, "get_task_by_id_any_occurrence", fake_get)
-        monkeypatch.setattr(persistence, "update_task_status", lambda t, s, o: (calls.append(("task", s)), True)[1])
+        def raw_context(task_id: str):
+            # Unanswered on the pre-check; answered by the post-write check.
+            if not answered["yet"]:
+                return {"deferral": {}}
+            return {"deferral": {"resolution": {"signed_at": "2026-08-21T00:00:00Z"}}}
+
+        monkeypatch.setattr(persistence, "get_task_raw_context", raw_context)
+
+        def set_status(tid, status, occ):
+            calls.append(("task", status))
+            if status is TaskStatus.ACTIVE:
+                answered["yet"] = True  # the WA lands inside the window
+            return True
+
+        monkeypatch.setattr(persistence, "update_task_status", set_status)
         monkeypatch.setattr(
             persistence,
             "update_thought_status",
@@ -415,12 +433,41 @@ class TestATimerCannotOverturnAnAnswerItRacedWith:
         scheduled = SimpleNamespace(task_id="sched-1", origin_thought_id="th-1")
 
         assert service._reactivate_deferred_task(scheduled, "task-1") is True
-
         assert not any(kind == "thought" for kind, _ in calls), (
-            "the refused thought must NOT be re-pended — that is the harm a status rewrite "
-            f"cannot undo. calls={calls}"
+            f"the refused thought must NOT be re-pended; calls={calls}"
         )
-        assert calls[-1] == ("task", TaskStatus.COMPLETED), f"the human's answer must be restored, got {calls}"
+        assert calls[-1] == ("task", TaskStatus.COMPLETED), f"answer must be restored, got {calls}"
+
+    def test_an_unraced_timer_still_reactivates(self, monkeypatch) -> None:
+        """The repair must not swallow the normal path."""
+        from types import SimpleNamespace
+
+        from ciris_engine.logic import persistence
+        from ciris_engine.logic.services.lifecycle.scheduler.service import TaskSchedulerService
+        from ciris_engine.schemas.runtime.enums import TaskStatus
+
+        calls: list = []
+        monkeypatch.setattr(
+            persistence,
+            "get_task_by_id_any_occurrence",
+            lambda tid: SimpleNamespace(status=TaskStatus.DEFERRED, agent_occurrence_id="occ-1"),
+        )
+        monkeypatch.setattr(persistence, "get_task_raw_context", lambda tid: {"deferral": {}})
+        monkeypatch.setattr(
+            persistence, "update_task_status", lambda t, s, o: (calls.append(("task", s)), True)[1]
+        )
+        monkeypatch.setattr(
+            persistence,
+            "update_thought_status",
+            lambda **kw: (calls.append(("thought", kw.get("status"))), True)[1],
+        )
+
+        service = TaskSchedulerService.__new__(TaskSchedulerService)
+        scheduled = SimpleNamespace(task_id="sched-1", origin_thought_id="th-1")
+        service._reactivate_deferred_task(scheduled, "task-1")
+
+        assert ("task", TaskStatus.ACTIVE) in calls
+        assert any(kind == "thought" for kind, _ in calls), "an unraced timer must re-pend the thought"
 
 
 class TestFirstRunCallersAreToldTheyCanAct:
@@ -453,3 +500,78 @@ class TestA401MustReadAsAStatusCode:
         from ciris_engine.logic.adapters.api.routes.system.health import _HTTP_401
 
         assert (_HTTP_401.search(text.lower()) is not None) is is_key_rejection
+
+
+class TestPromotionCarriesJurisdiction:
+    """A role change that needs a restart to take effect is not a role change.
+
+    The new-certificate path issues resolve_deferral:any with the AUTHORITY
+    role. The promotion path updated only the role, so an OBSERVER promoted to
+    AUTHORITY was 403'd on every domain-tagged deferral until the process
+    restarted and the bootstrap backfill ran.
+    """
+
+    @pytest.mark.asyncio
+    async def test_promoting_to_authority_adds_the_scope(self) -> None:
+        from types import SimpleNamespace
+
+        from ciris_engine.logic.adapters.api.services.auth_service import APIAuthService
+        from ciris_engine.schemas.services.authority_core import WARole
+
+        captured: dict = {}
+
+        async def get_wa(wa_id):
+            return SimpleNamespace(scopes=["read:any", "write:any"])
+
+        async def update_wa(wa_id, updates=None, **kw):
+            captured["permissions"] = getattr(updates, "permissions", None)
+            captured["role"] = getattr(updates, "role", None)
+
+        svc = APIAuthService.__new__(APIAuthService)
+        svc._auth_service = SimpleNamespace(get_wa=get_wa, update_wa=update_wa)
+
+        await svc._update_existing_wa("wa-2026-08-21-ABC123", WARole.AUTHORITY)
+        assert "resolve_deferral:any" in (captured["permissions"] or []), captured
+        assert "read:any" in (captured["permissions"] or []), "existing scopes must be preserved"
+
+    @pytest.mark.asyncio
+    async def test_a_narrow_grant_is_not_widened_by_a_promotion(self) -> None:
+        from types import SimpleNamespace
+
+        from ciris_engine.logic.adapters.api.services.auth_service import APIAuthService
+        from ciris_engine.schemas.services.authority_core import WARole
+
+        captured: dict = {}
+
+        async def get_wa(wa_id):
+            return SimpleNamespace(scopes=["resolve_deferral:medical_*"])
+
+        async def update_wa(wa_id, updates=None, **kw):
+            captured["permissions"] = getattr(updates, "permissions", None)
+
+        svc = APIAuthService.__new__(APIAuthService)
+        svc._auth_service = SimpleNamespace(get_wa=get_wa, update_wa=update_wa)
+
+        await svc._update_existing_wa("wa-2026-08-21-ABC123", WARole.AUTHORITY)
+        assert captured["permissions"] is None, (
+            "an operator who deliberately scoped this WA to medical must not have it widened "
+            f"to :any by a promotion; got {captured['permissions']}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_demotion_to_observer_grants_nothing(self) -> None:
+        from types import SimpleNamespace
+
+        from ciris_engine.logic.adapters.api.services.auth_service import APIAuthService
+        from ciris_engine.schemas.services.authority_core import WARole
+
+        captured: dict = {}
+
+        async def update_wa(wa_id, updates=None, **kw):
+            captured["permissions"] = getattr(updates, "permissions", None)
+
+        svc = APIAuthService.__new__(APIAuthService)
+        svc._auth_service = SimpleNamespace(update_wa=update_wa)
+
+        await svc._update_existing_wa("wa-2026-08-21-ABC123", WARole.OBSERVER)
+        assert captured["permissions"] is None

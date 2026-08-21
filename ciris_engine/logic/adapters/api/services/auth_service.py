@@ -1384,11 +1384,40 @@ class APIAuthService:
             user.api_role = APIRole.OBSERVER
 
     async def _update_existing_wa(self, user_id: str, wa_role: WARole) -> None:
-        """Update existing WA certificate."""
+        """Update existing WA certificate.
+
+        A promotion has to carry jurisdiction with it. The new-certificate path
+        issues ``resolve_deferral:any`` alongside the AUTHORITY role; this path
+        used to change only the role, so an OBSERVER promoted to AUTHORITY was
+        refused every domain-tagged deferral by the F1 gate until the process
+        restarted and the bootstrap backfill ran. A role change that does not
+        take effect until a restart is not a role change.
+
+        Uses the SAME predicate as that backfill, so the two cannot disagree
+        about what counts as already holding jurisdiction — and so a
+        deliberately narrow grant (``resolve_deferral:medical_*``) is left
+        alone rather than widened to ``:any`` on the next promotion.
+        """
         if not self._auth_service:
             return
+
+        from ciris_engine.logic.services.infrastructure.authentication.service import (
+            AuthenticationService,
+        )
+
+        permissions: Optional[List[str]] = None
+        if wa_role in (WARole.AUTHORITY, WARole.ROOT):
+            existing = await self._auth_service.get_wa(user_id)
+            held = list(getattr(existing, "scopes", None) or []) if existing else []
+            if not AuthenticationService._holds_deferral_jurisdiction(held):
+                permissions = held + ["resolve_deferral:any"]
+
         await self._auth_service.update_wa(
-            user_id, updates=WAUpdate(role=wa_role.value if hasattr(wa_role, "value") else str(wa_role))
+            user_id,
+            updates=WAUpdate(
+                role=wa_role.value if hasattr(wa_role, "value") else str(wa_role),
+                permissions=permissions,
+            ),
         )
         logger.debug(f"[AUTH DEBUG] Updated existing WA {user_id} to role {wa_role}")
 

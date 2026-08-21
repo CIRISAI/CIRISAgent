@@ -99,32 +99,34 @@ RESOLVED_TASK_STATUSES: FrozenSet[TaskStatus] = frozenset(
 )
 
 
-def _has_recorded_resolution(task: object) -> bool:
+def _has_recorded_resolution(task_id: str) -> bool:
     """Did a wise authority already answer this deferral?
 
     Reads the SIGNED resolution record that
     ``WiseAuthorityService.resolve_deferral`` writes into
     ``context["deferral"]["resolution"]``.
 
+    Takes a task_id and reads the RAW PERSISTED ROW, not a ``Task``, and that
+    is load-bearing: ``_persist_row_to_task`` materializes ``TaskContext`` from
+    seven named fields and drops everything else the row carries, ``deferral``
+    included. An earlier version of this function accepted a ``Task`` and was
+    therefore always False in production — a guard that could never fire, which
+    is worse than no guard because the code around it reads as protected.
+
     Status alone cannot answer this under concurrency, but the record can, and
     the asymmetry is what makes it reliable: ``update_task_status`` writes ONLY
     the status column, never context. So if this timer clobbers a resolution
-    that landed mid-window, the WA's record is still sitting there afterwards
-    and says so. The marker is monotonic — once written it is never removed —
-    which is exactly the property a status field lacks.
+    that landed mid-window, the WA's record is still sitting in the row
+    afterwards and says so. The marker is monotonic — once written it is never
+    removed — which is exactly the property a status field lacks.
     """
-    context = getattr(task, "context", None)
-    if context is None:
-        return False
-    if not isinstance(context, dict):
-        context = getattr(context, "model_dump", lambda: {})() or {}
-    if not isinstance(context, dict):
-        return False
+    from ciris_engine.logic.persistence import get_task_raw_context
+
+    context = get_task_raw_context(task_id)
     deferral = context.get("deferral")
     if not isinstance(deferral, dict):
         return False
-    resolution = deferral.get("resolution")
-    return bool(resolution)
+    return bool(deferral.get("resolution"))
 
 
 class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
@@ -389,7 +391,7 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
         # has closed, and re-pend the very thought a WA refused. Not a
         # dead-letter: the deferral was answered, so the one-time scheduled task
         # retires normally on the caller's happy path.
-        if deferred_task.status in RESOLVED_TASK_STATUSES or _has_recorded_resolution(deferred_task):
+        if deferred_task.status in RESOLVED_TASK_STATUSES or _has_recorded_resolution(deferred_task_id):
             resolved_status = getattr(deferred_task.status, "value", deferred_task.status)
             logger.info(
                 f"Reactivate {safe_deferred_id}: skipped — task is already "
@@ -427,8 +429,7 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
         # Deliberately BEFORE the thought is re-pended: re-pending a thought a
         # WA refused is the actual harm, and it is the step that cannot be
         # undone by rewriting a status.
-        raced_task = get_task_by_id_any_occurrence(deferred_task_id)
-        if raced_task is not None and _has_recorded_resolution(raced_task):
+        if _has_recorded_resolution(deferred_task_id):
             update_task_status(deferred_task_id, TaskStatus.COMPLETED, occurrence_id)
             logger.warning(
                 f"Reactivate {safe_deferred_id}: a wise authority answered while this timer was "

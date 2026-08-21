@@ -5,12 +5,14 @@ for the setup wizard.
 """
 
 import asyncio
+import os
 import logging
 from typing import Any, Dict, List, Optional
 
 from ciris_engine.config.model_capabilities import get_model_capabilities
 
 from .models import ListModelsResponse, LiveModelInfo, LLMProvider, LLMValidationRequest, LLMValidationResponse
+from ciris_engine.logic.utils.log_sanitizer import sanitize_for_log
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +31,11 @@ _PROVIDER_BASE_URLS: Dict[str, str] = {
     "deepinfra": "https://api.deepinfra.com/v1/openai",
 }
 
-_LIST_MODELS_TIMEOUT = 10.0  # seconds
+# OpenRouter serves ~420 models; that payload over a consumer connection does not
+# reliably complete in 10s, and a timeout here is indistinguishable from a broken
+# provider to the user because the wizard silently shows cached data instead.
+# Overridable so an operator on a slow link can raise it without a rebuild.
+_LIST_MODELS_TIMEOUT = float(os.environ.get("CIRIS_LIST_MODELS_TIMEOUT_SECONDS", "30"))
 
 
 def _get_llm_providers() -> List[LLMProvider]:
@@ -460,11 +466,36 @@ async def _list_models_openai_compatible(api_key: str, base_url: Optional[str]) 
         client_kwargs["base_url"] = base_url
 
     client = AsyncOpenAI(**client_kwargs)
-    models_page = await asyncio.wait_for(client.models.list(), timeout=_LIST_MODELS_TIMEOUT)
+
+    # Together answers /models with a BARE JSON ARRAY where the OpenAI SDK
+    # expects {"data": [...]}, so the SDK's own parse raises
+    # "'list' object has no attribute '_set_private_attributes'" — Together's
+    # live listing failed 100% of the time on a valid key, and the wizard
+    # silently showed cached models. Confirmed live by the conformance matrix.
+    #
+    # Fall back to the raw response and read the array directly. Not
+    # Together-specific by name: any OpenAI-compatible endpoint that answers
+    # this shape now works, and the SDK path is still preferred when it parses.
+    try:
+        models_page = await asyncio.wait_for(client.models.list(), timeout=_LIST_MODELS_TIMEOUT)
+        entries: List[Any] = list(models_page.data)
+    except AttributeError:
+        logger.info(
+            "[LIST_MODELS] %s returned a non-standard /models envelope; reading the raw array",
+            sanitize_for_log(base_url or "default"),
+        )
+        raw = await asyncio.wait_for(
+            client.get("/models", cast_to=object), timeout=_LIST_MODELS_TIMEOUT
+        )
+        payload = raw.get("data") if isinstance(raw, dict) else raw
+        entries = list(payload) if isinstance(payload, list) else []
 
     result: List[LiveModelInfo] = []
-    for model in models_page.data:
-        result.append(LiveModelInfo(id=model.id, display_name=model.id, source="live"))
+    for model in entries:
+        model_id = getattr(model, "id", None) or (model.get("id") if isinstance(model, dict) else None)
+        if not model_id:
+            continue
+        result.append(LiveModelInfo(id=str(model_id), display_name=str(model_id), source="live"))
     return result
 
 
@@ -490,9 +521,18 @@ async def _list_models_anthropic(api_key: str) -> List[LiveModelInfo]:
 
 
 async def _google_models_to_list(client: Any) -> List[Any]:
-    """Collect Google models into a list (helper to work with asyncio.wait_for)."""
+    """Collect Google models into a list (helper to work with asyncio.wait_for).
+
+    ``AsyncModels.list()`` returns a COROUTINE that resolves to the async
+    pager — it is not itself an async iterable. Without the await this raised
+    "'async for' requires an object with __aiter__ method, got coroutine" on
+    every single call, so Google's live listing failed 100% of the time even
+    with a valid key, and the wizard silently showed cached models instead.
+    Confirmed live by the provider conformance matrix.
+    """
+    pager = await client.aio.models.list(config={"query_base": True})
     result = []
-    async for model in client.aio.models.list(config={"query_base": True}):
+    async for model in pager:
         result.append(model)
     return result
 
@@ -663,9 +703,36 @@ async def _list_models_for_provider(config: LLMValidationRequest) -> ListModelsR
 
     try:
         live_models = await _fetch_live_models(config)
+    except asyncio.TimeoutError:
+        # Named separately because the remedy differs: nothing is misconfigured,
+        # the catalogue just did not arrive in time. Told apart from a broken
+        # provider, this is a retry; lumped in with one, it is a support ticket.
+        logger.warning(
+            "[LIST_MODELS] provider=%s url=%s TIMED OUT after %.0fs listing models — "
+            "showing cached data. Raise CIRIS_LIST_MODELS_TIMEOUT_SECONDS if this recurs.",
+            sanitize_for_log(config.provider),
+            sanitize_for_log(_get_provider_base_url(config.provider, config.base_url) or "default"),
+            _LIST_MODELS_TIMEOUT,
+        )
+        return _build_fallback_response(
+            config.provider,
+            f"timed out after {_LIST_MODELS_TIMEOUT:.0f}s",
+        )
     except Exception as e:
-        logger.warning("[LIST_MODELS] Live query failed, falling back to static data")
-        return _build_fallback_response(config.provider, str(e))
+        # LOG THE EXCEPTION. The previous version logged only that something went
+        # wrong, so seven consecutive failures in a real user's log said nothing
+        # about why — and the wizard then presented cached models as though they
+        # had been confirmed against their key. A fallback nobody can diagnose is
+        # worse than an error, because it looks like success.
+        logger.warning(
+            "[LIST_MODELS] provider=%s url=%s live query FAILED (%s): %s — showing cached data",
+            sanitize_for_log(config.provider),
+            sanitize_for_log(_get_provider_base_url(config.provider, config.base_url) or "default"),
+            type(e).__name__,
+            sanitize_for_log(str(e)[:300]),
+            exc_info=True,
+        )
+        return _build_fallback_response(config.provider, f"{type(e).__name__}: {e}")
 
     annotated = _annotate_models_with_capabilities(live_models, config.provider)
     sorted_models = _sort_models(annotated)

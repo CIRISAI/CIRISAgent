@@ -236,15 +236,15 @@ def _synthetic_preflight_cell(spec: ProviderSpec) -> MatrixCell:
     return MatrixCell(
         cell_id=f"{spec.provider_id}/preflight/valid/cheap",
         provider=spec.provider_id,
-        probe=ProbeKind.CHAT_MINIMAL,
+        probe=ProbeKind.MODELS_LIST,
         credential=CredentialMode.VALID,
-        model_selector=ModelSelector.CHEAP,
-        requested_model=spec.cheap_model,
+        model_selector=ModelSelector.OMITTED,
+        requested_model=None,
         base_url=spec.base_url,
         client_base_url=None,
         expected_cause=ExpectedCause.SUCCESS,
-        rationale="Credential liveness probe: one minimal completion, so a stale key is reported as a stale "
-        "key rather than graded as provider behaviour.",
+        rationale="Credential liveness probe: the provider's /models endpoint, naming NO model, so a "
+        "retired model cannot make a live key look dead and a stale key is still reported as stale.",
     )
 
 
@@ -427,22 +427,21 @@ class LLMMatrix:
                 None,
             )
 
-        cell = self._baseline_cell(provider_id, cells)
-        if cell is None:
-            # Nothing in this expansion exercises the happy path (a filtered
-            # run), so synthesise one. It is a single max_tokens=1 call and it
-            # is counted in estimate_live_calls, so the budget stays honest.
-            cell = _synthetic_preflight_cell(spec)
-
-        outcome, verdict = await self.executor.run_chat(cell, spec, self.keys[provider_id] or "")
+        # ALWAYS a model-free probe, never the expansion's chat cell. Reusing a
+        # chat cell made liveness inherit that cell's model, so a decommissioned
+        # model reported as a bad credential — which is exactly what happened to
+        # Groq, whose retired cheap_model produced a 404 and skipped an entire
+        # column on a key that worked. Authentication and model availability are
+        # separate questions.
+        cell = _synthetic_preflight_cell(spec)
+        outcome = await self.executor.run_credential_probe(cell, spec, self.keys[provider_id] or "")
         status = build_status(provider_id, spec.key_file, outcome, key_present=True)
 
         if status.liveness is KeyLiveness.LIVE:
-            result = CellResult(cell=cell, outcome=outcome, classifier=verdict)
-            result.findings = analysis.grade_cell(cell, outcome, verdict, spec)
+            result = CellResult(cell=cell, outcome=outcome)
         else:
             # Recorded so the evidence is in the report, but graded as skipped.
-            result = CellResult(cell=cell, outcome=outcome, classifier=verdict, skipped_reason=skip_reason(status))
+            result = CellResult(cell=cell, outcome=outcome, skipped_reason=skip_reason(status))
         return status, result
 
     async def _run_provider(self, provider_id: str, cells: Sequence[MatrixCell]) -> List[CellResult]:

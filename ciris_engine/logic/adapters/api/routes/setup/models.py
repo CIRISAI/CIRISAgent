@@ -223,6 +223,15 @@ class LLMValidationRequest(BaseModel):
     api_key: str = Field(..., description="API key")
     base_url: Optional[str] = Field(None, description="Base URL for OpenAI-compatible endpoints")
     model: Optional[str] = Field(None, description="Model name")
+    require_zero_data_retention: bool = Field(
+        True,
+        description=(
+            "Only accept providers that do not retain or train on request data. "
+            "Default True so the protective posture is what an older client, or a caller "
+            "that omits the field, gets. Sent on the validation request itself, so what is "
+            "validated is what the pipeline will actually ask for."
+        ),
+    )
 
 
 class LLMValidationResponse(BaseModel):

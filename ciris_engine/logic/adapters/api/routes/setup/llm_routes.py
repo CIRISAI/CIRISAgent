@@ -148,7 +148,28 @@ async def get_provider_models(provider_id: str) -> SuccessResponse[Dict[str, Any
         config = get_model_capabilities()
 
         if provider_id not in config.providers:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Provider '{provider_id}' not found")
+            # NOT a 404. The wizard offers more providers than the curated
+            # catalogue covers (deepinfra, local, ...), and 404 here made
+            # selecting one of them read as an ERROR with an empty dropdown —
+            # a provider the product supports looked broken. "We have no
+            # curated opinions about this provider" is a normal answer: return
+            # it as one, and point the client at live discovery, which is how
+            # models for every provider are actually found.
+            return SuccessResponse(
+                data={
+                    "provider_id": provider_id,
+                    "display_name": provider_id,
+                    "api_base": None,
+                    "compatible_models": [],
+                    "incompatible_models": [],
+                    "ciris_requirements": config.ciris_requirements.model_dump(),
+                    "curated": False,
+                    "note": (
+                        "No curated model data for this provider. Use live discovery "
+                        "(POST /v1/setup/list-models) to see what it serves."
+                    ),
+                }
+            )
 
         provider = config.providers[provider_id]
         compatible_models = []

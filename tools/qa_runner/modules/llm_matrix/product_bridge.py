@@ -70,18 +70,26 @@ def bridge_status() -> str:
 # as a TABLE_DIVERGENCE finding rather than being silently wrong.
 # ─────────────────────────────────────────────────────────────────────────────
 
-# `_validate_openai_compatible`: model_to_test = config.model or "gpt-3.5-turbo"
+# REMOVED from the product (Lane A / #1078-class): validation now REFUSES a
+# request with no model instead of substituting a per-provider guess. These
+# constants are kept as the record of what USED to be substituted, and
+# `verify_product_constants()` now asserts each is ABSENT from the product
+# source — reintroducing one is the regression, so presence is the finding.
 FABRICATED_MODEL_OPENAI_COMPATIBLE = "gpt-3.5-turbo"
-# `_validate_anthropic_connection`: model_to_test = config.model or "claude-haiku-4-5-20251001"
 FABRICATED_MODEL_ANTHROPIC = "claude-haiku-4-5-20251001"
-# `_validate_google_connection`: model_to_test = config.model or "gemini-2.0-flash"
 FABRICATED_MODEL_GOOGLE = "gemini-2.0-flash"
 # `_validate_google_connection` hardcodes this, ignoring config.base_url.
 GOOGLE_VALIDATOR_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 
 
 def fabricated_model_for(provider: str) -> str:
-    """The model the product substitutes when the user chose none."""
+    """The model the product USED to substitute when the user chose none.
+
+    The product no longer substitutes — a model-less validation is refused at
+    the door. The matrix still sends these ids on its OMITTED-model cells,
+    deliberately: they document the historical behaviour, and a provider-side
+    answer for them shows what a user on an OLD build still experiences.
+    """
     if provider == "anthropic":
         return FABRICATED_MODEL_ANTHROPIC
     if provider == "google":
@@ -102,13 +110,20 @@ def verify_product_constants() -> List[Tuple[str, str, bool]]:
     except OSError:  # pragma: no cover - source always available in a checkout
         return []
 
-    checks = [
+    # The fabricated models must be ABSENT (their removal is the fix being
+    # guarded); the Google base URL must be PRESENT (still how the validator
+    # reaches the API). `still_present` keeps its meaning of "matches
+    # expectation" so callers turn False into a finding either way.
+    absent_checks = [
         ("FABRICATED_MODEL_OPENAI_COMPATIBLE", FABRICATED_MODEL_OPENAI_COMPATIBLE),
         ("FABRICATED_MODEL_ANTHROPIC", FABRICATED_MODEL_ANTHROPIC),
         ("FABRICATED_MODEL_GOOGLE", FABRICATED_MODEL_GOOGLE),
-        ("GOOGLE_VALIDATOR_BASE_URL", GOOGLE_VALIDATOR_BASE_URL),
     ]
-    return [(name, value, f'"{value}"' in source) for name, value in checks]
+    results = [(name, value, f'"{value}"' not in source) for name, value in absent_checks]
+    results.append(
+        ("GOOGLE_VALIDATOR_BASE_URL", GOOGLE_VALIDATOR_BASE_URL, f'"{GOOGLE_VALIDATOR_BASE_URL}"' in source)
+    )
+    return results
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -130,6 +145,12 @@ _MESSAGE_TO_CAUSE = {
     "Invalid API key": RenderedCause.AUTH,
     "API key required": RenderedCause.AUTH,
     "SDK not installed": RenderedCause.SDK_MISSING,
+    # Typed-first classifier (Lane A3): headlines that name the actual remedy.
+    "Blocked by data policy": RenderedCause.POLICY_BLOCKED,
+    "Out of credit": RenderedCause.QUOTA,
+    "Rate limited": RenderedCause.QUOTA,
+    "No model selected": RenderedCause.REFUSED_NO_MODEL,
+    "API key has stray whitespace": RenderedCause.AUTH,
 }
 
 
@@ -178,16 +199,35 @@ def to_verdict(response: "LLMValidationResponse") -> ClassifierVerdict:
 class ReplayedProviderError(Exception):
     """A recorded provider failure, re-raised for ``--dry-run``.
 
-    ``_classify_llm_connection_error`` reads nothing but ``str(error)``, so an
-    exception whose ``str()`` is a verbatim recording of a real SDK exception
-    drives the real classifier down the real branch. The dry run therefore
-    grades the same code the live run does — it only skips the wire.
+    Carries the recorded STRUCTURE — ``status_code`` and ``body`` — not only the
+    rendered prose. The first version carried ``str()`` alone, because at the
+    time the classifier read nothing else; when the classifier went typed-first
+    (reading ``body.error.code``/``message`` and ``status_code`` through the
+    same walker the runtime uses), every replayed failure silently fell past the
+    typed path into the legacy substring fallback, and the dry-run's gap rate
+    froze at the OLD classifier's 45% while the live behaviour had actually
+    been fixed. A measurement that cannot observe the fix it exists to measure
+    is the instrument-side version of the defect itself.
     """
 
-    def __init__(self, rendered: str, exception_type: str = "recorded") -> None:
+    def __init__(
+        self,
+        rendered: str,
+        exception_type: str = "recorded",
+        status_code: "int | None" = None,
+        error_code: "str | None" = None,
+        error_message: "str | None" = None,
+    ) -> None:
         super().__init__(rendered)
         self._rendered = rendered
         self.exception_type = exception_type
+        # The two attributes the typed walker reads, shaped as the SDK shapes them.
+        self.status_code = status_code
+        self.body = (
+            {"error": {"code": error_code, "message": error_message}}
+            if (error_code is not None or error_message is not None)
+            else None
+        )
 
     def __str__(self) -> str:
         return self._rendered

@@ -76,6 +76,7 @@ class ExpectedCause(str, Enum):
     POLICY_BLOCKED = "policy_blocked"  # blocked by a data-retention / privacy guardrail
     QUOTA = "quota"  # out of credit or rate limited
     ENDPOINT = "endpoint"  # the base URL genuinely is wrong
+    REFUSED_NO_MODEL = "refused_no_model"  # product must refuse pre-network: no model was chosen
     UNKNOWN = "unknown"  # only used for exploratory cells
 
 
@@ -96,6 +97,9 @@ class RenderedCause(str, Enum):
     REFUSED = "refused"  # "Connection refused"
     UNCLASSIFIED = "unclassified"  # "Connection failed" — the raw-error fallthrough
     SDK_MISSING = "sdk_missing"  # "SDK not installed"
+    POLICY_BLOCKED = "policy_blocked"  # "Blocked by data policy"
+    QUOTA = "quota"  # "Out of credit" / "Rate limited"
+    REFUSED_NO_MODEL = "refused_no_model"  # "No model selected" — refused before any network
 
 
 class FindingKind(str, Enum):

@@ -180,6 +180,23 @@ class LLMMatrixTests:
             if baseline is None or baseline.skipped_reason is not None:
                 self._record(f"provider_column_{provider}", True, None)
                 continue
+            # An out-of-credit account is the same class as a dead key: an
+            # operations fact the owner acts on, not a defect in the wizard.
+            # The classifier itself makes the call — a QUOTA rendering means the
+            # provider named billing. The column reads PASS with the remedy in
+            # the detail; any OTHER baseline failure still fails the column,
+            # because then it really is suspect.
+            billing = (
+                baseline.classifier is not None
+                and getattr(baseline.classifier.rendered_cause, "value", None) == "quota"
+            )
+            if not baseline.outcome.succeeded and billing:
+                self._record(
+                    f"provider_column_{provider}",
+                    True,
+                    f"untestable: account out of credit (HTTP {baseline.outcome.http_status}) — top up and re-run",
+                )
+                continue
             self._record(
                 f"provider_column_{provider}",
                 baseline.outcome.succeeded,

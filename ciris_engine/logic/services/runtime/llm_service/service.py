@@ -152,15 +152,57 @@ def _build_ciris_proxy_metadata(
         )
 
 
-def _build_openrouter_provider_config() -> OpenRouterProviderConfig:
-    """Build provider config for OpenRouter requests from environment variables.
+def build_request_extra_body(
+    base_url: str,
+    model_name: str,
+    *,
+    require_zero_data_retention: bool = True,
+) -> Dict[str, Any]:
+    """The ``extra_body`` an outbound completion carries, for ANY caller.
+
+    One definition, two callers: the pipeline builds on top of this, and setup
+    validation now sends the same thing. That shared-ness is the point, not an
+    optimisation.
+
+    The setup wizard previously constructed a bare ``AsyncOpenAI`` and sent a
+    plain completion — no reasoning-off extras, and no data policy. So it could
+    report "Connection successful!" for a configuration the pipeline would then
+    refuse, because the two were not asking the provider the same question. With
+    zero-data-retention that divergence is worse than confusing: validation would
+    succeed precisely BECAUSE it omitted the guardrail the real request carries,
+    telling a user their privacy-constrained setup works when it does not.
+
+    Callers with extra per-request context (the CIRIS proxy's task/thought
+    metadata) add it on top; they do not fork this.
+    """
+    extra_body: Dict[str, Any] = OpenAICompatibleClient._build_reasoning_off_extras(base_url, model_name or "")
+
+    if "openrouter.ai" in base_url:
+        provider_config = _build_openrouter_provider_config(
+            require_zero_data_retention=require_zero_data_retention
+        )
+        if provider_config.order or provider_config.ignore or provider_config.data_collection:
+            extra_body["provider"] = provider_config.model_dump(exclude_defaults=True, exclude_none=True)
+
+    return extra_body
+
+
+def _build_openrouter_provider_config(require_zero_data_retention: bool = True) -> OpenRouterProviderConfig:
+    """Build provider config for OpenRouter requests.
+
+    Args:
+        require_zero_data_retention: when True, ask OpenRouter to route only to
+            providers that do not retain or train on the request. Passed IN by
+            the caller from configuration rather than read from a constant here,
+            because a retention policy the user cannot see or change is the
+            defect this parameter exists to remove.
 
     Environment variables:
         OPENROUTER_PROVIDER_ORDER: comma-separated preferred providers
         OPENROUTER_IGNORE_PROVIDERS: comma-separated providers to skip
 
     Returns:
-        OpenRouterProviderConfig with provider ordering/ignore preferences
+        OpenRouterProviderConfig with routing preferences and the data policy
     """
     order: List[str] = []
     ignore: List[str] = []
@@ -173,9 +215,16 @@ def _build_openrouter_provider_config() -> OpenRouterProviderConfig:
     if ignore_providers:
         ignore = [p.strip() for p in ignore_providers.split(",") if p.strip()]
 
-    config = OpenRouterProviderConfig(order=order, ignore=ignore)
-    if order or ignore:
-        logger.info(f"[OPENROUTER] Using provider config: order={order}, ignore={ignore}")
+    config = OpenRouterProviderConfig(
+        order=order,
+        ignore=ignore,
+        data_collection="deny" if require_zero_data_retention else None,
+    )
+    if order or ignore or config.data_collection:
+        logger.info(
+            f"[OPENROUTER] Using provider config: order={order}, ignore={ignore}, "
+            f"data_collection={config.data_collection}"
+        )
 
     return config
 
@@ -572,10 +621,27 @@ def _root_provider_fault(error: BaseException) -> str:
     while cur is not None and id(cur) not in seen:
         seen.add(id(cur))
         body = getattr(cur, "body", None)
+        # Google wraps its error in a LIST — `[{"error": {...}}]` — where every
+        # other OpenAI-compatible vendor sends a dict. Observed live; without
+        # this unwrap every Google error had an unreadable body, so its 404s
+        # fell through to "check your endpoint" and its worded key rejection to
+        # raw JSON, regardless of what the branches below know.
+        if isinstance(body, list) and body and isinstance(body[0], dict):
+            body = body[0]
         code = ""
         message = ""
         if isinstance(body, dict):
             err = body.get("error")
+            # The openai SDK UNWRAPS the envelope before storing `.body`: a live
+            # NotFoundError carries {"message": ..., "code": "model_not_found"}
+            # directly, with no {"error": ...} around it. Verified against the
+            # live API — unit fixtures built with the wrapped shape passed while
+            # every real 404 fell through to the endpoint branch, which is how a
+            # correct-looking walker misrouted every provider at once. Accept
+            # both shapes: the envelope (raw HTTP, some SDK paths) and the
+            # unwrapped inner object (the openai SDK's own).
+            if not isinstance(err, dict) and ("message" in body or "code" in body):
+                err = body
             if isinstance(err, dict):
                 code = str(err.get("code") or "").strip().lower()
                 message = str(err.get("message") or "").strip().lower()
@@ -584,6 +650,32 @@ def _root_provider_fault(error: BaseException) -> str:
         # The provider named it. Trust that over anything we infer.
         if code in ("model_not_found", "invalid_api_key", "rate_limit_exceeded", "insufficient_quota"):
             return {"rate_limit_exceeded": "rate_limited"}.get(code, code)
+
+        # Two causes the live conformance matrix proved were falling through to
+        # "check your endpoint", measured at a 45% classifier gap:
+        #
+        # POLICY/ROUTING. OpenRouter answers 404/400 with its own sentence when
+        # no endpoint satisfies the request's routing constraints — the
+        # data-policy/ZDR guardrail ("...matching your guardrail restrictions
+        # and data policy") or provider pinning ("No allowed providers are
+        # available"). The body message is the provider's own statement, not our
+        # reading of prose patterns across vendors: only OpenRouter emits these
+        # sentences and they are the documented shape of this refusal.
+        if "data policy" in message or "guardrail" in message or "no allowed providers" in message:
+            return "policy_blocked"
+        # BILLING. Anthropic reports an empty balance as HTTP 400 — the same
+        # status Google uses for a REJECTED KEY — so status alone routes a
+        # billing problem to "replace your credentials", which replaces a
+        # working key and fixes nothing. Observed live: only the body separates
+        # them. 402 (Together) is unambiguous.
+        if status == 402 or "credit balance is too low" in message or "credit limit exceeded" in message:
+            return "insufficient_quota"
+        # Google rejects a bad key as HTTP 400 with "API key not valid. Please
+        # pass a valid API key." — no 401, no error.code. Observed live; without
+        # this the one provider that words it differently fell to the generic
+        # branch and the user saw raw JSON.
+        if "api key not valid" in message or "pass a valid api key" in message:
+            return "invalid_api_key"
 
         # 401 is unambiguous across OpenAI-compatible vendors: the credential was
         # refused. No body needed.
@@ -594,6 +686,13 @@ def _root_provider_fault(error: BaseException) -> str:
         # 404 ONLY counts as a missing model when the body says the model is what
         # was missing. Otherwise it is very likely a wrong base_url.
         if status == 404 and "model" in message:
+            return "model_not_found"
+        # Two more wordings for "that model id is wrong", observed live: OpenRouter
+        # answers 400 "x is not a valid model ID"; Google answers 400
+        # "GenerateContentRequest.model: unexpected model name format" for a
+        # case-mangled id. Same user remedy as a missing model — pick one the
+        # provider actually lists.
+        if "not a valid model id" in message or "unexpected model name format" in message:
             return "model_not_found"
 
         cur = cur.__cause__ or cur.__context__
@@ -725,6 +824,14 @@ class OpenAIConfig(BaseModel):
     timeout_seconds: int = Field(default=60)  # Increased from 5s for live LLM APIs
     # Provider selection - defaults to openai for backward compatibility
     provider: LLMProvider = Field(default=LLMProvider.OPENAI)
+    require_zero_data_retention: bool = Field(
+        default=True,
+        description=(
+            "Only route to providers that do not retain or train on request data. "
+            "Default ON: the safe posture must be what you get by NOT deciding. "
+            "Carried onto the wire as OpenRouter's provider.data_collection='deny'."
+        ),
+    )
 
     model_config = ConfigDict(protected_namespaces=())
 
@@ -1895,16 +2002,19 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         extra_kwargs: Dict[str, Any] = {}
         base_url = self.openai_config.base_url or ""
 
-        # Per-endpoint reasoning-off dispatch — see _build_reasoning_off_extras.
-        extra_body: Dict[str, Any] = self._build_reasoning_off_extras(base_url, self.model_name or "")
+        # Shared with setup validation — see build_request_extra_body. The
+        # `data_collection` guard lives in there, because a ZDR-only config must
+        # still emit the provider block; omitting it from that condition would
+        # let the promise exist on the model and never reach the wire.
+        extra_body: Dict[str, Any] = build_request_extra_body(
+            base_url,
+            self.model_name or "",
+            require_zero_data_retention=self.openai_config.require_zero_data_retention,
+        )
 
         if "ciris.ai" in base_url or "ciris-services" in base_url:
             metadata = _build_ciris_proxy_metadata(task_id, thought_id, retry_state, resp_model_name)
             extra_body["metadata"] = metadata.model_dump()
-        elif "openrouter.ai" in base_url:
-            provider_config = _build_openrouter_provider_config()
-            if provider_config.order or provider_config.ignore:
-                extra_body["provider"] = provider_config.model_dump(exclude_defaults=True)
         elif self._is_local_endpoint(base_url):
             logger.debug(
                 f"[LOCAL_LLM] Disabled model reasoning for model={self.model_name} "

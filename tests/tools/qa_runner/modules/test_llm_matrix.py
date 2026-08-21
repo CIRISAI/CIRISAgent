@@ -365,7 +365,10 @@ class TestStaticAudit:
         assert results
         assert any(r.findings for r in results)
 
-    def test_fabricated_default_is_flagged_for_every_provider_that_cannot_serve_it(self):
+    def test_fabricated_default_audit_is_silent_while_the_product_is_clean(self):
+        """The fabrications were DELETED from the product (Lane A / #1078-class),
+        so auditing the historical ids against today's catalogue would report
+        criticals about code that does not exist. Silence here is the pass."""
         results = analysis.static_table_audit()
         flagged = {
             f.provider
@@ -373,8 +376,34 @@ class TestStaticAudit:
             for f in r.findings
             if f.kind is FindingKind.FABRICATED_MODEL and r.cell.probe is ProbeKind.STATIC_AUDIT
         }
-        # gpt-3.5-turbo is not in these providers' catalogues at all.
-        assert {"openrouter", "together", "groq"}.issubset(flagged)
+        assert flagged == set(), (
+            f"static fabrication audit fired for {sorted(flagged)} — either a fabricated default "
+            "is back in llm_validation.py (fix the product), or the audit's source gate broke"
+        )
+
+    def test_fabricated_default_audit_rearms_when_the_product_regresses(self, monkeypatch):
+        """The audit must not be dead — it fires again the moment a fabricated
+        default reappears in the product source."""
+        # analysis imports the symbol INSIDE static_table_audit, so the patch
+        # must land on the defining module, not on analysis.
+        from tools.qa_runner.modules.llm_matrix import product_bridge
+
+        monkeypatch.setattr(
+            product_bridge,
+            "verify_product_constants",
+            lambda: [("FABRICATED_MODEL_OPENAI_COMPATIBLE", "gpt-3.5-turbo", False)],
+        )
+        results = analysis.static_table_audit()
+        flagged = {
+            f.provider
+            for r in results
+            for f in r.findings
+            if f.kind is FindingKind.FABRICATED_MODEL and r.cell.probe is ProbeKind.STATIC_AUDIT
+        }
+        assert {"openrouter", "together", "groq"}.issubset(flagged), (
+            "with a fabrication present in the source, the audit must flag every provider "
+            f"that cannot serve it; got {sorted(flagged)}"
+        )
 
     def test_every_wizard_provider_has_a_catalogue_entry_or_is_flagged(self):
         from tools.qa_runner.modules.llm_matrix.product_bridge import get_llm_providers, get_model_capabilities

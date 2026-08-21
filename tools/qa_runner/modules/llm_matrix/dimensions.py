@@ -169,9 +169,13 @@ PROVIDERS: Dict[str, ProviderSpec] = {
         key_file="~/.groq_key",
         sdk="openai",
         base_url="https://api.groq.com/openai/v1",
-        cheap_model="llama-3.3-70b-versatile",
-        nonexistent_model="llama-3.3-70b-versatile-ciris-qa-does-not-exist",
-        wrong_case_model="Llama-3.3-70B-Versatile",
+        # llama-3.3-70b-versatile was DECOMMISSIONED by groq (verified against
+        # the live /models list, 2026-08-21) — probing with it made the funded
+        # baseline fail and the whole column read as suspect. gpt-oss-20b is
+        # the smallest chat model groq currently serves.
+        cheap_model="openai/gpt-oss-20b",
+        nonexistent_model="openai/gpt-oss-20b-ciris-qa-does-not-exist",
+        wrong_case_model="OpenAI/GPT-OSS-20B",
         gated_model=None,
         # CLAUDE.md: 8192 max_tokens ceiling; exceeding it was the 2.7.4 incident.
         max_tokens_cap=8192,
@@ -275,10 +279,11 @@ CORE_INJECTIONS: List[InjectionSpec] = [
     InjectionSpec(
         credential=CredentialMode.VALID,
         model_selector=ModelSelector.OMITTED,
-        expected_cause=ExpectedCause.MODEL_NOT_FOUND,
-        rationale="No model chosen. The wizard fabricates 'gpt-3.5-turbo' and sends it to whatever provider "
-        "is selected — this is precisely how Francesco hit OpenRouter with an OpenAI model name.",
-    ),
+        expected_cause=ExpectedCause.REFUSED_NO_MODEL,
+        rationale="No model chosen. The product must refuse BEFORE any network I/O — the fabricated "
+        "per-provider substitution was deleted (Lane A / #1078-class). Anything other than the "
+        "refusal here means a model the user never picked went to a provider again",
+),
     InjectionSpec(
         credential=CredentialMode.VALID,
         model_selector=ModelSelector.GATED,

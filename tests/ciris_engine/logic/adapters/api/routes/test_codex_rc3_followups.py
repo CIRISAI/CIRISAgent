@@ -33,9 +33,9 @@ class TestDeferralScopeGrammarIsSingular:
 
     def test_the_plural_matches_nothing_anyone_grants(self) -> None:
         resource = f"medical_{'defer_001'}"
-        assert scope_grants("resolve_deferral:medical_*", "resolve_deferrals", resource) is False, (
-            "If this ever passes, the grammar changed and routes/wa.py must change with it."
-        )
+        assert (
+            scope_grants("resolve_deferral:medical_*", "resolve_deferrals", resource) is False
+        ), "If this ever passes, the grammar changed and routes/wa.py must change with it."
 
     def test_a_bare_domain_resource_does_not_match_a_domain_glob(self) -> None:
         """Why the route prefixes the domain onto the deferral id.
@@ -58,7 +58,7 @@ class TestDeferralScopeGrammarIsSingular:
 
 
 class TestJurisdictionLookupFailsClosed:
-    """"We could not check" is not "there was nothing to check".
+    """ "We could not check" is not "there was nothing to check".
 
     The gate only runs when a domain was found. If the lookup itself raises, an
     authority with no jurisdiction over the actual domain could resolve the
@@ -80,9 +80,9 @@ class TestJurisdictionLookupFailsClosed:
         tree = ast.parse(inspect.cleandoc(self._gate_source()))
         for node in ast.walk(tree):
             if isinstance(node, ast.Try):
-                names = {
-                    n.attr for n in ast.walk(node) if isinstance(n, ast.Attribute)
-                } | {n.id for n in ast.walk(node) if isinstance(n, ast.Name)}
+                names = {n.attr for n in ast.walk(node) if isinstance(n, ast.Attribute)} | {
+                    n.id for n in ast.walk(node) if isinstance(n, ast.Name)
+                }
                 if "get_pending_deferrals" in names:
                     return node
         pytest.fail("could not locate the try block wrapping get_pending_deferrals()")
@@ -219,9 +219,7 @@ class TestEveryMintedAuthorityCanActuallyResolve:
 
 class TestTheBackfillRestoresBreadthWithoutWideningAnyone:
     def _holds(self, scopes: list) -> bool:
-        from ciris_engine.logic.services.infrastructure.authentication.service import (
-            AuthenticationService,
-        )
+        from ciris_engine.logic.services.infrastructure.authentication.service import AuthenticationService
 
         return AuthenticationService._holds_deferral_jurisdiction(scopes)
 
@@ -250,9 +248,7 @@ class TestTheBackfillRestoresBreadthWithoutWideningAnyone:
     def test_only_authority_is_backfilled(self) -> None:
         import inspect
 
-        from ciris_engine.logic.services.infrastructure.authentication.service import (
-            AuthenticationService,
-        )
+        from ciris_engine.logic.services.infrastructure.authentication.service import AuthenticationService
 
         src = inspect.getsource(AuthenticationService._backfill_deferral_scopes)
         assert "WARole.AUTHORITY" in src, "ROOT bypasses the gate; OBSERVER must not resolve deferrals"
@@ -272,7 +268,9 @@ class TestOAuthAuthoritiesAreLookedUpByCertificate:
             return SimpleNamespace(wa_id="wa-2026-08-21-ABC123")
 
         request = SimpleNamespace(
-            app=SimpleNamespace(state=SimpleNamespace(authentication_service=SimpleNamespace(get_wa_by_oauth=_by_oauth)))
+            app=SimpleNamespace(
+                state=SimpleNamespace(authentication_service=SimpleNamespace(get_wa_by_oauth=_by_oauth))
+            )
         )
         resolved = await resolve_certificate_id(request, SimpleNamespace(user_id="google:12345"))
         assert resolved == "wa-2026-08-21-ABC123"
@@ -406,9 +404,7 @@ class TestATimerCannotOverturnAnAnswerItRacedWith:
             )
 
         monkeypatch.setattr(persistence, "get_task_by_id_any_occurrence", fake_get)
-        monkeypatch.setattr(
-            persistence, "update_task_status", lambda t, s, o: (calls.append(("task", s)), True)[1]
-        )
+        monkeypatch.setattr(persistence, "update_task_status", lambda t, s, o: (calls.append(("task", s)), True)[1])
         monkeypatch.setattr(
             persistence,
             "update_thought_status",
@@ -424,9 +420,7 @@ class TestATimerCannotOverturnAnAnswerItRacedWith:
             "the refused thought must NOT be re-pended — that is the harm a status rewrite "
             f"cannot undo. calls={calls}"
         )
-        assert calls[-1] == ("task", TaskStatus.COMPLETED), (
-            f"the human's answer must be restored, got {calls}"
-        )
+        assert calls[-1] == ("task", TaskStatus.COMPLETED), f"the human's answer must be restored, got {calls}"
 
 
 class TestFirstRunCallersAreToldTheyCanAct:

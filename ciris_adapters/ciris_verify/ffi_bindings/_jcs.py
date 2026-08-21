@@ -155,10 +155,7 @@ def jcs_canonicalize(value: Any) -> bytes:
     )
     if rc != _SUCCESS:
         # rc 2 == SerializationError in the CirisVerifyError enum.
-        raise ValueError(
-            f"jcs_canonicalize: input is not valid JSON or cannot be "
-            f"canonicalized (FFI code {rc})"
-        )
+        raise ValueError(f"jcs_canonicalize: input is not valid JSON or cannot be " f"canonicalized (FFI code {rc})")
     n = out_len.value
     if n == 0:
         return b""

@@ -45,9 +45,10 @@ def _hard_imports(path: Path) -> list[tuple[int, str]]:
             handled = any(
                 (h.type is None)
                 or (isinstance(h.type, ast.Name) and h.type.id in ("ImportError", "Exception"))
-                or (isinstance(h.type, ast.Tuple)
-                    and any(isinstance(e, ast.Name) and e.id in ("ImportError", "Exception")
-                            for e in h.type.elts))
+                or (
+                    isinstance(h.type, ast.Tuple)
+                    and any(isinstance(e, ast.Name) and e.id in ("ImportError", "Exception") for e in h.type.elts)
+                )
                 for h in node.handlers
             )
             if handled:
@@ -84,7 +85,7 @@ class TestNoStandaloneVerifyImports:
             "ModuleNotFoundError in a fresh environment:\n  "
             + "\n  ".join(offenders)
             + "\n\nRewire to `from ciris_adapters.ciris_verify.ffi_bindings import ...`, or wrap "
-              "in try/except ImportError if the capability is genuinely optional."
+            "in try/except ImportError if the capability is genuinely optional."
         )
 
     def test_requirements_does_not_pin_standalone_verify(self) -> None:
@@ -171,9 +172,7 @@ from ciris_adapters.ciris_verify.ffi_bindings import (
 )
 print("OK")
 """
-        proc = subprocess.run(
-            [sys.executable, "-c", script], cwd=REPO, capture_output=True, text=True, timeout=300
-        )
+        proc = subprocess.run([sys.executable, "-c", script], cwd=REPO, capture_output=True, text=True, timeout=300)
         assert proc.returncode == 0 and "OK" in proc.stdout, (
             "The tree still needs the standalone ciris-verify wheel.\n"
             f"stdout: {proc.stdout[-2000:]}\nstderr: {proc.stderr[-2000:]}"

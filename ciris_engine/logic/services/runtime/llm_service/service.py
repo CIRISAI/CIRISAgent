@@ -6,7 +6,6 @@ Supports native SDKs for:
 - Google (Gemini models)
 """
 
-from urllib.parse import urlparse
 import json
 import logging
 import os
@@ -14,6 +13,7 @@ import re
 import time
 from enum import Enum
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, Type, Union, cast
+from urllib.parse import urlparse
 
 import instructor
 from openai import (
@@ -81,8 +81,12 @@ def _coalesce_consecutive_roles(messages: List[MessageDict]) -> List[MessageDict
             # If either side is a list (multimodal), concatenate as a list;
             # otherwise join strings with a blank line.
             if isinstance(prev_content, list) or isinstance(curr_content, list):
-                prev_list = prev_content if isinstance(prev_content, list) else [{"type": "text", "text": str(prev_content)}]
-                curr_list = curr_content if isinstance(curr_content, list) else [{"type": "text", "text": str(curr_content)}]
+                prev_list = (
+                    prev_content if isinstance(prev_content, list) else [{"type": "text", "text": str(prev_content)}]
+                )
+                curr_list = (
+                    curr_content if isinstance(curr_content, list) else [{"type": "text", "text": str(curr_content)}]
+                )
                 merged = prev_list + curr_list
             else:
                 merged = f"{prev_content}\n\n{curr_content}"
@@ -176,9 +180,7 @@ def _build_openrouter_provider_config() -> OpenRouterProviderConfig:
     return config
 
 
-def _try_recover_missing_brace(
-    exc: Exception, resp_model: Type[BaseModel]
-) -> Optional[Tuple[BaseModel, Any]]:
+def _try_recover_missing_brace(exc: Exception, resp_model: Type[BaseModel]) -> Optional[Tuple[BaseModel, Any]]:
     """Recover from the Llama-family JSON-mode dropped-prefix bug: model
     emits a JSON body that's missing its leading characters. Two distinct
     variants observed on `meta-llama/llama-4-scout` via OpenRouter
@@ -1952,9 +1954,9 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             "172.16.",
             ".local",
             ":11434",  # Ollama
-            ":8080",   # llama.cpp
-            ":1234",   # LM Studio
-            ":8000",   # vLLM
+            ":8080",  # llama.cpp
+            ":1234",  # LM Studio
+            ":8000",  # vLLM
         )
         return any(indicator in base_url_lower for indicator in local_indicators)
 

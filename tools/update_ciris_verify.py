@@ -76,6 +76,7 @@ IOS_TARGETS = {
     "simulator": "aarch64-apple-ios-sim",
 }
 
+
 def run_cmd(cmd: list[str], check: bool = True) -> subprocess.CompletedProcess:
     """Run a command and return the result."""
     print(f"  $ {' '.join(cmd)}")
@@ -211,7 +212,6 @@ def update_android_binaries(extract_dir: Path, checksums: dict[str, str]) -> Non
         dest_dir.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src_file, dest_file)
         print(f"  -> Copied to {dest_file.relative_to(REPO_ROOT)}")
-
 
 
 # ---------------------------------------------------------------------------

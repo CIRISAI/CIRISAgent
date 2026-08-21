@@ -28,13 +28,12 @@ Logging:
 
 import logging as _logging
 
-from .client import CIRISVerify, MockCIRISVerify
-
 # jcs_canonicalize IS re-exported (unlike verify_tree below): it binds the
 # substrate's ciris_verify_jcs_canonicalize through ciris_server.verify_ffi_path(),
 # so it carries no standalone-wheel dependency. This is the import the 2.9.29
 # ciris-verify pin removal (#917) rewired the producer call sites onto.
 from ._jcs import jcs_canonicalize
+from .client import CIRISVerify, MockCIRISVerify
 from .exceptions import (
     AttestationInProgressError,
     BinaryNotFoundError,

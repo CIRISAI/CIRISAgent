@@ -12,7 +12,9 @@ from typing import Annotated, Optional, Sequence
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ciris_engine.constants import CIRIS_VERSION
+from ciris_engine.logic.utils.localization import get_preferred_language, get_string
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
+from ciris_engine.schemas.api.auth import UserRole
 from ciris_engine.schemas.api.responses import SuccessResponse
 from ciris_engine.schemas.api.telemetry import TimeSyncStatus
 
@@ -35,10 +37,6 @@ from .schemas import (
     SystemTimeResponse,
     SystemWarning,
 )
-
-from ciris_engine.logic.utils.localization import get_preferred_language, get_string
-
-from ciris_engine.schemas.api.auth import UserRole
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +91,7 @@ def _provider_model(service_provider: object) -> str:
 
 
 def _breaker_state(service_provider: object) -> str:
-    """"open" / "half_open" / "closed" / "" when the provider exposes no breaker."""
+    """ "open" / "half_open" / "closed" / "" when the provider exposes no breaker."""
     cb = getattr(service_provider, "circuit_breaker", None)
     state = getattr(cb, "state", None)
     return str(getattr(state, "value", state) or "").lower()
@@ -255,11 +253,7 @@ def _llm_breaker_warnings(providers: Sequence[object], can_manage: bool = True) 
 
         # The actionable fault, if we can name the remedy with confidence.
         fault_code = _provider_fault_code(sp)
-        fault = (
-            _fault_warning(lang, role, name, model, err, fault_code, can_manage)
-            if (err or fault_code)
-            else None
-        )
+        fault = _fault_warning(lang, role, name, model, err, fault_code, can_manage) if (err or fault_code) else None
         if fault:
             warnings.append(fault)
 
@@ -404,7 +398,9 @@ async def check_llm_availability(can_manage: bool = True) -> tuple[bool, list[Sy
     lang = get_preferred_language()
     detail = _describe_provider_failures(llm_providers)
     if detail:
-        key = "status.llm_providers_unhealthy_detail" if can_manage else "status.llm_providers_unhealthy_detail_observer"
+        key = (
+            "status.llm_providers_unhealthy_detail" if can_manage else "status.llm_providers_unhealthy_detail_observer"
+        )
         message = get_string(lang, key, detail=detail)
     else:
         key = "status.llm_providers_unhealthy" if can_manage else "status.llm_providers_unhealthy_observer"
@@ -466,7 +462,6 @@ def _hardware_trust_warnings(request: Request) -> list[SystemWarning]:
     except Exception as e:
         logger.debug(f"Could not check hardware trust degradation: {e}")
     return []
-
 
 
 def _adapter_load_failure_warnings(request: Request) -> list[SystemWarning]:
@@ -728,9 +723,7 @@ def _stale_shared_task_warnings(request: Request) -> list[SystemWarning]:
     ]
 
 
-async def collect_system_warnings(
-    request: Request, can_manage: bool = True
-) -> tuple[bool, list[SystemWarning]]:
+async def collect_system_warnings(request: Request, can_manage: bool = True) -> tuple[bool, list[SystemWarning]]:
     """Collect system-level warnings and check degraded mode.
 
     Returns (degraded_mode, warnings) tuple. degraded_mode is True when NO
@@ -853,9 +846,7 @@ async def get_federation_address(_auth: AuthObserverDep) -> SuccessResponse[Fede
     from ciris_engine.logic.runtime import edge_runtime
 
     if not edge_runtime.is_available():
-        return SuccessResponse(
-            data=FederationAddressResponse(available=False, key_id=None, edge_version=None)
-        )
+        return SuccessResponse(data=FederationAddressResponse(available=False, key_id=None, edge_version=None))
 
     key_id = edge_runtime.get_federation_address()
     edge_version: Optional[str] = None

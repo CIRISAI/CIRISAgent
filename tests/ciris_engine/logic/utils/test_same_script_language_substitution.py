@@ -61,9 +61,7 @@ def test_known_debt_is_still_debt_and_not_silently_fixed():
         path = LOCALE_DIR / f"{lang}.json"
         if not path.exists():
             continue
-        count = sum(
-            1 for v in _flat(json.load(open(path, encoding="utf-8"))).values() if any(c in v for c in letters)
-        )
+        count = sum(1 for v in _flat(json.load(open(path, encoding="utf-8"))).values() if any(c in v for c in letters))
         assert count > 0, (
             f"{lang}.json now has ZERO same-script foreign letters. Move {lang!r} from KNOWN_DEBT "
             "into FOREIGN_LETTERS so the gate holds it there."
@@ -99,6 +97,5 @@ def test_locale_does_not_contain_its_neighbours_language(lang):
         f"{len(offenders)} string(s) in {lang}.json contain letters from another language "
         f"({why}).\n"
         "These pass every structural gate — key parity, placeholders, script family — because "
-        "the languages share a script. First 10:\n"
-        + "\n".join(f"  {k}  [{f}]  {v}" for k, f, v in offenders[:10])
+        "the languages share a script. First 10:\n" + "\n".join(f"  {k}  [{f}]  {v}" for k, f, v in offenders[:10])
     )

@@ -112,7 +112,7 @@ class TestRedressIsNotUndo:
         assert record.external_effect_undone is True
 
     def test_carrier_reversible_is_not_carrier_reversed(self) -> None:
-        """"We could have deleted it" is not "we deleted it"."""
+        """ "We could have deleted it" is not "we deleted it"."""
         record = make_record(reversibility=EffectReversibility.CARRIER_REVERSIBLE)
         assert record.external_effect_undone is False
 
@@ -271,7 +271,7 @@ class TestLinkage:
         assert resolve_effective_state(TARGET, [elsewhere]).standing is ActionStanding.UNCHALLENGED
 
     def test_superseded_must_name_what_replaced_it(self) -> None:
-        """"Read the other thing instead" is useless without the other thing."""
+        """ "Read the other thing instead" is useless without the other thing."""
         with pytest.raises(ValidationError, match="compensating_action"):
             make_record(disposition=RedressDisposition.SUPERSEDED)
 
@@ -511,9 +511,7 @@ class TestTheStrongAndWeakRefsAgree:
     def test_anchored_and_unanchored_refs_to_one_action_share_a_key(self) -> None:
         from ciris_engine.schemas.services.redress import ActionRef
 
-        strong = ActionRef(
-            audit_entry_id="ae-1", audit_entry_hash="h-1", task_id="task-1", thought_id="th-1"
-        )
+        strong = ActionRef(audit_entry_id="ae-1", audit_entry_hash="h-1", task_id="task-1", thought_id="th-1")
         weak = ActionRef(task_id="task-1", thought_id="th-1")
         assert strong.identity_key == weak.identity_key
 
@@ -527,8 +525,6 @@ class TestTheStrongAndWeakRefsAgree:
     def test_the_anchor_is_kept_even_though_it_is_not_the_key(self) -> None:
         from ciris_engine.schemas.services.redress import ActionRef
 
-        strong = ActionRef(
-            audit_entry_id="ae-1", audit_entry_hash="h-1", task_id="task-1", thought_id="th-1"
-        )
+        strong = ActionRef(audit_entry_id="ae-1", audit_entry_hash="h-1", task_id="task-1", thought_id="th-1")
         assert strong.is_chain_anchored is True
         assert ActionRef(task_id="task-1", thought_id="th-1").is_chain_anchored is False

@@ -273,8 +273,7 @@ async def resolve_deferral(
         _decision = await wa_service.authorize(_wa_id, "resolve_deferral", _scope_resource)
         if not _decision.allowed:
             logger.warning(
-                "JURISDICTION DENIED: %s (caller %s) may not resolve %s deferral %s "
-                "(%s; required scope %s)",
+                "JURISDICTION DENIED: %s (caller %s) may not resolve %s deferral %s " "(%s; required scope %s)",
                 _wa_id,
                 auth.user_id,
                 _domain,
@@ -360,9 +359,7 @@ async def resolve_deferral(
                 status_code=503,
             )
         try:
-            deferral_response = await auth_service.sign_deferral_resolution(
-                deferral_id, deferral_response, signed_at
-            )
+            deferral_response = await auth_service.sign_deferral_resolution(deferral_id, deferral_response, signed_at)
         except Exception as exc:
             logger.error(f"Refusing to record an unsigned deferral resolution for {sanitize_for_log(deferral_id)}")
             raise_wa_error(f"Cannot resolve deferral: signing failed ({type(exc).__name__})", status_code=503)

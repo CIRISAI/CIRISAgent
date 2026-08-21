@@ -676,9 +676,7 @@ class TestResourceScopedAuthorization:
     @pytest.mark.asyncio
     async def test_authority_with_scope_for_domain_is_allowed(self, wa_service: WiseAuthorityService) -> None:
         """Same authority, same action, in-scope resource: allowed."""
-        allowed = await wa_service.check_authorization(
-            "wa-2025-06-28-MEDIC1", "resolve_deferral", "medical_defer_001"
-        )
+        allowed = await wa_service.check_authorization("wa-2025-06-28-MEDIC1", "resolve_deferral", "medical_defer_001")
         assert allowed is True
 
     @pytest.mark.asyncio
@@ -689,9 +687,7 @@ class TestResourceScopedAuthorization:
         accepted and discarded. That equality is the whole finding, so assert on
         the inequality directly rather than only on the two values.
         """
-        in_scope = await wa_service.check_authorization(
-            "wa-2025-06-28-MEDIC1", "resolve_deferral", "medical_defer_001"
-        )
+        in_scope = await wa_service.check_authorization("wa-2025-06-28-MEDIC1", "resolve_deferral", "medical_defer_001")
         out_of_scope = await wa_service.check_authorization(
             "wa-2025-06-28-MEDIC1", "resolve_deferral", "financial_defer_001"
         )
@@ -748,9 +744,7 @@ class TestResourceScopedAuthorization:
         assert "resolve_deferral:medical_*" in decision.message
 
     @pytest.mark.asyncio
-    async def test_role_denial_is_distinguishable_from_scope_denial(
-        self, wa_service: WiseAuthorityService
-    ) -> None:
+    async def test_role_denial_is_distinguishable_from_scope_denial(self, wa_service: WiseAuthorityService) -> None:
         """`May never do this` and `may, but not here` need different names."""
         decision = await wa_service.authorize("wa-2025-06-28-MEDIC1", "mint_wa", "medical_defer_001")
         assert decision.allowed is False

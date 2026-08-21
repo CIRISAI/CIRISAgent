@@ -28,9 +28,16 @@ def _api_error(status: int, body: dict | None):
 class TestStructuredSignal:
     def test_groqs_real_model_not_found_body(self):
         # Verbatim shape from the 2.9.27 Windows field report.
-        e = _api_error(404, {"error": {"message": "The model `default` does not exist or you do not "
-                                                  "have access to it.",
-                                       "type": "invalid_request_error", "code": "model_not_found"}})
+        e = _api_error(
+            404,
+            {
+                "error": {
+                    "message": "The model `default` does not exist or you do not " "have access to it.",
+                    "type": "invalid_request_error",
+                    "code": "model_not_found",
+                }
+            },
+        )
         assert _root_provider_fault(e) == "model_not_found"
 
     def test_a_401_is_a_bad_key_without_needing_a_body(self):
@@ -58,8 +65,9 @@ class TestTheFourOhFourTrap:
         assert _root_provider_fault(_api_error(404, None)) == ""
 
     def test_a_404_about_something_else_is_not_a_missing_model(self):
-        e = _api_error(404, {"error": {"message": "The requested endpoint was not found",
-                                       "type": "invalid_request_error"}})
+        e = _api_error(
+            404, {"error": {"message": "The requested endpoint was not found", "type": "invalid_request_error"}}
+        )
         assert _root_provider_fault(e) == ""
 
     def test_a_404_whose_message_names_the_model_does_count(self):

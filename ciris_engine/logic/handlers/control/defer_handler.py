@@ -3,9 +3,7 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 
 from ciris_engine.logic import persistence
-from ciris_engine.logic.infrastructure.authorization.tool_approval import (
-    pending_tool_from_deferral_context,
-)
+from ciris_engine.logic.infrastructure.authorization.tool_approval import pending_tool_from_deferral_context
 from ciris_engine.logic.infrastructure.handlers.base_handler import BaseActionHandler
 from ciris_engine.logic.infrastructure.handlers.shared_helpers import parse_iso_timestamp
 from ciris_engine.logic.utils.localization import get_preferred_language, get_string

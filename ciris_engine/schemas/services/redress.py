@@ -402,9 +402,10 @@ class RedressAuthority(BaseModel):
 
     @model_validator(mode="after")
     def _validate_authority(self) -> "RedressAuthority":
-        if self.basis is RedressAuthorityBasis.WA_DEFERRAL_RESOLUTION and not (
-            self.authorizing_deferral_id or ""
-        ).strip():
+        if (
+            self.basis is RedressAuthorityBasis.WA_DEFERRAL_RESOLUTION
+            and not (self.authorizing_deferral_id or "").strip()
+        ):
             raise ValueError("WA_DEFERRAL_RESOLUTION authority must name the deferral it rests on")
         if self.basis is RedressAuthorityBasis.WA_DIRECT and (self.authorizing_deferral_id or "").strip():
             raise ValueError("WA_DIRECT authority does not rest on a deferral; do not name one")

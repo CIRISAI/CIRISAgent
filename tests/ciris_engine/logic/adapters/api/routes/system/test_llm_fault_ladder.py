@@ -92,9 +92,7 @@ class TestItDoesNotOverreach:
         assert "bad day" in _msg(ws, "llm_provider_failed"), "repeat the provider's own words instead"
 
     def test_one_provider_down_is_not_an_outage(self):
-        ws = _llm_breaker_warnings(
-            [_p("a", "m1", "open", "HTTP 401 Invalid API Key"), _p("b", "m2", "closed")]
-        )
+        ws = _llm_breaker_warnings([_p("a", "m1", "open", "HTTP 401 Invalid API Key"), _p("b", "m2", "closed")])
         assert "llm_all_providers_failed" not in _codes(ws)
 
     def test_half_open_is_not_reported_as_lost(self):

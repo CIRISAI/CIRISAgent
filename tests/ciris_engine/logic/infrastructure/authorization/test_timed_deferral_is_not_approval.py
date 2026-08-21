@@ -62,10 +62,7 @@ from ciris_engine.logic.infrastructure.authorization.tool_approval import (
     envelope_approves_tool,
 )
 from ciris_engine.logic.processors.core.thought_processor.main import ThoughtProcessor
-from ciris_engine.logic.services.lifecycle.scheduler.service import (
-    RESOLVED_TASK_STATUSES,
-    TaskSchedulerService,
-)
+from ciris_engine.logic.services.lifecycle.scheduler.service import RESOLVED_TASK_STATUSES, TaskSchedulerService
 from ciris_engine.schemas.actions.parameters import DeferParams, ToolParams
 from ciris_engine.schemas.adapters.tools import ToolDMAGuidance, ToolInfo, ToolParameterSchema
 from ciris_engine.schemas.conscience.core import EpistemicData

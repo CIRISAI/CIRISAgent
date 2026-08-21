@@ -172,23 +172,17 @@ class APIAuthService:
                 # this load. Flipping it True here would permanently suppress
                 # the reload and accept revoked service tokens until process
                 # restart (codex P1).
-                logger.warning(
-                    "[AUTH] persist engine not wired yet — revocation load will retry on next auth call"
-                )
+                logger.warning("[AUTH] persist engine not wired yet — revocation load will retry on next auth call")
                 self._revoked_service_tokens = set()
                 return
 
             raw = engine.service_token_revocation_list()
             parsed = json.loads(raw) if isinstance(raw, (bytes, str)) else (raw or [])
             self._revoked_service_tokens = {
-                str(row.get("token_hash"))
-                for row in parsed
-                if isinstance(row, dict) and row.get("token_hash")
+                str(row.get("token_hash")) for row in parsed if isinstance(row, dict) and row.get("token_hash")
             }
             self._revoked_tokens_loaded = True
-            logger.info(
-                f"[AUTH] Loaded {len(self._revoked_service_tokens)} revoked service tokens from persist"
-            )
+            logger.info(f"[AUTH] Loaded {len(self._revoked_service_tokens)} revoked service tokens from persist")
         except Exception as e:
             logger.error(f"[AUTH] Failed to load revoked tokens: {type(e).__name__}: {e}")
             # Initialize empty set on error to avoid blocking startup
@@ -1213,12 +1207,14 @@ class APIAuthService:
             if engine is None:
                 logger.warning("[AUTH] persist engine not wired — revocation in-memory only")
             else:
-                payload = json.dumps({
-                    "token_hash": token_hash,
-                    "revoked_at": datetime.now(timezone.utc).isoformat(),
-                    "revoked_by": revoked_by,
-                    "reason": reason,
-                })
+                payload = json.dumps(
+                    {
+                        "token_hash": token_hash,
+                        "revoked_at": datetime.now(timezone.utc).isoformat(),
+                        "revoked_by": revoked_by,
+                        "reason": reason,
+                    }
+                )
                 engine.service_token_revocation_record(payload)
         except Exception as e:
             logger.error(f"[AUTH] Failed to persist revocation: {type(e).__name__}: {e}")

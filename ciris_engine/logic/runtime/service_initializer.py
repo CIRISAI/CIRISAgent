@@ -87,7 +87,6 @@ def _is_loopback_or_lan(url: str) -> bool:
         return False
 
 
-
 class ServiceInitializer:
     """Manages initialization of all core services."""
 
@@ -484,9 +483,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
                     # fsync the underlying fd so the bytes are durable on disk
                     # before we promote the .tmp to the canonical name.
                     fd = f.fileno()
-                    await asyncio.get_running_loop().run_in_executor(
-                        None, os.fsync, fd
-                    )
+                    await asyncio.get_running_loop().run_in_executor(None, os.fsync, fd)
                 os.chmod(tmp_path, 0o600)
                 # POSIX atomic rename. Either the canonical name holds the
                 # previous file (or doesn't exist), or it holds the fully-
@@ -629,9 +626,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
         too, and say so loudly if it goes wrong.
         """
         try:
-            from ciris_engine.logic.persistence.stores.wa_cert_legacy_migration import (
-                migrate_legacy_wa_certificates,
-            )
+            from ciris_engine.logic.persistence.stores.wa_cert_legacy_migration import migrate_legacy_wa_certificates
 
             migrate_legacy_wa_certificates(self.essential_config)
         except Exception:
@@ -1948,7 +1943,9 @@ This directory contains critical cryptographic keys for the CIRIS system.
                 if not self.llm_service:
                     logger.info("LLM service not initialized (first-run mode - will be initialized after setup)")
             elif ciris_disabled and not self.llm_service:
-                logger.warning("[WARN] No LLM provider configured - CIRIS services disabled and no local provider set up")
+                logger.warning(
+                    "[WARN] No LLM provider configured - CIRIS services disabled and no local provider set up"
+                )
                 logger.warning("[WARN] Agent will start but cannot process requests until an LLM provider is added")
             elif not ciris_disabled:
                 # Only require LLM service when CIRIS services are enabled

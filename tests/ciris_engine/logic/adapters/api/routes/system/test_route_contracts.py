@@ -51,9 +51,9 @@ class TestHealthStaysReachableWithoutCredentials:
             "and take the container down."
         )
         hint = get_type_hints(get_system_health, include_extras=True).get("auth")
-        assert "Optional" in str(hint) or "None" in str(hint), (
-            f"auth must be Optional so optional_auth can return None for an anonymous probe; got {hint!r}"
-        )
+        assert "Optional" in str(hint) or "None" in str(
+            hint
+        ), f"auth must be Optional so optional_auth can return None for an anonymous probe; got {hint!r}"
 
 
 class TestAuthorizationDecisionFieldNames:
@@ -124,9 +124,7 @@ class TestProvidersWithoutScopesStillAnswerHonestly:
 
     @pytest.mark.asyncio
     async def test_default_authorize_reports_scope_not_enforced(self) -> None:
-        from ciris_engine.protocols.services.governance.wise_authority import (
-            WiseAuthorityServiceProtocol,
-        )
+        from ciris_engine.protocols.services.governance.wise_authority import WiseAuthorityServiceProtocol
 
         class RoleOnlyProvider:
             async def check_authorization(self, wa_id, action, resource=None):
@@ -140,9 +138,9 @@ class TestProvidersWithoutScopesStillAnswerHonestly:
         assert isinstance(granted, AuthorizationDecision)
         assert granted.allowed is True
         assert granted.reason is None
-        assert granted.scope_enforced is False, (
-            "A provider that never looked at scopes must not claim it enforced them."
-        )
+        assert (
+            granted.scope_enforced is False
+        ), "A provider that never looked at scopes must not claim it enforced them."
 
         refused = await provider.authorize("stranger", "resolve_deferrals", "medical")
         assert refused.allowed is False

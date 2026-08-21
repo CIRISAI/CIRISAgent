@@ -142,9 +142,7 @@ class TaskCompleteHandler(BaseActionHandler):
         # Check for pending thoughts, in the occurrence that owns the task.
         self._verify_no_pending_thoughts(task_id, thought_id, task_occurrence_id)
 
-        task_updated = persistence.update_task_status(
-            task_id, TaskStatus.COMPLETED, task_occurrence_id
-        )
+        task_updated = persistence.update_task_status(task_id, TaskStatus.COMPLETED, task_occurrence_id)
 
         if not task_updated:
             self.logger.error(f"Failed to update status for parent task {task_id} to COMPLETED.")
@@ -199,20 +197,15 @@ class TaskCompleteHandler(BaseActionHandler):
             for t in persistence.get_thoughts_by_task_id(task_id, occurrence_id=occurrence_id)
             if t.thought_id != current_thought_id
         ]
-        outstanding = [
-            t.thought_id for t in siblings if getattr(t, "status", None) in self._OBLIGATION_OUTSTANDING
-        ]
+        outstanding = [t.thought_id for t in siblings if getattr(t, "status", None) in self._OBLIGATION_OUTSTANDING]
 
         if outstanding:
-            deferred = [
-                t.thought_id for t in siblings if getattr(t, "status", None) == ThoughtStatus.DEFERRED
-            ]
+            deferred = [t.thought_id for t in siblings if getattr(t, "status", None) == ThoughtStatus.DEFERRED]
             # Name the DEFERRED ones separately: they need a human, not a retry,
             # and telling an operator to look for "a handler that failed" when the
             # truth is "a person has not answered" sends them to the wrong place.
             detail = (
-                f" Of these, {len(deferred)} are DEFERRED and awaiting a Wise Authority "
-                f"resolution: {deferred}."
+                f" Of these, {len(deferred)} are DEFERRED and awaiting a Wise Authority " f"resolution: {deferred}."
                 if deferred
                 else " This indicates a handler failed to properly complete thought processing."
             )

@@ -71,9 +71,7 @@ class TestItNeverGuesses:
         assert _llm_breaker_warnings([sp]) == []
 
     def test_an_unknown_model_still_names_the_provider(self):
-        sp = SimpleNamespace(
-            name="mystery", instance=SimpleNamespace(), circuit_breaker=SimpleNamespace(state="open")
-        )
+        sp = SimpleNamespace(name="mystery", instance=SimpleNamespace(), circuit_breaker=SimpleNamespace(state="open"))
         ws = _llm_breaker_warnings([sp])
         assert ws, "a provider with an open breaker must still be reported"
         joined = " ".join(w.message for w in ws)

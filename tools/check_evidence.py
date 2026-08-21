@@ -57,9 +57,7 @@ def _module_symbols(tree: ast.Module) -> tuple[set[str], dict[str, set[str]]]:
             top.add(node.name)
         elif isinstance(node, ast.ClassDef):
             top.add(node.name)
-            methods[node.name] = {
-                m.name for m in node.body if isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef))
-            }
+            methods[node.name] = {m.name for m in node.body if isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef))}
         elif isinstance(node, ast.Assign):
             for t in node.targets:
                 if isinstance(t, ast.Name):
@@ -191,11 +189,7 @@ def main() -> int:
                     "Either the gap closed and the row should move to impl/staged, or the "
                     "issue was closed prematurely."
                 )
-    checked_note = (
-        f", {len(states)} issue states checked"
-        if states
-        else ", issue states NOT checked (gh unavailable)"
-    )
+    checked_note = f", {len(states)} issue states checked" if states else ", issue states NOT checked (gh unavailable)"
 
     for e in errors:
         print(f"FAIL: {e}", file=sys.stderr)

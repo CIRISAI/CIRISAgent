@@ -62,6 +62,7 @@ F = TypeVar("F", bound=Callable[..., Any])
 # Key file names
 SYSTEM_WA_KEY_FILENAME = "system_wa.key"
 
+
 # End-to-end budget for startup attestation, measured from when the
 # AuthenticationService's background `_attestation_task` is scheduled until
 # the cache is populated. The agent processor is gated on this completing,
@@ -2109,10 +2110,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
         engine = get_persist_engine()
         if engine is None:
-            logger.debug(
-                "[AuthenticationService] persist engine not wired; "
-                "skipping steward key registration"
-            )
+            logger.debug("[AuthenticationService] persist engine not wired; " "skipping steward key registration")
             return
 
         # #1009 — id AND key both come from the ENGINE, or neither does.
@@ -2160,8 +2158,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 added_by="agent_bootstrap",
             )
             logger.info(
-                "[AuthenticationService] registered federation signing key %s in "
-                "accord_public_keys",
+                "[AuthenticationService] registered federation signing key %s in " "accord_public_keys",
                 key_id,
             )
         except Exception as exc:  # noqa: BLE001
@@ -2213,10 +2210,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         try:
             self._register_agent_pubkey_with_persist()
         except Exception as e:
-            logger.warning(
-                f"[AuthenticationService] persist federation key registration "
-                f"skipped (non-fatal): {e}"
-            )
+            logger.warning(f"[AuthenticationService] persist federation key registration " f"skipped (non-fatal): {e}")
 
         # Kick off startup attestation in the BACKGROUND — but capture the
         # task so any code that *needs* the attestation result can await it.
@@ -2565,9 +2559,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         # run_startup_attestation on completion) so a 20s+ run still
         # raises here even if the gate-side wait was a no-op.
         if self._attestation_task.done():
-            total = getattr(self, "_attestation_stage_timings", {}).get(
-                "run_attestation_total_seconds"
-            )
+            total = getattr(self, "_attestation_stage_timings", {}).get("run_attestation_total_seconds")
             if isinstance(total, (int, float)) and total > budget_seconds:
                 raise RuntimeError(
                     f"Startup attestation completed but exceeded the "
@@ -2601,11 +2593,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             # paths still benefit from an eventual result. But surface the
             # contract violation immediately so the caller (processor gate)
             # aborts startup rather than absorbing the latency silently.
-            elapsed_total = (
-                asyncio.get_event_loop().time() - started_at
-                if started_at is not None
-                else None
-            )
+            elapsed_total = asyncio.get_event_loop().time() - started_at if started_at is not None else None
             elapsed_str = f"{elapsed_total:.1f}s" if elapsed_total is not None else "unknown"
             raise RuntimeError(
                 f"Startup attestation exceeded the {budget_seconds:.0f}s budget "

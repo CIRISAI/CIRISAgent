@@ -614,10 +614,7 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
 
             # Routed through persist substrate (CIRISAgent#763).
             from ciris_engine.logic.persistence.models.graph import get_persist_engine
-            from ciris_engine.logic.persistence.models.tasks import (
-                _persist_row_to_task,
-                _task_to_persist_payload,
-            )
+            from ciris_engine.logic.persistence.models.tasks import _persist_row_to_task, _task_to_persist_payload
 
             engine = get_persist_engine()
             if engine is None:
@@ -703,9 +700,7 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
             for occurrence_id in ("default", "__shared__"):
                 try:
                     deferred_tasks.extend(
-                        _list_with_filter(
-                            {"status": TaskStatus.DEFERRED.value, "agent_occurrence_id": occurrence_id}
-                        )
+                        _list_with_filter({"status": TaskStatus.DEFERRED.value, "agent_occurrence_id": occurrence_id})
                     )
                 except Exception as inner_e:
                     logger.warning(f"Failed to list deferred tasks for occurrence {occurrence_id}: {inner_e}")
@@ -819,8 +814,6 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
             return False
 
         try:
-            from ciris_engine.logic.utils.task_thought_factory import create_task
-
             # Routed through persist substrate (CIRISAgent#763).
             from ciris_engine.logic.persistence.models.graph import get_persist_engine
             from ciris_engine.logic.persistence.models.tasks import (
@@ -828,6 +821,7 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                 _persist_row_to_task,
                 _task_to_persist_payload,
             )
+            from ciris_engine.logic.utils.task_thought_factory import create_task
 
             engine = get_persist_engine()
             if engine is None:
@@ -859,9 +853,7 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                 # Fall back to scanning deferred tasks for deferral_id in context.
                 matched: Optional[str] = None
                 for occ in ("default", "__shared__"):
-                    candidates = _list_with_filter(
-                        {"status": TaskStatus.DEFERRED.value, "agent_occurrence_id": occ}
-                    )
+                    candidates = _list_with_filter({"status": TaskStatus.DEFERRED.value, "agent_occurrence_id": occ})
                     for cand in candidates:
                         raw = engine.task_get(cand.task_id)
                         if raw is None:
@@ -992,13 +984,10 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                     if original_task is not None:
                         # Prefer the top-level field (Task is record of truth);
                         # fall back to context for older records.
-                        original_preferred_language = (
-                            getattr(original_task, "preferred_language", None)
-                            or (
-                                getattr(original_task.context, "preferred_language", None)
-                                if original_task.context is not None
-                                else None
-                            )
+                        original_preferred_language = getattr(original_task, "preferred_language", None) or (
+                            getattr(original_task.context, "preferred_language", None)
+                            if original_task.context is not None
+                            else None
                         )
                 except Exception as exc:
                     logger.debug(
@@ -1131,9 +1120,7 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
         no approval envelope, so the gate denies again on the re-run. That is the
         fail-closed direction — a broken issuance can never turn into a grant.
         """
-        from ciris_engine.logic.infrastructure.authorization.tool_approval import (
-            pending_tool_from_deferral_context,
-        )
+        from ciris_engine.logic.infrastructure.authorization.tool_approval import pending_tool_from_deferral_context
 
         if not isinstance(deferral_info, dict):
             return
@@ -1142,9 +1129,7 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
             return
 
         try:
-            from ciris_engine.logic.infrastructure.authorization.envelope_issuer import (
-                issue_authority_envelope,
-            )
+            from ciris_engine.logic.infrastructure.authorization.envelope_issuer import issue_authority_envelope
             from ciris_engine.schemas.runtime.task_envelope import EnvelopeIssuerKind
 
             envelope = issue_authority_envelope(
@@ -1290,9 +1275,7 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                 # Pending = currently DEFERRED across known occurrences.
                 for occ in ("default", "__shared__"):
                     pending_deferrals_count += len(
-                        _list_with_filter(
-                            {"status": TaskStatus.DEFERRED.value, "agent_occurrence_id": occ}
-                        )
+                        _list_with_filter({"status": TaskStatus.DEFERRED.value, "agent_occurrence_id": occ})
                     )
                 # Resolved = task whose context_json contains "resolution".
                 # No SQL JSON predicate via persist; scan each occurrence's

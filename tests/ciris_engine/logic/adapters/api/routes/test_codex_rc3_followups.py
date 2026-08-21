@@ -626,3 +626,65 @@ class TestReadingRawContextNeverHardFails:
             "_get_engine() raises; hoisting it above the try turns a degradable read into a "
             "hard failure for every caller that has no bootstrapped database."
         )
+
+
+class TestTheJurisdictionGateCannotBeUsedToForgeLogLines:
+    """SonarCloud flagged both of the gate's warnings as log injection.
+
+    deferral_id is a PATH PARAMETER and _domain comes from stored deferral
+    context, so both are attacker-reachable. Logged raw, a newline inside a
+    deferral id writes a second line into the log — and the line an attacker
+    would choose to forge is the one this gate emits when it REFUSES them.
+    A security log that can be authored by the subject of the log is not
+    evidence.
+
+    The file already had sanitize_for_log() and used it elsewhere; the two
+    sites I added did not.
+    """
+
+    def _warning_calls(self):
+        import ast
+        import inspect
+
+        from ciris_engine.logic.adapters.api.routes import wa
+
+        tree = ast.parse(inspect.cleandoc(inspect.getsource(wa.resolve_deferral)))
+        out = []
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr in ("warning", "error", "info")
+            ):
+                out.append(node)
+        return out
+
+    def test_no_user_controlled_value_is_logged_raw(self) -> None:
+        import ast
+
+        RAW = {"deferral_id", "_domain", "_wa_id"}
+        offenders = []
+        for call in self._warning_calls():
+            for arg in call.args[1:]:  # arg 0 is the format string
+                if isinstance(arg, ast.Name) and arg.id in RAW:
+                    offenders.append(arg.id)
+                if isinstance(arg, ast.Attribute) and arg.attr == "user_id":
+                    offenders.append("auth.user_id")
+        assert not offenders, (
+            "these attacker-reachable values reach a log call unsanitized: "
+            f"{sorted(set(offenders))}. Wrap them in sanitize_for_log()."
+        )
+
+    def test_the_sanitizer_actually_defeats_a_forged_line(self) -> None:
+        from ciris_engine.logic.adapters.api.routes.wa import sanitize_for_log
+
+        forged = "defer_1\nJURISDICTION GRANTED: attacker may resolve everything"
+        cleaned = sanitize_for_log(forged)
+        assert "\n" not in cleaned and "\r" not in cleaned
+        assert cleaned.startswith("defer_1 ")
+
+    def test_control_characters_do_not_survive(self) -> None:
+        from ciris_engine.logic.adapters.api.routes.wa import sanitize_for_log
+
+        for ch in ("\n", "\r", "\t", "\x00", "\x1b"):
+            assert ch not in sanitize_for_log(f"a{ch}b")

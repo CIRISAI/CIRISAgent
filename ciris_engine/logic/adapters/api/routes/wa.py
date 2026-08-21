@@ -256,8 +256,11 @@ async def resolve_deferral(
                 _domain = _pd.context.get("domain_hint")
                 break
     except Exception as exc:
-        logger.warning(
-            "JURISDICTION UNVERIFIABLE: could not read domain for deferral %s: %s", deferral_id, exc, exc_info=True
+        logger.warning(  # NOSONAR - deferral_id sanitized via sanitize_for_log()
+            "JURISDICTION UNVERIFIABLE: could not read domain for deferral %s: %s",
+            sanitize_for_log(deferral_id),
+            exc,
+            exc_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -272,14 +275,14 @@ async def resolve_deferral(
         _wa_id = await resolve_certificate_id(request, auth)
         _decision = await wa_service.authorize(_wa_id, "resolve_deferral", _scope_resource)
         if not _decision.allowed:
-            logger.warning(
-                "JURISDICTION DENIED: %s (caller %s) may not resolve %s deferral %s " "(%s; required scope %s)",
-                _wa_id,
-                auth.user_id,
-                _domain,
-                deferral_id,
+            logger.warning(  # NOSONAR - all user-controlled values sanitized via sanitize_for_log()
+                "JURISDICTION DENIED: %s (caller %s) may not resolve %s deferral %s (%s; required scope %s)",
+                sanitize_for_log(_wa_id),
+                sanitize_for_log(auth.user_id or ""),
+                sanitize_for_log(str(_domain)),
+                sanitize_for_log(deferral_id),
                 _decision.reason.value if _decision.reason else "no reason",
-                _decision.required_scope or "-",
+                sanitize_for_log(_decision.required_scope or "-"),
             )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

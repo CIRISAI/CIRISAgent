@@ -266,7 +266,7 @@ class TestVerificationIntegration:
         """The downloaded key + JCS canonical bytes verify the proof independently."""
         import base64
 
-        from ciris_verify import jcs_canonicalize
+        from ciris_adapters.ciris_verify.ffi_bindings import jcs_canonicalize
 
         key_id = valid_deletion_proof.public_key_id
         key_response = client.get(f"/v1/verification/keys/{key_id}.pub")

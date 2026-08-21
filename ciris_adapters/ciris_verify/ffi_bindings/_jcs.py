@@ -37,8 +37,11 @@ _SUCCESS = 0
 
 
 def _candidate_paths() -> list[str]:
-    """Library search paths, reusing the package's platform map plus the
-    package-local wheel layout (the .so ships next to this module)."""
+    """Library search paths, substrate-first (CIRISAgent#917).
+
+    Order: the ciris-server wheel's folded verify FFI, then the standalone
+    ``ciris-verify`` wheel layout (legacy), then the package's documented
+    install + dev paths."""
     here = Path(__file__).resolve().parent
     system = _platform.system()
     names = {
@@ -48,10 +51,26 @@ def _candidate_paths() -> list[str]:
     }.get(system, ["libciris_verify_ffi.so"])
 
     paths: list[str] = []
-    # 1. Alongside this module (the wheel layout).
+    # 1. THE SUBSTRATE'S OWN verify (CIRISAgent#917). ciris-server folds
+    #    ciris-verify-ffi directly into ciris_server._native (CIRISServer#232),
+    #    exporting all 88 ciris_verify_* C symbols — ciris_verify_jcs_canonicalize
+    #    among them. Binding here means the producer's canonical bytes come from
+    #    the SAME verify the substrate's Rust verifiers recompute with, so JCS
+    #    skew is impossible by construction rather than by pin discipline. This
+    #    is the identical loader hop attestation/tree_verify.py takes for
+    #    ciris_verify_tree; keep the two in step.
+    try:
+        import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
+
+        paths.append(str(ciris_server.verify_ffi_path()))
+    except Exception:  # pragma: no cover - defensive
+        pass
+    # 2. Alongside this module (the standalone-wheel layout). LEGACY fallback:
+    #    the ciris-verify pin was dropped once #917 landed, so this only fires
+    #    in environments that still carry the standalone package.
     for n in names:
         paths.append(str(here / n))
-    # 2. The package's documented default install + dev paths.
+    # 3. The package's documented default install + dev paths.
     try:
         from .client import DEFAULT_BINARY_PATHS  # type: ignore
 

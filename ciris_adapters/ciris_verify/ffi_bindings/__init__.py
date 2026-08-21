@@ -4,7 +4,7 @@ Hardware-rooted license verification for the CIRIS ecosystem.
 Provides cryptographic proof of license status to prevent capability spoofing.
 
 Usage:
-    from ciris_verify import CIRISVerify, LicenseStatus
+    from ciris_adapters.ciris_verify.ffi_bindings import CIRISVerify, LicenseStatus
 
     verifier = CIRISVerify()
     status = verifier.get_license_status(challenge_nonce=os.urandom(32))
@@ -22,13 +22,19 @@ Logging:
     verifier.set_log_callback(lambda lvl, target, msg: print(f"[{lvl}] {msg}"))
 
     # Or integrate with Python logging
-    from ciris_verify import setup_logging
+    from ciris_adapters.ciris_verify.ffi_bindings import setup_logging
     setup_logging(verifier, level="DEBUG")
 """
 
 import logging as _logging
 
 from .client import CIRISVerify, MockCIRISVerify
+
+# jcs_canonicalize IS re-exported (unlike verify_tree below): it binds the
+# substrate's ciris_verify_jcs_canonicalize through ciris_server.verify_ffi_path(),
+# so it carries no standalone-wheel dependency. This is the import the 2.9.29
+# ciris-verify pin removal (#917) rewired the producer call sites onto.
+from ._jcs import jcs_canonicalize
 from .exceptions import (
     AttestationInProgressError,
     BinaryNotFoundError,
@@ -43,7 +49,10 @@ from .exceptions import (
 # vendored ffi_bindings layer — it carries CIRISAgent-local FFI-loader
 # patches (commit 03f5e958d) that the upstream client.py doesn't have.
 # Consumers needing the runtime tree verifier import directly:
-#     from ciris_verify import verify_tree, TreeVerifyRequest
+#     from ciris_engine.logic.services.infrastructure.authentication\
+#             .attestation.tree_verify import verify_tree, TreeVerifyRequest
+# which ctypes-binds ciris_verify_tree through ciris_server.verify_ffi_path()
+# (the 2.9.7 DRY purge) — no standalone ciris-verify wheel involved.
 # This file is in `update_ciris_verify.py::AGENT_MANAGED` to prevent
 # upstream `__init__.py` from re-introducing the broken import on each
 # `ciris-verify` bump (Codex P0 on PR #741, fix tracked in fe14c6c94).
@@ -131,6 +140,7 @@ __version__ = "10.3.0"
 __all__ = [
     "CIRISVerify",
     "MockCIRISVerify",
+    "jcs_canonicalize",  # substrate-bound (#917)
     # verify_tree / DEFAULT_REGISTRY_URL not re-exported — see comment above.
     "TreeVerifyRequest",
     "TreeVerifyResult",

@@ -659,7 +659,7 @@ def compute_manifest_digest(raw: Dict[str, Any]) -> str:
     """
     import hashlib
 
-    from ciris_verify import jcs_canonicalize  # substrate-provided canonicalizer
+    from ciris_adapters.ciris_verify.ffi_bindings import jcs_canonicalize  # substrate-provided canonicalizer
 
     canonical: bytes = jcs_canonicalize(json.dumps(raw, ensure_ascii=False, sort_keys=True))
     return "sha256:" + hashlib.sha256(canonical).hexdigest()

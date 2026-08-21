@@ -857,7 +857,14 @@ def update_python_bindings(version: str, tmpdir: Path, ios: bool = True) -> None
         # should `from ciris_verify import ...` directly — the upstream
         # PyPI package is the canonical surface, our vendored layer is for
         # the FFI-loader patches only.
-        AGENT_MANAGED = {"client.py", "__init__.py"}
+        # _jcs.py carries the CIRISAgent#917 substrate-first loader patch:
+        # _candidate_paths() tries ciris_server.verify_ffi_path() BEFORE the
+        # standalone-wheel layout, which is what let the ciris-verify pin be
+        # dropped in 2.9.29. The upstream copy searches the standalone wheel
+        # ONLY, so re-vendoring it would silently reintroduce a hard
+        # ciris-verify dependency at the producer's signing-bytes path — the
+        # exact regression class as the __init__.py verify_tree note below.
+        AGENT_MANAGED = {"client.py", "__init__.py", "_jcs.py"}
 
         # Deleted in the 2.9.7 DRY cut (CIRISAgent#896): every capability
         # these upstream helpers provided has a verified substrate symbol in

@@ -54,7 +54,7 @@ class AttestationInProgressError(CIRISVerifyError):
     The caller should wait ~500ms and retry. Example:
 
         import time
-        from ciris_verify import CIRISVerify, AttestationInProgressError
+        from ciris_adapters.ciris_verify.ffi_bindings import CIRISVerify, AttestationInProgressError
 
         verifier = CIRISVerify()
         max_retries = 5

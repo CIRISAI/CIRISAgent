@@ -2170,6 +2170,15 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         # The provider's own words are already unwrapped for the log; keeping the
         # last one lets the health warning name the actual fault.
         self.last_error = _root_provider_error(e)
+        # …AND the structured slug, on EVERY failure, not just the instructor one.
+        # These two are read as a pair: health prefers last_fault_code over
+        # substring-matching last_error. Refreshing only half means a provider
+        # whose first failure was `model_not_found` and whose current failure is a
+        # timeout keeps telling the user to change the model — the remedy would
+        # describe an outage that is already over while the live one goes unnamed.
+        # _root_provider_fault returns "" when it cannot name the fault, which is
+        # the correct way to say "no structured verdict, fall back to the words".
+        self.last_fault_code = _root_provider_fault(e)
         _handle_generic_llm_exception(
             e, self.model_name, self.openai_config.base_url or "", resp_model_name, self.circuit_breaker
         )

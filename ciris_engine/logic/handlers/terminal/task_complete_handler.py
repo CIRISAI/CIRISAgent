@@ -121,10 +121,14 @@ class TaskCompleteHandler(BaseActionHandler):
             self.logger.info(f"Task {task_id} is a persistent task. Not marking as COMPLETED.")
             return
 
-        # Check for pending thoughts
-        self._verify_no_pending_thoughts(task_id, thought_id)
-
-        # Get task with correct occurrence_id
+        # Resolve the task FIRST: the obligation guard below has to query siblings
+        # in the task's OWN occurrence, and only the task record knows which that
+        # is. get_thoughts_by_task_id filters agent_occurrence_id by equality with
+        # a "default" default, so running the guard before this lookup silently
+        # returned zero siblings for every task claimed by another occurrence —
+        # i.e. the guard held only on single-occurrence deployments, and a
+        # horizontally-scaled agent could still complete a task while a human
+        # owed an answer on a DEFERRED sibling.
         from ciris_engine.logic.persistence.models.tasks import get_task_by_id_any_occurrence
 
         task = get_task_by_id_any_occurrence(task_id)
@@ -134,6 +138,9 @@ class TaskCompleteHandler(BaseActionHandler):
 
         task_occurrence_id = task.agent_occurrence_id
         self.logger.debug(f"Marking task {task_id} as COMPLETED with occurrence_id={task_occurrence_id}")
+
+        # Check for pending thoughts, in the occurrence that owns the task.
+        self._verify_no_pending_thoughts(task_id, thought_id, task_occurrence_id)
 
         task_updated = persistence.update_task_status(
             task_id, TaskStatus.COMPLETED, task_occurrence_id
@@ -177,10 +184,20 @@ class TaskCompleteHandler(BaseActionHandler):
         ThoughtStatus.DEFERRED,
     }
 
-    def _verify_no_pending_thoughts(self, task_id: str, current_thought_id: str) -> None:
-        """Refuse completion while any sibling obligation is unresolved."""
+    def _verify_no_pending_thoughts(
+        self, task_id: str, current_thought_id: str, occurrence_id: str = "default"
+    ) -> None:
+        """Refuse completion while any sibling obligation is unresolved.
+
+        ``occurrence_id`` must be the TASK's occurrence, not the ambient one:
+        thoughts inherit it from their task, and the persistence filter is an
+        equality match. Defaulting it here would reintroduce the single-
+        occurrence-only bug for any caller that forgets to pass it.
+        """
         siblings = [
-            t for t in persistence.get_thoughts_by_task_id(task_id) if t.thought_id != current_thought_id
+            t
+            for t in persistence.get_thoughts_by_task_id(task_id, occurrence_id=occurrence_id)
+            if t.thought_id != current_thought_id
         ]
         outstanding = [
             t.thought_id for t in siblings if getattr(t, "status", None) in self._OBLIGATION_OUTSTANDING

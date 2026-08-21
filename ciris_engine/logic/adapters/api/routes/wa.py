@@ -185,26 +185,53 @@ async def resolve_deferral(
     #
     # The resource is the deferral's DOMAIN (MEDICAL / FINANCIAL / LEGAL / ...),
     # which is the taxonomy the deferral rail already routes on via
-    # `DeferralContext.domain_hint`. That makes `resolve_deferrals:medical` a
-    # sayable scope and a medical authority resolving a financial deferral a
-    # denial — the auditors' own example.
+    # `DeferralContext.domain_hint`, prefixed onto the deferral id. That is the
+    # shape `scope_grants` matches with fnmatchcase, so a certificate reading
+    # `resolve_deferral:medical_*` covers `medical_defer_001` and a medical
+    # authority resolving a financial deferral is a denial — the auditors' own
+    # example. The action is SINGULAR `resolve_deferral`: that is the spelling
+    # every certificate fixture and every other caller uses, and the plural was
+    # already caught once inside the service (see the note at
+    # tests/test_deferral_permissions.py, "plural, and so matching no action
+    # anyone actually requests"). Requesting the plural here would have denied
+    # every correctly scoped authority instead of the wrong ones.
     #
-    # A deferral with NO domain keeps the pre-existing role-only answer rather
-    # than being denied: most deferrals carry no domain_hint today, and denying
-    # them would take the whole human-resolution path down. Under-specified, not
-    # unenforced — and the denial below says which it was.
+    # Two failure modes that look alike and must not be treated alike:
+    #
+    #   no domain on the deferral -> role-only, as before. Most deferrals carry
+    #       no domain_hint today and denying them takes the whole human-
+    #       resolution path down. Under-specified, not unenforced.
+    #   domain could not be READ  -> refuse. A transient persistence failure
+    #       must not be a way to resolve a MEDICAL deferral without
+    #       jurisdiction; "we could not check" is not "there was nothing to
+    #       check". Fail closed, and say it is a lookup failure so an operator
+    #       retries rather than hunting a permissions ghost.
     _domain = None
     try:
         for _pd in await wa_service.get_pending_deferrals():
             if _pd.deferral_id == deferral_id:
-                _domain = (_pd.context or {}).get("domain_hint") or (_pd.metadata or {}).get("domain_hint")
+                # PendingDeferral.context is Dict[str, str] with default_factory=dict —
+                # never None, and there is no `metadata` field. The WA service copies
+                # every stored deferral-context key into it unfiltered, so the
+                # domain_hint wise_bus writes (wise_bus.py:275) arrives here.
+                _domain = _pd.context.get("domain_hint")
                 break
-    except Exception as exc:  # pragma: no cover - jurisdiction lookup must not 500 the route
-        logger.warning("Could not read domain for deferral %s: %s", deferral_id, exc)
+    except Exception as exc:
+        logger.warning(
+            "JURISDICTION UNVERIFIABLE: could not read domain for deferral %s: %s", deferral_id, exc, exc_info=True
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "Cannot verify jurisdiction for this deferral right now, so it cannot be resolved. "
+                "This is a lookup failure, not a permissions decision — please retry."
+            ),
+        ) from exc
 
     if _domain:
-        _decision = await wa_service.authorize(auth.user_id, "resolve_deferrals", str(_domain).lower())
-        if not _decision.authorized:
+        _scope_resource = f"{str(_domain).lower()}_{deferral_id}"
+        _decision = await wa_service.authorize(auth.user_id, "resolve_deferral", _scope_resource)
+        if not _decision.allowed:
             logger.warning(
                 "JURISDICTION DENIED: %s may not resolve %s deferral %s (%s; required scope %s)",
                 auth.user_id,
@@ -217,7 +244,8 @@ async def resolve_deferral(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=(
                     f"Not authorized to resolve a {_domain} deferral. Role permits the action; "
-                    f"jurisdiction does not. Required scope: {_decision.required_scope or f'resolve_deferrals:{str(_domain).lower()}'}."
+                    f"jurisdiction does not. Required scope: "
+                    f"{_decision.required_scope or f'resolve_deferral:{str(_domain).lower()}_*'}."
                 ),
             )
 

@@ -17,6 +17,7 @@ from ciris_engine.schemas.api.telemetry import TimeSyncStatus
 
 from ...constants import ERROR_TIME_SERVICE_NOT_AVAILABLE
 from ...dependencies.auth import AuthContext, require_observer
+from .._common import OptionalAuthDep
 from .helpers import (
     check_initialization_status,
     check_processor_health,
@@ -330,9 +331,12 @@ async def check_llm_availability(can_manage: bool = True) -> tuple[bool, list[Sy
         return False, [
             SystemWarning(
                 code="no_llm_provider",
-                message="No LLM provider configured. Add a provider in LLM Settings to enable AI features.",
+                message=get_string(
+                    get_preferred_language(),
+                    "status.no_llm_provider" if can_manage else "status.no_llm_provider_observer",
+                ),
                 severity="error",
-                action_url="/settings/llm",
+                action_url="/settings/llm" if can_manage else None,
             )
         ]
 
@@ -363,17 +367,26 @@ async def check_llm_availability(can_manage: bool = True) -> tuple[bool, list[Sy
     if breaker:
         return False, breaker
 
+    # Same role rule as the ladder above: an observer is told what is wrong and
+    # who fixes it, never handed a link to a control the settings API will
+    # refuse them. This branch and the no-provider branch above are the two
+    # most common states — first boot, and a provider failing with no recorded
+    # error — so getting the role wrong here is what a non-admin user would
+    # actually hit.
+    lang = get_preferred_language()
     detail = _describe_provider_failures(llm_providers)
+    if detail:
+        key = "status.llm_providers_unhealthy_detail" if can_manage else "status.llm_providers_unhealthy_detail_observer"
+        message = get_string(lang, key, detail=detail)
+    else:
+        key = "status.llm_providers_unhealthy" if can_manage else "status.llm_providers_unhealthy_observer"
+        message = get_string(lang, key)
     return False, [
         SystemWarning(
             code="llm_providers_unhealthy",
-            message=(
-                f"No LLM provider is answering. {detail} Open LLM settings to fix it."
-                if detail
-                else "No LLM provider is answering. Open LLM settings to check your provider, key and model."
-            ),
+            message=message,
             severity="warning",
-            action_url="/settings/llm",
+            action_url="/settings/llm" if can_manage else None,
         )
     ]
 
@@ -710,7 +723,7 @@ async def collect_system_warnings(
 
 
 @router.get("/health")
-async def get_system_health(request: Request) -> SuccessResponse[SystemHealthResponse]:
+async def get_system_health(request: Request, auth: OptionalAuthDep = None) -> SuccessResponse[SystemHealthResponse]:
     """
     Overall system health.
 

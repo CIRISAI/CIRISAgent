@@ -197,7 +197,17 @@ def _validate_api_key_for_provider(config: LLMValidationRequest) -> Optional[LLM
                 message="Invalid API key",
                 error="OpenAI requires a valid API key starting with 'sk-'",
             )
-    elif config.provider not in ("local", "local_inference", "mobile_local") and not config.api_key:
+    if config.api_key and config.api_key != config.api_key.strip():
+        # A pasted key with a trailing newline produces a LOCAL connection error
+        # whose str() is just "Connection error." — observed on every provider —
+        # so the user is sent to their network for a clipboard problem. Catch it
+        # where the information still exists.
+        return LLMValidationResponse(
+            valid=False,
+            message="API key has stray whitespace",
+            error="The API key starts or ends with whitespace or a newline — re-paste it without them.",
+        )
+    if config.provider not in ("local", "local_inference", "mobile_local") and not config.api_key:
         # Non-keyless providers need an API key. `mobile_local` runs an
         # on-device OpenAI-compatible server on loopback so no external
         # credential is required — same as `local` / `local_inference`.
@@ -206,16 +216,85 @@ def _validate_api_key_for_provider(config: LLMValidationRequest) -> Optional[LLM
     return None
 
 
+# What each structured fault slug means TO THE USER, as (headline, remedy).
+# The remedy names the action that actually fixes the fault — the live matrix
+# measured a 45% rate of messages that contradicted the real cause, and every
+# entry here was a cell in that gap: model_not_found and policy_blocked both
+# read "check your endpoint", and insufficient_quota read "replace your key"
+# (which replaces a working key and fixes nothing).
+_FAULT_RESPONSES = {
+    "model_not_found": (
+        "Model not found",
+        "The provider does not serve this model (it may have been retired). "
+        "List the provider's models and pick one it actually offers.",
+    ),
+    "invalid_api_key": (
+        "Authentication failed",
+        "The provider rejected the API key. Check the key — including stray whitespace — "
+        "or issue a new one.",
+    ),
+    "rate_limited": (
+        "Rate limited",
+        "The provider is rate-limiting this key. Wait a moment and try again.",
+    ),
+    "insufficient_quota": (
+        "Out of credit",
+        "The key is valid but the account has no credit. Add funds in the provider's "
+        "billing settings — replacing the key will not help.",
+    ),
+    "policy_blocked": (
+        "Blocked by data policy",
+        "No endpoint for this model satisfies the request's data-retention/routing "
+        "constraints. Choose a different model, or review the provider's privacy "
+        "settings if you manage them.",
+    ),
+}
+
+
 def _classify_llm_connection_error(error: Exception, base_url: Optional[str]) -> LLMValidationResponse:
-    """Classify and format LLM connection errors.
+    """Classify an LLM connection error into the user's actual remedy.
 
-    Args:
-        error: The exception that occurred
-        base_url: The base URL being connected to (None for providers with fixed endpoints)
-
-    Returns:
-        Formatted error response
+    TYPED FIRST, PROSE LAST. The provider's structured verdict — its
+    ``body.error.code``, its status, its own body message — is read by
+    ``_root_provider_fault``, the same walker the runtime health surface uses,
+    so setup and the running agent diagnose a fault identically. Substring
+    matching over ``str(error)`` remains only as the final fallback for
+    transport-level failures that carry no provider body at all, because that is
+    where the 45% classifier gap came from: a 404 whose body named the missing
+    MODEL was read as an unreachable ENDPOINT, and the user was sent to check a
+    network that was fine.
     """
+    from ciris_engine.logic.services.runtime.llm_service.service import _root_provider_fault
+
+    fault = _root_provider_fault(error)
+    if fault in _FAULT_RESPONSES:
+        headline, remedy = _FAULT_RESPONSES[fault]
+        return LLMValidationResponse(valid=False, message=headline, error=remedy)
+
+    # Transport-level failures: no provider body to read, so the exception TYPE
+    # is the evidence. openai's typed exceptions cover the SDK paths.
+    try:
+        from openai import APIConnectionError, APITimeoutError
+
+        if isinstance(error, APITimeoutError):
+            return LLMValidationResponse(
+                valid=False,
+                message="Connection timeout",
+                error="The provider did not answer in time. Check the endpoint URL and your network.",
+            )
+        if isinstance(error, APIConnectionError):
+            return LLMValidationResponse(
+                valid=False,
+                message="Connection failed",
+                error=(
+                    f"Could not connect to {base_url}. Check the URL and that the server is running."
+                    if base_url
+                    else "Could not connect to the provider. Check your network and the endpoint URL."
+                ),
+            )
+    except ImportError:  # pragma: no cover - openai is a hard dependency
+        pass
+
     error_str = str(error)
 
     if "401" in error_str or "Unauthorized" in error_str or "authentication_error" in error_str.lower():
@@ -310,7 +389,7 @@ async def _validate_openai_compatible(config: LLMValidationRequest) -> LLMValida
     logger.info(f"[VALIDATE_LLM] Creating OpenAI client with base_url: {client_kwargs.get('base_url', 'default')}")
 
     client = AsyncOpenAI(**client_kwargs)
-    model_to_test = config.model or "gpt-3.5-turbo"
+    model_to_test = config.model or ""  # unreachable empty: _validate_llm_connection refuses first
 
     # SAME request shaping as the pipeline (CIRISAgent Lane A). Validating with a
     # bare completion asked the provider a different question than the agent will
@@ -363,7 +442,7 @@ async def _validate_anthropic_connection(config: LLMValidationRequest) -> LLMVal
         client = anthropic.AsyncAnthropic(api_key=config.api_key)
 
         # Try a minimal completion
-        model_to_test = config.model or "claude-haiku-4-5-20251001"
+        model_to_test = config.model or ""  # unreachable empty: _validate_llm_connection refuses first
         await client.messages.create(
             model=model_to_test,
             max_tokens=1,
@@ -399,7 +478,7 @@ async def _validate_google_connection(config: LLMValidationRequest) -> LLMValida
         client = AsyncOpenAI(api_key=config.api_key, base_url=base_url)
 
         # Try a minimal completion
-        model_to_test = config.model or "gemini-2.0-flash"
+        model_to_test = config.model or ""  # unreachable empty: _validate_llm_connection refuses first
         await client.chat.completions.create(
             model=model_to_test,
             messages=[{"role": "user", "content": "Hi"}],
@@ -432,6 +511,26 @@ async def _validate_llm_connection(config: LLMValidationRequest) -> LLMValidatio
                 valid=True,
                 message="On-device inference — no remote endpoint to validate",
                 error=None,
+            )
+
+        # NO MODEL, NO VALIDATION. The fallbacks this replaces substituted a
+        # per-provider guess (an OpenAI 3.5-era model, a Claude, a Gemini) and posted it
+        # as though the user had chosen it. Same class as CIRISAgent#1078, on
+        # the setup path. Two ways that answered falsely: on providers that DO
+        # serve the guess (OpenAI, OpenRouter) it returned 200 and the wizard
+        # said "Connection successful!" for a model the user never picked and
+        # the catalogue marks incompatible; on providers that do not, the 404
+        # was blamed on the network. A validation is a statement about the
+        # user's ACTUAL configuration or it is nothing.
+        if not (config.model or "").strip():
+            return LLMValidationResponse(
+                valid=False,
+                message="No model selected",
+                error=(
+                    "Select a model before validating. List the provider's models first — "
+                    "validation tests the exact provider + key + model you will run with, "
+                    "so there is nothing meaningful to test until a model is chosen."
+                ),
             )
 
         # Validate API key for provider type

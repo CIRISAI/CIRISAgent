@@ -60,6 +60,13 @@ def _extract_error_fields(body: Any) -> Tuple[Optional[str], Optional[str]]:
             body = json.loads(body)
         except (ValueError, TypeError):
             return None, None
+    # Google wraps its error in a LIST — [{"error": {...}}] — observed live.
+    # Without this unwrap every Google failure recorded code=None/message=None,
+    # so fixtures replayed with no body and could only exercise the legacy
+    # substring fallback: the capture side of the same defect the product's
+    # typed walker had, and it froze the gap measurement for one provider.
+    if isinstance(body, list) and body and isinstance(body[0], dict):
+        body = body[0]
     if not isinstance(body, dict):
         return None, None
 
@@ -118,6 +125,17 @@ class ProbeExecutor:
         the product and the matrix says so without reprinting the key.
         """
         response = classify_connection_error(exc, classifier_base_url(cell.provider, cell.client_base_url))
+        verdict = to_verdict(response)
+        return ClassifierVerdict(
+            valid=verdict.valid,
+            message=verdict.message,
+            error=self.redactor.scrub(verdict.error),
+            rendered_cause=verdict.rendered_cause,
+        )
+
+    def _verdict_from_response(self, response: "LLMValidationResponse") -> ClassifierVerdict:
+        """A verdict for a product response that never involved an exception —
+        the pre-network refusals (no model selected, whitespace key)."""
         verdict = to_verdict(response)
         return ClassifierVerdict(
             valid=verdict.valid,
@@ -215,8 +233,33 @@ class ProbeExecutor:
         """Execute a chat cell. ``cell.requested_model`` may be None (OMITTED)."""
         from .product_bridge import fabricated_model_for
 
-        # Reproduce the product's substitution exactly, so the report can say
-        # what model was ACTUALLY sent versus what the user chose.
+        # OMITTED-model cells run the REAL product path, which now refuses
+        # before any network I/O — the fabricated-substitution behaviour this
+        # branch used to reproduce was deleted (Lane A / #1078-class). Calling
+        # the product rather than mimicking it means this measurement follows
+        # the product: if the substitution ever comes back, effective_model
+        # will name it again and the FABRICATED_MODEL findings re-fire.
+        if cell.requested_model is None and cell.probe is not ProbeKind.CHAT_MAX_TOKENS_OVER_CAP:
+            from ciris_engine.logic.adapters.api.routes.setup.llm_validation import (
+                _validate_llm_connection,
+            )
+            from ciris_engine.logic.adapters.api.routes.setup.models import LLMValidationRequest
+
+            started = time.monotonic()
+            product_verdict = await _validate_llm_connection(
+                LLMValidationRequest(
+                    provider=cell.provider, api_key=api_key, base_url=cell.client_base_url, model=None
+                )
+            )
+            elapsed_ms = (time.monotonic() - started) * 1000.0
+            outcome = LLMProbeOutcome(
+                succeeded=bool(product_verdict.valid),
+                http_status=None,
+                effective_model=None,  # nothing was sent anywhere, which is the fix
+                latency_ms=elapsed_ms,
+            )
+            return outcome, self._verdict_from_response(product_verdict)
+
         effective_model = cell.requested_model or fabricated_model_for(spec.provider_id)
 
         if cell.probe == ProbeKind.CHAT_MAX_TOKENS_OVER_CAP:
@@ -365,6 +408,31 @@ class FixtureExecutor(ProbeExecutor):
     async def run_chat(
         self, cell: MatrixCell, spec: ProviderSpec, api_key: str
     ) -> Tuple[LLMProbeOutcome, Optional[ClassifierVerdict]]:
+        # An omitted model runs the REAL product path in dry-run too: the
+        # refusal happens before any network I/O, so replaying a recording of
+        # it is strictly worse than executing it — the recording carries no
+        # exception (nothing raised), which replayed as an empty
+        # "Connection failed". Same branch as the live executor.
+        if cell.requested_model is None and cell.probe is not ProbeKind.CHAT_MAX_TOKENS_OVER_CAP:
+            from ciris_engine.logic.adapters.api.routes.setup.llm_validation import (
+                _validate_llm_connection,
+            )
+            from ciris_engine.logic.adapters.api.routes.setup.models import LLMValidationRequest
+
+            product_verdict = await _validate_llm_connection(
+                LLMValidationRequest(
+                    provider=cell.provider, api_key=api_key or "sk-dry-run", base_url=cell.client_base_url, model=None
+                )
+            )
+            outcome = LLMProbeOutcome(
+                succeeded=bool(product_verdict.valid),
+                http_status=None,
+                effective_model=None,
+                latency_ms=0.0,
+                from_fixture=True,
+            )
+            return outcome, self._verdict_from_response(product_verdict)
+
         from .product_bridge import fabricated_model_for
 
         recorded = self.fixtures.get(cell.cell_id)
@@ -396,12 +464,35 @@ class FixtureExecutor(ProbeExecutor):
                 rendered_cause=RenderedCause.SUCCESS,
             )
 
-        # Replay the RECORDED exception rendering through the REAL classifier.
-        # `_classify_llm_connection_error` reads nothing but str(error), so this
-        # takes the same branch the live call did.
-        replayed = ReplayedProviderError(
-            outcome.exception_str or "", exception_type=outcome.exception_type or "recorded"
-        )
+        # Replay the RECORDED failure through the REAL classifier, structure and
+        # all: the classifier is typed-first now, so the replay must carry the
+        # recorded status and body or it can only ever exercise the legacy
+        # substring fallback — and the gap measurement goes blind to fixes.
+        # Transport failures carry no provider body — their entire identity is
+        # the exception TYPE, which the classifier now tests with isinstance.
+        # Rebuild the real type for the two the product distinguishes; every
+        # body-carrying failure replays through ReplayedProviderError, which
+        # carries the recorded status and body for the typed walker.
+        exc_type = outcome.exception_type or "recorded"
+        replayed: BaseException
+        if exc_type.endswith("APITimeoutError"):
+            import httpx
+            from openai import APITimeoutError
+
+            replayed = APITimeoutError(request=httpx.Request("POST", "https://replay.invalid/v1"))
+        elif exc_type.endswith("APIConnectionError"):
+            import httpx
+            from openai import APIConnectionError
+
+            replayed = APIConnectionError(request=httpx.Request("POST", "https://replay.invalid/v1"))
+        else:
+            replayed = ReplayedProviderError(
+                outcome.exception_str or "",
+                exception_type=exc_type,
+                status_code=outcome.http_status,
+                error_code=outcome.provider_error_code,
+                error_message=outcome.provider_error_message,
+            )
         return outcome, self._classify(replayed, cell)
 
     async def run_models_list(self, cell: MatrixCell, api_key: str) -> Tuple[LLMProbeOutcome, ListModelsResponse]:

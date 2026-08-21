@@ -621,10 +621,27 @@ def _root_provider_fault(error: BaseException) -> str:
     while cur is not None and id(cur) not in seen:
         seen.add(id(cur))
         body = getattr(cur, "body", None)
+        # Google wraps its error in a LIST — `[{"error": {...}}]` — where every
+        # other OpenAI-compatible vendor sends a dict. Observed live; without
+        # this unwrap every Google error had an unreadable body, so its 404s
+        # fell through to "check your endpoint" and its worded key rejection to
+        # raw JSON, regardless of what the branches below know.
+        if isinstance(body, list) and body and isinstance(body[0], dict):
+            body = body[0]
         code = ""
         message = ""
         if isinstance(body, dict):
             err = body.get("error")
+            # The openai SDK UNWRAPS the envelope before storing `.body`: a live
+            # NotFoundError carries {"message": ..., "code": "model_not_found"}
+            # directly, with no {"error": ...} around it. Verified against the
+            # live API — unit fixtures built with the wrapped shape passed while
+            # every real 404 fell through to the endpoint branch, which is how a
+            # correct-looking walker misrouted every provider at once. Accept
+            # both shapes: the envelope (raw HTTP, some SDK paths) and the
+            # unwrapped inner object (the openai SDK's own).
+            if not isinstance(err, dict) and ("message" in body or "code" in body):
+                err = body
             if isinstance(err, dict):
                 code = str(err.get("code") or "").strip().lower()
                 message = str(err.get("message") or "").strip().lower()
@@ -633,6 +650,32 @@ def _root_provider_fault(error: BaseException) -> str:
         # The provider named it. Trust that over anything we infer.
         if code in ("model_not_found", "invalid_api_key", "rate_limit_exceeded", "insufficient_quota"):
             return {"rate_limit_exceeded": "rate_limited"}.get(code, code)
+
+        # Two causes the live conformance matrix proved were falling through to
+        # "check your endpoint", measured at a 45% classifier gap:
+        #
+        # POLICY/ROUTING. OpenRouter answers 404/400 with its own sentence when
+        # no endpoint satisfies the request's routing constraints — the
+        # data-policy/ZDR guardrail ("...matching your guardrail restrictions
+        # and data policy") or provider pinning ("No allowed providers are
+        # available"). The body message is the provider's own statement, not our
+        # reading of prose patterns across vendors: only OpenRouter emits these
+        # sentences and they are the documented shape of this refusal.
+        if "data policy" in message or "guardrail" in message or "no allowed providers" in message:
+            return "policy_blocked"
+        # BILLING. Anthropic reports an empty balance as HTTP 400 — the same
+        # status Google uses for a REJECTED KEY — so status alone routes a
+        # billing problem to "replace your credentials", which replaces a
+        # working key and fixes nothing. Observed live: only the body separates
+        # them. 402 (Together) is unambiguous.
+        if status == 402 or "credit balance is too low" in message or "credit limit exceeded" in message:
+            return "insufficient_quota"
+        # Google rejects a bad key as HTTP 400 with "API key not valid. Please
+        # pass a valid API key." — no 401, no error.code. Observed live; without
+        # this the one provider that words it differently fell to the generic
+        # branch and the user saw raw JSON.
+        if "api key not valid" in message or "pass a valid api key" in message:
+            return "invalid_api_key"
 
         # 401 is unambiguous across OpenAI-compatible vendors: the credential was
         # refused. No body needed.
@@ -643,6 +686,13 @@ def _root_provider_fault(error: BaseException) -> str:
         # 404 ONLY counts as a missing model when the body says the model is what
         # was missing. Otherwise it is very likely a wrong base_url.
         if status == 404 and "model" in message:
+            return "model_not_found"
+        # Two more wordings for "that model id is wrong", observed live: OpenRouter
+        # answers 400 "x is not a valid model ID"; Google answers 400
+        # "GenerateContentRequest.model: unexpected model name format" for a
+        # case-mangled id. Same user remedy as a missing model — pick one the
+        # provider actually lists.
+        if "not a valid model id" in message or "unexpected model name format" in message:
             return "model_not_found"
 
         cur = cur.__cause__ or cur.__context__

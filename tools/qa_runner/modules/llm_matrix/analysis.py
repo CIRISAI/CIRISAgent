@@ -47,15 +47,20 @@ from .schemas import (
 )
 
 # The cause the classifier would have to render for the user to be pointed at
-# the right remedy. An expected cause absent from this table (POLICY_BLOCKED,
-# QUOTA) has NO branch in the product that can express it — every rendering is
-# wrong, which is itself the finding.
+# the right remedy. POLICY_BLOCKED and QUOTA were deliberately absent while the
+# product had no branch that could express them — every rendering was wrong,
+# and that WAS the finding. The Lane A3 typed classifier gave them branches
+# ("Blocked by data policy", "Out of credit"/"Rate limited"), so they are now
+# gradeable like everything else.
 _ACCEPTABLE_RENDERINGS: Dict[ExpectedCause, Set[RenderedCause]] = {
     ExpectedCause.SUCCESS: {RenderedCause.SUCCESS},
+    ExpectedCause.REFUSED_NO_MODEL: {RenderedCause.REFUSED_NO_MODEL},
     ExpectedCause.AUTH: {RenderedCause.AUTH},
     ExpectedCause.MODEL_NOT_FOUND: {RenderedCause.MODEL_NOT_FOUND},
     ExpectedCause.MODEL_ACCESS_DENIED: {RenderedCause.AUTH, RenderedCause.MODEL_NOT_FOUND},
     ExpectedCause.ENDPOINT: {RenderedCause.ENDPOINT, RenderedCause.REFUSED, RenderedCause.TIMEOUT},
+    ExpectedCause.POLICY_BLOCKED: {RenderedCause.POLICY_BLOCKED},
+    ExpectedCause.QUOTA: {RenderedCause.QUOTA},
 }
 
 # HTTP statuses a provider is expected to use for each injected cause. A status
@@ -184,9 +189,21 @@ def grade_cell(
             findings.append(
                 _finding(
                     FindingKind.STATUS_ANOMALY,
-                    Severity.HIGH,
+                    # An exhausted balance is an operations fact, not a product
+                    # defect — the same rule the module already applies to a dead
+                    # key ("the owner expects to re-provision; that must not fail
+                    # the suite"). The classifier itself proves the distinction:
+                    # a QUOTA rendering means the provider named billing, so the
+                    # column is untestable, not suspect. Anything else failing
+                    # the happy path stays HIGH, because then the column really
+                    # is suspect.
+                    Severity.INFO if verdict and verdict.rendered_cause is RenderedCause.QUOTA else Severity.HIGH,
                     cell,
-                    "Baseline call failed — this provider's whole column is suspect",
+                    (
+                        "Baseline untestable — account is out of credit; top up and re-run this provider"
+                        if verdict and verdict.rendered_cause is RenderedCause.QUOTA
+                        else "Baseline call failed — this provider's whole column is suspect"
+                    ),
                     "The valid-key/cheap-model happy path did not succeed. Until this passes, every other "
                     "finding for this provider may be an artefact of a stale key, an exhausted balance, or "
                     f"a decommissioned model rather than a product defect. Provider note: "
@@ -232,6 +249,33 @@ def grade_cell(
 
     if verdict.rendered_cause is RenderedCause.UNCLASSIFIED:
         findings.append(_unclassified_finding(cell, truth, rendered, verdict))
+        return findings
+
+    # An out-of-credit account answers EVERY completion with a billing error,
+    # whatever fault the cell injected — the provider never evaluates the model.
+    # The rendering is TRUE (the account is out of credit; the message says so
+    # and names billing, not the key), so grading it as "misleading" would
+    # punish a correct diagnosis. It is also not a pass: the injected fault went
+    # untested. Report exactly that.
+    if (
+        verdict.rendered_cause is RenderedCause.QUOTA
+        and cell.expected_cause not in (ExpectedCause.QUOTA, ExpectedCause.UNKNOWN)
+        and cell.credential is CredentialMode.VALID
+    ):
+        findings.append(
+            _finding(
+                FindingKind.STATUS_ANOMALY,
+                Severity.INFO,
+                cell,
+                f"Cell untestable: {cell.provider} account is out of credit, so the injected "
+                f"'{cell.expected_cause.value}' fault never reached evaluation",
+                "The provider rejects every completion at billing before looking at the model. "
+                "The rendered message is correct for what actually happened; the injection "
+                "requires a funded account to grade. Top up and re-run this provider.",
+                truth=truth,
+                rendered=rendered,
+            )
+        )
         return findings
 
     acceptable = _ACCEPTABLE_RENDERINGS.get(cell.expected_cause, set())
@@ -315,7 +359,13 @@ def fabrication_findings(
     """Findings specific to the OMITTED-model injection."""
     if cell.model_selector is not ModelSelector.OMITTED:
         return []
-    substituted = outcome.effective_model or fabricated_model_for(cell.provider)
+    # The product no longer substitutes — a model-less request is refused before
+    # any network I/O, and effective_model is None. These findings stay armed:
+    # they fire again the moment an outcome names a model nobody chose, which is
+    # exactly the regression they exist to catch.
+    if outcome.effective_model is None:
+        return []
+    substituted = outcome.effective_model
     in_catalogue = substituted in set(catalogue_ids)
     severity = Severity.HIGH if in_catalogue else Severity.CRITICAL
     return [
@@ -537,7 +587,20 @@ def static_table_audit() -> List[CellResult]:
         )
 
     # 3. The model the wizard fabricates when the user picks none.
-    for provider_id in sorted(PROVIDERS):
+    #
+    # GATED ON THE PRODUCT SOURCE. The fabrications were deleted in Lane A —
+    # verify_product_constants() now asserts each is ABSENT from
+    # llm_validation.py — so while that holds there is nothing to audit here.
+    # The audit re-arms by itself the moment a fabricated default reappears in
+    # the source, which is the regression it exists to catch; auditing the
+    # HISTORICAL ids against today's catalogue while the product no longer
+    # sends them would report criticals about code that does not exist.
+    from .product_bridge import verify_product_constants
+
+    fabrications_removed = all(
+        matches for name, _value, matches in verify_product_constants() if name.startswith("FABRICATED_MODEL_")
+    )
+    for provider_id in sorted(PROVIDERS) if not fabrications_removed else []:
         substituted = fabricated_model_for(provider_id)
         provider_models = capabilities.get_provider_models(provider_id) or {}
         info = provider_models.get(substituted)

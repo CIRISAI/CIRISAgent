@@ -176,3 +176,129 @@ class TestFaultCodeNeverGoesStale:
                 f"The health ladder reads them together; refreshing one leaves a stale remedy on screen. "
                 f"fault-code assignments are at {code_lines}."
             )
+
+
+class TestEveryMintedAuthorityCanActuallyResolve:
+    """A gate nobody can pass is an outage, not a control.
+
+    Before this, no supported minting path issued a scope the F1 gate accepts:
+    setup authorities got read:any/write:any, OAuth authorities got the
+    `wa.resolve_deferral` PERMISSION (a different grammar — no colon, so it
+    names an action and no domain and grants nothing). Every non-ROOT
+    authority in production would have been refused every domain-tagged
+    deferral, i.e. F1 would have "closed" by breaking the human-resolution
+    path it exists to protect.
+    """
+
+    RESOURCE = "medical_defer_001"
+
+    def test_setup_minted_authority_scopes_pass_the_gate(self) -> None:
+        src = (REPO / "ciris_engine/logic/runtime/service_initializer.py").read_text()
+        assert '"resolve_deferral:any"' in src, "setup-created AUTHORITY must be minted with jurisdiction"
+        assert any(
+            scope_grants(s, "resolve_deferral", self.RESOURCE)
+            for s in ["read:any", "write:any", "resolve_deferral:any"]
+        )
+
+    def test_the_old_setup_scopes_alone_would_have_been_refused(self) -> None:
+        assert not any(
+            scope_grants(s, "resolve_deferral", self.RESOURCE) for s in ["read:any", "write:any"]
+        ), "this is why the mint had to change; if it ever passes, the grammar moved"
+
+    def test_the_wa_permission_is_not_a_scope(self) -> None:
+        assert scope_grants("wa.resolve_deferral", "resolve_deferral", self.RESOURCE) is False, (
+            "wa.resolve_deferral is an API permission, not a certificate scope. A bare scope "
+            "with no colon must not be read as 'therefore every domain'."
+        )
+
+    def test_oauth_minting_adds_the_scope_for_authority_only(self) -> None:
+        src = (REPO / "ciris_engine/logic/adapters/api/services/auth_service.py").read_text()
+        assert '"resolve_deferral:any"' in src
+        assert "WARole.AUTHORITY, WARole.ROOT" in src, "OBSERVER must not be granted deferral jurisdiction"
+
+
+class TestTheBackfillRestoresBreadthWithoutWideningAnyone:
+    def _holds(self, scopes: list) -> bool:
+        from ciris_engine.logic.services.infrastructure.authentication.service import (
+            AuthenticationService,
+        )
+
+        return AuthenticationService._holds_deferral_jurisdiction(scopes)
+
+    def test_pre_grammar_certificates_are_backfilled(self) -> None:
+        assert self._holds(["read:any", "write:any"]) is False
+        assert self._holds(["wa.resolve_deferral", "wa.mint"]) is False
+
+    def test_a_deliberately_narrow_certificate_is_left_alone(self) -> None:
+        """The important half.
+
+        A grant-based check would ask scope_grants(s, "resolve_deferral", probe)
+        and get False for resolve_deferral:medical_* against any probe outside
+        medical — then widen to :any the exact certificates an operator
+        deliberately narrowed. The check is structural for that reason.
+        """
+        assert self._holds(["resolve_deferral:medical_*"]) is True
+        assert self._holds(["resolve_deferral:org/acme/*"]) is True
+        assert self._holds(["resolve_deferral:any"]) is True
+        assert self._holds(["*"]) is True
+
+    def test_malformed_scopes_do_not_count_as_jurisdiction(self) -> None:
+        assert self._holds(["resolve_deferral:"]) is False
+        assert self._holds(["   "]) is False
+        assert self._holds([]) is False
+
+    def test_only_authority_is_backfilled(self) -> None:
+        import inspect
+
+        from ciris_engine.logic.services.infrastructure.authentication.service import (
+            AuthenticationService,
+        )
+
+        src = inspect.getsource(AuthenticationService._backfill_deferral_scopes)
+        assert "WARole.AUTHORITY" in src, "ROOT bypasses the gate; OBSERVER must not resolve deferrals"
+
+
+class TestOAuthAuthoritiesAreLookedUpByCertificate:
+    """AuthContext.user_id is not the certificate id for ingress auth."""
+
+    @pytest.mark.asyncio
+    async def test_an_oauth_identity_maps_to_its_certificate(self) -> None:
+        from types import SimpleNamespace
+
+        from ciris_engine.logic.adapters.api.routes.wa import resolve_certificate_id
+
+        async def _by_oauth(provider: str, external_id: str):
+            assert (provider, external_id) == ("google", "12345")
+            return SimpleNamespace(wa_id="wa-2026-08-21-ABC123")
+
+        request = SimpleNamespace(
+            app=SimpleNamespace(state=SimpleNamespace(authentication_service=SimpleNamespace(get_wa_by_oauth=_by_oauth)))
+        )
+        resolved = await resolve_certificate_id(request, SimpleNamespace(user_id="google:12345"))
+        assert resolved == "wa-2026-08-21-ABC123"
+
+    @pytest.mark.asyncio
+    async def test_a_password_user_already_carries_the_certificate_id(self) -> None:
+        from types import SimpleNamespace
+
+        from ciris_engine.logic.adapters.api.routes.wa import resolve_certificate_id
+
+        request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace()))
+        resolved = await resolve_certificate_id(request, SimpleNamespace(user_id="wa-2026-08-21-ABC123"))
+        assert resolved == "wa-2026-08-21-ABC123"
+
+    @pytest.mark.asyncio
+    async def test_an_unmappable_identity_is_returned_unchanged(self) -> None:
+        """So the gate reports WA_NOT_FOUND naming it, rather than inventing a certificate."""
+        from types import SimpleNamespace
+
+        from ciris_engine.logic.adapters.api.routes.wa import resolve_certificate_id
+
+        async def _none(provider: str, external_id: str):
+            return None
+
+        request = SimpleNamespace(
+            app=SimpleNamespace(state=SimpleNamespace(authentication_service=SimpleNamespace(get_wa_by_oauth=_none)))
+        )
+        resolved = await resolve_certificate_id(request, SimpleNamespace(user_id="google:unknown"))
+        assert resolved == "google:unknown"

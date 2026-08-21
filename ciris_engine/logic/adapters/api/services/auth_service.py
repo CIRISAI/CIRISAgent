@@ -1400,20 +1400,40 @@ class APIAuthService:
         """Create email for WA certificate."""
         return user_name + "@ciris.local" if "@" not in user_name else user_name
 
-    def _get_wa_permissions(self, user: User) -> List[str]:
-        """Get permissions for WA certificate."""
+    def _get_wa_permissions(self, user: User, wa_role: Optional[WARole] = None) -> List[str]:
+        """Get permissions for WA certificate.
+
+        Two grammars live in this list and both are load-bearing:
+
+        * ``wa.<thing>`` are API PERMISSIONS, checked by the route decorators.
+        * ``<action>:<resource-pattern>`` are certificate SCOPES, checked by
+          ``scope_grants`` when a resource is named.
+
+        ``wa.resolve_deferral`` is the first kind and grants no jurisdiction —
+        it has no colon, so ``scope_grants`` treats it as naming an action and
+        no domain, which is deliberate (a bare scope must not be read as "every
+        domain"). An authority holding only that was refused every
+        domain-tagged deferral by the F1 gate. AUTHORITY therefore also gets the
+        scope-grammar form.
+        """
         base_permissions = self.get_permissions_for_role(user.api_role)
-        return base_permissions + [
+        permissions = base_permissions + [
             "wa.resolve_deferral",  # Critical for deferral resolution
             "wa.mint",  # Allow WA to mint others
         ]
+        if wa_role in (WARole.AUTHORITY, WARole.ROOT):
+            # `:any` is the status quo ante — role-only breadth — made explicit
+            # so an operator can narrow it (resolve_deferral:medical_*) instead
+            # of it being inferred by the gate.
+            permissions.append("resolve_deferral:any")
+        return permissions
 
     async def _create_new_wa_for_oauth_user(self, user: User, user_id: str, wa_role: WARole) -> str:
         """Create new WA certificate for OAuth user and return the wa_id."""
         if not self._auth_service:
             raise ValueError("Authentication service not available")
 
-        wa_permissions = self._get_wa_permissions(user)
+        wa_permissions = self._get_wa_permissions(user, wa_role)
 
         # Create WA certificate with proper wa_id format, but link to OAuth user
         import json

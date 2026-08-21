@@ -1750,6 +1750,60 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         # Verify the signature
         return self._verify_signature(canonical_json.encode("utf-8"), task.signature, wa.pubkey)
 
+    @staticmethod
+    def _holds_deferral_jurisdiction(scopes: List[str]) -> bool:
+        """Does any held scope name `resolve_deferral` (or everything) as its action?
+
+        A STRUCTURAL check, not a grant check. Asking `scope_grants(s,
+        "resolve_deferral", <probe>)` would report False for a legitimately
+        narrow `resolve_deferral:medical_*` against any probe outside that
+        domain, and the backfill would then widen exactly the certificates an
+        operator deliberately narrowed. Presence of the action half is the
+        question here; whether it grants THIS resource is the gate's job.
+        """
+        for raw in scopes:
+            scope = (raw or "").strip()
+            if not scope:
+                continue
+            if scope == "*":
+                return True
+            action, sep, pattern = scope.partition(":")
+            if sep and pattern.strip() and action.strip() in ("resolve_deferral", "*"):
+                return True
+        return False
+
+    async def _backfill_deferral_scopes(self) -> None:
+        """Give pre-existing AUTHORITY certificates the scope the F1 gate needs.
+
+        routes/wa.py refuses a domain-tagged deferral unless the resolving WA
+        holds `resolve_deferral:<pattern>`. No minting path issued that before
+        2.9.29 — setup authorities got `read:any, write:any` and OAuth
+        authorities got the `wa.resolve_deferral` PERMISSION, which is a
+        different grammar and grants no jurisdiction. Without this backfill,
+        turning the gate on would 403 every authority that already exists,
+        i.e. it would close a security finding by breaking the human-resolution
+        path for everyone who currently uses it.
+
+        `:any` restores exactly the breadth these certificates already had
+        under role-only authorization — this widens nobody. Certificates that
+        already name the action (including narrow ones) are left alone.
+        """
+        try:
+            for wa in await self._list_all_was():
+                if wa.role != WARole.AUTHORITY:
+                    continue  # ROOT bypasses the scope gate; OBSERVER must not resolve
+                if self._holds_deferral_jurisdiction(list(wa.scopes or [])):
+                    continue
+                scopes = list(wa.scopes or []) + ["resolve_deferral:any"]
+                await self.update_wa(wa.wa_id, scopes_json=json.dumps(scopes))
+                logger.info(
+                    "Backfilled resolve_deferral:any onto AUTHORITY %s — it predates the "
+                    "scope grammar and would otherwise be refused every domain-tagged deferral",
+                    wa.wa_id,
+                )
+        except Exception as e:  # pragma: no cover - never block startup on a backfill
+            logger.warning("Could not backfill deferral scopes: %s", e, exc_info=True)
+
     async def bootstrap_if_needed(self) -> None:
         """Bootstrap the system if no WAs exist."""
         was = await self._list_all_was()
@@ -1791,6 +1845,11 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 await self._create_system_wa_certificate(found_root_wa.wa_id)
             else:
                 logger.warning("No root WA certificate found - cannot create system WA")
+
+        # Certificates minted before the scope grammar existed would be refused
+        # every domain-tagged deferral by the F1 gate. Restore the breadth they
+        # already had, without widening anyone who named the action explicitly.
+        await self._backfill_deferral_scopes()
 
     async def _create_channel_token_for_adapter(self, adapter_type: str, adapter_info: JSONDict) -> str:
         """Create a channel token for an adapter."""

@@ -1686,7 +1686,17 @@ This directory contains critical cryptographic keys for the CIRIS system.
                 wa_cert = await self.auth_service.create_wa(
                     name=username,
                     email=f"{username}@local",  # Placeholder email for local users
-                    scopes=["read:any", "write:any"] if wa_role == WARole.AUTHORITY else ["read:any"],
+                    # AUTHORITY needs jurisdiction in the SCOPE grammar, not just the
+                    # role: routes/wa.py checks resolve_deferral:<pattern> before letting
+                    # a domain-tagged deferral be resolved (F1). Minting without it made
+                    # every setup-created authority a 403 on exactly those deferrals.
+                    # `:any` is the status quo ante — role-only breadth — written down so
+                    # it can be NARROWED to e.g. resolve_deferral:medical_* deliberately.
+                    scopes=(
+                        ["read:any", "write:any", "resolve_deferral:any"]
+                        if wa_role == WARole.AUTHORITY
+                        else ["read:any"]
+                    ),
                     role=wa_role,
                 )
 

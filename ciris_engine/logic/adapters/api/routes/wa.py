@@ -65,6 +65,45 @@ def get_wa_service(request: Request) -> WiseAuthorityServiceProtocol:
     return cast(WiseAuthorityServiceProtocol, request.app.state.wise_authority_service)
 
 
+async def resolve_certificate_id(request: Request, auth: AuthContext) -> str:
+    """Map the authenticated caller onto the WA CERTIFICATE id.
+
+    These are not the same identifier, and the jurisdiction gate needs the
+    certificate one because ``WiseAuthorityService.authorize()`` resolves it
+    with an exact ``get_wa()`` lookup.
+
+    * Password / API-key auth already carries it: ``_handle_password_auth``
+      sets ``user_id=user.wa_id``.
+    * Ingress / OAuth auth does NOT. ``dependencies/auth.py`` builds
+      ``user_id`` as ``"{provider}:{external_id}"`` while the certificate is
+      stored under a generated ``wa-YYYY-MM-DD-XXXXXX`` id and merely LINKED
+      to that OAuth identity via ``oauth_provider`` / ``oauth_external_id``.
+      Passing the external identity straight through made every OAuth
+      authority a ``WA_NOT_FOUND`` and therefore a 403 on every domain-tagged
+      deferral.
+
+    Returns the caller's id unchanged when it cannot be mapped: the gate then
+    reports WA_NOT_FOUND naming that id, which is diagnosable, rather than
+    this helper inventing a certificate.
+    """
+    user_id = (auth.user_id or "").strip()
+    if ":" not in user_id:
+        return user_id
+
+    provider, _, external_id = user_id.partition(":")
+    auth_service = getattr(request.app.state, "authentication_service", None)
+    if auth_service is None or not hasattr(auth_service, "get_wa_by_oauth"):
+        return user_id
+
+    try:
+        cert = await auth_service.get_wa_by_oauth(provider, external_id)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("Could not resolve WA certificate for %s: %s", user_id, exc)
+        return user_id
+
+    return str(cert.wa_id) if cert is not None else user_id
+
+
 # TypeVar for generic response wrapper (Python 3.10 compatible)
 _T = TypeVar("_T", bound=BaseModel)
 
@@ -230,10 +269,13 @@ async def resolve_deferral(
 
     if _domain:
         _scope_resource = f"{str(_domain).lower()}_{deferral_id}"
-        _decision = await wa_service.authorize(auth.user_id, "resolve_deferral", _scope_resource)
+        _wa_id = await resolve_certificate_id(request, auth)
+        _decision = await wa_service.authorize(_wa_id, "resolve_deferral", _scope_resource)
         if not _decision.allowed:
             logger.warning(
-                "JURISDICTION DENIED: %s may not resolve %s deferral %s (%s; required scope %s)",
+                "JURISDICTION DENIED: %s (caller %s) may not resolve %s deferral %s "
+                "(%s; required scope %s)",
+                _wa_id,
                 auth.user_id,
                 _domain,
                 deferral_id,

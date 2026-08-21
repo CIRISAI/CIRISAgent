@@ -152,15 +152,22 @@ def _build_ciris_proxy_metadata(
         )
 
 
-def _build_openrouter_provider_config() -> OpenRouterProviderConfig:
-    """Build provider config for OpenRouter requests from environment variables.
+def _build_openrouter_provider_config(require_zero_data_retention: bool = True) -> OpenRouterProviderConfig:
+    """Build provider config for OpenRouter requests.
+
+    Args:
+        require_zero_data_retention: when True, ask OpenRouter to route only to
+            providers that do not retain or train on the request. Passed IN by
+            the caller from configuration rather than read from a constant here,
+            because a retention policy the user cannot see or change is the
+            defect this parameter exists to remove.
 
     Environment variables:
         OPENROUTER_PROVIDER_ORDER: comma-separated preferred providers
         OPENROUTER_IGNORE_PROVIDERS: comma-separated providers to skip
 
     Returns:
-        OpenRouterProviderConfig with provider ordering/ignore preferences
+        OpenRouterProviderConfig with routing preferences and the data policy
     """
     order: List[str] = []
     ignore: List[str] = []
@@ -173,9 +180,16 @@ def _build_openrouter_provider_config() -> OpenRouterProviderConfig:
     if ignore_providers:
         ignore = [p.strip() for p in ignore_providers.split(",") if p.strip()]
 
-    config = OpenRouterProviderConfig(order=order, ignore=ignore)
-    if order or ignore:
-        logger.info(f"[OPENROUTER] Using provider config: order={order}, ignore={ignore}")
+    config = OpenRouterProviderConfig(
+        order=order,
+        ignore=ignore,
+        data_collection="deny" if require_zero_data_retention else None,
+    )
+    if order or ignore or config.data_collection:
+        logger.info(
+            f"[OPENROUTER] Using provider config: order={order}, ignore={ignore}, "
+            f"data_collection={config.data_collection}"
+        )
 
     return config
 
@@ -725,6 +739,14 @@ class OpenAIConfig(BaseModel):
     timeout_seconds: int = Field(default=60)  # Increased from 5s for live LLM APIs
     # Provider selection - defaults to openai for backward compatibility
     provider: LLMProvider = Field(default=LLMProvider.OPENAI)
+    require_zero_data_retention: bool = Field(
+        default=True,
+        description=(
+            "Only route to providers that do not retain or train on request data. "
+            "Default ON: the safe posture must be what you get by NOT deciding. "
+            "Carried onto the wire as OpenRouter's provider.data_collection='deny'."
+        ),
+    )
 
     model_config = ConfigDict(protected_namespaces=())
 
@@ -1902,9 +1924,17 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             metadata = _build_ciris_proxy_metadata(task_id, thought_id, retry_state, resp_model_name)
             extra_body["metadata"] = metadata.model_dump()
         elif "openrouter.ai" in base_url:
-            provider_config = _build_openrouter_provider_config()
-            if provider_config.order or provider_config.ignore:
-                extra_body["provider"] = provider_config.model_dump(exclude_defaults=True)
+            provider_config = _build_openrouter_provider_config(
+                require_zero_data_retention=self.openai_config.require_zero_data_retention
+            )
+            # `data_collection` MUST be in this condition. It gates whether the
+            # provider block is emitted at all, so omitting it here would let the
+            # field exist on the model, be set from config, and still never reach
+            # the wire — a promise that type-checks, tests green on the config
+            # object, and is absent from the request. That is precisely the shape
+            # of the original defect, one layer further in.
+            if provider_config.order or provider_config.ignore or provider_config.data_collection:
+                extra_body["provider"] = provider_config.model_dump(exclude_defaults=True, exclude_none=True)
         elif self._is_local_endpoint(base_url):
             logger.debug(
                 f"[LOCAL_LLM] Disabled model reasoning for model={self.model_name} "

@@ -241,10 +241,33 @@ class LLMErrorContext(BaseModel):
 
 
 class OpenRouterProviderConfig(BaseModel):
-    """Configuration for OpenRouter provider routing preferences."""
+    """Configuration for OpenRouter provider routing preferences.
+
+    ``data_collection`` is the zero-data-retention control, and it is the field
+    whose ABSENCE caused the incident this was added for. OpenRouter routes a
+    request onward to third-party providers, and whether those providers may
+    retain or train on the payload is decided per request by this preference.
+
+    Before this field existed the agent sent no data policy at all, so the only
+    place retention could be constrained was the user's OpenRouter ACCOUNT
+    settings — out of band, invisible to the client, and unverifiable by it.
+    When those settings filtered every endpoint for a model, OpenRouter answered
+    404 "No endpoints available matching your guardrail restrictions and data
+    policy", which the product then reported as a network problem.
+
+    A retention guarantee the client never transmits is not a guarantee. It is
+    an assumption about someone else's configuration.
+    """
 
     order: List[str] = Field(default_factory=list, description="Preferred provider order")
     ignore: List[str] = Field(default_factory=list, description="Providers to skip")
+    data_collection: Optional[Literal["deny", "allow"]] = Field(
+        default=None,
+        description=(
+            "'deny' routes only to providers that do not retain or train on request data. "
+            "None omits the preference entirely, deferring to the account's own policy."
+        ),
+    )
 
     model_config = ConfigDict(extra="forbid", defer_build=True)
 

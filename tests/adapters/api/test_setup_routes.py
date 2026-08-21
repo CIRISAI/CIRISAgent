@@ -265,7 +265,10 @@ class TestValidateLLMEndpoint:
                     "provider": "openai",
                     "api_key": "sk-test123",
                     "base_url": None,
-                    "model": None,
+                    # A model is REQUIRED now: the wizard used to substitute
+                    # gpt-3.5-turbo when this was None and report success for a
+                    # model the user never chose (#1078-class, setup path).
+                    "model": "gpt-4o",
                 },
             )
 
@@ -273,6 +276,20 @@ class TestValidateLLMEndpoint:
             data = response.json()["data"]
             assert data["valid"] is True
             assert "successful" in data["message"].lower()
+
+    @pytest.mark.asyncio
+    @patch("ciris_engine.logic.adapters.api.routes.setup.helpers.is_first_run", return_value=True)
+    @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run", return_value=True)
+    async def test_validate_without_a_model_is_refused(self, mock_dep_first_run, mock_helpers_first_run, client):
+        """No model, no validation — and no network call either."""
+        response = client.post(
+            "/v1/setup/validate-llm",
+            json={"provider": "openai", "api_key": "sk-test123", "base_url": None, "model": None},
+        )
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()["data"]
+        assert data["valid"] is False
+        assert "no model selected" in data["message"].lower()
 
     @pytest.mark.asyncio
     @patch("ciris_engine.logic.adapters.api.routes.setup.helpers.is_first_run", return_value=True)
@@ -285,7 +302,8 @@ class TestValidateLLMEndpoint:
                 "provider": "openai",
                 "api_key": "",
                 "base_url": None,
-                "model": None,
+                # a model is present so the KEY failure is what surfaces
+                "model": "gpt-4o",
             },
         )
 

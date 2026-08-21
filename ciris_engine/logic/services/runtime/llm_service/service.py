@@ -2065,6 +2065,16 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         """Handle authentication errors (401)."""
         self._track_error(e)
         self._total_errors += 1
+        # Record the fault HERE too. This handler is a SIBLING of `except
+        # Exception`, so it is matched first and never reaches
+        # _handle_general_exception — recording only there left the two most
+        # user-visible faults (a rejected key, a provider outage) invisible to
+        # the health ladder, and left a stale earlier code on screen: correct
+        # the model and then present a bad key, and the UI still says "change
+        # the model". _root_provider_fault returns "" when it cannot name the
+        # fault, which correctly falls back to the provider's own words.
+        self.last_error = _root_provider_error(e)
+        self.last_fault_code = _root_provider_fault(e)
         base_url = self.openai_config.base_url or ""
 
         if "ciris.ai" in base_url:
@@ -2090,6 +2100,16 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         """Handle provider-specific errors (connection, rate limit, internal server)."""
         self._track_error(e)
         self._total_errors += 1
+        # Record the fault HERE too. This handler is a SIBLING of `except
+        # Exception`, so it is matched first and never reaches
+        # _handle_general_exception — recording only there left the two most
+        # user-visible faults (a rejected key, a provider outage) invisible to
+        # the health ladder, and left a stale earlier code on screen: correct
+        # the model and then present a bad key, and the UI still says "change
+        # the model". _root_provider_fault returns "" when it cannot name the
+        # fault, which correctly falls back to the provider's own words.
+        self.last_error = _root_provider_error(e)
+        self.last_fault_code = _root_provider_fault(e)
 
         error_details = {
             "error_type": type(e).__name__,

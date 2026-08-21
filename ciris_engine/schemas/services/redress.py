@@ -328,9 +328,22 @@ class ActionRef(BaseModel):
 
     @property
     def identity_key(self) -> str:
-        """Stable key used to group redress records onto one action."""
-        if (self.audit_entry_id or "").strip():
-            return f"audit:{self.audit_entry_id}"
+        """Stable key used to group redress records onto one action.
+
+        ALWAYS the task/thought pair, never the audit id — even though the
+        audit anchor is the stronger reference. Both forms are valid ways to
+        name the same action: a redress raised from the audit chain carries
+        the anchor, while the task rows a query starts from often have only
+        the pair. Keying on whichever is present made those two spellings hash
+        apart, so a redress stored under `audit:...` was invisible to a lookup
+        holding `tt:...` and the action came back UNCHALLENGED — the one
+        answer this type exists to make impossible.
+
+        The pair is the identity every representation carries, so it is the
+        canonical one. The audit anchor is not discarded: it remains on the
+        model, `is_chain_anchored` still reports it, and it is what a verifier
+        checks. It is simply not the grouping key.
+        """
         return f"tt:{self.task_id}:{self.thought_id}"
 
 

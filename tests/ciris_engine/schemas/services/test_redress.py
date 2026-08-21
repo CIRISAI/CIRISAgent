@@ -255,7 +255,10 @@ class TestLinkage:
 
     def test_chain_anchoring_is_visible(self) -> None:
         assert TARGET.is_chain_anchored is True
-        assert TARGET.identity_key == "audit:ae-original"
+        # The task/thought pair, NOT the audit anchor: see
+        # TestTheStrongAndWeakRefsAgree below for why keying on the anchor
+        # made the same action hash two different ways.
+        assert TARGET.identity_key == "tt:task-1:th-1"
         assert ActionRef(audit_entry_id="ae-x", task_id="t", thought_id="h").is_chain_anchored is False
 
     def test_hash_without_an_entry_id_references_nothing(self) -> None:
@@ -286,7 +289,7 @@ class TestLinkage:
         state = resolve_effective_state(TARGET, [record])
         assert state.standing is ActionStanding.SUPERSEDED
         assert state.compensating_action is not None
-        assert state.compensating_action.action.identity_key == "audit:ae-correction"
+        assert state.compensating_action.action.identity_key == "tt:task-1:th-2"
 
     def test_undelivered_correction_is_recorded_as_undelivered(self) -> None:
         """Absent or failed delivery is never rendered as silent success."""
@@ -429,7 +432,7 @@ class TestRecordingShape:
         """No new storage shape, and no new table — the append-only chain."""
         event = redress_audit_event_data(make_record())
         assert event.action == "redress_retracted"
-        assert event.entity_id == "audit:ae-original"
+        assert event.entity_id == "tt:task-1:th-1"
         assert event.resource == "ae-original"
         assert event.reason == "factual_error"
         assert event.actor == WA_ID
@@ -487,3 +490,45 @@ class TestRecordingShape:
         assert redress_authorization_payload(record, "2026-08-20T10:00:00+00:00") != redress_authorization_payload(
             record, "2026-08-20T11:00:00+00:00"
         )
+
+
+class TestTheStrongAndWeakRefsAgree:
+    """Both spellings of one action must group to the same key.
+
+    ActionRef deliberately accepts two identities: the audit anchor (strong,
+    content-addressed) and the (task_id, thought_id) pair (weak). That is not a
+    convenience — action_dispatcher.py logs the audit entry_id and DISCARDS it
+    rather than writing it onto the task or thought row, so a lookup starting
+    from an existing task row can only ever construct the weak form.
+
+    identity_key used to switch on whichever was present. A redress recorded
+    from the audit chain therefore hashed as `audit:...` while the only ref a
+    task-row query could build hashed as `tt:...`, so the two never met and the
+    action came back UNCHALLENGED — with a redress sitting right there. That is
+    the single answer this type exists to make impossible.
+    """
+
+    def test_anchored_and_unanchored_refs_to_one_action_share_a_key(self) -> None:
+        from ciris_engine.schemas.services.redress import ActionRef
+
+        strong = ActionRef(
+            audit_entry_id="ae-1", audit_entry_hash="h-1", task_id="task-1", thought_id="th-1"
+        )
+        weak = ActionRef(task_id="task-1", thought_id="th-1")
+        assert strong.identity_key == weak.identity_key
+
+    def test_different_actions_still_differ(self) -> None:
+        from ciris_engine.schemas.services.redress import ActionRef
+
+        a = ActionRef(task_id="task-1", thought_id="th-1")
+        b = ActionRef(task_id="task-1", thought_id="th-2")
+        assert a.identity_key != b.identity_key
+
+    def test_the_anchor_is_kept_even_though_it_is_not_the_key(self) -> None:
+        from ciris_engine.schemas.services.redress import ActionRef
+
+        strong = ActionRef(
+            audit_entry_id="ae-1", audit_entry_hash="h-1", task_id="task-1", thought_id="th-1"
+        )
+        assert strong.is_chain_anchored is True
+        assert ActionRef(task_id="task-1", thought_id="th-1").is_chain_anchored is False

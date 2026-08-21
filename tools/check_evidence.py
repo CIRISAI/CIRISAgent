@@ -27,6 +27,7 @@ from __future__ import annotations
 import ast
 import csv
 import re
+import os
 import shutil
 import subprocess
 import sys
@@ -92,18 +93,28 @@ def resolve(pointer: str) -> str | None:
     return None
 
 
-def _issue_states(refs: set[str]) -> dict[str, str]:
+def _issue_states(refs: set[str]) -> tuple[dict[str, str], set[str]]:
     """Ask GitHub whether each ``REPO#issue`` is still open.
 
-    NETWORK-OPTIONAL BY DESIGN. Returns ``{}`` when `gh` is missing or
-    unauthenticated, which makes this check a CI-only reinforcement rather than a
-    local hard dependency. A developer without `gh` still gets the shape checks;
-    they simply do not get this one, and the summary line says so rather than
-    implying it ran.
+    Returns ``(states, unresolved)`` — and returning the second half is the
+    point. The first version returned only the states and swallowed every
+    failure, so a timeout, a rate limit, or an unauthenticated `gh` produced an
+    empty dict that the caller could not tell apart from "nothing to check".
+    With CI presenting this as the enforcement for stale compliance gaps, a
+    total outage of the lookup read as a pass. That is the same defect this
+    script exists to catch, one level up: a claim (CI checked the issues) that
+    has drifted from the code (CI checked nothing).
+
+    Network-optional stays available for a developer without `gh` — the caller
+    decides what an unresolved ref means, and only enforces it where a token
+    was supplied.
     """
-    if not refs or shutil.which("gh") is None:
-        return {}
+    if not refs:
+        return {}, set()
+    if shutil.which("gh") is None:
+        return {}, set(refs)
     states: dict[str, str] = {}
+    unresolved: set[str] = set()
     for ref in sorted(refs):
         repo, _, num = ref.partition("#")
         try:
@@ -113,11 +124,14 @@ def _issue_states(refs: set[str]) -> dict[str, str]:
                 text=True,
                 timeout=20,
             )
-        except Exception:  # pragma: no cover - a consistency check must not break the build on flake
+        except Exception:  # timeout, gh crash — record it, never silently skip
+            unresolved.add(ref)
             continue
         if out.returncode == 0 and out.stdout.strip():
             states[ref] = out.stdout.strip().upper()
-    return states
+        else:
+            unresolved.add(ref)
+    return states, unresolved
 
 
 def main() -> int:
@@ -180,16 +194,37 @@ def main() -> int:
     # F7's recommendation was to put compliance text under exact-pin consistency
     # checks so claims cannot drift BEHIND or AHEAD of code. This is the behind
     # half; `resolve()` above is the ahead half.
-    states = _issue_states(open_refs)
-    if states:
-        for ref, state in sorted(states.items()):
-            if state != "OPEN":
-                errors.append(
-                    f"[{ref}]: row declares status=open, but the issue is {state}. "
-                    "Either the gap closed and the row should move to impl/staged, or the "
-                    "issue was closed prematurely."
-                )
-    checked_note = f", {len(states)} issue states checked" if states else ", issue states NOT checked (gh unavailable)"
+    states, unresolved = _issue_states(open_refs)
+    for ref, state in sorted(states.items()):
+        if state != "OPEN":
+            errors.append(
+                f"[{ref}]: row declares status=open, but the issue is {state}. "
+                "Either the gap closed and the row should move to impl/staged, or the "
+                "issue was closed prematurely."
+            )
+
+    # Where a token was supplied, an UNCHECKED reference is a failure, not a
+    # silent omission. Partial success is the subtler half: one resolvable issue
+    # used to mask any number of unresolvable ones, so the summary said "checked"
+    # and meant "checked some".
+    enforcing = bool(os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN"))
+    if unresolved and enforcing:
+        for ref in sorted(unresolved):
+            errors.append(
+                f"[{ref}]: declared status=open but its issue state could not be read "
+                "(gh timed out, is unauthenticated, or the issue is inaccessible). A gate "
+                "that cannot check must not report a pass."
+            )
+
+    if unresolved and not enforcing:
+        checked_note = (
+            f", {len(states)}/{len(open_refs)} issue states checked "
+            f"({len(unresolved)} unreadable — no GH_TOKEN, not enforced)"
+        )
+    elif open_refs:
+        checked_note = f", {len(states)}/{len(open_refs)} issue states checked"
+    else:
+        checked_note = ", no declared-open rows to check"
 
     for e in errors:
         print(f"FAIL: {e}", file=sys.stderr)

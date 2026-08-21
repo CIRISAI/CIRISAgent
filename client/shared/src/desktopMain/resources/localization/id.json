@@ -99,7 +99,19 @@
     "success": "Berhasil",
     "all_operational": "Semua sistem berjalan normal",
     "llm_provider_circuit_open": "Kegagalan berulang pada {model} di {provider} — pemutus sirkuit terbuka, sehingga penyedia ini tidak lagi dipanggil. Periksa kunci API dan modelnya di Pengaturan LLM.",
-    "llm_all_circuits_open": "Semua pemutus sirkuit LLM terbuka — tidak ada penyedia LLM yang berfungsi ({named}). Periksa penyedia, kunci API, dan model Anda di Pengaturan LLM."
+    "llm_all_providers_failed": "Semua penyedia LLM gagal. Tambahkan penyedia yang berfungsi di Pengaturan LLM — sistem akan mencoba lagi secara otomatis setiap {seconds} detik.",
+    "llm_all_providers_failed_observer": "Semua penyedia LLM gagal, sehingga agen tidak dapat menjawab. Administrator perlu menambahkan penyedia yang berfungsi. Sistem akan mencoba lagi secara otomatis setiap {seconds} detik.",
+    "llm_key_rejected": "{provider} menolak kunci API yang digunakan untuk “{model}”. Buka Pengaturan LLM dan perbarui kuncinya.",
+    "llm_key_rejected_observer": "{provider} menolak kunci API yang digunakan untuk “{model}”. Administrator perlu memperbaruinya di Pengaturan LLM.",
+    "llm_model_not_found": "{provider} tidak memiliki model “{model}”. Buka Pengaturan LLM dan pilih model yang didukungnya.",
+    "llm_model_not_found_observer": "{provider} tidak memiliki model “{model}”. Administrator perlu menggantinya di Pengaturan LLM.",
+    "llm_provider_failed": "Penyedia LLM {role} ({provider} / {model}) gagal: {detail}",
+    "llm_providers_unhealthy": "Tidak ada penyedia LLM yang merespons. Buka Pengaturan LLM untuk memeriksa penyedia, kunci, dan model Anda.",
+    "llm_providers_unhealthy_detail": "Tidak ada penyedia LLM yang merespons. {detail} Buka Pengaturan LLM untuk memperbaikinya.",
+    "llm_providers_unhealthy_detail_observer": "Tidak ada penyedia LLM yang merespons, sehingga agen tidak dapat menjawab. {detail} Administrator perlu memperbaikinya di Pengaturan LLM.",
+    "llm_providers_unhealthy_observer": "Tidak ada penyedia LLM yang merespons, sehingga agen tidak dapat menjawab. Administrator perlu memeriksa penyedia, kunci, dan model.",
+    "no_llm_provider": "Belum ada penyedia LLM yang dikonfigurasi. Tambahkan satu di Pengaturan LLM untuk mengaktifkan fitur AI.",
+    "no_llm_provider_observer": "Belum ada penyedia LLM yang dikonfigurasi, sehingga agen tidak dapat menjawab. Administrator perlu menambahkannya."
   },
   "prompts": {
     "dma": {

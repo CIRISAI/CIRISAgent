@@ -575,3 +575,54 @@ class TestPromotionCarriesJurisdiction:
 
         await svc._update_existing_wa("wa-2026-08-21-ABC123", WARole.OBSERVER)
         assert captured["permissions"] is None
+
+
+class TestReadingRawContextNeverHardFails:
+    """get_task_raw_context must degrade, because its caller used not to need a DB.
+
+    Before the lost-race repair existed, the timer path read an attribute off an
+    already-loaded Task and touched no database. Routing that read through
+    persistence widened its reach: `_get_engine()` RAISES when persistence is
+    not bootstrapped, and it was sitting OUTSIDE the helper's own try block — so
+    a function whose docstring promised "returns an empty dict when the context
+    is unreadable" propagated a RuntimeError instead.
+
+    CI caught it (8 shards, `persist engine not initialized`) where the local run
+    did not: run as a whole suite, some earlier test had already bootstrapped the
+    engine, so the ordering hid it. Sharded parallel execution did not.
+
+    "No engine" means "no marker visible" — the caller then falls back to the
+    status check exactly as it did before.
+    """
+
+    def test_an_unbootstrapped_engine_yields_no_marker_instead_of_raising(self, monkeypatch) -> None:
+        from ciris_engine.logic.persistence.models import tasks
+
+        def _boom():
+            raise RuntimeError("persist engine not initialized — call initialize_database() first")
+
+        monkeypatch.setattr(tasks, "_get_engine", _boom)
+        assert tasks.get_task_raw_context("task-1") == {}
+
+    def test_the_resolution_check_survives_it_too(self, monkeypatch) -> None:
+        from ciris_engine.logic.persistence.models import tasks
+        from ciris_engine.logic.services.lifecycle.scheduler.service import _has_recorded_resolution
+
+        def _boom():
+            raise RuntimeError("persist engine not initialized")
+
+        monkeypatch.setattr(tasks, "_get_engine", _boom)
+        assert _has_recorded_resolution("task-1") is False
+
+    def test_the_engine_lookup_is_inside_the_guard(self) -> None:
+        """Structural backstop: the raising call must not sit above the try."""
+        import inspect
+
+        from ciris_engine.logic.persistence.models.tasks import get_task_raw_context
+
+        src = inspect.getsource(get_task_raw_context)
+        body = src.split('"""', 2)[-1]
+        assert body.index("try:") < body.index("_get_engine()"), (
+            "_get_engine() raises; hoisting it above the try turns a degradable read into a "
+            "hard failure for every caller that has no bootstrapped database."
+        )

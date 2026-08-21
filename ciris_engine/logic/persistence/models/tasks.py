@@ -298,11 +298,19 @@ def get_task_raw_context(task_id: str) -> Dict[str, Any]:
     unreadable — callers treat "no marker" as "not answered", which is the
     conservative direction for every current caller.
     """
-    engine = _get_engine()
     try:
+        # _get_engine() RAISES when persistence is not bootstrapped, so it has to
+        # be inside the guard, not above it. Before this helper existed the
+        # caller read an attribute off an already-loaded Task and touched no
+        # database at all; leaving the lookup unguarded turned a path that never
+        # needed persistence into one that hard-fails without it — which is a
+        # regression in reach, not just in tests. "No engine" means "no marker
+        # visible", and the caller then falls back to the status check exactly
+        # as it did before.
+        engine = _get_engine()
         raw = engine.task_get(task_id)
     except Exception as e:
-        logger.exception(f"Failed to read raw context for task {task_id}: {e}")
+        logger.debug(f"Raw context unavailable for task {task_id}: {e}")
         return {}
     if raw is None:
         return {}

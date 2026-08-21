@@ -99,7 +99,19 @@
     "success": "Àṣeyọrí",
     "all_operational": "Gbogbo ètò ń ṣiṣẹ́ dáradára",
     "llm_provider_circuit_open": "{model} ní {provider} ti kùnà léraléra — adènà ìyíká ti ṣí, nítorí náà a kò tún ń rán ìbéèrè sí olùpèsè yìí mọ́. Ṣàyẹ̀wò kọ́kọ́rọ́ àti àwòṣe rẹ̀ nínú Àwọn ètò LLM.",
-    "llm_all_circuits_open": "Gbogbo àwọn adènà ìyíká LLM ti ṣí — kò sí olùpèsè LLM tí ó ń ṣiṣẹ́ ({named}). Ṣàyẹ̀wò olùpèsè, kọ́kọ́rọ́ àti àwòṣe rẹ nínú Àwọn ètò LLM."
+    "llm_all_providers_failed": "Gbogbo àwọn olùpèsè LLM ti kùnà. Ẹ fi olùpèsè tó ń ṣiṣẹ́ kún ní Àwọn ètò LLM — ẹ̀rọ náà máa ń tún gbìyànjú láìfọwọ́yí ní gbogbo ìṣẹ́jú-àáyá {seconds}.",
+    "llm_all_providers_failed_observer": "Gbogbo àwọn olùpèsè LLM ti kùnà, nítorí náà aṣojú kò lè dáhùn. Olùṣàkóso nílò láti fi olùpèsè tó ń ṣiṣẹ́ kún. Ẹ̀rọ náà máa ń tún gbìyànjú láìfọwọ́yí ní gbogbo ìṣẹ́jú-àáyá {seconds}.",
+    "llm_key_rejected": "{provider} kò gbà kọ́kọ́rọ́ API tí a lò fún ‘{model}’. Ẹ ṣí Àwọn ètò LLM kí ẹ sì ṣàtúnṣe kọ́kọ́rọ́ náà.",
+    "llm_key_rejected_observer": "{provider} kò gbà kọ́kọ́rọ́ API tí a lò fún ‘{model}’. Olùṣàkóso nílò láti ṣàtúnṣe kọ́kọ́rọ́ náà ní Àwọn ètò LLM.",
+    "llm_model_not_found": "{provider} kò ní àwòṣe ‘{model}’. Ẹ ṣí Àwọn ètò LLM kí ẹ sì yan àwòṣe tí olùpèsè náà ní.",
+    "llm_model_not_found_observer": "{provider} kò ní àwòṣe ‘{model}’. Olùṣàkóso nílò láti yí àwòṣe náà padà ní Àwọn ètò LLM.",
+    "llm_provider_failed": "Olùpèsè LLM {role} ({provider} / {model}) ti kùnà: {detail}",
+    "llm_providers_unhealthy": "Kò sí olùpèsè LLM kankan tí ó ń dáhùn. Ẹ ṣí Àwọn ètò LLM láti ṣàyẹ̀wò olùpèsè, kọ́kọ́rọ́ àti àwòṣe yín.",
+    "llm_providers_unhealthy_detail": "Kò sí olùpèsè LLM kankan tí ó ń dáhùn. {detail} Ẹ ṣí Àwọn ètò LLM láti ṣàtúnṣe ìṣòro náà.",
+    "llm_providers_unhealthy_detail_observer": "Kò sí olùpèsè LLM kankan tí ó ń dáhùn, nítorí náà aṣojú kò lè fèsì. {detail} Olùṣàkóso nílò láti ṣàtúnṣe ìṣòro náà ní Àwọn ètò LLM.",
+    "llm_providers_unhealthy_observer": "Kò sí olùpèsè LLM kankan tí ó ń dáhùn, nítorí náà aṣojú kò lè fèsì. Olùṣàkóso nílò láti ṣàyẹ̀wò olùpèsè, kọ́kọ́rọ́ àti àwòṣe náà.",
+    "no_llm_provider": "A kò tíì ṣètò olùpèsè LLM kankan. Ẹ fi ọ̀kan kún ní Àwọn ètò LLM láti mú àwọn ẹ̀yà AI ṣiṣẹ́.",
+    "no_llm_provider_observer": "A kò tíì ṣètò olùpèsè LLM kankan, nítorí náà aṣojú kò lè dáhùn. Olùṣàkóso nílò láti fi ọ̀kan kún."
   },
   "prompts": {
     "dma": {

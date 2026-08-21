@@ -99,7 +99,19 @@
     "success": "Nasara",
     "all_operational": "Dukkan tsarin suna aiki",
     "llm_provider_circuit_open": "{model} a {provider} ya kasa aiki sau da yawa — mai katse da'ira ya buɗe, don haka ba a ƙara tuntuɓar wannan mai samarwa ba. Duba maɓallinsa da samfurinsa a Saitunan LLM.",
-    "llm_all_circuits_open": "Duk masu katse da'ira na LLM sun buɗe — babu wani mai samar da LLM da ke aiki ({named}). Duba mai samarwa, maɓalli da samfuri a Saitunan LLM."
+    "llm_all_providers_failed": "Duk masu ba da LLM sun gaza. Ƙara wani mai ba da LLM da ke aiki a Saitunan LLM — tsarin yana sake gwadawa da kansa duk bayan daƙiƙa {seconds}.",
+    "llm_all_providers_failed_observer": "Duk masu ba da LLM sun gaza, saboda haka wakili ba zai iya ba da amsa ba. Ana buƙatar mai gudanarwa ya ƙara wani mai ba da LLM da ke aiki. Tsarin yana sake gwadawa da kansa duk bayan daƙiƙa {seconds}.",
+    "llm_key_rejected": "{provider} ya ƙi maɓallin API da aka yi amfani da shi don ‘{model}’. Buɗe Saitunan LLM don sabunta maɓallin.",
+    "llm_key_rejected_observer": "{provider} ya ƙi maɓallin API da aka yi amfani da shi don ‘{model}’. Ana buƙatar mai gudanarwa ya sabunta shi a Saitunan LLM.",
+    "llm_model_not_found": "{provider} ba shi da samfurin ‘{model}’. Buɗe Saitunan LLM don zaɓar samfurin da yake da shi.",
+    "llm_model_not_found_observer": "{provider} ba shi da samfurin ‘{model}’. Ana buƙatar mai gudanarwa ya canja shi a Saitunan LLM.",
+    "llm_provider_failed": "Mai ba da LLM na {role} ({provider} / {model}) ya gaza: {detail}",
+    "llm_providers_unhealthy": "Babu wani mai ba da LLM da ke amsawa. Buɗe Saitunan LLM don duba mai ba da hidima, maɓalli da samfuri.",
+    "llm_providers_unhealthy_detail": "Babu wani mai ba da LLM da ke amsawa. {detail} Buɗe Saitunan LLM don gyara shi.",
+    "llm_providers_unhealthy_detail_observer": "Babu wani mai ba da LLM da ke amsawa, saboda haka wakili ba zai iya ba da amsa ba. {detail} Ana buƙatar mai gudanarwa ya gyara shi a Saitunan LLM.",
+    "llm_providers_unhealthy_observer": "Babu wani mai ba da LLM da ke amsawa, saboda haka wakili ba zai iya ba da amsa ba. Ana buƙatar mai gudanarwa ya duba mai ba da hidima, maɓalli da samfuri.",
+    "no_llm_provider": "Ba a saita wani mai ba da LLM ba. Ƙara ɗaya a Saitunan LLM don kunna ayyukan AI.",
+    "no_llm_provider_observer": "Ba a saita wani mai ba da LLM ba, saboda haka wakili ba zai iya ba da amsa ba. Ana buƙatar mai gudanarwa ya ƙara ɗaya."
   },
   "prompts": {
     "dma": {

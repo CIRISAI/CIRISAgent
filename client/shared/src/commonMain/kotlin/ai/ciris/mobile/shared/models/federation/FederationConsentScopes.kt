@@ -36,8 +36,14 @@ object FederationConsentScopes {
      *            corpus, so it can never author a capacity score.
      * `capacity:` — the score the canonical authors back about this agent, which
      *            this node must also accept as a replicated row.
+     * `self:delegates_to:` — the OWNER-BINDING. Added by ciris-server 0.5.186's
+     *            substrate default (the person/node identity axis). Without it
+     *            the attestation that says "this human owns this node" is
+     *            stranded at (cohort_scope=self, tier=local) exactly like the
+     *            traces were: the node stays healthy and the canonical never
+     *            learns who owns it.
      */
-    val TO_CANONICAL: List<String> = listOf("trace:", "capacity:")
+    val TO_CANONICAL: List<String> = listOf("trace:", "capacity:", "self:delegates_to:")
 
     /**
      * What a peer is asked to send BACK on the reverse direction of a bilateral

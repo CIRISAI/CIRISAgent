@@ -1609,13 +1609,19 @@ private fun AiStep(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Test Connection button
-            OutlinedButton(
-                onClick = {
-                    if (!isTesting) {
-                        isTesting = true
-                        testResult = null
-                        coroutineScope.launch(Dispatchers.Default) {
+            // Test Connection action.
+            //
+            // Bound to BOTH the real tap (onClick) and the UI-automation click
+            // path (testableClickable on the button below). This button used to
+            // carry `testable(...)` — position only, NOT reachable via the test
+            // server's /click — so automation could never trigger it and the
+            // live BYOK model dropdown (#1062) never populated under test.
+            // Extracting the action lets both the human and the harness run it.
+            val runTestConnection: () -> Unit = {
+                if (!isTesting) {
+                    isTesting = true
+                    testResult = null
+                    coroutineScope.launch(Dispatchers.Default) {
                             try {
                                 // Provider is now stored as key directly (e.g., "openai", "local")
                                 val providerId = state.llmProvider
@@ -1673,8 +1679,13 @@ private fun AiStep(
                             }
                         }
                     }
-                },
-                modifier = Modifier.fillMaxWidth().testable("btn_test_connection"),
+                }
+
+            OutlinedButton(
+                onClick = runTestConnection,
+                // testableClickable (not testable): the /click endpoint must be
+                // able to fire this so UI automation can list BYOK models.
+                modifier = Modifier.fillMaxWidth().testableClickable("btn_test_connection") { runTestConnection() },
                 enabled = !isTesting && (isLocalProvider || isMobileLocalProvider || state.llmApiKey.isNotEmpty()),
                 colors = ButtonDefaults.outlinedButtonColors(
                     contentColor = SetupColors.Primary

@@ -630,13 +630,19 @@ class DesktopAppTestRunner:
             # run broken -- the same lesson as the .env assertion that passed
             # while asserting nothing. If YOU is unsatisfied, say so here, where
             # the cause is, instead of two steps downstream.
-            await asyncio.sleep(0.5)
-            if await self.helper.is_element_visible(band_tag):
-                await self._dump_tree("you_step:did-not-advance")
-                raise RuntimeError(
-                    "still on the YOU step after btn_next — a required field is unsatisfied "
-                    "(age band, account, or fed-ID label)"
-                )
+            #
+            # POLL, don't one-shot: on the Windows CI runner the transition
+            # takes ~1s, and a fixed 0.5s sleep flagged a wizard that advanced
+            # 300ms after the check (join_federation then passed immediately).
+            deadline = asyncio.get_event_loop().time() + 10.0
+            while await self.helper.is_element_visible(band_tag):
+                if asyncio.get_event_loop().time() > deadline:
+                    await self._dump_tree("you_step:did-not-advance")
+                    raise RuntimeError(
+                        "still on the YOU step 10s after btn_next — a required field is "
+                        "unsatisfied (age band, account, or fed-ID label)"
+                    )
+                await asyncio.sleep(0.5)
 
         await self.run_test("you_step", you_step)
 

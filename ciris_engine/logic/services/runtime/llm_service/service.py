@@ -1926,6 +1926,33 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         model = (model_name or "").lower()
 
         if "openrouter.ai" in base:
+            # `reasoning.enabled=false` is OpenRouter's documented switch and it
+            # works: live A/B on qwen3-32b, 100 reasoning tokens / 4.1s ->
+            # 0 tokens / 1.5s.
+            #
+            # DO NOT ALSO SEND chat_template_kwargs HERE. OpenRouter does not
+            # document that parameter, and adding it alongside the real switch
+            # measurably UN-disables reasoning: same model, same call, 0 tokens
+            # became 229 and 1.5s became 7.3s. A key that looks harmless because
+            # "unknown keys are ignored" is not ignored on this hop.
+            #
+            # Some endpoints refuse to be quiet: DeepSeek-R1 answers
+            # `400 Reasoning is mandatory for this endpoint and cannot be
+            # disabled`, so asking turns every call into a hard failure instead
+            # of a slow one. For those, ask only that the reasoning be left OUT
+            # of the response, which they accept.
+            if any(t in model for t in ("deepseek-r1", "-r1", ":thinking", "-thinking")):
+                return {"reasoning": {"exclude": True}}
+            # ADHERENCE IS UPSTREAM-DEPENDENT, and no request-side key fixes
+            # that. Same model, same payload, four calls, reading the `provider`
+            # field OpenRouter returns:
+            #   SiliconFlow -> 0 reasoning tokens (honours it)
+            #   Nebius      -> 130-301 tokens (ignores it)
+            #   DeepInfra   -> 296 tokens (ignores it)
+            # `provider.require_parameters=true` does NOT restrict routing to
+            # the ones that honour it — measured, still landed on Nebius. The
+            # only real lever is routing itself: OPENROUTER_IGNORE_PROVIDERS /
+            # OPENROUTER_PROVIDER_ORDER, which this module already sends.
             return {"reasoning": {"enabled": False}}
 
         if "together" in base:
@@ -1945,17 +1972,62 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             }
 
         if "groq" in base:
-            # Llama-4-scout (our model) doesn't reason; nothing to disable.
-            # Sending unknown keys risks 422. Returning an empty dict is the
-            # robust default for non-reasoning Groq models. If we ever ship
-            # a reasoning Groq model (qwen-3-32b, gpt-oss-120b), gate it on
-            # model_name and return ``{"reasoning_format": "hidden"}`` here.
+            # Non-reasoning models (llama-scout) have nothing to disable, and
+            # unknown keys risk a 422, so they still get {}.
+            #
+            # Reasoning models DID get {} too, which is how gpt-oss shipped with
+            # thinking fully on. Live measurement fixes the value:
+            #   reasoning_effort="none"     -> 400, `must be one of low, medium,
+            #                                  or high` (Groq has NO none — the
+            #                                  older comment here claimed it did)
+            #   reasoning_format="hidden"   -> accepted, 57 reasoning tokens:
+            #                                  hides the text, still pays for it
+            #   reasoning_effort="low"      -> accepted, 40 tokens -> 6
+            # So "low" is the real floor on this provider. CIRIS does its own
+            # reasoning in the DMA pipeline; we want the model's kept minimal.
+            if any(t in model for t in ("gpt-oss", "qwen", "deepseek", "reason")):
+                return {"reasoning_effort": "low"}
             return {}
 
-        if "api.openai.com" in base:
-            # Only o-series / gpt-5 accept reasoning_effort. 4o/4-turbo 422.
-            o_series = any(t in model for t in ("o1", "o3", "o4", "gpt-5"))
-            return {"reasoning_effort": "minimal"} if o_series else {}
+        # An EMPTY base_url is not "unknown" — it is OpenAI. The SDK defaults to
+        # api.openai.com/v1 when none is given, which is the single most common
+        # configuration there is, and it used to fall all the way through to the
+        # unknown-endpoint default and send nothing. So gpt-5 / o-series reasoned
+        # at full effort on the default config, which is exactly the tax this
+        # whole map exists to remove.
+        if "api.openai.com" in base or not base:
+            # Only the reasoning families accept `reasoning_effort`; 4o/4-turbo
+            # 400 on the field, so they still get nothing.
+            #
+            # The value is NOT one enum across the families. Measured live:
+            #   gpt-5.2 + "minimal" -> 400 `does not support 'minimal' with
+            #                          this model. Supported values are: 'none'…`
+            #   gpt-5.2 + "none"    -> 0 reasoning tokens, 563ms (the floor)
+            #   gpt-5.2 + "low"     -> 7 reasoning tokens, 1197ms
+            # We shipped "minimal" for the whole set, which means every gpt-5
+            # call was a hard 400 — not slow, broken.
+            if "gpt-5" in model:
+                return {"reasoning_effort": "none"}
+            if any(t in model for t in ("o1", "o3", "o4")):
+                # The o-series enum is low|medium|high — "low" is its floor.
+                return {"reasoning_effort": "low"}
+            return {}
+
+        if "generativelanguage.googleapis.com" in base or "aiplatform.googleapis.com" in base:
+            # Gemini through the OpenAI-compat shim. Two knobs exist and they
+            # CONFLICT — `reasoning_effort` and `thinking_config`
+            # (thinking_budget / thinking_level) cannot both be sent — so send
+            # exactly one: `reasoning_effort="none"`, which Google documents as
+            # the OpenAI-surface way to turn thinking off on 2.5-class models.
+            #
+            # 2.5 Pro and the 3.x family CANNOT turn thinking off at all, and
+            # the shim is strict about the enum it accepts per model, so for
+            # those we send nothing rather than earn a 400 on every call. This
+            # branch existing at all is the fix: Google fell through to the
+            # unknown-endpoint default and shipped with thinking ON, which is
+            # the 30-60s-per-call tax this whole map exists to avoid.
+            cannot_disable = "2.5-pro" in model or "gemini-3" in model
+            return {} if cannot_disable else {"reasoning_effort": "none"}
 
         if "ciris.ai" in base or "ciris-services" in base:
             # Already-wrapped CIRIS proxy: no native reasoning toggle.

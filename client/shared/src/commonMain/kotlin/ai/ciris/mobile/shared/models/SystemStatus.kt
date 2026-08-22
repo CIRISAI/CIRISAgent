@@ -18,6 +18,8 @@ data class ApiResponseMetadata(
 @Serializable
 data class SystemStatus(
     val status: String,
+    /** What the runtime says it IS — "agent" from a brain, "fabric-node" from a bare node. */
+    val role: String? = null,
     val cognitive_state: String? = null,
     val services_online: Int = 0,
     val services_total: Int = 22,

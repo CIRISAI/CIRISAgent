@@ -848,6 +848,8 @@ async def get_system_health(
 
     response = SystemHealthResponse(
         status=status,
+        # We are the brain. Say so — never make a client infer it.
+        role="agent",
         version=CIRIS_VERSION,
         uptime_seconds=uptime_seconds,
         services=services,

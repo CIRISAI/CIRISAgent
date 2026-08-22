@@ -329,11 +329,29 @@ class DesktopAppTestRunner:
 
         return all(r.success for r in self.results)
 
+    # The message checkLlmConfig returns when state.llmApiKey is BLANK — the
+    # signature of the stale-click-closure regression: the field visibly holds a
+    # key, the automation clicked Test Connection, and the handler read a frozen
+    # snapshot from before the key existed. If this text appears while we KNOW
+    # we entered a key, the registered handler is stale, full stop.
+    _BLANK_KEY_MESSAGE = "Enter an API key"
+
+    async def _llm_verdict_texts(self) -> dict:
+        """testTag -> text for the AI step's verdict surfaces (txt_llm_*)."""
+        assert self.helper is not None
+        out = {}
+        for e in await self.helper.get_elements():
+            if e.test_tag.startswith("txt_llm_") and e.text:
+                out[e.test_tag] = e.text
+        return out
+
     async def _drive_llm_step_byok(
         self,
         provider: str,
         api_key: str,
         model: Optional[str],
+        expect_key_rejected: bool = False,
+        require_live_models: bool = False,
     ) -> None:
         """Drive the AI step's BYOK path: provider → key → Test Connection → model.
 
@@ -383,6 +401,31 @@ class DesktopAppTestRunner:
                     "testableClickable fix? (#1062)"
                 )
             self._log(f"AI (BYOK): Test Connection attempt {attempt}/5")
+            await asyncio.sleep(3)  # let one checkLlmConfig produce its verdict rows
+
+            verdicts = await self._llm_verdict_texts()
+            blob = " | ".join(verdicts.values())
+            if self._BLANK_KEY_MESSAGE in blob:
+                # We ENTERED a key; the handler saw none. Do not retry — every
+                # retry replays the same frozen closure and the old runner
+                # "fell back to the text field" and PASSED, which is exactly how
+                # this shipped. Fail loudly with the mechanism named.
+                raise RuntimeError(
+                    "STALE CLICK CLOSURE regression: Test Connection ran with an EMPTY api key while "
+                    f"input_api_key holds one (verdict: {blob!r}). The automation registry is serving a "
+                    "handler captured before the key was typed — see "
+                    "TestAutomation.desktop.kt testableClickable/rememberUpdatedState."
+                )
+            if expect_key_rejected:
+                # Synthetic-key CI mode: the PASS is the provider refusing the
+                # credential — proof the key REACHED the wire. No dropdown will
+                # ever appear, so return on the auth-class verdict.
+                lowered = blob.lower()
+                if any(w in lowered for w in ("rejected", "auth", "invalid", "key", "credit", "unauthorized")):
+                    self._log(f"AI (BYOK): synthetic key correctly refused by the provider ({blob!r})")
+                    return
+                self._log(f"AI (BYOK): no auth verdict yet (attempt {attempt}): {blob!r}")
+
             # One checkLlmConfig cycle (validate + listModels) is a few seconds;
             # give it up to 18s to surface the dropdown before retrying.
             inner_deadline = time.time() + 18
@@ -406,6 +449,25 @@ class DesktopAppTestRunner:
             self._log(f"AI (BYOK): no live list on attempt {attempt}; node may be warming, retrying")
             await asyncio.sleep(4)
 
+        if expect_key_rejected:
+            raise RuntimeError(
+                "expected the provider to REJECT the synthetic key, but no auth-class verdict ever "
+                "rendered — either the request never reached the provider or the verdict surfaces "
+                "(txt_llm_*) are missing from this build."
+            )
+        if require_live_models:
+            # A REAL key was supplied, so the live dropdown is the contract.
+            # The permissive text-fallback below is what let the stale-closure
+            # regression pass CI-shaped runs silently: no dropdown, type the
+            # model by hand, setup "succeeds". With a working key that fallback
+            # is indistinguishable from the bug, so in strict mode it is one.
+            verdicts = await self._llm_verdict_texts()
+            raise RuntimeError(
+                "live model dropdown never appeared with a REAL key after 5 Test Connection "
+                f"attempts (verdicts: {verdicts!r}) — the BYOK path is broken; refusing the "
+                "text-field fallback because it would report this as a pass."
+            )
+
         # 4. Still no live list after retries → text fallback so setup can finish.
         tags = await _tags()
         if "input_llm_model_text" in tags and model:
@@ -425,6 +487,8 @@ class DesktopAppTestRunner:
         llm_provider: Optional[str] = None,
         llm_api_key: Optional[str] = None,
         llm_model: Optional[str] = None,
+        llm_key_expect_rejected: bool = False,
+        llm_require_live_models: bool = False,
     ) -> bool:
         """Drive the first-run setup wizard via the test server.
 
@@ -566,13 +630,19 @@ class DesktopAppTestRunner:
             # run broken -- the same lesson as the .env assertion that passed
             # while asserting nothing. If YOU is unsatisfied, say so here, where
             # the cause is, instead of two steps downstream.
-            await asyncio.sleep(0.5)
-            if await self.helper.is_element_visible(band_tag):
-                await self._dump_tree("you_step:did-not-advance")
-                raise RuntimeError(
-                    "still on the YOU step after btn_next — a required field is unsatisfied "
-                    "(age band, account, or fed-ID label)"
-                )
+            #
+            # POLL, don't one-shot: on the Windows CI runner the transition
+            # takes ~1s, and a fixed 0.5s sleep flagged a wizard that advanced
+            # 300ms after the check (join_federation then passed immediately).
+            deadline = asyncio.get_event_loop().time() + 10.0
+            while await self.helper.is_element_visible(band_tag):
+                if asyncio.get_event_loop().time() > deadline:
+                    await self._dump_tree("you_step:did-not-advance")
+                    raise RuntimeError(
+                        "still on the YOU step 10s after btn_next — a required field is "
+                        "unsatisfied (age band, account, or fed-ID label)"
+                    )
+                await asyncio.sleep(0.5)
 
         await self.run_test("you_step", you_step)
 
@@ -609,7 +679,11 @@ class DesktopAppTestRunner:
                 # BYOK path (#1062): real provider + key + Test Connection +
                 # live-model dropdown. This exercises the accommodation that
                 # made btn_test_connection reachable by automation.
-                await self._drive_llm_step_byok(llm_provider or "openrouter", llm_api_key, llm_model)
+                await self._drive_llm_step_byok(
+                    llm_provider or "openrouter", llm_api_key, llm_model,
+                    expect_key_rejected=llm_key_expect_rejected,
+                    require_live_models=llm_require_live_models,
+                )
             elif await self.helper.is_element_visible("btn_use_free_ai"):
                 # CIRIS-hosted proxy option (OAuth path) — no key entry needed.
                 self._log("AI: choosing CIRIS-hosted option (btn_use_free_ai)")
@@ -972,6 +1046,23 @@ Examples:
         "--llm-key",
         default=None,
         help="For desktop-setup: BYOK API key literal (prefer --llm-key-file).",
+    )
+    parser.add_argument(
+        "--llm-require-live-models",
+        action="store_true",
+        help=(
+            "Strict BYOK: a real key was supplied, so the live model dropdown MUST populate — "
+            "the text-field fallback becomes a failure instead of a silent pass."
+        ),
+    )
+    parser.add_argument(
+        "--llm-key-expect-rejected",
+        action="store_true",
+        help=(
+            "CI mode: the supplied key is SYNTHETIC and the pass is the provider refusing it — "
+            "proof the key reached the wire. Guards the stale-click-closure regression without "
+            "a real secret."
+        ),
     )
     parser.add_argument(
         "--llm-key-file",
@@ -2381,6 +2472,8 @@ async def run_desktop_tests(args: argparse.Namespace) -> int:
                 fed_label=args.fed_label,
                 announce=not args.no_announce,
                 trace_opt_in=not args.no_trace_opt_in,
+                llm_key_expect_rejected=getattr(args, "llm_key_expect_rejected", False),
+                llm_require_live_models=getattr(args, "llm_require_live_models", False),
                 llm_provider=args.llm_provider,
                 llm_api_key=_byok_key,
                 llm_model=args.llm_model,

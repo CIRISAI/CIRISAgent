@@ -98,9 +98,26 @@ data class LlmConfigCheck(
  * Run the whole check against a provider's real endpoint.
  *
  * Both the wizard and LLM settings call THIS, so they cannot drift apart again.
- * Ordered deliberately: the key is checked first, and a rejected key
- * short-circuits, because "list models" against a bad credential returns a
- * confusing secondary error that buries the real one.
+ *
+ * ORDERING — and why it is not simply "validate then list":
+ *
+ * `validateLlmConfiguration` (POST /v1/setup/validate-llm) REFUSES a probe that
+ * names no model: since CIRISAgent#1078 ("a credential probe must not assume a
+ * model") it returns `valid=false, "No model selected"` when `model` is empty.
+ * That is correct for the pipeline probe, but it means validate cannot be the
+ * key gate on a FRESH setup — no model is chosen until the dropdown loads, and
+ * the dropdown loads from `listModels`, so gating listing behind a validate that
+ * demands a model is an unbreakable chicken-and-egg (CIRISAgent#1062 follow-up:
+ * the wizard showed "No model selected" and never populated the dropdown).
+ *
+ * So the gate depends on whether we already have a model to name:
+ *   - model in hand  -> validate it first (it may be a model the provider does
+ *     not serve, and validate surfaces that precisely); a rejected key still
+ *     short-circuits so its error is not buried by a secondary listing error.
+ *   - no model yet   -> SKIP validate and let `listModels` be the credential
+ *     check. Listing hits the same provider with the same key, so a live list is
+ *     itself proof the key authenticates; a thrown error is the real key/reach
+ *     failure, reported as such.
  */
 suspend fun CIRISApiClient.checkLlmConfig(
     provider: String,
@@ -118,32 +135,42 @@ suspend fun CIRISApiClient.checkLlmConfig(
         )
     }
 
-    val validation = try {
-        validateLlmConfiguration(provider = provider, apiKey = apiKey, baseUrl = baseUrl, model = selectedModel)
-    } catch (e: Exception) {
-        return LlmConfigCheck(
-            key = CheckState.FAILED,
-            keyMessage = e.message ?: "Could not reach the provider.",
-        )
-    }
+    val hasModel = !selectedModel.isNullOrBlank()
 
-    if (!validation.valid) {
-        // Stop here on purpose. Listing models with a rejected credential
-        // produces a second, less informative error that hides the first.
-        return LlmConfigCheck(
-            key = CheckState.FAILED,
-            keyMessage = validation.error ?: validation.message,
-        )
+    // Explicit credential probe ONLY when a model is already named — otherwise
+    // #1078 refuses it and we would report a false key failure (see above).
+    var validationMessage: String? = null
+    if (hasModel) {
+        val validation = try {
+            validateLlmConfiguration(provider = provider, apiKey = apiKey, baseUrl = baseUrl, model = selectedModel)
+        } catch (e: Exception) {
+            return LlmConfigCheck(
+                key = CheckState.FAILED,
+                keyMessage = e.message ?: "Could not reach the provider.",
+            )
+        }
+        if (!validation.valid) {
+            // Stop here on purpose. Listing models with a rejected credential
+            // produces a second, less informative error that hides the first.
+            return LlmConfigCheck(
+                key = CheckState.FAILED,
+                keyMessage = validation.error ?: validation.message,
+            )
+        }
+        validationMessage = validation.message
     }
 
     val listed = try {
         listModels(provider = provider, apiKey = apiKey, baseUrl = baseUrl)
     } catch (e: Exception) {
+        // With a model already validated the key is known good, so a listing
+        // error is purely a models failure. Without one, listing WAS the key
+        // check, so its failure is the key's.
         return LlmConfigCheck(
-            key = CheckState.OK,
-            keyMessage = validation.message,
-            models = CheckState.FAILED,
-            modelsMessage = e.message ?: "Could not list models.",
+            key = if (hasModel) CheckState.OK else CheckState.FAILED,
+            keyMessage = if (hasModel) validationMessage else (e.message ?: "The API key was rejected or the provider is unreachable."),
+            models = if (hasModel) CheckState.FAILED else CheckState.UNKNOWN,
+            modelsMessage = if (hasModel) (e.message ?: "Could not list models.") else null,
         )
     }
 
@@ -151,6 +178,15 @@ suspend fun CIRISApiClient.checkLlmConfig(
         listed.isLive && listed.models.isNotEmpty() -> CheckState.OK
         listed.models.isEmpty() -> CheckState.FAILED
         else -> CheckState.DEGRADED
+    }
+
+    // On the no-model path a LIVE list is proof the key authenticates; a
+    // non-live/empty list can't distinguish a bad key from a provider hiccup, so
+    // leave the key UNKNOWN and let the models row carry the detail.
+    val keyState = when {
+        hasModel -> CheckState.OK
+        modelsState == CheckState.OK -> CheckState.OK
+        else -> CheckState.UNKNOWN
     }
 
     // Only judge the selected model against a LIVE list. Marking it missing
@@ -163,8 +199,8 @@ suspend fun CIRISApiClient.checkLlmConfig(
     }
 
     return LlmConfigCheck(
-        key = CheckState.OK,
-        keyMessage = validation.message,
+        key = keyState,
+        keyMessage = validationMessage,
         models = modelsState,
         modelsMessage = listed.error,
         selectedModel = selectedState,

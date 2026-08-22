@@ -155,6 +155,57 @@ jobs:
         shell: pwsh
         run: python tools/dev/assert_no_control_chars_in_env.py --home "$env:CIRIS_HOME" --label boot1
 
+      # ── BYOK regression boot — the stale-click-closure gate ───────────────
+      # A SYNTHETIC key drives the real BYOK path: provider dropdown, key entry,
+      # Test Connection. The PASS is the provider REFUSING the credential —
+      # proof the key the automation typed actually reached the wire. The
+      # regression this guards (rememberUpdatedState in
+      # TestAutomation.desktop.kt): the click registry served a closure captured
+      # before the key existed, so Test Connection read an EMPTY key while the
+      # field held one, rendered "Enter an API key", and the old runner fell
+      # back to the text field and PASSED. Humans were immune (.clickable reads
+      # the live lambda), which is why only THIS runner can catch it — and
+      # before this step, no CI run ever supplied a key, so the guarded path
+      # never executed at all.
+      #
+      # Own CIRIS_HOME: this boot must not disturb the boot-1/boot-2 env-sync
+      # assertions that follow.
+      - name: BYOK boot — a typed key must reach the wire
+        shell: pwsh
+        run: |
+          # REAL key (repo secret): the gate is the FULL happy path — Test
+          # Connection populates the live model dropdown, and the text-field
+          # fallback is a FAILURE (--llm-require-live-models), because with a
+          # working key that fallback is indistinguishable from the
+          # stale-closure bug this step exists to catch.
+          #
+          # Fork PRs get no secrets, so the key is empty there: fall back to a
+          # SYNTHETIC key where the pass is the provider REFUSING it — weaker,
+          # but still proof the key the automation typed reached the wire.
+          if ($env:OPENROUTER_API_KEY) {
+            Write-Host "BYOK gate: REAL key (strict live-models mode)"
+            python -m tools.qa_runner.modules.web_ui desktop-setup `
+              --launch --headless --mock-llm `
+              --username qabyok --password "qa_test_password_12345" `
+              --llm-provider openrouter `
+              --llm-key "$env:OPENROUTER_API_KEY" `
+              --llm-require-live-models `
+              --json-report byok_regression.json -v
+          } else {
+            Write-Host "BYOK gate: no secret (fork PR?) — synthetic key, expect-rejected mode"
+            python -m tools.qa_runner.modules.web_ui desktop-setup `
+              --launch --headless --mock-llm `
+              --username qabyok --password "qa_test_password_12345" `
+              --llm-provider openrouter `
+              --llm-key "sk-or-v1-cirisci-synthetic-not-a-real-credential-000000000000" `
+              --llm-key-expect-rejected `
+              --json-report byok_regression.json -v
+          }
+        env:
+          CIRIS_FORCE_FIRST_RUN: "1"
+          CIRIS_HOME: ${{ runner.temp }}\ciris-byok-regression
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+
       # ── BOOT 2 — THE ONE THAT CATCHES IT ─────────────────────────────────
       # The env sync rewrites .env on every start. In 2.9.19 it un-escaped what
       # the wizard had just written correctly, so boot 1 was always clean and

@@ -1713,14 +1713,25 @@ private fun AiStep(
             // then fails every request. Break them out.
             configCheck?.let { c ->
                 Spacer(modifier = Modifier.height(12.dp))
+                // The verdict TEXT is exposed to the test server (testable carries
+                // `text` into /tree). Without this, CI could see THAT a check row
+                // rendered but never WHAT it said — which is how the stale-closure
+                // regression hid: the row said "Enter an API key" while the field
+                // held one, and no automation could read the words.
                 if (c.key != CheckState.UNKNOWN) {
-                    LlmCheckRow(state = c.key, message = c.keyMessage)
+                    Box(Modifier.testable("txt_llm_check_key", text = c.keyMessage)) {
+                        LlmCheckRow(state = c.key, message = c.keyMessage)
+                    }
                 }
                 if (c.models != CheckState.UNKNOWN) {
-                    LlmCheckRow(state = c.models, message = c.modelsMessage)
+                    Box(Modifier.testable("txt_llm_check_models", text = c.modelsMessage)) {
+                        LlmCheckRow(state = c.models, message = c.modelsMessage)
+                    }
                 }
                 if (c.selectedModel != CheckState.UNKNOWN) {
-                    LlmCheckRow(state = c.selectedModel, message = c.selectedModelMessage)
+                    Box(Modifier.testable("txt_llm_check_selected_model", text = c.selectedModelMessage)) {
+                        LlmCheckRow(state = c.selectedModel, message = c.selectedModelMessage)
+                    }
                 }
             }
 
@@ -1730,6 +1741,7 @@ private fun AiStep(
                     shape = RoundedCornerShape(8.dp),
                     color = if (result.valid) SetupColors.SuccessLight else SetupColors.ErrorLight,
                     modifier = Modifier.fillMaxWidth()
+                        .testable("txt_llm_test_result", text = listOfNotNull(result.message, result.error).joinToString(" — "))
                 ) {
                     Row(
                         modifier = Modifier.padding(12.dp),

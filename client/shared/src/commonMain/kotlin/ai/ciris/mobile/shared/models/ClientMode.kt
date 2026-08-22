@@ -45,10 +45,17 @@ enum class ClientMode {
  *   so its 10 first-run services are the wizard's, not an agent's. Only the brain
  *   knows this; the health envelope alone cannot distinguish it from a real agent.
  */
+/** The runtime's own answer to "what am I" — `data.role` in `/v1/system/health`. */
+const val ROLE_AGENT = "agent"
+
+/** A node with no brain folded on top of it. */
+const val ROLE_FABRIC_NODE = "fabric-node"
+
 fun clientModeFrom(
     cognitiveState: String?,
     serviceCount: Int,
     brainUnconfigured: Boolean = false,
+    role: String? = null,
 ): ClientMode =
     when {
         // A HALF-STARTED BRAIN IS NOT AN AGENT (CIRISAgent#1075).
@@ -77,6 +84,16 @@ fun clientModeFrom(
         // can say whether it is configured, so the caller asks it and passes the
         // answer in.
         brainUnconfigured -> ClientMode.NODE
+        // WHAT THE RUNTIME SAYS IT IS BEATS WHAT WE CAN INFER ABOUT IT.
+        // A bare node answers role="fabric-node"; the agent answers role="agent"
+        // (CIRISAgent#1111). Everything below this line is inference over
+        // symptoms — a cognitive_state that leaked, a service map that happened
+        // to be non-empty — and inference is what read a half-started brain as
+        // an agent (#1075) and a brain-carrying home as a bare node. The
+        // declaration is checked AFTER brainUnconfigured on purpose: a brain
+        // that still needs its wizard is honestly role="agent" and still must
+        // not get the agent surface.
+        role == ROLE_AGENT -> ClientMode.AGENT
         cognitiveState != null || serviceCount > 0 -> ClientMode.AGENT
         else -> ClientMode.NODE
     }

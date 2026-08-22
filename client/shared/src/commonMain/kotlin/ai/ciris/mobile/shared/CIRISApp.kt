@@ -901,7 +901,8 @@ fun CIRISApp(
                     s.setup_required && !s.has_env_file
                 }.getOrDefault(false)
                 var mode = ai.ciris.mobile.shared.models.clientModeFrom(
-                    nodeHealth.cognitiveState, nodeHealth.serviceCount, brainUnconfigured
+                    nodeHealth.cognitiveState, nodeHealth.serviceCount, brainUnconfigured,
+                    role = nodeHealth.role
                 )
                 if (mode.isNode) {
                     // Bare node health — ask the brain whether it is running on top.
@@ -911,7 +912,8 @@ fun CIRISApp(
                     runCatching { apiClient.getSystemStatus() }
                         .onSuccess { sys ->
                             mode = ai.ciris.mobile.shared.models.clientModeFrom(
-                                sys.cognitive_state, sys.services_total, brainUnconfigured
+                                sys.cognitive_state, sys.services_total, brainUnconfigured,
+                                role = sys.role
                             )
                         }
                         .onFailure { e ->

@@ -333,22 +333,47 @@ class TestReasoningModeDisabling:
         extra_body = self._build_for("http://localhost:8080/v1", "llama")["extra_body"]
         assert extra_body["chat_template_kwargs"] == {"enable_thinking": False}
 
-    def test_openai_o_series_carries_reasoning_effort_minimal(self):
-        extra_body = self._build_for("https://api.openai.com/v1", "o3-mini")["extra_body"]
-        assert extra_body["reasoning_effort"] == "minimal"
+    def test_openai_reasoning_families_each_carry_their_own_floor(self):
+        """"minimal" was one value for two different enums, and it is a 400 on
+        the newer one:
+
+            gpt-5.2 + "minimal" -> 400 `does not support 'minimal' with this
+                                   model. Supported values are: 'none'...`
+
+        so every gpt-5 call was failing outright, not merely reasoning. Measured
+        floors: gpt-5 takes "none" (0 reasoning tokens, 563ms); the o-series
+        enum is low|medium|high, so "low" is as quiet as it gets there.
+        """
+        o_series = self._build_for("https://api.openai.com/v1", "o3-mini")["extra_body"]
+        assert o_series["reasoning_effort"] == "low"
+
+        gpt5 = self._build_for("https://api.openai.com/v1", "gpt-5.2")["extra_body"]
+        assert gpt5["reasoning_effort"] == "none"
+
+    def test_openai_with_no_base_url_still_gets_its_floor(self):
+        """An empty base_url IS OpenAI — the SDK defaults there, and it is the
+        commonest configuration we ship. It used to fall through to the
+        unknown-endpoint branch and suppress nothing at all."""
+        extra_body = self._build_for("", "gpt-5.2")["extra_body"]
+        assert extra_body["reasoning_effort"] == "none"
 
     # ------------------------------------------------------------------
     # Per-endpoint forbidden keys (negative assertions — 2.7.4 regressions)
     # ------------------------------------------------------------------
 
     def test_groq_sends_no_reasoning_keys(self):
-        """2.7.4 Groq 422 incident pin: Groq must receive NO reasoning
-        toggle keys. Llama-4-scout doesn't reason; sending
-        ``reasoning_effort=minimal`` 422s with enum
-        ``low|medium|high|xhigh|none``; sending ``thinking`` /
-        ``chat_template_kwargs`` / ``reasoning`` is also unsafe — keep
-        the dispatcher empty for Groq until we ship a Groq reasoning
-        model."""
+        """2.7.4 Groq 422 incident pin, still live for NON-reasoning models.
+
+        Llama-4-scout doesn't reason, and the field itself is rejected, so it
+        must receive no toggle keys at all.
+
+        What changed since this pin was written: Groq's reasoning models are no
+        longer covered by it. They used to get {} as well, which is how gpt-oss
+        shipped reasoning at full effort. They now get ``reasoning_effort=low``
+        — measured 103 reasoning tokens -> 11. Note the enum in the original
+        note was wrong: Groq has NO "none" (`must be one of low, medium, or
+        high`), which is why "low" is the floor and not "none".
+        """
         extra_body = self._build_for(
             "https://api.groq.com/openai/v1", "meta-llama/llama-4-scout-17b-16e-instruct"
         )["extra_body"]

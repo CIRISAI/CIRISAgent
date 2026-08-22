@@ -33,6 +33,16 @@ class SystemHealthResponse(BaseModel):
     """Overall system health status."""
 
     status: str = Field(..., description="Overall health status (healthy/degraded/critical)")
+    role: str = Field(
+        "agent",
+        description=(
+            "What this runtime IS, declared rather than inferred. An agent is a node "
+            "with a brain added, so a bare node answers 'fabric-node' here and we answer "
+            "'agent'. Clients key their surface on this instead of guessing from "
+            "cognitive_state/services, which is how a half-started brain once read as a "
+            "full agent (#1075) and a brain-carrying home read as a bare node."
+        ),
+    )
     version: str = Field(..., description="System version")
     uptime_seconds: float = Field(..., description="System uptime in seconds")
     services: Dict[str, Dict[str, int]] = Field(..., description="Service health summary")

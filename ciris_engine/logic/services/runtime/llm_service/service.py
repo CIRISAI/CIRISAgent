@@ -1888,6 +1888,33 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         raise RuntimeError("All endpoints exhausted without success")
 
     @staticmethod
+    def _endpoint_host(base_url: str) -> str:
+        """The HOST of an endpoint, lowercased — never a substring of the URL.
+
+        ``"api.openai.com" in base_url`` is also true for
+        ``https://api.openai.com.attacker.example/v1`` and for any URL that
+        merely mentions the name in a path or query, so provider dispatch keyed
+        on a substring can be steered by a hostile base_url. CodeQL calls this
+        incomplete-url-substring-sanitization; it is right.
+        """
+        from urllib.parse import urlsplit
+
+        raw = (base_url or "").strip()
+        if not raw:
+            return ""
+        if "://" not in raw:
+            raw = "//" + raw
+        try:
+            return (urlsplit(raw).hostname or "").lower()
+        except ValueError:
+            return ""
+
+    @staticmethod
+    def _host_is(host: str, domain: str) -> bool:
+        """Exact host, or a subdomain of it — never a lookalike suffix."""
+        return host == domain or host.endswith("." + domain)
+
+    @staticmethod
     def _build_reasoning_off_extras(base_url: str, model_name: str) -> Dict[str, Any]:
         """Return the ``extra_body`` keys that disable reasoning for this
         specific (provider, model) combination.
@@ -1924,8 +1951,10 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         """
         base = (base_url or "").lower()
         model = (model_name or "").lower()
+        host = OpenAICompatibleClient._endpoint_host(base_url)
+        is_host = OpenAICompatibleClient._host_is
 
-        if "openrouter.ai" in base:
+        if is_host(host, "openrouter.ai"):
             # `reasoning.enabled=false` is OpenRouter's documented switch and it
             # works: live A/B on qwen3-32b, 100 reasoning tokens / 4.1s ->
             # 0 tokens / 1.5s.
@@ -1955,7 +1984,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             # OPENROUTER_PROVIDER_ORDER, which this module already sends.
             return {"reasoning": {"enabled": False}}
 
-        if "together" in base:
+        if is_host(host, "together.xyz") or is_host(host, "together.ai"):
             # Models live in BOTH families on this endpoint; layer both keys.
             # Each is silently ignored by the family that doesn't honour it.
             return {
@@ -1963,7 +1992,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                 "chat_template_kwargs": {"enable_thinking": False},
             }
 
-        if "deepinfra" in base:
+        if is_host(host, "deepinfra.com"):
             # vLLM-backed; same key as Together's vLLM family. Add
             # `reasoning.enabled` for newer DeepSeek-V3.1+ which honours it.
             return {
@@ -1971,7 +2000,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                 "reasoning": {"enabled": False},
             }
 
-        if "groq" in base:
+        if is_host(host, "groq.com"):
             # Non-reasoning models (llama-scout) have nothing to disable, and
             # unknown keys risk a 422, so they still get {}.
             #
@@ -1995,7 +2024,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         # unknown-endpoint default and send nothing. So gpt-5 / o-series reasoned
         # at full effort on the default config, which is exactly the tax this
         # whole map exists to remove.
-        if "api.openai.com" in base or not base:
+        if is_host(host, "openai.com") or not host:
             # Only the reasoning families accept `reasoning_effort`; 4o/4-turbo
             # 400 on the field, so they still get nothing.
             #
@@ -2013,7 +2042,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                 return {"reasoning_effort": "low"}
             return {}
 
-        if "generativelanguage.googleapis.com" in base or "aiplatform.googleapis.com" in base:
+        if is_host(host, "googleapis.com"):
             # Gemini through the OpenAI-compat shim. Two knobs exist and they
             # CONFLICT — `reasoning_effort` and `thinking_config`
             # (thinking_budget / thinking_level) cannot both be sent — so send
@@ -2029,11 +2058,11 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             cannot_disable = "2.5-pro" in model or "gemini-3" in model
             return {} if cannot_disable else {"reasoning_effort": "none"}
 
-        if "ciris.ai" in base or "ciris-services" in base:
+        if is_host(host, "ciris.ai") or host.startswith("ciris-services"):
             # Already-wrapped CIRIS proxy: no native reasoning toggle.
             return {}
 
-        if "anthropic" in base:
+        if is_host(host, "anthropic.com"):
             # Anthropic uses a top-level `thinking` parameter on the
             # Messages API, not extra_body. Default Claude calls don't
             # opt into extended thinking; nothing to disable here.

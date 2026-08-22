@@ -103,3 +103,47 @@ class TestTheRegressionsThatCostUs:
     def test_groq_never_gets_reasoning_effort_none(self):
         # Groq's enum has no "none" — it is a 400, i.e. every call fails.
         assert extras(GROQ, "openai/gpt-oss-20b").get("reasoning_effort") != "none"
+
+
+class TestProviderDispatchCannotBeSpoofed:
+    """The endpoint is identified by its HOST, not by a substring of its URL.
+
+    A substring test (`"api.openai.com" in base_url`) is satisfied by a
+    lookalike host and by any URL that merely mentions the name in a path or
+    query — CodeQL's incomplete-url-substring-sanitization, flagged high. The
+    blast radius here is which reasoning payload a hostile base_url can steer
+    us into sending, which is small; the fix is cheap and the class of bug is
+    not one to keep.
+    """
+
+    @pytest.mark.parametrize(
+        "hostile",
+        [
+            "https://api.openai.com.attacker.example/v1",
+            "https://openrouter.ai.attacker.example/v1",
+            "https://evil.example/?upstream=api.openai.com",
+            "https://evil.example/proxy/openrouter.ai/v1",
+            "https://notgroq.com/openai/v1",
+        ],
+    )
+    def test_a_lookalike_host_is_not_that_provider(self, hostile):
+        assert extras(hostile, "gpt-5.2") == {}
+
+    @pytest.mark.parametrize(
+        "genuine,model,key",
+        [
+            ("https://api.openai.com/v1", "gpt-5.2", "reasoning_effort"),
+            ("https://openrouter.ai/api/v1", "qwen/qwen3-32b", "reasoning"),
+            ("https://api.groq.com/openai/v1", "openai/gpt-oss-20b", "reasoning_effort"),
+            ("https://generativelanguage.googleapis.com/v1beta/openai/", "gemini-2.5-flash", "reasoning_effort"),
+            ("https://api.together.xyz/v1", "Qwen/Qwen3-235B", "chat_template_kwargs"),
+            ("https://api.deepinfra.com/v1/openai", "Qwen/Qwen3.6-35B", "chat_template_kwargs"),
+        ],
+    )
+    def test_the_real_endpoints_still_dispatch(self, genuine, model, key):
+        assert key in extras(genuine, model)
+
+    def test_a_regional_subdomain_still_resolves(self):
+        # Subdomains of a provider ARE that provider — eu.api.openai.com must
+        # not fall through to the unknown-endpoint branch and lose the switch.
+        assert extras("https://eu.api.openai.com/v1", "gpt-5.2") == {"reasoning_effort": "none"}

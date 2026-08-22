@@ -141,16 +141,21 @@ async def reinitialize_billing_provider(runtime: Any) -> None:
     is_mobile = "ANDROID_DATA" in os.environ or os.environ.get("CIRIS_IOS_FRAMEWORK_PATH", "")
     using_ciris_proxy = is_using_ciris_proxy()
 
-    logger.info(f"Billing provider check: is_mobile={is_mobile}, using_ciris_proxy={using_ciris_proxy}")
+    logger.info(f"Billing provider check: platform_mobile={bool(is_mobile)}, using_ciris_proxy={using_ciris_proxy}")
     logger.info(f"  OPENAI_API_BASE={os.getenv('OPENAI_API_BASE', '')}")
 
-    if not (is_mobile and using_ciris_proxy):
-        logger.info("Billing provider not needed (not using CIRIS proxy or not mobile)")
+    # Billing is required for ANY client on the CIRIS LLM proxy — desktop
+    # Google-OAuth included, not just mobile (#1098 follow-up). The OAuth ID
+    # token below is the real gate: no token, no billing provider. The old
+    # `is_mobile` requirement silently disabled billing on desktop CIRISProxy,
+    # so those LLM calls went out with no billing identity.
+    if not using_ciris_proxy:
+        logger.info("Billing provider not needed (not using CIRIS proxy)")
         return
 
     google_id_token = os.getenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", "") or os.getenv("CIRIS_BILLING_APPLE_ID_TOKEN", "")
     if not google_id_token:
-        logger.warning("Mobile using CIRIS LLM proxy without OAuth ID token - billing provider not configured")
+        logger.warning("Using CIRIS LLM proxy without OAuth ID token - billing provider not configured")
         return
 
     credit_provider = create_billing_provider(google_id_token)

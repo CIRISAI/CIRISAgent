@@ -881,15 +881,17 @@ data class SetupFormState(
             runWithoutAi -> null
             // "Google sign-in is required" told a SIGNED-IN user to sign in.
             //
-            // The desktop browser-handoff path calls setGoogleAuthState(isAuth =
-            // true, idToken = null) on purpose — it collects a BEARER, not the raw
-            // Google ID token — so isGoogleAuth is true while googleIdToken is
-            // null. The old single check read that as "not signed in".
+            // The desktop browser-handoff path forwards the provider's ID token
+            // when the node sends one (CIRISApp: idToken = collected.idToken,
+            // CIRISServer#434 / ciris-server 0.5.177+). An older node — or a
+            // provider that issues no ID token — leaves isGoogleAuth true while
+            // googleIdToken is null, and the old single check read that as
+            // "not signed in".
             //
             // The token still genuinely matters: CIRIS_PROXY sends it AS the LLM
             // api_key (SetupViewModel: llm_api_key = googleIdToken ?: ""), so
-            // waving this through would configure the proxy with an EMPTY key and
-            // fail later, further from the cause. Two states, two messages.
+            // waving a null through would configure the proxy with an EMPTY key
+            // and fail later, further from the cause. Two states, two messages.
             setupMode == SetupMode.CIRIS_PROXY && !isGoogleAuth ->
                 LocalizationHelper.getString("setup_validation_google_required")
             setupMode == SetupMode.CIRIS_PROXY && googleIdToken == null ->

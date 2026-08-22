@@ -238,3 +238,57 @@ def sync_oauth_providers_to_node(node_url: str = "http://127.0.0.1:4243") -> Non
             logger.warning("[OAUTH_SYNC] registering provider %r returned %s", name, status)
 
     _sync_callback_base(node_url)
+
+
+#: The CIRIS mobile app's Apple audience. Native "Sign in with Apple" mints an
+#: ID token whose `aud` is the app's bundle id; the node validates the token
+#: against a configured provider's client_id. Public identifier, NOT a secret.
+_APPLE_NATIVE_CLIENT_ID = "ai.ciris.mobile"
+
+
+def ensure_native_apple_provider(node_url: str = "http://127.0.0.1:4243") -> None:
+    """Register the app's native Apple audience with the node.
+
+    2.9.14 folded /v1/auth/* onto the node. The substrate ships a default Google
+    provider (the browser-handoff client) but NO Apple provider, so native
+    "Sign in with Apple" (POST /v1/auth/native/apple) is refused
+    "Apple native auth is not configured for this application"
+    (reason_id=auth.oauth.native_token_invalid) — the bundle id it checks the
+    token `aud` against was never carried across the fold, and setup completes
+    (via claim-remote) but the FIRST real Apple login afterwards 401s.
+
+    Registering the provider makes native validation pass (verified: signature +
+    aud + exp are checked against Apple's live keys). Native auth performs no
+    code exchange, so no client_secret is meaningful — the config endpoint
+    requires the field, so a non-secret placeholder is sent. Skipped when a
+    hosted Apple provider is already configured (a server deployment owns that
+    via oauth.json). Idempotent upsert; never raises — auth being unconfigured
+    must not stop an agent from starting.
+    """
+    try:
+        # A hosted Apple provider (real client_id + secret from oauth.json) owns
+        # this config on a server deployment — do not clobber it.
+        existing = _read_provider_config() or {}
+        if "apple" in existing:
+            logger.debug("[OAUTH_SYNC] hosted Apple provider present — skipping native registration")
+            return
+
+        payload: Dict[str, Any] = {
+            "provider": "apple",
+            "client_id": _APPLE_NATIVE_CLIENT_ID,
+            # Native token validation does no code exchange, so there is no
+            # secret; the endpoint requires the field, so send a placeholder
+            # that can never authenticate a hosted flow.
+            "client_secret": "native-apple-no-hosted-flow",
+            "metadata": {
+                "ios_client_id": _APPLE_NATIVE_CLIENT_ID,
+                "bundle_id": _APPLE_NATIVE_CLIENT_ID,
+            },
+        }
+        status, _ = _call("POST", f"{node_url}/v1/auth/oauth/providers", payload)
+        if status == 200:
+            logger.info("[OAUTH_SYNC] native Apple provider registered (aud=%s)", _APPLE_NATIVE_CLIENT_ID)
+        else:
+            logger.warning("[OAUTH_SYNC] native Apple provider registration returned %s", status)
+    except Exception:  # pragma: no cover - never block boot on OAuth config
+        logger.exception("[OAUTH_SYNC] native Apple provider registration failed (agent continues)")

@@ -632,6 +632,19 @@ async def _create_setup_users(
     await auth_service.start()
 
     try:
+        from ciris_engine.logic.persistence.stores import authentication_store
+
+        # WORKAROUND (#1098 — drop once ciris-server mints OAuth WA ids as proper
+        # `wa-…`): the OAuth browser-handoff parks the session as a live wa_cert
+        # whose id is the placeholder `oauth-<provider>-<sub>`. Capture it BEFORE
+        # we mint+link (linking can repoint the primary oauth index) so we can
+        # retire it afterwards and leave exactly one live cert for the identity.
+        provisional_oauth_wa_id: Optional[str] = None
+        if setup.oauth_provider and setup.oauth_external_id:
+            provisional_oauth_wa_id = authentication_store.provisional_oauth_cert_id(
+                setup.oauth_provider, setup.oauth_external_id
+            )
+
         # Check if OAuth user already exists and update to ROOT if found
         existing_wa, _ = await _check_existing_oauth_wa(auth_service, setup)
 
@@ -676,6 +689,18 @@ async def _create_setup_users(
             wa_cert = await _link_oauth_identity_to_wa(auth_service, setup, wa_cert)
         else:
             _log_oauth_linking_skip(setup)
+
+        # Retire the substrate's provisional OAuth cert so it does not duplicate
+        # the WA we just minted+linked (#1098 workaround — drop once ciris-server
+        # mints OAuth WA ids correctly). Raw set_active, so the placeholder id is
+        # never materialized into a WACertificate.
+        if provisional_oauth_wa_id and provisional_oauth_wa_id != wa_cert.wa_id:
+            authentication_store.update_wa_certificate(provisional_oauth_wa_id, {"active": False})
+            logger.info(
+                "CIRIS_USER_CREATE: retired provisional OAuth cert %s (kept minted %s)",
+                provisional_oauth_wa_id,
+                wa_cert.wa_id,
+            )
 
         # Update default admin password if specified
         assert wa_cert is not None, "wa_cert should be set by create_wa or existing WA lookup"

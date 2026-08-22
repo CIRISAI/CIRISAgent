@@ -1662,35 +1662,54 @@ fun CIRISApp(
                             // password manager and 2FA, short enough that an
                             // abandoned attempt does not spin forever.
                             var token: ai.ciris.mobile.shared.models.OAuthHandoff? = null
+                            var failure: ai.ciris.mobile.shared.models.OAuthHandoffPoll.Failed? = null
                             var attempts = 0
-                            while (token == null && attempts < 90) {
+                            while (token == null && failure == null && attempts < 90) {
                                 kotlinx.coroutines.delay(2000)
                                 attempts++
                                 // After ~20s our own tab has had its chance;
                                 // accept a sign-in that completed in a stray
                                 // tab rather than spin while the node holds a
                                 // perfectly good session.
-                                token = apiClient.collectOAuthHandoff(
+                                when (val poll = apiClient.pollOAuthHandoff(
                                     nonce,
                                     nodeBaseUrl,
                                     allowUnbound = attempts > 10,
-                                )
-                                // Heartbeat every ~20s: "still waiting" must be
-                                // visible, or a stalled flow looks like a crashed one.
-                                if (token == null && attempts % 10 == 0) {
-                                    platformLog(TAG, "[INFO][onGoogleSignIn] still waiting for the browser (${attempts * 2}s)")
+                                )) {
+                                    is ai.ciris.mobile.shared.models.OAuthHandoffPoll.Ready -> token = poll.handoff
+                                    // The node reported a TERMINAL failure — stop
+                                    // spinning and surface its reason (#1098). Without
+                                    // this, a failed sign-in spun the full ~3 minutes.
+                                    is ai.ciris.mobile.shared.models.OAuthHandoffPoll.Failed -> failure = poll
+                                    // Heartbeat every ~20s: "still waiting" must be
+                                    // visible, or a stalled flow looks like a crashed one.
+                                    ai.ciris.mobile.shared.models.OAuthHandoffPoll.Pending ->
+                                        if (attempts % 10 == 0) {
+                                            platformLog(TAG, "[INFO][onGoogleSignIn] still waiting for the browser (${attempts * 2}s)")
+                                        }
                                 }
                             }
                             isLoginLoading = false
                             loginStatusMessage = null
                             val collected = token
                             if (collected == null) {
-                                // Say WHICH failure this is. "Sign-in failed" would
-                                // cover both "you closed the tab" and "the node is
-                                // broken", and only one of those is the user's to fix.
-                                loginErrorMessage =
-                                    LocalizationHelper.getString("auth.browser_signin.timed_out")
-                                platformLog(TAG, "[WARN][onGoogleSignIn] no hand-off after ${attempts * 2}s. If you signed in successfully, the browser tab was probably an OLD one opened without ?app_nonce= — close stray CIRIS sign-in tabs and use the button again.")
+                                // Show the reason the browser tab showed, so a user
+                                // who saw the node's error on the web page sees the
+                                // same thing here — not a 3-minute spinner (#1098).
+                                loginErrorMessage = when (failure?.reasonId) {
+                                    "auth.oauth.store_unavailable" ->
+                                        "That account is linked to more than one certificate on this node, so it can't sign you in with it. Sign in with your local username and password, or retire the duplicate."
+                                    "auth.oauth.flow_expired", "auth.oauth.state_invalid" ->
+                                        "That sign-in expired before it completed. Please try again."
+                                    null ->
+                                        LocalizationHelper.getString("auth.browser_signin.timed_out")
+                                    else ->
+                                        "Google sign-in couldn't complete (${failure?.reasonId}). Try again, or sign in with your local username and password."
+                                }
+                                // Return to the Login chooser so the message is
+                                // actionable rather than stranded behind a spinner.
+                                currentScreen = Screen.Login
+                                platformLog(TAG, "[WARN][onGoogleSignIn] sign-in did not complete after ${attempts * 2}s (reason=${failure?.reasonId ?: "timeout"}).")
                             } else {
                                 platformLog(TAG, "[INFO][onGoogleSignIn] desktop browser sign-in collected a session")
                                 currentAccessToken = collected.accessToken

@@ -522,9 +522,16 @@ def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Opti
     # sign-in fell back to the node's loopback callback and Google rejected it.
     # Best-effort and idempotent: a desktop install has no oauth.json and needs none.
     try:
-        from ciris_engine.logic.runtime.oauth_provider_sync import sync_oauth_providers_to_node
+        from ciris_engine.logic.runtime.oauth_provider_sync import (
+            ensure_native_apple_provider,
+            sync_oauth_providers_to_node,
+        )
 
         sync_oauth_providers_to_node()
+        # The substrate defaults a Google provider but no Apple one, so native
+        # "Sign in with Apple" is refused "not configured" until we register the
+        # app's bundle id (the 2.9.14 fold did not carry it across). Idempotent.
+        ensure_native_apple_provider()
     except Exception:  # pragma: no cover - never block the boot on OAuth config
         logger.exception("Node fold: OAuth provider sync failed (agent continues)")
     _reprime_federation_delivery("post-bind")

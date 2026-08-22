@@ -823,6 +823,102 @@ def _resolve_udid(helper: IDeviceHelper) -> Optional[str]:
     return None
 
 
+def _sanitize_model_tag(model_id: str) -> str:
+    """Mirror SetupScreen.kt's ``menu_model_${model.id.replace("/","_").replace(":","_")}``.
+
+    The live-model dropdown item testTags are derived from the provider's model
+    id with ``/`` and ``:`` swapped for ``_``. Keep this in lockstep with the
+    Kotlin composable or the automation clicks a tag that doesn't exist.
+    """
+    return model_id.replace("/", "_").replace(":", "_")
+
+
+def _select_from_model_dropdown(client: "TestAutomationClient", model_tag: str, llm_model: str) -> Tuple[bool, str]:
+    """Open the live-model dropdown and pick a model.
+
+    The ``ExposedDropdownMenu`` composes its ``menu_model_*`` items only while
+    expanded, so we click the ``input_llm_model`` anchor first, THEN read the
+    tree for the option tags. Prefer the requested model; otherwise take the
+    first offered option (the provider list is CIRIS-sorted, recommended-first,
+    and the app auto-selects the recommended one — clicking the first option
+    just makes that explicit so Finish is never blocked on an empty selection).
+    """
+    client.click("input_llm_model")
+    time.sleep(1)
+    menu_tags = [t for t in client.tree() if t.startswith("menu_model_")]
+    if model_tag and f"menu_model_{model_tag}" in menu_tags:
+        client.click(f"menu_model_{model_tag}")
+        return True, f"selected requested model {llm_model!r} from live dropdown"
+    if menu_tags:
+        client.click(menu_tags[0])
+        return True, f"selected {menu_tags[0]} (first of {len(menu_tags)} live models)"
+    return True, "model dropdown present but empty; provider default stands"
+
+
+def _drive_llm_wizard_step(
+    client: "TestAutomationClient",
+    llm_provider: str,
+    llm_api_key: str,
+    llm_model: str,
+) -> Tuple[bool, str]:
+    """Drive the wizard's 'AI' step (LLM provider / key / model).
+
+    Since 2.9.30 (#1062) the model field is *adaptive*. Once a valid BYOK key
+    yields a live model list from the provider, the free-text
+    ``input_llm_model_text`` field is replaced by a read-only dropdown
+    (``input_llm_model`` anchor + one ``menu_model_<sanitized-id>`` per listed
+    model). Before validation — or with no key at all (mock path) — the text
+    field remains. This helper accommodates BOTH shapes: it waits out the
+    provider round-trip for a BYOK key and selects from the dropdown, and falls
+    back to typing into the text field when no live list appears.
+    """
+    # 1. Provider selection (dropdown toggled by input_llm_provider).
+    if client.click("input_llm_provider"):
+        time.sleep(1)
+        client.click(f"menu_provider_{llm_provider}")
+        time.sleep(1)
+
+    # 2. API key.
+    if llm_api_key:
+        client.input("input_api_key", llm_api_key)
+        time.sleep(1)
+
+    model_tag = _sanitize_model_tag(llm_model) if llm_model else ""
+
+    # 3. Model. Entering a key does NOT list models on its own — the wizard
+    #    runs the shared checkLlmConfig probe only when "Test Connection" is
+    #    tapped (SetupScreen.kt), which then populates the live-model dropdown
+    #    and auto-selects a recommended model. So for a BYOK key we tap
+    #    btn_test_connection, then give the provider round-trip a generous
+    #    window before deciding it's a text-only step.
+    if llm_api_key:
+        client.click("btn_test_connection")
+        time.sleep(2)
+        deadline = time.time() + 25.0
+        while time.time() < deadline:
+            tags = set(client.tree())
+            if "input_llm_model" in tags:
+                return _select_from_model_dropdown(client, model_tag, llm_model)
+            if "input_llm_model_text" not in tags:
+                # Step still rendering — neither widget yet.
+                time.sleep(1)
+                continue
+            # Text field present but the model list may still be loading.
+            time.sleep(1.5)
+        # Live list never arrived; fall through to the text fallback below.
+
+    tags = set(client.tree())
+    if "input_llm_model_text" in tags:
+        if llm_model:
+            client.input("input_llm_model_text", llm_model)
+            return True, f"typed model {llm_model!r} into text field (no live list)"
+        return True, "no model specified; using provider/mock default"
+    if "input_llm_model" in tags:
+        # Dropdown appeared late (e.g. after the wait window); use it.
+        return _select_from_model_dropdown(client, model_tag, llm_model)
+    return True, "no model widget present; leaving provider default"
+
+
 def test_physical_ui_login(helper: IDeviceHelper, ui: PhysicalDeviceUIHelper, config: dict) -> TestReport:
     """Drive a real UI login on the device via the in-app test-automation server.
 
@@ -973,17 +1069,12 @@ def test_physical_ui_login(helper: IDeviceHelper, ui: PhysicalDeviceUIHelper, co
         time.sleep(3)
 
         # ── Step 3 "AI": LLM provider / key / model ──
+        # Adaptive model widget since 2.9.30 (#1062): a valid BYOK key + Test
+        # Connection yields a live-model dropdown; otherwise a free-text field.
+        # _drive_llm_wizard_step accommodates both.
         print(f"  [5e] 'AI' step: LLM provider={llm_provider} model={llm_model or '(default)'}...")
-        if client.click("input_llm_provider"):
-            time.sleep(1)
-            client.click(f"menu_provider_{llm_provider}")
-            time.sleep(1)
-        if llm_api_key:
-            client.input("input_api_key", llm_api_key)
-            time.sleep(1)
-        if llm_model:
-            client.input("input_llm_model_text", llm_model)
-            time.sleep(1)
+        ai_ok, ai_msg = _drive_llm_wizard_step(client, llm_provider, llm_api_key, llm_model)
+        print(f"       LLM step: {ai_msg}")
 
         # ── Finish → "CLAIM then COMPLETE" (exercises the claim_pin file read) ──
         print("  [5f] Finishing setup — self-claim + complete...")

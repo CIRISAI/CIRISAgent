@@ -329,6 +329,91 @@ class DesktopAppTestRunner:
 
         return all(r.success for r in self.results)
 
+    async def _drive_llm_step_byok(
+        self,
+        provider: str,
+        api_key: str,
+        model: Optional[str],
+    ) -> None:
+        """Drive the AI step's BYOK path: provider → key → Test Connection → model.
+
+        Since 2.9.30 (#1062) the model field is adaptive. Once a valid key +
+        Test Connection yields a live model list, the free-text
+        ``input_llm_model_text`` is replaced by a dropdown (``input_llm_model``
+        anchor + one ``menu_model_<sanitized-id>`` per model). The live list
+        only appears AFTER btn_test_connection runs the shared checkLlmConfig
+        probe, so we must click it (it is now testableClickable, the fix under
+        test) before waiting for the dropdown. Falls back to the text field
+        when no live list appears.
+        """
+        assert self.helper is not None
+
+        def _model_tag(model_id: str) -> str:
+            # Mirror SetupScreen.kt: menu_model_${id.replace("/","_").replace(":","_")}
+            return model_id.replace("/", "_").replace(":", "_")
+
+        async def _tags() -> set:
+            return {e.test_tag for e in await self.helper.get_elements()}
+
+        self._log(f"AI (BYOK): provider={provider} model={model or '(auto)'}")
+
+        # 1. Provider.
+        if not await self.helper.click("input_llm_provider"):
+            raise RuntimeError("Failed to open LLM provider dropdown")
+        if not await self.helper.wait_for_element(f"menu_provider_{provider}", timeout=4000):
+            raise RuntimeError(f"menu_provider_{provider} not found in provider dropdown")
+        await self.helper.click(f"menu_provider_{provider}")
+        await asyncio.sleep(0.3)
+
+        # 2. API key.
+        if not await self.helper.input_text("input_api_key", api_key):
+            raise RuntimeError("Failed to enter API key (input_api_key)")
+        await asyncio.sleep(0.3)
+
+        # 3. Test Connection — populates the live-model dropdown (the fix: this
+        #    button is now testableClickable, so /click can fire it). Retry it a
+        #    few times: on a freshly-wiped node the backend/node can still be
+        #    warming when the first probe fires, so listModels throws and no
+        #    dropdown appears. Each attempt re-runs the whole checkLlmConfig.
+        model_tag = _model_tag(model) if model else ""
+        for attempt in range(1, 6):
+            if not await self.helper.click("btn_test_connection"):
+                raise RuntimeError(
+                    "Failed to click btn_test_connection — is the app built with the "
+                    "testableClickable fix? (#1062)"
+                )
+            self._log(f"AI (BYOK): Test Connection attempt {attempt}/5")
+            # One checkLlmConfig cycle (validate + listModels) is a few seconds;
+            # give it up to 18s to surface the dropdown before retrying.
+            inner_deadline = time.time() + 18
+            while time.time() < inner_deadline:
+                tags = await _tags()
+                if "input_llm_model" in tags:
+                    await self.helper.click("input_llm_model")
+                    await asyncio.sleep(0.6)
+                    menu = sorted(t for t in await _tags() if t.startswith("menu_model_"))
+                    if model_tag and f"menu_model_{model_tag}" in menu:
+                        await self.helper.click(f"menu_model_{model_tag}")
+                        self._log(f"AI (BYOK): selected requested model {model!r} from live dropdown")
+                    elif menu:
+                        await self.helper.click(menu[0])
+                        self._log(f"AI (BYOK): selected {menu[0]} (first of {len(menu)} live models)")
+                    else:
+                        self._log("AI (BYOK): model dropdown present but empty; provider default stands")
+                    return
+                await asyncio.sleep(1)
+            # No dropdown this cycle. Let the node warm before the next attempt.
+            self._log(f"AI (BYOK): no live list on attempt {attempt}; node may be warming, retrying")
+            await asyncio.sleep(4)
+
+        # 4. Still no live list after retries → text fallback so setup can finish.
+        tags = await _tags()
+        if "input_llm_model_text" in tags and model:
+            await self.helper.input_text("input_llm_model_text", model)
+            self._log(f"AI (BYOK): typed model {model!r} into text field (no live list appeared)")
+        else:
+            self._log("AI (BYOK): no live model list appeared after retries; leaving provider/text default")
+
     async def test_setup_wizard_flow(
         self,
         username: str = "admin",
@@ -337,6 +422,9 @@ class DesktopAppTestRunner:
         announce: bool = True,
         trace_opt_in: bool = True,
         age_band: str = "adult",
+        llm_provider: Optional[str] = None,
+        llm_api_key: Optional[str] = None,
+        llm_model: Optional[str] = None,
     ) -> bool:
         """Drive the first-run setup wizard via the test server.
 
@@ -517,7 +605,12 @@ class DesktopAppTestRunner:
             if not await self.helper.wait_for_element("input_llm_provider", timeout=6000):
                 self._log("No AI screen (node-client build) — the wizard is finishing")
                 return
-            if await self.helper.is_element_visible("btn_use_free_ai"):
+            if llm_api_key:
+                # BYOK path (#1062): real provider + key + Test Connection +
+                # live-model dropdown. This exercises the accommodation that
+                # made btn_test_connection reachable by automation.
+                await self._drive_llm_step_byok(llm_provider or "openrouter", llm_api_key, llm_model)
+            elif await self.helper.is_element_visible("btn_use_free_ai"):
                 # CIRIS-hosted proxy option (OAuth path) — no key entry needed.
                 self._log("AI: choosing CIRIS-hosted option (btn_use_free_ai)")
                 if not await self.helper.click("btn_use_free_ai"):
@@ -864,6 +957,32 @@ Examples:
         "--no-trace-opt-in",
         action="store_true",
         help="For desktop-setup/desktop-catchup: announce but don't opt into reasoning traces",
+    )
+    # BYOK LLM options for the desktop-setup AI step. Without a key the AI step
+    # takes the keyless 'local' provider (works with --mock-llm). With a key it
+    # drives the real BYOK path: provider + key + Test Connection + live-model
+    # dropdown (#1062).
+    parser.add_argument(
+        "--llm-provider",
+        default=None,
+        help="For desktop-setup: BYOK provider id (e.g. openrouter, groq, together). "
+        "Omit for the keyless 'local' provider.",
+    )
+    parser.add_argument(
+        "--llm-key",
+        default=None,
+        help="For desktop-setup: BYOK API key literal (prefer --llm-key-file).",
+    )
+    parser.add_argument(
+        "--llm-key-file",
+        default=None,
+        help="For desktop-setup: file holding the BYOK API key (e.g. ~/.openrouter_key).",
+    )
+    parser.add_argument(
+        "--llm-model",
+        default=None,
+        help="For desktop-setup: exact model id to select from the live dropdown "
+        "(default: whatever the wizard auto-selects as recommended).",
     )
 
     # Browser options
@@ -2249,12 +2368,22 @@ async def run_desktop_tests(args: argparse.Namespace) -> int:
             # First-run wizard (2.9.14, three screens):
             #   YOU (fed-ID + account + age) → JOIN_FEDERATION (consent)
             #   → [AI] → COMPLETE
+            _byok_key = args.llm_key
+            if not _byok_key and args.llm_key_file:
+                _key_path = Path(args.llm_key_file).expanduser()
+                if _key_path.is_file():
+                    _byok_key = _key_path.read_text().strip()
+                else:
+                    print(f" [WARN] --llm-key-file not found: {_key_path} — falling back to keyless local")
             success = await runner.test_setup_wizard_flow(
                 username=args.username or TEST_ADMIN_USERNAME,
                 password=args.password or TEST_ADMIN_PASSWORD,
                 fed_label=args.fed_label,
                 announce=not args.no_announce,
                 trace_opt_in=not args.no_trace_opt_in,
+                llm_provider=args.llm_provider,
+                llm_api_key=_byok_key,
+                llm_model=args.llm_model,
             )
             runner.print_summary()
             return 0 if success else 1

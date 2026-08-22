@@ -43,3 +43,33 @@ data class OAuthHandoff(
     @SerialName("id_token")
     val idToken: String? = null,
 )
+
+/**
+ * The node's terminal error body on the OAuth hand-off endpoint, e.g.
+ * `{"reason_id":"auth.oauth.store_unavailable","status":"..."}`. Human message
+ * is derived from [reasonId] client-side (the body carries no prose).
+ */
+@Serializable
+data class OAuthHandoffError(
+    @SerialName("reason_id")
+    val reasonId: String? = null,
+    val status: String? = null,
+)
+
+/**
+ * The outcome of one poll of the desktop OAuth hand-off (#1098 follow-up).
+ *
+ * Distinguishes a TERMINAL node failure from "still waiting", so a failed
+ * sign-in returns to Login with the node's reason instead of spinning to the
+ * ~3-minute timeout.
+ */
+sealed class OAuthHandoffPoll {
+    /** 204 — not yet; the human is still in the browser. Keep waiting. */
+    object Pending : OAuthHandoffPoll()
+
+    /** The node handed the session over. */
+    data class Ready(val handoff: OAuthHandoff) : OAuthHandoffPoll()
+
+    /** The node reported a terminal failure for this flow. Stop and show it. */
+    data class Failed(val reasonId: String?, val status: String?) : OAuthHandoffPoll()
+}

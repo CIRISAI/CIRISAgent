@@ -556,6 +556,31 @@ def get_wa_by_oauth(provider: str, external_id: str) -> Optional[WACertificate]:
     return None
 
 
+def provisional_oauth_cert_id(provider: str, external_id: str) -> Optional[str]:
+    """Return the id of the substrate's PROVISIONAL OAuth cert, or None.
+
+    WORKAROUND for #1098 — drop once ciris-server mints OAuth WA ids as proper
+    ``wa-…`` (server issue). The OAuth browser-handoff parks the session as a
+    live wa_cert keyed by (provider, external_id) whose wa_id is the placeholder
+    ``oauth-<provider>-<sub>``. Once setup mints+links a real WA for the same
+    identity, that placeholder becomes a DUPLICATE and the node refuses the
+    ambiguous account. Callers capture this id BEFORE linking (linking can
+    repoint the primary oauth index) and deactivate it afterwards via
+    ``update_wa_certificate(id, {"active": False})`` — the raw set_active path,
+    since materializing the placeholder id would fail the wa_id pattern.
+    Returns None when the primary row is already a minted WA or absent.
+    """
+    engine = _get_engine()
+    raw = engine.wa_cert_get_by_oauth(provider, external_id)
+    row = _parse_persist_payload(raw)
+    if not isinstance(row, dict):
+        return None
+    wa_id = row.get("wa_id")
+    if isinstance(wa_id, str) and wa_id and not _MINTED_WA_ID.match(wa_id):
+        return wa_id
+    return None
+
+
 def get_wa_by_adapter(adapter_id: str) -> Optional[WACertificate]:
     """Get an active WA certificate by adapter_id.
 

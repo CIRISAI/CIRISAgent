@@ -1618,17 +1618,45 @@ class CIRISApiClient(
          * bound path always wins when it exists.
          */
         allowUnbound: Boolean = false,
-    ): OAuthHandoff? {
+    ): OAuthHandoff? = (pollOAuthHandoff(appNonce, localNodeUrl, allowUnbound) as? OAuthHandoffPoll.Ready)?.handoff
+
+    /**
+     * Poll the desktop OAuth hand-off, distinguishing a TERMINAL node failure
+     * from "still waiting" (#1098 follow-up).
+     *
+     * `collectOAuthHandoff` collapsed every non-204 to null, so a failed
+     * sign-in — the node already reporting e.g. `auth.oauth.store_unavailable`
+     * or `auth.oauth.flow_expired` — was indistinguishable from "the human is
+     * still in the browser", and the caller spun the full ~3-minute timeout
+     * instead of returning to Login with the reason. This surfaces the node's
+     * own `reason_id`. Only a node-reported terminal state (a body carrying a
+     * `reason_id`) stops the poll; an unrecognized non-success is treated as
+     * transient so a boot blip does not abort a live sign-in.
+     */
+    suspend fun pollOAuthHandoff(
+        appNonce: String,
+        localNodeUrl: String = LOCAL_NODE_URL,
+        allowUnbound: Boolean = false,
+    ): OAuthHandoffPoll {
         val client = federationHttpClient()
         return try {
             val response = client.get(
                 "$localNodeUrl/v1/auth/oauth/handoff?app_nonce=$appNonce&allow_unbound=$allowUnbound"
             )
-            if (response.status.value == 204) return null
-            if (!response.status.isSuccess()) return null
-            jsonConfig.decodeFromString(OAuthHandoff.serializer(), response.bodyAsText())
+            when {
+                response.status.value == 204 -> OAuthHandoffPoll.Pending
+                response.status.isSuccess() ->
+                    OAuthHandoffPoll.Ready(jsonConfig.decodeFromString(OAuthHandoff.serializer(), response.bodyAsText()))
+                else -> {
+                    val err = runCatching {
+                        jsonConfig.decodeFromString(OAuthHandoffError.serializer(), response.bodyAsText())
+                    }.getOrNull()
+                    if (err?.reasonId != null) OAuthHandoffPoll.Failed(err.reasonId, err.status)
+                    else OAuthHandoffPoll.Pending
+                }
+            }
         } catch (_: Exception) {
-            null
+            OAuthHandoffPoll.Pending
         } finally {
             client.close()
         }

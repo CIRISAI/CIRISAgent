@@ -47,7 +47,10 @@ fun isWeb(): Boolean = getPlatform() == Platform.WEB
 fun getOAuthProviderName(): String = when (getPlatform()) {
     Platform.IOS -> "Apple"
     Platform.ANDROID -> "Google"
-    Platform.DESKTOP -> "Desktop"
+    // Desktop signs in through the Google browser-handoff flow (there is no
+    // native SDK), so the provider the user sees is Google — not "Desktop".
+    // Real OAuth routing already uses "google" here (CIRISApp: `else "google"`).
+    Platform.DESKTOP -> "Google"
     Platform.WEB -> "Web"
 }
 
@@ -57,7 +60,7 @@ fun getOAuthProviderName(): String = when (getPlatform()) {
 fun getOAuthProviderId(): String = when (getPlatform()) {
     Platform.IOS -> "apple"
     Platform.ANDROID -> "google"
-    Platform.DESKTOP -> "desktop"
+    Platform.DESKTOP -> "google"
     Platform.WEB -> "web"
 }
 

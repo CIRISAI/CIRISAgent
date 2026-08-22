@@ -509,13 +509,40 @@ def _list_active_by_role(role: str, limit: int = 1000) -> List[Dict[str, Any]]:
     return [r for r in obj if isinstance(r, dict)]
 
 
+#: A minted WA id — ``wa-YYYY-MM-DD-XXXXXX``. Mirrors WACertificate.wa_id's
+#: own pattern (schemas/services/authority_core.py). The OAuth browser-handoff
+#: flow can leave a PROVISIONAL wa_cert row keyed by (provider, external_id)
+#: whose wa_id is the OAuth placeholder ``oauth-<provider>-<sub>`` — which is not
+#: a minted certificate and does NOT satisfy this pattern (#1098).
+_MINTED_WA_ID = re.compile(r"^wa-\d{4}-\d{2}-\d{2}-[A-Z0-9]{6}$")
+
+
+def _row_to_wa_or_none(row: Dict[str, Any]) -> Optional[WACertificate]:
+    """Materialize a row into a WACertificate, or None if it is not a minted WA.
+
+    A provisional OAuth-placeholder row (``wa_id='oauth-<provider>-<sub>'``) is
+    not a certificate; constructing a WACertificate from it raises on the
+    wa_id pattern and 500s completeSetup, looping the wizard (#1098). Treat such
+    a row as absent so callers fall through to the real linked WA — or create
+    and link one — instead of crashing.
+    """
+    wa_id = row.get("wa_id")
+    if not isinstance(wa_id, str) or not _MINTED_WA_ID.match(wa_id):
+        return None
+    return _row_to_wa(row)
+
+
 def get_wa_by_oauth(provider: str, external_id: str) -> Optional[WACertificate]:
     """Get an active WA certificate by OAuth identity (primary + linked fallback)."""
     engine = _get_engine()
     raw = engine.wa_cert_get_by_oauth(provider, external_id)
     row = _active_or_none(_parse_persist_payload(raw))
     if row is not None:
-        return _row_to_wa(row)
+        wa = _row_to_wa_or_none(row)
+        if wa is not None:
+            return wa
+        # Provisional OAuth-placeholder row — not a minted WA. Fall through to
+        # the linked-identity search below (and, ultimately, None → mint one).
 
     # Fallback: search linked OAuth identities across all active certs.
     for role in ("root", "authority", "observer"):

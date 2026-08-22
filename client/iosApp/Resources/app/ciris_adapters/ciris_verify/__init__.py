@@ -38,6 +38,7 @@ from .ffi_bindings import (  # noqa: F401
     ValidationStatus,
     VerificationFailedError,
     get_library_version,
+    jcs_canonicalize,
     setup_logging,
 )
 from .service import CIRISVerifyService, VerificationConfig  # noqa: F401

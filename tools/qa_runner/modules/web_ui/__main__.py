@@ -651,12 +651,21 @@ class DesktopAppTestRunner:
         # consent control, so no production node could ever ship a trace.
         async def consent_step():
             self._log("JOIN_FEDERATION: waiting for toggle_announce_ownership")
-            if not await self.helper.wait_for_element("toggle_announce_ownership", timeout=8000):
+            if not await self.helper.wait_for_element("toggle_announce_ownership", timeout=15000):
                 raise RuntimeError("toggle_announce_ownership not found on the consent screen")
-            if not await self.helper.is_element_visible("toggle_trace_opt_in"):
+            # WAIT FOR IT — the two toggles do not arrive together. Announce is
+            # local state and paints immediately; the trace grant is rendered
+            # from `GET /v1/setup/consent-disclosure`, so on a loaded runner it
+            # lands seconds later. A one-shot is_element_visible here read that
+            # gap as the 2.9.13 sealed-consent regression and failed a build
+            # whose consent screen was fine (same race as you_step, one screen
+            # further on). A genuine regression still fails, 15s later.
+            if not await self.helper.wait_for_element("toggle_trace_opt_in", timeout=15000):
+                await self._dump_tree("join_federation:no-trace-toggle")
                 raise RuntimeError(
-                    "toggle_trace_opt_in is not reachable on the consent screen — "
-                    "this is the 2.9.13 sealed-consent regression"
+                    "toggle_trace_opt_in is not reachable on the consent screen 15s after "
+                    "the announce toggle — this is the 2.9.13 sealed-consent regression "
+                    "(the disclosure carried no `replication` grant)"
                 )
             if not announce:
                 await self.helper.click("toggle_announce_ownership")
@@ -672,7 +681,11 @@ class DesktopAppTestRunner:
         # ── Screen 3: AI (agent build only; final step there) ─────────
         async def ai_step():
             self._log("Probing for the AI screen (agent builds only)")
-            if not await self.helper.wait_for_element("input_llm_provider", timeout=6000):
+            # 20s, not 6s: the same CI runner has taken 18.8s just to paint the
+            # wizard's first screen. At 6s a loaded agent build looks exactly
+            # like a node-client build that has no AI screen at all, and the run
+            # walks past the whole LLM step reporting nothing wrong.
+            if not await self.helper.wait_for_element("input_llm_provider", timeout=20000):
                 self._log("No AI screen (node-client build) — the wizard is finishing")
                 return
             if llm_api_key:

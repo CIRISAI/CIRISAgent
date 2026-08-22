@@ -25,8 +25,8 @@ android {
         applicationId "ai.ciris.mobile"
         minSdk 24
         targetSdk 35
-        versionCode 170
-        versionName "2.9.33"
+        versionCode 171
+        versionName "2.9.34"
 
         ndk {
             // Include x86_64 for emulator testing (Chaquopy reads abiFilters at config time)
@@ -59,7 +59,7 @@ android {
                 // installs the Android-bundled Python raises ModuleNotFound
                 // on `from ciris_persist import …` / `import ciris_edge` at
                 // boot, and `/v1/federation/identity` 503s the UI.
-                install "ciris-server==0.5.184"  // ONE substrate wheel — #979/#984 refloat (2026-08-02): mint_location_proof (CIRISServer#341, §0.8.1 rough-only bound enforced at mint) + sign_object/verify_object (detached artifact signing, label sealed in the envelope). EXACT pin, lockstep with requirements.txt (tools/update_substrate_libs.py --lib server). Android wheels sha256-verified in client/androidApp/wheels/.
+                install "ciris-server==0.5.186"  // ONE substrate wheel — #979/#984 refloat (2026-08-02): mint_location_proof (CIRISServer#341, §0.8.1 rough-only bound enforced at mint) + sign_object/verify_object (detached artifact signing, label sealed in the envelope). EXACT pin, lockstep with requirements.txt (tools/update_substrate_libs.py --lib server). Android wheels sha256-verified in client/androidApp/wheels/.
                                 // ciris-lens-core is REQUIRED by the accord_metrics adapter
                 // in 2.9.6+ (CIRISAgent#866 LensCore fold) — the fourth
                 // substrate leg. Android wheels ship in the lens-core release

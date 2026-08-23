@@ -446,3 +446,168 @@ class TestTheBillingCallbackCannotUndoARefresh:
         ).read_text(encoding="utf-8")
         factory = src[src.index("def create_billing_provider") : src.index("async def reinitialize_billing_provider")]
         assert "read_proxy_token" in factory, "get_fresh_token must not re-implement the choice"
+
+
+class TestTheSelectorIsStable:
+    """The same environment must give the same answer every time."""
+
+    def test_opaque_tokens_do_not_alternate_across_repeated_calls(self, monkeypatch):
+        """The bug this class exists for.
+
+        With two opaque tokens the earlier tie-break preferred "whichever copy
+        is not the one in hand". Holding A it returned B; holding B, the stable
+        sort put A first again and the guard no longer fired, so it returned A.
+        Credentials flipped on every single billing request — one of them
+        always the rejected one. A selector whose answer depends on who is
+        asking is not a selector.
+        """
+        from ciris_engine.logic.utils.token_handshake import read_proxy_token
+
+        monkeypatch.setenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", "opaque-a")
+        monkeypatch.setenv("CIRIS_BILLING_OAUTH_TOKEN", "opaque-b")
+
+        answers = {read_proxy_token(current=held)[0] for held in ("", "opaque-a", "opaque-b")}
+        assert len(answers) == 1, f"the selector answered differently depending on what was held: {answers}"
+
+    def test_repeated_billing_requests_settle_on_one_credential(self, monkeypatch):
+        """The same property through the provider, which is where it bit."""
+        from ciris_engine.logic.services.infrastructure.resource_monitor.ciris_billing_provider import (
+            CIRISBillingProvider,
+        )
+
+        monkeypatch.setenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", "opaque-expired")
+        monkeypatch.setenv("CIRIS_BILLING_OAUTH_TOKEN", "opaque-refreshed")
+
+        provider = CIRISBillingProvider.__new__(CIRISBillingProvider)
+        provider._google_id_token = "opaque-expired"
+        provider._token_refresh_callback = lambda: "opaque-expired"
+
+        seen = {provider._get_current_token() for _ in range(5)}
+        assert seen == {"opaque-refreshed"}, f"credentials alternated across requests: {seen}"
+
+    def test_expiry_still_beats_the_tie_order(self, monkeypatch):
+        """The tie order only applies when nothing carries a readable expiry."""
+        from ciris_engine.logic.utils.token_handshake import read_proxy_token
+
+        monkeypatch.setenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", jwt(3600))
+        monkeypatch.setenv("CIRIS_BILLING_OAUTH_TOKEN", jwt(-600))
+        token, var = read_proxy_token()
+        assert var == "CIRIS_BILLING_GOOGLE_ID_TOKEN", "a live token lost to an expired one on name order"
+
+
+class TestTheCallbackParticipates:
+    """Neither privileged nor ignored."""
+
+    def test_an_external_callback_token_is_used_even_when_env_has_one(self, monkeypatch):
+        """A caller fetching credentials from secure storage must not be
+        silenced by a stale bootstrap value left in the environment."""
+        from ciris_engine.logic.utils.token_handshake import read_proxy_token
+
+        monkeypatch.setenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", "opaque-bootstrap")
+        token, var = read_proxy_token(callback_token="from-secure-storage")
+        assert token == "from-secure-storage" and var == "callback"
+
+    def test_a_callback_that_merely_echoes_the_environment_gains_no_precedence(self, monkeypatch):
+        """Echoing is not sourcing: the legacy first-non-empty callback returns
+        a value already in .env, and must not win a tie with it."""
+        from ciris_engine.logic.utils.token_handshake import read_proxy_token
+
+        monkeypatch.setenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", "opaque-stale")
+        monkeypatch.setenv("CIRIS_BILLING_OAUTH_TOKEN", "opaque-refreshed")
+        token, _ = read_proxy_token(callback_token="opaque-stale")
+        assert token == "opaque-refreshed"
+
+    def test_a_fresher_env_token_still_beats_an_expired_callback(self, monkeypatch):
+        from ciris_engine.logic.utils.token_handshake import read_proxy_token
+
+        monkeypatch.setenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", jwt(3600))
+        token, var = read_proxy_token(callback_token=jwt(-600))
+        assert var == "CIRIS_BILLING_GOOGLE_ID_TOKEN"
+
+
+class TestHostedToolsSharesTheSelector:
+    def test_hosted_tools_does_not_read_the_token_names_itself(self):
+        src = (
+            Path(__file__).resolve().parents[6] / "ciris_adapters/ciris_hosted_tools/services.py"
+        ).read_text(encoding="utf-8")
+        method = src[src.index("def _get_google_id_token") : src.index("def _get_google_id_token") + 3000]
+        assert "read_proxy_token" in method, (
+            "hosted tools reads the token names directly, so after a client refreshes under a "
+            "different name its requests keep going out with the stale setup token while the "
+            "rest of the agent has recovered"
+        )
+
+
+class TestTheHandshakePathsThemselves:
+    """The three paths, and the failure modes of writing to them.
+
+    These are the values both processes must agree on, so each one is worth a
+    test of its own: a wrong directory here is invisible at runtime — the ask
+    is written, nothing answers, and the log looks like a client that simply
+    never refreshed.
+    """
+
+    def test_every_path_hangs_off_CIRIS_HOME(self, tmp_path, monkeypatch):
+        from ciris_engine.logic.utils import token_handshake as th
+
+        monkeypatch.setenv("CIRIS_HOME", str(tmp_path))
+        assert th.handshake_home() == tmp_path
+        assert th.token_refresh_request_path() == tmp_path / ".token_refresh_needed"
+        assert th.config_reload_signal_path() == tmp_path / ".config_reload"
+        assert th.env_path() == tmp_path / ".env"
+
+    def test_without_CIRIS_HOME_it_falls_back_to_the_shared_resolver(self, monkeypatch):
+        """Never a third opinion about where home is."""
+        from ciris_engine.logic.utils import token_handshake as th
+
+        monkeypatch.delenv("CIRIS_HOME", raising=False)
+        monkeypatch.setattr(
+            "ciris_engine.logic.utils.path_resolution.get_ciris_home",
+            lambda: "/somewhere/ciris",  # a str, as some callers return
+        )
+        assert th.handshake_home() == Path("/somewhere/ciris")
+        assert th.env_path() == Path("/somewhere/ciris/.env")
+
+    def test_the_ask_creates_the_directory_if_it_is_missing(self, tmp_path, monkeypatch):
+        from ciris_engine.logic.utils.token_handshake import request_token_refresh
+
+        home = tmp_path / "not-yet-there"
+        monkeypatch.setenv("CIRIS_HOME", str(home))
+        assert request_token_refresh(reason="first 401") is True
+        assert (home / ".token_refresh_needed").read_text()
+
+    def test_an_unwritable_home_is_reported_not_raised(self, tmp_path, monkeypatch, caplog):
+        """A 401 handler must not turn into a crash because the disk said no."""
+        import logging
+
+        from ciris_engine.logic.utils.token_handshake import request_token_refresh
+
+        blocker = tmp_path / "blocked"
+        blocker.write_text("i am a file, not a directory")
+        monkeypatch.setenv("CIRIS_HOME", str(blocker))
+        with caplog.at_level(logging.ERROR):
+            assert request_token_refresh(reason="proxy 401") is False
+        assert "failed to write" in caplog.text.lower()
+
+    def test_an_empty_environment_says_what_it_looked_for(self, monkeypatch, caplog):
+        """When there is no token anywhere, the log must name the variables it
+        checked — that line is how a stranded client is diagnosed at all."""
+        import logging
+
+        from ciris_engine.logic.utils.token_handshake import read_proxy_token
+
+        for var in ("CIRIS_BILLING_GOOGLE_ID_TOKEN", "CIRIS_BILLING_APPLE_ID_TOKEN", "CIRIS_BILLING_OAUTH_TOKEN"):
+            monkeypatch.delenv(var, raising=False)
+        with caplog.at_level(logging.WARNING):
+            token, var = read_proxy_token()
+        assert (token, var) == ("", "")
+        assert "CIRIS_BILLING_GOOGLE_ID_TOKEN" in caplog.text
+
+    def test_an_unreadable_jwt_sorts_last_instead_of_raising(self):
+        from ciris_engine.logic.utils.token_handshake import jwt_expiry_epoch
+
+        assert jwt_expiry_epoch("") is None
+        assert jwt_expiry_epoch("not-a-jwt") is None
+        assert jwt_expiry_epoch("a.b.c") is None          # payload is not base64 JSON
+        assert jwt_expiry_epoch("h.eyJzdWIiOiJ4In0.s") is None  # valid JSON, no exp
+        assert jwt_expiry_epoch(jwt(60)) is not None

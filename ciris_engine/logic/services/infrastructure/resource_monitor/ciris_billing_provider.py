@@ -23,11 +23,11 @@ from ciris_engine.schemas.services.credit_gate import (
 logger = logging.getLogger(__name__)
 
 
-def _read_proxy_token(current: str = "") -> str:
+def _read_proxy_token(current: str = "", callback_token: str = "") -> str:
     """The freshest proxy token, chosen exactly as the LLM side chooses it."""
     from ciris_engine.logic.utils.token_handshake import read_proxy_token
 
-    token, _var = read_proxy_token(current=current)
+    token, _var = read_proxy_token(current=current, callback_token=callback_token)
     return token
 
 
@@ -127,34 +127,33 @@ class CIRISBillingProvider(CreditGateProtocol):
         # The selector also needs to know what we are holding: with opaque
         # tokens it cannot rank by expiry, and "the copy that is not the one
         # currently being rejected" is the only signal left.
-        selected = _read_proxy_token(current=self._google_id_token)
+        # ASK THE CALLBACK, THEN RANK IT WITH EVERYTHING ELSE.
+        #
+        # This has now been wrong in both directions. Consulting the callback
+        # FIRST and returning on any difference let a stale value overwrite a
+        # fresh one — the refresh was undone on the next billing request.
+        # Skipping the callback whenever the environment held anything fixed
+        # that but silently disabled callers who fetch credentials from secure
+        # storage or some other external source, which is exactly what the
+        # parameter is documented for. So the callback is neither first nor
+        # last: it is a candidate, and the selector ranks it.
+        callback_token = ""
+        if self._token_refresh_callback:
+            try:
+                callback_token = self._token_refresh_callback() or ""
+            except Exception as exc:
+                logger.warning("[TOKEN_HANDSHAKE] billing token refresh callback failed: %s", exc)
+
+        selected = _read_proxy_token(current=self._google_id_token, callback_token=callback_token)
         if selected:
             if selected != self._google_id_token:
                 logger.info(
-                    "[TOKEN_HANDSHAKE] billing token updated from the environment: %d chars -> %d chars",
+                    "[TOKEN_HANDSHAKE] billing token updated: %d chars -> %d chars",
                     len(self._google_id_token) if self._google_id_token else 0,
                     len(selected),
                 )
                 self._google_id_token = selected
             return self._google_id_token
-
-        # Nothing in the environment at all — fall back to the injected
-        # callback, which is how a caller supplies a token from somewhere other
-        # than .env, then to the legacy variable.
-        if self._token_refresh_callback:
-            try:
-                new_token = self._token_refresh_callback()
-                if new_token and new_token != self._google_id_token:
-                    old_len = len(self._google_id_token) if self._google_id_token else 0
-                    logger.info(
-                        "[TOKEN_HANDSHAKE] billing token refreshed via callback: %d chars -> %d chars",
-                        old_len,
-                        len(new_token),
-                    )
-                    self._google_id_token = new_token
-                    return self._google_id_token
-            except Exception as exc:
-                logger.warning("[TOKEN_HANDSHAKE] billing token refresh callback failed: %s", exc)
 
         env_token = os.environ.get("GOOGLE_ID_TOKEN", "")
         if env_token and env_token != self._google_id_token:

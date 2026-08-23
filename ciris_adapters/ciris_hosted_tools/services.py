@@ -173,10 +173,16 @@ class CIRISHostedToolService:
         Returns:
             Google ID token if available, None otherwise
         """
-        # First try environment (direct or loaded at startup)
-        token = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN")
+        # Same selector as billing and the LLM services. Reading only the
+        # Google name here meant that after a desktop client refreshed under a
+        # different variable, hosted tools and tool-balance requests went on
+        # sending the stale setup token — or none — while the rest of the agent
+        # had already recovered.
+        from ciris_engine.logic.utils.token_handshake import read_proxy_token
+
+        token, source_var = read_proxy_token()
         if token:
-            logger.info(f"[HOSTED_TOOLS] Got token from env CIRIS_BILLING_GOOGLE_ID_TOKEN (len={len(token)})")
+            logger.info(f"[HOSTED_TOOLS] Got token from env {source_var} (len={len(token)})")
         else:
             token = os.environ.get("GOOGLE_ID_TOKEN")
             if token:

@@ -137,59 +137,86 @@ def jwt_expiry_epoch(token: str) -> Optional[float]:
         return None
 
 
+#: How to break a tie when NO candidate carries a readable expiry. Order is
+#: meaning, not taste: a token handed back by a caller's callback was fetched
+#: on purpose just now; CIRIS_BILLING_OAUTH_TOKEN is only ever written by a
+#: desktop client that has just refreshed (setup writes the Google name, and
+#: the corrected client deletes this one), so its presence implies it is the
+#: newer of the two.
+_OPAQUE_TIE_ORDER = ("callback", "CIRIS_BILLING_OAUTH_TOKEN", "CIRIS_BILLING_GOOGLE_ID_TOKEN", "CIRIS_BILLING_APPLE_ID_TOKEN")
+
+
 def read_proxy_token(
-    current: str = "", sources: Sequence[str] = PROXY_TOKEN_VARS
+    current: str = "",
+    callback_token: str = "",
+    sources: Sequence[str] = PROXY_TOKEN_VARS,
 ) -> Tuple[str, str]:
-    """The freshest proxy token in the environment, and the name it came under.
+    """The freshest proxy token available, and the name it came under.
 
-    Returns ``("", "")`` when none is present.
+    Returns ``("", "")`` when there is none.
 
-    Not first-non-empty: a real `.env` carries more than one of these — the
-    name written at setup, plus whatever the client last refreshed — and name
-    order returns the setup-time token, which is precisely the expired one. So
-    rank by expiry, and never re-select the value already in hand when a
-    different copy exists, because "keep the credential that is currently
-    401ing" is not a resolution of that tie.
+    THE ANSWER DEPENDS ONLY ON THE CANDIDATES, NEVER ON WHAT IS CURRENTLY
+    INSTALLED. An earlier version broke the tie by preferring "any copy that
+    differs from the one in hand", which made the opaque-token case flip on
+    every single request: holding A it returned B, then holding B the stable
+    sort put A first again and it returned A, for ever. A selector that answers
+    differently depending on who is asking is not a selector. `current` is now
+    read only to describe the outcome in the log.
+
+    Ranking: readable ``exp`` first (a JWT that lasts longer is the newer
+    issue), then :data:`_OPAQUE_TIE_ORDER` for candidates whose expiry cannot
+    be read at all.
+
+    `callback_token` participates as an ordinary candidate. It used to be
+    consulted first and unconditionally, which let a stale value overwrite a
+    fresh one; then it was skipped entirely whenever the environment held
+    anything, which silently disabled callers who fetch credentials from
+    secure storage. It is neither privileged nor ignored — it is ranked.
     """
-    present = [(var, os.environ.get(var, "")) for var in sources]
-    present = [(var, tok) for var, tok in present if tok]
+    # Build the candidate set, DEDUPED BY VALUE. A callback that hands back a
+    # token already sitting in the environment has told us nothing new — it is
+    # echoing, not sourcing — so it keeps the environment's label and does not
+    # get the "fetched on purpose just now" precedence that belongs to a
+    # callback which produced something the environment does not have. Without
+    # this, the legacy first-non-empty callback would re-win every tie with the
+    # very stale value we are trying to move off.
+    present: list[Tuple[str, str]] = []
+    seen: set[str] = set()
+    for var in sources:
+        token = os.environ.get(var, "")
+        if token and token not in seen:
+            present.append((var, token))
+            seen.add(token)
+    if callback_token and callback_token not in seen:
+        present.append(("callback", callback_token))
     if not present:
-        logger.warning("%s no proxy token in the environment (looked at %s)", LOG_PREFIX, ", ".join(sources))
+        logger.warning(
+            "%s no proxy token available (looked at %s%s)",
+            LOG_PREFIX,
+            ", ".join(sources),
+            " and the refresh callback" if callback_token == "" else "",
+        )
         return "", ""
 
-    ranked = sorted(present, key=lambda vt: (jwt_expiry_epoch(vt[1]) or 0.0), reverse=True)
-    if current and ranked[0][1] == current:
-        # Only sideways or forwards, never back. Preferring "any copy that
-        # differs" is right when the tokens are opaque and both score 0 — that
-        # is the legacy-desktop case this exists for — but wrong the moment the
-        # value in hand is genuinely the freshest: a stale sibling left in .env
-        # would then be selected on every reload, downgrading a working key and
-        # restarting the 401 loop this whole module exists to end.
-        current_expiry = jwt_expiry_epoch(current) or 0.0
-        alternative = next(
-            (
-                vt
-                for vt in ranked
-                if vt[1] != current and (jwt_expiry_epoch(vt[1]) or 0.0) >= current_expiry
-            ),
-            None,
-        )
-        if alternative is not None:
-            logger.info(
-                "%s %s still holds the value already in use; taking the differing copy from %s",
-                LOG_PREFIX,
-                ranked[0][0],
-                alternative[0],
-            )
-            ranked = [alternative] + [vt for vt in ranked if vt is not alternative]
+    def rank(vt: Tuple[str, str]) -> Tuple[float, int]:
+        var, token = vt
+        expiry = jwt_expiry_epoch(token)
+        tie = _OPAQUE_TIE_ORDER.index(var) if var in _OPAQUE_TIE_ORDER else len(_OPAQUE_TIE_ORDER)
+        # Sort: latest expiry first, then the documented order. Negate the
+        # index so a single reverse=True gives both.
+        return (expiry if expiry is not None else 0.0, -tie)
 
+    ranked = sorted(present, key=rank, reverse=True)
     var, token = ranked[0]
+
     if len(ranked) > 1:
         logger.info(
-            "%s %d tokens present (%s) — chose %s by expiry",
+            "%s %d tokens present (%s) — chose %s",
             LOG_PREFIX,
             len(ranked),
             ", ".join(v for v, _ in ranked),
             var,
         )
+    if current and token != current:
+        logger.info("%s selected token differs from the one in use — swapping to %s", LOG_PREFIX, var)
     return token, var

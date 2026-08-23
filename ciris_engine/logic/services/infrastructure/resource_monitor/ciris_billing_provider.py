@@ -23,6 +23,14 @@ from ciris_engine.schemas.services.credit_gate import (
 logger = logging.getLogger(__name__)
 
 
+def _read_proxy_token() -> str:
+    """The freshest proxy token, chosen exactly as the LLM side chooses it."""
+    from ciris_engine.logic.utils.token_handshake import read_proxy_token
+
+    token, _var = read_proxy_token()
+    return token
+
+
 class CIRISBillingProvider(CreditGateProtocol):
     """Async credit provider that gates interactions via self-hosted CIRIS Billing API.
 
@@ -63,8 +71,12 @@ class CIRISBillingProvider(CreditGateProtocol):
         self._api_key = api_key or os.environ.get("CIRIS_BILLING_API_KEY", "")
         self._google_id_token = (
             google_id_token
-            or os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN", "")
-            or os.environ.get("CIRIS_BILLING_APPLE_ID_TOKEN", "")
+            # Same selector the LLM side uses: billing that keeps reading only
+            # the Google/Apple names goes on sending the stale setup-time token
+            # after a legacy-desktop client refreshed under its own name, so
+            # AUTH_EXPIRED keeps gating every interaction even once the LLM key
+            # has recovered.
+            or _read_proxy_token()
         )
         self._token_refresh_callback = token_refresh_callback
         # Use provided URL or get from central config
@@ -116,8 +128,7 @@ class CIRISBillingProvider(CreditGateProtocol):
         # Check environment for updated token (set by auth route or ResourceMonitor after .env reload)
         # Check Google token (Android), Apple token (iOS), and legacy GOOGLE_ID_TOKEN
         env_token = (
-            os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN", "")
-            or os.environ.get("CIRIS_BILLING_APPLE_ID_TOKEN", "")
+            _read_proxy_token()
             or os.environ.get("GOOGLE_ID_TOKEN", "")
         )
         if env_token and env_token != self._google_id_token:

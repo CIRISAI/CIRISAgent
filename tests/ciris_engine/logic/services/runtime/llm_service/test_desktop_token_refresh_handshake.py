@@ -38,6 +38,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import re
 import time
 from pathlib import Path
 
@@ -63,13 +64,56 @@ IOS_UPDATER = CLIENT_ROOT / "iosMain/kotlin/ai/ciris/mobile/shared/platform/EnvF
 class TestTheHandshakeContract:
     """Both halves must name the same variable, on every platform."""
 
+    @staticmethod
+    def _code_only(path: Path) -> str:
+        """Kotlin source with comments stripped.
+
+        Searching the whole file was the first version of this test and it was
+        worthless: the explanatory comment above the assignment names both
+        correct variables, so reverting the assignment itself back to the
+        broken name would have left this green and let the outage return. A
+        regression test that its own comment can satisfy is not a test.
+        """
+        out, in_block = [], False
+        for raw in path.read_text(encoding="utf-8").splitlines():
+            line = raw
+            if in_block:
+                if "*/" in line:
+                    line = line.split("*/", 1)[1]
+                    in_block = False
+                else:
+                    continue
+            if "/*" in line:
+                head, rest = line.split("/*", 1)
+                if "*/" in rest:
+                    line = head + rest.split("*/", 1)[1]
+                else:
+                    line, in_block = head, True
+            if "//" in line:
+                line = line.split("//", 1)[0]
+            out.append(line)
+        return "\n".join(out)
+
     @pytest.mark.skipif(not DESKTOP_UPDATER.exists(), reason="client tree not present")
-    def test_desktop_writes_a_token_name_python_actually_reads(self):
-        src = DESKTOP_UPDATER.read_text(encoding="utf-8")
-        assert any(name in src for name in PY_READS), (
-            "the desktop updater writes a token variable no Python code reads, so a "
+    def test_desktop_ASSIGNS_a_token_name_python_actually_reads(self):
+        code = self._code_only(DESKTOP_UPDATER)
+        assignment = re.search(r"val\s+tokenKey\s*=\s*(.+)", code)
+        assert assignment, "could not find the tokenKey assignment — this guard has gone blind"
+        rhs = assignment.group(1).strip()
+        accepted = ("TokenHandshake.GOOGLE_TOKEN_VAR", "TokenHandshake.APPLE_TOKEN_VAR") + PY_READS
+        assert any(name in rhs for name in accepted), (
+            f"the desktop updater assigns tokenKey = {rhs} — a variable no Python code reads, so a "
             "successful silent re-sign-in leaves the expired token in place and every "
             "hosted-proxy call keeps 401ing. Python reads: " + ", ".join(PY_READS)
+        )
+
+    @pytest.mark.skipif(not DESKTOP_UPDATER.exists(), reason="client tree not present")
+    def test_desktop_never_assigns_the_dead_legacy_name(self):
+        code = self._code_only(DESKTOP_UPDATER)
+        assignment = re.search(r"val\s+tokenKey\s*=\s*(.+)", code)
+        assert assignment
+        assert "CIRIS_BILLING_OAUTH_TOKEN" not in assignment.group(1), (
+            "writing the legacy name is the original outage"
         )
 
     @pytest.mark.skipif(not ANDROID_UPDATER.exists(), reason="client tree not present")
@@ -264,3 +308,82 @@ class TestTheRequestSideLogsWhereItWrote:
         assert (tmp_path / ".token_refresh_needed").exists()
         assert str(tmp_path) in caplog.text
         assert "proxy 401 on gpt-4o-mini" in caplog.text
+
+
+class TestTheSelectorNeverGoesBackwards:
+    """Choosing between copies must not undo a good credential."""
+
+    def test_a_stale_sibling_cannot_displace_the_freshest_value_in_hand(self, monkeypatch):
+        """The mirror image of the legacy-desktop case.
+
+        After a recovery the .env can hold a fresh token under one name and a
+        stale one under another, with the fresh one already active. Preferring
+        "any copy that differs" would then pick the stale one on every reload —
+        including reloads the setup route triggers for unrelated reasons — and
+        walk a working agent straight back into the 401 loop.
+        """
+        from ciris_engine.logic.utils.token_handshake import read_proxy_token
+
+        fresh, stale = jwt(3600), jwt(-600)
+        monkeypatch.setenv("CIRIS_BILLING_OAUTH_TOKEN", fresh)
+        monkeypatch.setenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", stale)
+        token, var = read_proxy_token(current=fresh)
+        assert token == fresh and var == "CIRIS_BILLING_OAUTH_TOKEN"
+
+    def test_an_equally_opaque_sibling_still_wins_when_ours_is_being_rejected(self, monkeypatch):
+        """The legacy-desktop case itself: neither token carries a readable
+        expiry, and the one in hand is the one the provider is refusing."""
+        from ciris_engine.logic.utils.token_handshake import read_proxy_token
+
+        monkeypatch.setenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", "opaque-expired")
+        monkeypatch.setenv("CIRIS_BILLING_OAUTH_TOKEN", "opaque-refreshed")
+        token, _ = read_proxy_token(current="opaque-expired")
+        assert token == "opaque-refreshed"
+
+    def test_with_nothing_in_hand_the_freshest_wins(self, monkeypatch):
+        from ciris_engine.logic.utils.token_handshake import read_proxy_token
+
+        fresh, stale = jwt(3600), jwt(60)
+        monkeypatch.setenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", stale)
+        monkeypatch.setenv("CIRIS_BILLING_APPLE_ID_TOKEN", fresh)
+        token, var = read_proxy_token()
+        assert token == fresh and var == "CIRIS_BILLING_APPLE_ID_TOKEN"
+
+
+class TestBillingSharesTheSelector:
+    """Billing recovering matters as much as the LLM recovering.
+
+    A refresh that revives the LLM key but leaves billing on the setup-time
+    token just moves the outage: credit checks keep returning AUTH_EXPIRED and
+    gate every interaction, which looks to the user exactly like the agent
+    still being broken.
+    """
+
+    def test_the_billing_provider_reads_through_the_shared_selector(self):
+        src = (
+            Path(__file__).resolve().parents[6]
+            / "ciris_engine/logic/services/infrastructure/resource_monitor/ciris_billing_provider.py"
+        ).read_text(encoding="utf-8")
+        assert "read_proxy_token" in src, (
+            "billing still reads the token names directly, so a client that refreshed under a "
+            "different name revives the LLM and leaves billing expired"
+        )
+
+    def test_the_runtime_handlers_read_through_the_shared_selector(self):
+        src = (
+            Path(__file__).resolve().parents[6] / "ciris_engine/logic/runtime/billing_helpers.py"
+        ).read_text(encoding="utf-8")
+        assert src.count("read_proxy_token") >= 2, (
+            "both the billing and the LLM refresh handlers must use the shared selector"
+        )
+
+    def test_the_llm_refresh_handler_does_not_key_off_OPENAI_API_KEY(self):
+        """That handler only ever touches CIRIS-proxy services, and those
+        authenticate with the ID token. Reading OPENAI_API_KEY meant the
+        hosted-proxy case (empty) refreshed nothing, and the BYOK-leftover case
+        pushed someone's provider key over a good token."""
+        src = (
+            Path(__file__).resolve().parents[6] / "ciris_engine/logic/runtime/billing_helpers.py"
+        ).read_text(encoding="utf-8")
+        handler = src[src.index("async def handle_llm_token_refreshed") : src.index("def update_llm_services_token")]
+        assert 'os.getenv("OPENAI_API_KEY"' not in handler

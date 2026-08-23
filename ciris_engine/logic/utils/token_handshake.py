@@ -159,7 +159,21 @@ def read_proxy_token(
 
     ranked = sorted(present, key=lambda vt: (jwt_expiry_epoch(vt[1]) or 0.0), reverse=True)
     if current and ranked[0][1] == current:
-        alternative = next((vt for vt in ranked if vt[1] != current), None)
+        # Only sideways or forwards, never back. Preferring "any copy that
+        # differs" is right when the tokens are opaque and both score 0 — that
+        # is the legacy-desktop case this exists for — but wrong the moment the
+        # value in hand is genuinely the freshest: a stale sibling left in .env
+        # would then be selected on every reload, downgrading a working key and
+        # restarting the 401 loop this whole module exists to end.
+        current_expiry = jwt_expiry_epoch(current) or 0.0
+        alternative = next(
+            (
+                vt
+                for vt in ranked
+                if vt[1] != current and (jwt_expiry_epoch(vt[1]) or 0.0) >= current_expiry
+            ),
+            None,
+        )
         if alternative is not None:
             logger.info(
                 "%s %s still holds the value already in use; taking the differing copy from %s",

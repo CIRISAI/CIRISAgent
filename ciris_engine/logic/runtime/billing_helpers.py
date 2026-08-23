@@ -29,7 +29,9 @@ def create_billing_token_handler(credit_provider: Any) -> Callable[..., Any]:
     """Create handler for billing token refresh signals."""
 
     async def handle_billing_token_refreshed(signal: str, resource: str) -> None:
-        new_token = os.getenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", "") or os.getenv("CIRIS_BILLING_APPLE_ID_TOKEN", "")
+        from ciris_engine.logic.utils.token_handshake import read_proxy_token
+
+        new_token, _var = read_proxy_token()
         if new_token and credit_provider:
             credit_provider.update_google_id_token(new_token)
             logger.info("Updated billing provider with refreshed OAuth ID token")
@@ -41,11 +43,21 @@ def create_llm_token_handler(runtime: Any) -> Callable[..., Any]:
     """Create handler for LLM service token refresh signals."""
 
     async def handle_llm_token_refreshed(signal: str, resource: str) -> None:
-        new_token = os.getenv("OPENAI_API_KEY", "")
+        # THIS HANDLER ONLY EVER TOUCHES CIRIS-PROXY SERVICES
+        # (`update_service_token_if_ciris_proxy` returns early for anything
+        # else), and those authenticate with the OAuth ID token — not with
+        # OPENAI_API_KEY. Reading OPENAI_API_KEY here meant the hosted-proxy
+        # case, where it is empty, bailed out and refreshed nothing; and the
+        # BYOK-leftover case, where it holds someone's provider key, pushed the
+        # wrong credential over a good token.
+        from ciris_engine.logic.utils.token_handshake import read_proxy_token
+
+        new_token, source_var = read_proxy_token()
         if not new_token:
-            logger.warning("[LLM_TOKEN] No OPENAI_API_KEY in env after token refresh")
+            logger.warning("[TOKEN_HANDSHAKE] no proxy token in env after refresh — services unchanged")
             return
 
+        logger.info("[TOKEN_HANDSHAKE] pushing the token from %s to every proxy service", source_var)
         update_llm_services_token(runtime, new_token)
 
     return handle_llm_token_refreshed

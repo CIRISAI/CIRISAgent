@@ -146,6 +146,44 @@ def jwt_expiry_epoch(token: str) -> Optional[float]:
 _OPAQUE_TIE_ORDER = ("callback", "CIRIS_BILLING_OAUTH_TOKEN", "CIRIS_BILLING_GOOGLE_ID_TOKEN", "CIRIS_BILLING_APPLE_ID_TOKEN")
 
 
+def rank_candidates(candidates: Sequence[Tuple[str, str]]) -> list:
+    """Order (name, token) pairs best-first. One definition of "best".
+
+    EXPIRY STATUS IS A TIER, NOT A NUMBER. Ranking on the raw `exp` alone put
+    an EXPIRED JWT above every opaque token, because an expired token still
+    carries a large positive epoch while a token whose format has no `exp` at
+    all scores zero. So a credential we can prove is dead outranked one that
+    might be alive — including the opaque forms a refresh callback legitimately
+    returns, which meant the callback could hand back a good token and be
+    ignored in favour of the expired value we were already being refused for.
+
+    The three tiers, best first:
+
+      2. live      — a JWT whose `exp` is still in the future; among these the
+                     later expiry is the newer issue
+      1. unknown   — no readable `exp`; among these :data:`_OPAQUE_TIE_ORDER`
+                     decides, which is where the legacy-desktop compatibility
+                     case is resolved
+      0. expired   — a JWT we can prove is dead; kept as a last resort rather
+                     than discarded, because sending a stale token and getting
+                     a clean 401 beats sending nothing at all
+
+    Nothing here reads what is currently installed: the order is a property of
+    the candidates, so repeated calls cannot oscillate.
+    """
+    now = time.time()
+
+    def key(vt: Tuple[str, str]) -> Tuple[int, float, int]:
+        var, token = vt
+        tie = -(_OPAQUE_TIE_ORDER.index(var) if var in _OPAQUE_TIE_ORDER else len(_OPAQUE_TIE_ORDER))
+        expiry = jwt_expiry_epoch(token)
+        if expiry is None:
+            return (1, 0.0, tie)
+        return (2 if expiry > now else 0, expiry, tie)
+
+    return sorted(candidates, key=key, reverse=True)
+
+
 def read_proxy_token(
     current: str = "",
     callback_token: str = "",
@@ -198,15 +236,7 @@ def read_proxy_token(
         )
         return "", ""
 
-    def rank(vt: Tuple[str, str]) -> Tuple[float, int]:
-        var, token = vt
-        expiry = jwt_expiry_epoch(token)
-        tie = _OPAQUE_TIE_ORDER.index(var) if var in _OPAQUE_TIE_ORDER else len(_OPAQUE_TIE_ORDER)
-        # Sort: latest expiry first, then the documented order. Negate the
-        # index so a single reverse=True gives both.
-        return (expiry if expiry is not None else 0.0, -tie)
-
-    ranked = sorted(present, key=rank, reverse=True)
+    ranked = rank_candidates(present)
     var, token = ranked[0]
 
     if len(ranked) > 1:

@@ -674,3 +674,100 @@ class TestNobodyReadsTheTokenNamesDirectly:
             if "token_handshake" not in (root / c).read_text(encoding="utf-8")
         ]
         assert not missing, f"these consume the proxy token without the shared selector: {missing}"
+
+
+class TestExpiryStatusIsATierNotANumber:
+    """A token we can prove is dead must never outrank one that might be alive."""
+
+    def test_an_expired_jwt_loses_to_an_opaque_callback_token(self, monkeypatch):
+        """The defect: an expired JWT still carries a large positive epoch,
+        while a token whose format has no `exp` scores zero. Ranking on the
+        raw number therefore preferred the credential we are actively being
+        refused for over the replacement a callback had just fetched."""
+        from ciris_engine.logic.utils.token_handshake import read_proxy_token
+
+        monkeypatch.setenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", jwt(-600))
+        token, var = read_proxy_token(callback_token="google:1089981372")
+        assert (token, var) == ("google:1089981372", "callback")
+
+    def test_an_expired_jwt_loses_to_an_opaque_environment_token(self, monkeypatch):
+        from ciris_engine.logic.utils.token_handshake import read_proxy_token
+
+        monkeypatch.setenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", jwt(-600))
+        monkeypatch.setenv("CIRIS_BILLING_OAUTH_TOKEN", "opaque-but-possibly-alive")
+        token, _ = read_proxy_token()
+        assert token == "opaque-but-possibly-alive"
+
+    def test_a_live_jwt_still_beats_an_opaque_token(self, monkeypatch):
+        """The tier order only helps the unknown against the known-dead."""
+        from ciris_engine.logic.utils.token_handshake import read_proxy_token
+
+        live = jwt(3600)
+        monkeypatch.setenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", live)
+        token, var = read_proxy_token(callback_token="opaque")
+        assert (token, var) == (live, "CIRIS_BILLING_GOOGLE_ID_TOKEN")
+
+    def test_an_expired_token_is_still_offered_when_it_is_all_there_is(self, monkeypatch):
+        """Last resort, not discarded: a clean 401 is more useful than sending
+        no credential at all."""
+        from ciris_engine.logic.utils.token_handshake import read_proxy_token
+
+        dead = jwt(-600)
+        monkeypatch.setenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", dead)
+        assert read_proxy_token()[0] == dead
+
+    def test_the_least_stale_expired_token_wins_among_expired_ones(self, monkeypatch):
+        from ciris_engine.logic.utils.token_handshake import read_proxy_token
+
+        older, newer = jwt(-9000), jwt(-60)
+        monkeypatch.setenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", older)
+        monkeypatch.setenv("CIRIS_BILLING_OAUTH_TOKEN", newer)
+        assert read_proxy_token()[0] == newer
+
+
+class TestTheEnvFileScanUsesTheSameRanking:
+    """One ordering, wherever the candidates were read from.
+
+    The hosted-tools .env fallback ranked its own finds by expiry alone, which
+    left the opaque tie to dictionary insertion order — Google first — while
+    the shared selector resolves that tie toward the legacy-desktop name. Same
+    inputs, different answers, so tools sent the stale credential while billing
+    and the LLM used the refreshed one.
+    """
+
+    def test_the_file_resolves_an_opaque_tie_like_the_selector(self, tmp_path, monkeypatch):
+        from ciris_adapters.ciris_hosted_tools.services import CIRISHostedToolService
+        from ciris_engine.logic.utils.token_handshake import read_proxy_token
+
+        for var in ("CIRIS_BILLING_GOOGLE_ID_TOKEN", "CIRIS_BILLING_APPLE_ID_TOKEN", "CIRIS_BILLING_OAUTH_TOKEN", "GOOGLE_ID_TOKEN"):
+            monkeypatch.delenv(var, raising=False)
+        monkeypatch.setenv("CIRIS_HOME", str(tmp_path))
+        monkeypatch.setattr("pathlib.Path.home", classmethod(lambda cls: tmp_path))
+        (tmp_path / ".env").write_text(
+            "CIRIS_BILLING_GOOGLE_ID_TOKEN=opaque-stale\nCIRIS_BILLING_OAUTH_TOKEN=opaque-refreshed\n"
+        )
+
+        service = CIRISHostedToolService.__new__(CIRISHostedToolService)
+        from_file = service._get_google_id_token()
+
+        # what the selector would have said from the same pair
+        monkeypatch.setenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", "opaque-stale")
+        monkeypatch.setenv("CIRIS_BILLING_OAUTH_TOKEN", "opaque-refreshed")
+        from_env, _ = read_proxy_token()
+
+        assert from_file == from_env == "opaque-refreshed"
+
+    def test_the_file_prefers_a_live_token_over_an_expired_one(self, tmp_path, monkeypatch):
+        from ciris_adapters.ciris_hosted_tools.services import CIRISHostedToolService
+
+        for var in ("CIRIS_BILLING_GOOGLE_ID_TOKEN", "CIRIS_BILLING_APPLE_ID_TOKEN", "CIRIS_BILLING_OAUTH_TOKEN", "GOOGLE_ID_TOKEN"):
+            monkeypatch.delenv(var, raising=False)
+        monkeypatch.setenv("CIRIS_HOME", str(tmp_path))
+        monkeypatch.setattr("pathlib.Path.home", classmethod(lambda cls: tmp_path))
+        live, dead = jwt(3600), jwt(-600)
+        (tmp_path / ".env").write_text(
+            f"CIRIS_BILLING_OAUTH_TOKEN={dead}\nCIRIS_BILLING_GOOGLE_ID_TOKEN={live}\n"
+        )
+
+        service = CIRISHostedToolService.__new__(CIRISHostedToolService)
+        assert service._get_google_id_token() == live

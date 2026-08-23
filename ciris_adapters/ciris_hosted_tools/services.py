@@ -239,14 +239,19 @@ class CIRISHostedToolService:
                                     if value:
                                         found[var] = value
                             if found:
-                                # Rank them the same way the selector does, so
-                                # the file path and the environment path cannot
-                                # disagree about which token is current.
-                                from ciris_engine.logic.utils.token_handshake import jwt_expiry_epoch
+                                # THE SAME RANKING, not a second one that
+                                # happens to agree on the easy cases. Comparing
+                                # expiry alone here left the opaque tie to
+                                # dictionary insertion order — Google first —
+                                # while the shared selector resolves that same
+                                # tie toward the legacy-desktop name. The file
+                                # path and the environment path would then pick
+                                # different tokens from identical inputs, so
+                                # hosted tools sent the stale credential while
+                                # billing and the LLM used the refreshed one.
+                                from ciris_engine.logic.utils.token_handshake import rank_candidates
 
-                                var, value = max(
-                                    found.items(), key=lambda kv: (jwt_expiry_epoch(kv[1]) or 0.0)
-                                )
+                                var, value = rank_candidates(list(found.items()))[0]
                                 token = value
                                 logger.info(
                                     f"[HOSTED_TOOLS] Loaded fresh token from {env_path} under {var} (len={len(value)})"

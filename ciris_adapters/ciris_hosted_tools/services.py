@@ -216,9 +216,20 @@ class CIRISHostedToolService:
                     logger.info(f"[HOSTED_TOOLS] Checking {env_path} exists={env_path.exists()}")
                     if env_path.exists():
                         with open(env_path) as f:
+                            # SAME NAMES AS THE SELECTOR. Scanning only for
+                            # CIRIS_BILLING_GOOGLE_ID_TOKEN here is the same
+                            # drift one level deeper: a desktop client that
+                            # refreshed under a different variable wrote it
+                            # into this very file, and this loop would walk
+                            # straight past it.
+                            from ciris_engine.logic.utils.token_handshake import PROXY_TOKEN_VARS
+
+                            found: dict[str, str] = {}
                             for line in f:
                                 line = line.strip()
-                                if line.startswith("CIRIS_BILLING_GOOGLE_ID_TOKEN="):
+                                for var in PROXY_TOKEN_VARS:
+                                    if not line.startswith(f"{var}="):
+                                        continue
                                     # Handle quoted and unquoted values
                                     value = line.split("=", 1)[1].strip()
                                     if value.startswith('"') and value.endswith('"'):
@@ -226,11 +237,20 @@ class CIRISHostedToolService:
                                     elif value.startswith("'") and value.endswith("'"):
                                         value = value[1:-1]
                                     if value:
-                                        token = value
-                                        logger.info(
-                                            f"[HOSTED_TOOLS] ✓ Loaded fresh token from {env_path} (len={len(value)})"
-                                        )
-                                        break
+                                        found[var] = value
+                            if found:
+                                # Rank them the same way the selector does, so
+                                # the file path and the environment path cannot
+                                # disagree about which token is current.
+                                from ciris_engine.logic.utils.token_handshake import jwt_expiry_epoch
+
+                                var, value = max(
+                                    found.items(), key=lambda kv: (jwt_expiry_epoch(kv[1]) or 0.0)
+                                )
+                                token = value
+                                logger.info(
+                                    f"[HOSTED_TOOLS] Loaded fresh token from {env_path} under {var} (len={len(value)})"
+                                )
                         if token:
                             break
                         else:

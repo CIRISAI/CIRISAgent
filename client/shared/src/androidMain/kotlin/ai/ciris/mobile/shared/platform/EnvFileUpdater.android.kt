@@ -22,8 +22,8 @@ actual class EnvFileUpdater {
     companion object {
         private const val TAG = "EnvFileUpdater"
         private const val ENV_FILE_NAME = ".env"
-        private const val CONFIG_RELOAD_FILE = ".config_reload"
-        private const val TOKEN_REFRESH_SIGNAL_FILE = ".token_refresh_needed"
+        private val CONFIG_RELOAD_FILE = TokenHandshake.CONFIG_RELOAD_SIGNAL_FILE
+        private val TOKEN_REFRESH_SIGNAL_FILE = TokenHandshake.TOKEN_REFRESH_REQUEST_FILE
 
         /**
          * Get CIRIS_HOME from environment variable (set by CirisVerify.setup())

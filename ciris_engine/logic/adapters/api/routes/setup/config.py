@@ -515,7 +515,9 @@ async def update_llm_config(
         config_path.write_text(new_content, encoding="utf-8")
 
         # Trigger config reload signal for the Python runtime
-        reload_file = config_path.parent / ".config_reload"
+        from ciris_engine.logic.utils.token_handshake import CONFIG_RELOAD_SIGNAL_FILE
+
+        reload_file = config_path.parent / CONFIG_RELOAD_SIGNAL_FILE
         import time
 
         reload_file.write_text(str(time.time()), encoding="utf-8")

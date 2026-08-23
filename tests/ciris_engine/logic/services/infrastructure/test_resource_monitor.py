@@ -863,8 +863,25 @@ async def test_billing_provider_jwt_auth_mode():
 
 
 @pytest.mark.asyncio
-async def test_billing_provider_token_refresh_callback():
-    """Test that token refresh callback is invoked and updates token."""
+async def test_billing_provider_token_refresh_callback(monkeypatch):
+    """Test that token refresh callback is invoked and updates token.
+
+    The callback is the fallback, not the first stop: a proxy token present in
+    the environment wins, because a first-non-empty callback was handing back a
+    stale token and installing it over a freshly refreshed one. So this test
+    has to say which environment it is testing — it wants the branch where the
+    environment offers nothing. It used to rely on that being true by accident,
+    which made it fail whenever another test left a CIRIS_BILLING_* variable
+    behind.
+    """
+    for var in (
+        "CIRIS_BILLING_GOOGLE_ID_TOKEN",
+        "CIRIS_BILLING_APPLE_ID_TOKEN",
+        "CIRIS_BILLING_OAUTH_TOKEN",
+        "GOOGLE_ID_TOKEN",
+    ):
+        monkeypatch.delenv(var, raising=False)
+
     refresh_count = 0
 
     def token_refresh_callback():
@@ -1199,8 +1216,19 @@ async def test_billing_provider_ensure_started():
 
 
 @pytest.mark.asyncio
-async def test_billing_provider_token_refresh_callback_failure():
-    """Test handling of token refresh callback that raises exception."""
+async def test_billing_provider_token_refresh_callback_failure(monkeypatch):
+    """Test handling of token refresh callback that raises exception.
+
+    Same isolation as the success case: the callback is only reached when the
+    environment holds no proxy token.
+    """
+    for var in (
+        "CIRIS_BILLING_GOOGLE_ID_TOKEN",
+        "CIRIS_BILLING_APPLE_ID_TOKEN",
+        "CIRIS_BILLING_OAUTH_TOKEN",
+        "GOOGLE_ID_TOKEN",
+    ):
+        monkeypatch.delenv(var, raising=False)
 
     def failing_callback():
         raise RuntimeError("Token refresh failed")

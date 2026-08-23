@@ -23,6 +23,14 @@ from ciris_engine.schemas.services.credit_gate import (
 logger = logging.getLogger(__name__)
 
 
+def _read_proxy_token(current: str = "", callback_token: str = "") -> str:
+    """The freshest proxy token, chosen exactly as the LLM side chooses it."""
+    from ciris_engine.logic.utils.token_handshake import read_proxy_token
+
+    token, _var = read_proxy_token(current=current, callback_token=callback_token)
+    return token
+
+
 class CIRISBillingProvider(CreditGateProtocol):
     """Async credit provider that gates interactions via self-hosted CIRIS Billing API.
 
@@ -63,8 +71,12 @@ class CIRISBillingProvider(CreditGateProtocol):
         self._api_key = api_key or os.environ.get("CIRIS_BILLING_API_KEY", "")
         self._google_id_token = (
             google_id_token
-            or os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN", "")
-            or os.environ.get("CIRIS_BILLING_APPLE_ID_TOKEN", "")
+            # Same selector the LLM side uses: billing that keeps reading only
+            # the Google/Apple names goes on sending the stale setup-time token
+            # after a legacy-desktop client refreshed under its own name, so
+            # AUTH_EXPIRED keeps gating every interaction even once the LLM key
+            # has recovered.
+            or _read_proxy_token()
         )
         self._token_refresh_callback = token_refresh_callback
         # Use provided URL or get from central config
@@ -100,26 +112,50 @@ class CIRISBillingProvider(CreditGateProtocol):
         5. ResourceMonitor reloads .env (via load_dotenv override=True)
         6. This method reads the updated GOOGLE_ID_TOKEN from environment
         """
-        # First, try the callback if available
+        # THE SHARED SELECTOR DECIDES, AND IT GOES FIRST.
+        #
+        # This used to consult the injected callback first and return the
+        # moment that callback produced anything different. The callback is a
+        # first-non-empty read of the Google/Apple names, so when a legacy
+        # desktop client had refreshed under its own name — leaving a stale
+        # Google value beside a fresh one — the callback handed back the STALE
+        # token, installed it over the fresh one the refresh handler had just
+        # set, and returned before this method ever reached the selector. The
+        # fix upstream was undone on the very next billing request, and billing
+        # kept answering AUTH_EXPIRED while the LLM key looked healthy.
+        #
+        # The selector also needs to know what we are holding: with opaque
+        # tokens it cannot rank by expiry, and "the copy that is not the one
+        # currently being rejected" is the only signal left.
+        # ASK THE CALLBACK, THEN RANK IT WITH EVERYTHING ELSE.
+        #
+        # This has now been wrong in both directions. Consulting the callback
+        # FIRST and returning on any difference let a stale value overwrite a
+        # fresh one — the refresh was undone on the next billing request.
+        # Skipping the callback whenever the environment held anything fixed
+        # that but silently disabled callers who fetch credentials from secure
+        # storage or some other external source, which is exactly what the
+        # parameter is documented for. So the callback is neither first nor
+        # last: it is a candidate, and the selector ranks it.
+        callback_token = ""
         if self._token_refresh_callback:
             try:
-                new_token = self._token_refresh_callback()
-                if new_token and new_token != self._google_id_token:
-                    old_len = len(self._google_id_token) if self._google_id_token else 0
-                    new_len = len(new_token)
-                    logger.info("[BILLING_TOKEN] Token refreshed via callback: %d chars -> %d chars", old_len, new_len)
-                    self._google_id_token = new_token
-                    return self._google_id_token
+                callback_token = self._token_refresh_callback() or ""
             except Exception as exc:
-                logger.warning("[BILLING_TOKEN] Token refresh callback failed: %s", exc)
+                logger.warning("[TOKEN_HANDSHAKE] billing token refresh callback failed: %s", exc)
 
-        # Check environment for updated token (set by auth route or ResourceMonitor after .env reload)
-        # Check Google token (Android), Apple token (iOS), and legacy GOOGLE_ID_TOKEN
-        env_token = (
-            os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN", "")
-            or os.environ.get("CIRIS_BILLING_APPLE_ID_TOKEN", "")
-            or os.environ.get("GOOGLE_ID_TOKEN", "")
-        )
+        selected = _read_proxy_token(current=self._google_id_token, callback_token=callback_token)
+        if selected:
+            if selected != self._google_id_token:
+                logger.info(
+                    "[TOKEN_HANDSHAKE] billing token updated: %d chars -> %d chars",
+                    len(self._google_id_token) if self._google_id_token else 0,
+                    len(selected),
+                )
+                self._google_id_token = selected
+            return self._google_id_token
+
+        env_token = os.environ.get("GOOGLE_ID_TOKEN", "")
         if env_token and env_token != self._google_id_token:
             old_len = len(self._google_id_token) if self._google_id_token else 0
             new_len = len(env_token)
@@ -604,34 +640,15 @@ class CIRISBillingProvider(CreditGateProtocol):
             self._client.headers["Authorization"] = f"Bearer {token}"
 
     def _signal_token_refresh_needed(self) -> None:
-        """Write a signal file to indicate token refresh is needed.
+        """Ask the client for a fresh token (billing's 401 path).
 
-        This is picked up by Android's TokenRefreshManager which will:
-        1. Call Google silentSignIn() to get a fresh ID token
-        2. Update .env with the new token
-        3. Write .config_reload signal
-        4. Python ResourceMonitor detects .config_reload and emits token_refreshed
+        Byte-for-byte the same conversation the LLM service has, so it is the
+        same code now — `utils.token_handshake` owns the directory, the
+        filename and the wording.
         """
-        import time
-        from pathlib import Path
+        from ciris_engine.logic.utils.token_handshake import request_token_refresh
 
-        # Get CIRIS_HOME
-        ciris_home = os.environ.get("CIRIS_HOME")
-        if not ciris_home:
-            try:
-                from ciris_engine.logic.utils.path_resolution import get_ciris_home
-
-                ciris_home = str(get_ciris_home())
-            except Exception:
-                logger.warning("[BILLING_TOKEN] Cannot write refresh signal - CIRIS_HOME not found")
-                return
-
-        try:
-            signal_file = Path(ciris_home) / ".token_refresh_needed"
-            signal_file.write_text(str(time.time()))
-            logger.info("[BILLING_TOKEN] Token refresh signal written to: %s", signal_file)
-        except Exception as exc:
-            logger.warning("[BILLING_TOKEN] Failed to write token refresh signal: %s", exc)
+        request_token_refresh(reason="billing 401")
 
     def _store_cache(self, cache_key: str, result: CreditCheckResult) -> None:
         if self._cache_ttl <= 0:

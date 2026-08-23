@@ -13,17 +13,27 @@ actual class EnvFileUpdater {
         File(home).also { it.mkdirs() }
     }
 
-    private val envFile: File get() = File(cirisHome, ".env")
-    private val configReloadFile: File get() = File(cirisHome, ".config_reload")
-    private val tokenRefreshSignalFile: File get() = File(cirisHome, ".token_refresh_needed")
+    private val envFile: File get() = File(cirisHome, TokenHandshake.ENV_FILE)
+    private val configReloadFile: File get() = File(cirisHome, TokenHandshake.CONFIG_RELOAD_SIGNAL_FILE)
+    private val tokenRefreshSignalFile: File get() = File(cirisHome, TokenHandshake.TOKEN_REFRESH_REQUEST_FILE)
     private var lastSignalTimestamp: Long = 0
 
     actual suspend fun updateEnvWithToken(oauthIdToken: String): Result<Boolean> = runCatching {
         val envContent = if (envFile.exists()) envFile.readText() else ""
         val lines = envContent.lines().toMutableList()
 
-        // Update or add CIRIS_BILLING_OAUTH_TOKEN
-        val tokenKey = "CIRIS_BILLING_OAUTH_TOKEN"
+        // WRITE THE NAME PYTHON READS. This wrote CIRIS_BILLING_OAUTH_TOKEN,
+        // which no Python code has ever read — Android writes
+        // CIRIS_BILLING_GOOGLE_ID_TOKEN and iOS writes
+        // CIRIS_BILLING_APPLE_ID_TOKEN, and those are the two the agent looks
+        // for. So on desktop the refresh handshake ran to completion and
+        // achieved nothing: silent re-sign-in, .env rewritten, .config_reload
+        // tripped, and the agent re-read the SAME expired token. The hosted
+        // proxy authenticates with that token, so it 401'd every call from
+        // roughly an hour after setup and never recovered.
+        //
+        // Desktop sign-in is Google, so it takes the Google name.
+        val tokenKey = TokenHandshake.GOOGLE_TOKEN_VAR
         val tokenLine = "$tokenKey=$oauthIdToken"
 
         val existingIndex = lines.indexOfFirst { it.startsWith("$tokenKey=") }
@@ -32,6 +42,10 @@ actual class EnvFileUpdater {
         } else {
             lines.add(tokenLine)
         }
+
+        // Drop the legacy name if this .env still carries one, so a stale
+        // value cannot sit next to the fresh token confusing the next reader.
+        lines.removeAll { it.startsWith("${TokenHandshake.LEGACY_DESKTOP_TOKEN_VAR}=") }
 
         envFile.writeText(lines.joinToString("\n"))
         triggerConfigReload()

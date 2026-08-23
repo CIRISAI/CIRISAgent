@@ -218,9 +218,9 @@ class ServiceInitializer:
         # Server: Simple API key check
         api_key = os.getenv("CIRIS_BILLING_API_KEY", "")
         # Mobile: OAuth ID token for JWT auth with CIRIS proxy (Google on Android, Apple on iOS)
-        google_id_token = os.getenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", "") or os.getenv(
-            "CIRIS_BILLING_APPLE_ID_TOKEN", ""
-        )
+        from ciris_engine.logic.utils.token_handshake import read_proxy_token
+
+        google_id_token, _tok_var = read_proxy_token()
 
         if api_key and not is_android:
             # Server with API key - use API key auth
@@ -1103,6 +1103,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
         # Base URL only applies to OpenAI-compatible providers
         base_url = None
         base_urls = None  # Multi-endpoint support for CIRIS proxy
+        is_ciris_proxy_url_checked = False
         if provider in (LLMProvider.OPENAI, LLMProvider.OPENAI_COMPATIBLE):
             base_url = os.environ.get("OPENAI_API_BASE") or self._get_llm_service_config_value(
                 config, "llm_endpoint", None
@@ -1111,7 +1112,8 @@ This directory contains critical cryptographic keys for the CIRIS system.
             if base_url:
                 from ciris_engine.config.ciris_services import get_all_proxy_endpoints, is_ciris_proxy_url
 
-                if is_ciris_proxy_url(base_url):
+                is_ciris_proxy_url_checked = is_ciris_proxy_url(base_url)
+                if is_ciris_proxy_url_checked:
                     # Skip CIRIS proxy if user has disabled CIRIS services
                     if ciris_services_disabled:
                         logger.info(" Skipping CIRIS proxy (CIRIS_SERVICES_DISABLED=true)")
@@ -1137,6 +1139,27 @@ This directory contains critical cryptographic keys for the CIRIS system.
                             f"[MULTI_ENDPOINT] CIRIS proxy detected, using {len(base_urls)} endpoints: "
                             f"{[ep.region for ep in endpoints]}"
                         )
+
+        # A CIRIS-PROXY URL MEANS THE CREDENTIAL IS THE OAUTH ID TOKEN.
+        #
+        # The proxy has no provider enum of its own — it rides OPENAI_COMPATIBLE
+        # — so the key came from OPENAI_API_KEY, which is where the setup wizard
+        # stashed the ID token once, at setup. That value is an hour-lived JWT.
+        # Every restart therefore rebuilt the primary service around the
+        # setup-time token no matter how many times the refresh handshake had
+        # replaced it since, and the first interaction after a restart 401'd
+        # until another whole handshake completed. The handshake variables are
+        # the live copy; read them here.
+        if base_url and is_ciris_proxy_url_checked and not ciris_services_disabled:
+            from ciris_engine.logic.utils.token_handshake import read_proxy_token
+
+            proxy_token, proxy_var = read_proxy_token(current=api_key)
+            if proxy_token and proxy_token != api_key:
+                logger.info(
+                    "[TOKEN_HANDSHAKE] proxy startup credential taken from %s, not the setup-time key",
+                    proxy_var,
+                )
+                api_key = proxy_token
 
         # Needed by BOTH the model default below and the service name further
         # down; computed once, here, so the two cannot disagree about it.
@@ -1371,9 +1394,9 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
         primary_is_local = base_url and not is_ciris_proxy_url(base_url)
         if primary_is_local and not ciris_services_disabled:
-            id_token = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN", "") or os.environ.get(
-                "CIRIS_BILLING_APPLE_ID_TOKEN", ""
-            )
+            from ciris_engine.logic.utils.token_handshake import read_proxy_token
+
+            id_token, _tok_var = read_proxy_token()
             if id_token:
                 logger.info(" Primary LLM is local - registering CIRIS proxy as fallback")
                 await self._initialize_ciris_proxy_fallback(config, id_token)
@@ -1382,9 +1405,9 @@ This directory contains critical cryptographic keys for the CIRIS system.
         # Supports both API key auth and CIRIS proxy with JWT auth (Google ID token)
         second_api_key = os.environ.get("CIRIS_OPENAI_API_KEY_2", "")
         second_base_url = os.environ.get("CIRIS_OPENAI_API_BASE_2", "")
-        google_id_token = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN", "") or os.environ.get(
-            "CIRIS_BILLING_APPLE_ID_TOKEN", ""
-        )
+        from ciris_engine.logic.utils.token_handshake import read_proxy_token
+
+        google_id_token, _tok_var = read_proxy_token()
 
         # Check if secondary LLM is CIRIS proxy (requires JWT auth, not API key)
         is_ciris_proxy_secondary = "ciris.ai" in second_base_url

@@ -1489,11 +1489,24 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
 
         # Read fresh API key from appropriate environment variable
         if is_ciris_proxy:
-            # CIRIS proxy uses JWT auth (Google/Apple ID token)
-            new_api_key = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN", "") or os.environ.get(
-                "CIRIS_BILLING_APPLE_ID_TOKEN", ""
-            )
-            logger.info("[LLM_TOKEN] CIRIS proxy service - reading from CIRIS_BILLING_*_ID_TOKEN")
+            # CIRIS proxy uses JWT auth (Google/Apple ID token).
+            #
+            # THREE NAMES, because three clients wrote three names. Android
+            # writes CIRIS_BILLING_GOOGLE_ID_TOKEN, iOS writes
+            # CIRIS_BILLING_APPLE_ID_TOKEN, and desktop wrote
+            # CIRIS_BILLING_OAUTH_TOKEN — a variable nothing here had ever
+            # read. So on desktop the whole refresh handshake completed
+            # successfully and changed nothing: the client silently re-signed
+            # in, rewrote .env, tripped the reload, and this method re-read the
+            # SAME expired token, reported "unchanged", reset the breaker, and
+            # 401'd again. Forever, from about an hour after setup.
+            #
+            # The desktop client now writes the Google name like Android does;
+            # this reads the legacy name too so a client and an agent that
+            # disagree about the version still recover.
+            from ciris_engine.logic.utils.token_handshake import read_proxy_token
+
+            new_api_key, source_var = read_proxy_token(current=self.openai_config.api_key or "")
         else:
             # Standard OpenAI-compatible service uses OPENAI_API_KEY
             new_api_key = os.environ.get("OPENAI_API_KEY", "")
@@ -1508,7 +1521,23 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         if key_changed:
             self.update_api_key(new_api_key)
         else:
-            logger.info("[LLM_TOKEN] API key unchanged after refresh - resetting circuit breaker")
+            # SAY WHAT WAS ACTUALLY CHECKED. This branch is what a stranded
+            # desktop user's log looked like for the whole outage, and it read
+            # as routine housekeeping: a reload happened, nothing changed, the
+            # breaker reset, the next call 401'd. Naming the variables that
+            # were consulted separates "the client never wrote a new token"
+            # from "the token is new and the provider still rejects it" — two
+            # different problems that looked identical here.
+            if is_ciris_proxy:
+                logger.warning(
+                    "[LLM_TOKEN] Reload produced NO new token — still holding the same value "
+                    "(read %s). The client signalled a refresh but wrote nothing this agent "
+                    "reads, so every proxy call will keep failing 401. Resetting the breaker "
+                    "anyway so the next attempt is not suppressed.",
+                    source_var or "no CIRIS_BILLING_* variable",
+                )
+            else:
+                logger.info("[LLM_TOKEN] API key unchanged after refresh - resetting circuit breaker")
             self.circuit_breaker.reset()
 
         # Also check if base URL changed (e.g. .env migration from legacy URLs)
@@ -2602,25 +2631,15 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         return "UNKNOWN"
 
     def _signal_token_refresh_needed(self) -> None:
-        """Write a signal file to indicate token refresh is needed (for ciris.ai).
+        """Ask the client for a fresh proxy token.
 
-        This file is monitored by the Android app to trigger Google silentSignIn().
-        The signal file is written to CIRIS_HOME/.token_refresh_needed
+        The path, the filename and the logging live in
+        `ciris_engine.logic.utils.token_handshake`. This method used to resolve
+        CIRIS_HOME and spell the filename itself — and so did a second copy in
+        the billing provider, and three Kotlin clients each had their own
+        constants. That is exactly how the desktop half came to write a token
+        variable this half never read.
         """
-        import os
-        from pathlib import Path
+        from ciris_engine.logic.utils.token_handshake import request_token_refresh
 
-        try:
-            # Get CIRIS_HOME from environment (set by mobile_main.py on Android)
-            ciris_home = os.getenv("CIRIS_HOME")
-            if not ciris_home:
-                # Fallback for non-Android environments
-                from ciris_engine.logic.utils.path_resolution import get_ciris_home
-
-                ciris_home = str(get_ciris_home())
-
-            signal_file = Path(ciris_home) / ".token_refresh_needed"
-            signal_file.write_text(str(time.time()))
-            logger.info(f"Token refresh signal written to: {signal_file}")
-        except Exception as e:
-            logger.error(f"Failed to write token refresh signal: {e}")
+        request_token_refresh(reason=f"proxy 401 on model {self.model_name}")

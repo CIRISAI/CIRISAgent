@@ -517,14 +517,19 @@ def _try_lazy_init_billing_provider(request: Request, resource_monitor: Any) -> 
             logger.debug("[BILLING_LAZY_INIT] Reloaded .env from %s", env_path)
 
     # Check for OAuth ID token (written by Kotlin when user logs in - Google on Android, Apple on iOS)
-    google_token = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN", "") or os.environ.get(
-        "CIRIS_BILLING_APPLE_ID_TOKEN", ""
-    )
+    # The shared selector, because compatibility must not depend on a provider
+    # already existing. Reading only the Google/Apple names here meant that when
+    # Python started BEFORE an older desktop client signed in — and that client
+    # writes its own variable — this returned None, /credits answered with the
+    # unlimited-credit response, and the purchase routes reported no provider
+    # configured, all while a perfectly good token sat in the environment.
+    from ciris_engine.logic.utils.token_handshake import PROXY_TOKEN_VARS, read_proxy_token
+
+    google_token, token_var = read_proxy_token()
     if not google_token:
-        logger.debug(
-            "[BILLING_LAZY_INIT] No CIRIS_BILLING_GOOGLE_ID_TOKEN or CIRIS_BILLING_APPLE_ID_TOKEN in environment"
-        )
+        logger.debug("[BILLING_LAZY_INIT] no proxy token in environment (looked at %s)", ", ".join(PROXY_TOKEN_VARS))
         return None
+    logger.debug("[BILLING_LAZY_INIT] using the token from %s", token_var)
 
     # Get billing URL from central config (checks env var first)
     billing_url = get_billing_url()
@@ -968,9 +973,9 @@ async def verify_google_play_purchase(
     if not google_id_token:
         import os
 
-        google_id_token = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN") or os.environ.get(
-            "CIRIS_BILLING_APPLE_ID_TOKEN"
-        )
+        from ciris_engine.logic.utils.token_handshake import read_proxy_token
+
+        google_id_token, _tok_var = read_proxy_token()
         if google_id_token:
             logger.info(f"[GOOGLE_PLAY_VERIFY] Using OAuth ID token from environment ({len(google_id_token)} chars)")
     else:

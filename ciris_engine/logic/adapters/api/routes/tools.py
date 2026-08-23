@@ -175,23 +175,27 @@ def _get_billing_url() -> str:
 
 
 def _get_google_id_token(request: Request) -> Optional[str]:
-    """Get Google ID token from request headers or environment."""
+    """Get the OAuth ID token for a tool request.
+
+    A header wins — the caller is naming the identity this request is for.
+    Otherwise the shared selector decides, exactly as billing, the LLM services
+    and the hosted-tools adapter do. Reading the variable names directly here
+    meant the balance, check and purchase endpoints kept forwarding the expired
+    setup token after a client had refreshed under a different name: tools
+    stayed broken while the rest of the agent had already recovered.
+    """
     # Try header first (set by Android)
     token = request.headers.get("X-Google-ID-Token")
     if token:
         return token
 
-    # Try environment (set after login) - Google on Android, Apple on iOS
-    token = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN")
-    if token:
-        return token
+    from ciris_engine.logic.utils.token_handshake import read_proxy_token
 
-    token = os.environ.get("CIRIS_BILLING_APPLE_ID_TOKEN")
-    if token:
-        return token
+    selected, _var = read_proxy_token()
+    if selected:
+        return selected
 
-    token = os.environ.get("GOOGLE_ID_TOKEN")
-    return token
+    return os.environ.get("GOOGLE_ID_TOKEN")
 
 
 async def _make_billing_request(

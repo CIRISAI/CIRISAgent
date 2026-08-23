@@ -173,10 +173,16 @@ class CIRISHostedToolService:
         Returns:
             Google ID token if available, None otherwise
         """
-        # First try environment (direct or loaded at startup)
-        token = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN")
+        # Same selector as billing and the LLM services. Reading only the
+        # Google name here meant that after a desktop client refreshed under a
+        # different variable, hosted tools and tool-balance requests went on
+        # sending the stale setup token — or none — while the rest of the agent
+        # had already recovered.
+        from ciris_engine.logic.utils.token_handshake import read_proxy_token
+
+        token, source_var = read_proxy_token()
         if token:
-            logger.info(f"[HOSTED_TOOLS] Got token from env CIRIS_BILLING_GOOGLE_ID_TOKEN (len={len(token)})")
+            logger.info(f"[HOSTED_TOOLS] Got token from env {source_var} (len={len(token)})")
         else:
             token = os.environ.get("GOOGLE_ID_TOKEN")
             if token:
@@ -210,9 +216,20 @@ class CIRISHostedToolService:
                     logger.info(f"[HOSTED_TOOLS] Checking {env_path} exists={env_path.exists()}")
                     if env_path.exists():
                         with open(env_path) as f:
+                            # SAME NAMES AS THE SELECTOR. Scanning only for
+                            # CIRIS_BILLING_GOOGLE_ID_TOKEN here is the same
+                            # drift one level deeper: a desktop client that
+                            # refreshed under a different variable wrote it
+                            # into this very file, and this loop would walk
+                            # straight past it.
+                            from ciris_engine.logic.utils.token_handshake import PROXY_TOKEN_VARS
+
+                            found: dict[str, str] = {}
                             for line in f:
                                 line = line.strip()
-                                if line.startswith("CIRIS_BILLING_GOOGLE_ID_TOKEN="):
+                                for var in PROXY_TOKEN_VARS:
+                                    if not line.startswith(f"{var}="):
+                                        continue
                                     # Handle quoted and unquoted values
                                     value = line.split("=", 1)[1].strip()
                                     if value.startswith('"') and value.endswith('"'):
@@ -220,11 +237,25 @@ class CIRISHostedToolService:
                                     elif value.startswith("'") and value.endswith("'"):
                                         value = value[1:-1]
                                     if value:
-                                        token = value
-                                        logger.info(
-                                            f"[HOSTED_TOOLS] ✓ Loaded fresh token from {env_path} (len={len(value)})"
-                                        )
-                                        break
+                                        found[var] = value
+                            if found:
+                                # THE SAME RANKING, not a second one that
+                                # happens to agree on the easy cases. Comparing
+                                # expiry alone here left the opaque tie to
+                                # dictionary insertion order — Google first —
+                                # while the shared selector resolves that same
+                                # tie toward the legacy-desktop name. The file
+                                # path and the environment path would then pick
+                                # different tokens from identical inputs, so
+                                # hosted tools sent the stale credential while
+                                # billing and the LLM used the refreshed one.
+                                from ciris_engine.logic.utils.token_handshake import rank_candidates
+
+                                var, value = rank_candidates(list(found.items()))[0]
+                                token = value
+                                logger.info(
+                                    f"[HOSTED_TOOLS] Loaded fresh token from {env_path} under {var} (len={len(value)})"
+                                )
                         if token:
                             break
                         else:

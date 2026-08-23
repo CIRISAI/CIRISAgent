@@ -32,7 +32,7 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import Optional, Sequence, Tuple
+from typing import List, Optional, Sequence, Set, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -146,7 +146,7 @@ def jwt_expiry_epoch(token: str) -> Optional[float]:
 _OPAQUE_TIE_ORDER = ("callback", "CIRIS_BILLING_OAUTH_TOKEN", "CIRIS_BILLING_GOOGLE_ID_TOKEN", "CIRIS_BILLING_APPLE_ID_TOKEN")
 
 
-def rank_candidates(candidates: Sequence[Tuple[str, str]]) -> list:
+def rank_candidates(candidates: Sequence[Tuple[str, str]]) -> List[Tuple[str, str]]:
     """Order (name, token) pairs best-first. One definition of "best".
 
     EXPIRY STATUS IS A TIER, NOT A NUMBER. Ranking on the raw `exp` alone put
@@ -218,8 +218,8 @@ def read_proxy_token(
     # callback which produced something the environment does not have. Without
     # this, the legacy first-non-empty callback would re-win every tie with the
     # very stale value we are trying to move off.
-    present: list[Tuple[str, str]] = []
-    seen: set[str] = set()
+    present: List[Tuple[str, str]] = []
+    seen: Set[str] = set()
     for var in sources:
         token = os.environ.get(var, "")
         if token and token not in seen:

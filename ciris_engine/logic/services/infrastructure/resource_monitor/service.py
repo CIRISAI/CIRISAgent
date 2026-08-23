@@ -245,9 +245,16 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
             if not self._ciris_home:
                 return
 
-            # Watch for .config_reload signal (written by Android after token refresh)
-            config_reload_file = self._ciris_home / ".config_reload"
-            env_file = self._ciris_home / ".env"
+            # Watch for the client's answer. Filenames come from the shared
+            # handshake module so this side and the client cannot disagree
+            # about which files the conversation uses.
+            from ciris_engine.logic.utils.token_handshake import (
+                CONFIG_RELOAD_SIGNAL_FILE,
+                ENV_FILE,
+            )
+
+            config_reload_file = self._ciris_home / CONFIG_RELOAD_SIGNAL_FILE
+            env_file = self._ciris_home / ENV_FILE
 
             # Check if config reload signal file exists
             if not config_reload_file.exists():
@@ -260,7 +267,12 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
                 return
 
             # New config reload signal detected!
-            logger.info(f" Config reload signal detected from Android (timestamp: {signal_mtime})")
+            logger.info(
+                "[TOKEN_HANDSHAKE] client answered: %s (mtime=%s) — reloading %s",
+                config_reload_file,
+                signal_mtime,
+                env_file,
+            )
 
             # Verify .env exists
             if not env_file.exists():
@@ -279,7 +291,7 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
 
             # 2. Emit token_refreshed signal (LLM service will reset circuit breaker)
             await self.signal_bus.emit("token_refreshed", "openai_api_key")
-            logger.info("[OK] Emitted token_refreshed signal")
+            logger.info("[TOKEN_HANDSHAKE] emitted token_refreshed — services will re-read the env")
 
             # 3. Mark signal as processed and clean up
             self._token_refresh_signal_mtime = signal_mtime

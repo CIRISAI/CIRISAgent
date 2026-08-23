@@ -604,34 +604,15 @@ class CIRISBillingProvider(CreditGateProtocol):
             self._client.headers["Authorization"] = f"Bearer {token}"
 
     def _signal_token_refresh_needed(self) -> None:
-        """Write a signal file to indicate token refresh is needed.
+        """Ask the client for a fresh token (billing's 401 path).
 
-        This is picked up by Android's TokenRefreshManager which will:
-        1. Call Google silentSignIn() to get a fresh ID token
-        2. Update .env with the new token
-        3. Write .config_reload signal
-        4. Python ResourceMonitor detects .config_reload and emits token_refreshed
+        Byte-for-byte the same conversation the LLM service has, so it is the
+        same code now — `utils.token_handshake` owns the directory, the
+        filename and the wording.
         """
-        import time
-        from pathlib import Path
+        from ciris_engine.logic.utils.token_handshake import request_token_refresh
 
-        # Get CIRIS_HOME
-        ciris_home = os.environ.get("CIRIS_HOME")
-        if not ciris_home:
-            try:
-                from ciris_engine.logic.utils.path_resolution import get_ciris_home
-
-                ciris_home = str(get_ciris_home())
-            except Exception:
-                logger.warning("[BILLING_TOKEN] Cannot write refresh signal - CIRIS_HOME not found")
-                return
-
-        try:
-            signal_file = Path(ciris_home) / ".token_refresh_needed"
-            signal_file.write_text(str(time.time()))
-            logger.info("[BILLING_TOKEN] Token refresh signal written to: %s", signal_file)
-        except Exception as exc:
-            logger.warning("[BILLING_TOKEN] Failed to write token refresh signal: %s", exc)
+        request_token_refresh(reason="billing 401")
 
     def _store_cache(self, cache_key: str, result: CreditCheckResult) -> None:
         if self._cache_ttl <= 0:

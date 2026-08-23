@@ -13,6 +13,37 @@ import ai.ciris.mobile.shared.config.CIRISConfig
  * Logic extracted from:
  * - android/app/src/main/java/ai/ciris/mobile/auth/TokenRefreshManager.kt (lines 240-334)
  */
+/**
+ * The client half of the token-refresh handshake, named once.
+ *
+ * The agent writes [TOKEN_REFRESH_REQUEST_FILE] when the hosted proxy rejects
+ * its token; we re-sign-in, write the fresh token into [ENV_FILE] under
+ * [tokenEnvVarFor], and answer with [CONFIG_RELOAD_SIGNAL_FILE]. The agent
+ * mirrors these names in `ciris_engine/logic/utils/token_handshake.py`.
+ *
+ * These were three sets of private constants, one per platform, and desktop's
+ * token variable did not match what the agent reads — so the handshake
+ * completed and changed nothing, and hosted-proxy users were dead an hour
+ * after setup with no error that named the cause. One place now, and a test
+ * pins both sides against each other.
+ */
+object TokenHandshake {
+    const val TOKEN_REFRESH_REQUEST_FILE = ".token_refresh_needed"
+    const val CONFIG_RELOAD_SIGNAL_FILE = ".config_reload"
+    const val ENV_FILE = ".env"
+
+    /** Google sign-in — Android and desktop. */
+    const val GOOGLE_TOKEN_VAR = "CIRIS_BILLING_GOOGLE_ID_TOKEN"
+
+    /** Apple sign-in — iOS. */
+    const val APPLE_TOKEN_VAR = "CIRIS_BILLING_APPLE_ID_TOKEN"
+
+    /** What desktop wrote before this was corrected. Readable by the agent for
+     *  one release so a mismatched client/agent pair still recovers; never
+     *  written any more. */
+    const val LEGACY_DESKTOP_TOKEN_VAR = "CIRIS_BILLING_OAUTH_TOKEN"
+}
+
 expect class EnvFileUpdater {
     /**
      * Update the .env file with a new OAuth ID token (Google on Android, Apple on iOS).

@@ -748,7 +748,9 @@ class ApiPlatform(Service):
         """Check if OAuth authentication token is available (Google or Apple)."""
         import os
 
-        return bool(os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN") or os.environ.get("CIRIS_BILLING_APPLE_ID_TOKEN"))
+        from ciris_engine.logic.utils.token_handshake import has_proxy_token
+
+        return has_proxy_token()
 
     def _is_hosted_tools_loaded(self) -> bool:
         """Check if ciris_hosted_tools adapter is already loaded."""

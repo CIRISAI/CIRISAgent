@@ -220,3 +220,14 @@ def read_proxy_token(
     if current and token != current:
         logger.info("%s selected token differs from the one in use — swapping to %s", LOG_PREFIX, var)
     return token, var
+
+
+def has_proxy_token() -> bool:
+    """Whether ANY proxy token is available.
+
+    The presence checks that gate hosted-proxy features asked only about the
+    Google name, so a client that refreshed under a different one looked to
+    them like a user who had never signed in — the capability was withdrawn
+    while a perfectly good token sat in the environment.
+    """
+    return any(os.environ.get(var) for var in PROXY_TOKEN_VARS)

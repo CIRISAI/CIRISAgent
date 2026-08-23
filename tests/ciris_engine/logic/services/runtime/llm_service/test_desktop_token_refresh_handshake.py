@@ -611,3 +611,66 @@ class TestTheHandshakePathsThemselves:
         assert jwt_expiry_epoch("a.b.c") is None          # payload is not base64 JSON
         assert jwt_expiry_epoch("h.eyJzdWIiOiJ4In0.s") is None  # valid JSON, no exp
         assert jwt_expiry_epoch(jwt(60)) is not None
+
+
+class TestNobodyReadsTheTokenNamesDirectly:
+    """One module knows the variable names. Everything else asks it.
+
+    This started as one mismatch — desktop writing a name Python never read —
+    and every round of review since has found another site quietly holding its
+    own copy of the list: billing's provider, its two runtime handlers, its
+    lazy initializer, the tools route, the hosted-tools adapter and its .env
+    scan, the startup credential, and the capability gates that decide whether
+    hosted features exist at all. Each was locally reasonable and collectively
+    they meant a refreshed token reached some subsystems and not others, so the
+    agent recovered in pieces.
+
+    A grep is the only thing that can hold this line, so here it is.
+    """
+
+    ALLOWED = {
+        "ciris_engine/logic/utils/token_handshake.py",  # defines them
+        "ciris_engine/logic/setup/wizard.py",           # writes the .env template
+    }
+
+    def test_no_module_outside_the_handshake_reads_a_token_variable(self):
+        import re
+
+        root = Path(__file__).resolve().parents[6]
+        pattern = re.compile(
+            r'os\.(?:getenv|environ\.get)\(\s*["\']'
+            r'(CIRIS_BILLING_GOOGLE_ID_TOKEN|CIRIS_BILLING_APPLE_ID_TOKEN|CIRIS_BILLING_OAUTH_TOKEN)'
+        )
+        offenders = []
+        for base in ("ciris_engine", "ciris_adapters"):
+            for py in (root / base).rglob("*.py"):
+                rel = py.relative_to(root).as_posix()
+                if rel in self.ALLOWED:
+                    continue
+                for lineno, line in enumerate(py.read_text(encoding="utf-8", errors="ignore").splitlines(), 1):
+                    if pattern.search(line):
+                        offenders.append(f"{rel}:{lineno}")
+        assert not offenders, (
+            "these read a proxy-token variable directly instead of calling "
+            "token_handshake.read_proxy_token() / has_proxy_token(); a token refreshed under a "
+            "name they do not know leaves them on the expired one while the rest of the agent "
+            "recovers: " + ", ".join(offenders)
+        )
+
+    def test_the_consumers_all_import_the_selector(self):
+        """The other direction: the known consumers must actually call it."""
+        root = Path(__file__).resolve().parents[6]
+        consumers = [
+            "ciris_engine/logic/services/runtime/llm_service/service.py",
+            "ciris_engine/logic/services/infrastructure/resource_monitor/ciris_billing_provider.py",
+            "ciris_engine/logic/runtime/billing_helpers.py",
+            "ciris_engine/logic/runtime/service_initializer.py",
+            "ciris_engine/logic/adapters/api/routes/billing.py",
+            "ciris_engine/logic/adapters/api/routes/tools.py",
+            "ciris_adapters/ciris_hosted_tools/services.py",
+        ]
+        missing = [
+            c for c in consumers
+            if "token_handshake" not in (root / c).read_text(encoding="utf-8")
+        ]
+        assert not missing, f"these consume the proxy token without the shared selector: {missing}"

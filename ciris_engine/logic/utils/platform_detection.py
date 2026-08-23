@@ -28,6 +28,20 @@ from ciris_engine.schemas.platform import PlatformCapabilities, PlatformRequirem
 logger = logging.getLogger(__name__)
 
 
+
+def _has_proxy_token() -> bool:
+    """Any OAuth proxy token, under any of the handshake names.
+
+    These presence checks used to ask only about the Google variable, so a
+    client that had refreshed under a different one looked exactly like a user
+    who never signed in — the capability was withdrawn while a good token sat
+    right there in the environment.
+    """
+    from ciris_engine.logic.utils.token_handshake import has_proxy_token
+
+    return has_proxy_token()
+
+
 def is_ios() -> bool:
     """Detect if running on iOS platform.
 
@@ -132,7 +146,7 @@ def _detect_android_capabilities() -> set[PlatformRequirement]:
 
     # Native Google auth is available if Play Services is available
     # AND we have a valid Google ID token
-    google_token = os.getenv("CIRIS_BILLING_GOOGLE_ID_TOKEN") or os.getenv("GOOGLE_ID_TOKEN")
+    google_token = _has_proxy_token() or bool(os.getenv("GOOGLE_ID_TOKEN"))
     if google_token:
         capabilities.add(PlatformRequirement.GOOGLE_NATIVE_AUTH)
 
@@ -273,7 +287,7 @@ def detect_platform_capabilities() -> PlatformCapabilities:
         tpm_available=PlatformRequirement.TPM in capabilities,
         # Token state
         has_valid_device_token=bool(
-            os.getenv("CIRIS_BILLING_GOOGLE_ID_TOKEN") or os.getenv("GOOGLE_ID_TOKEN") or os.getenv("APPLE_ID_TOKEN")
+            _has_proxy_token() or os.getenv("GOOGLE_ID_TOKEN") or os.getenv("APPLE_ID_TOKEN")
         ),
         token_binding_method=_get_token_binding_method(capabilities),
     )

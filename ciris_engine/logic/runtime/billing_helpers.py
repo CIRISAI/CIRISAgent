@@ -172,7 +172,9 @@ async def reinitialize_billing_provider(runtime: Any) -> None:
         logger.info("Billing provider not needed (not using CIRIS proxy)")
         return
 
-    google_id_token = os.getenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", "") or os.getenv("CIRIS_BILLING_APPLE_ID_TOKEN", "")
+    from ciris_engine.logic.utils.token_handshake import read_proxy_token
+
+    google_id_token, _tok_var = read_proxy_token()
     if not google_id_token:
         logger.warning("Using CIRIS LLM proxy without OAuth ID token - billing provider not configured")
         return

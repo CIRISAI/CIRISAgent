@@ -127,7 +127,14 @@ def create_billing_provider(google_id_token: str) -> Any:
     fail_open = os.getenv("CIRIS_BILLING_FAIL_OPEN", "false").lower() == "true"
 
     def get_fresh_token() -> str:
-        return os.getenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", "") or os.getenv("CIRIS_BILLING_APPLE_ID_TOKEN", "")
+        # Same selector as everywhere else. A first-non-empty read here handed
+        # back the stale Google value when a legacy desktop client had
+        # refreshed under its own name, and the provider installed it over the
+        # fresh token — undoing the refresh on the next billing request.
+        from ciris_engine.logic.utils.token_handshake import read_proxy_token
+
+        token, _var = read_proxy_token()
+        return token
 
     return CIRISBillingProvider(
         google_id_token=google_id_token,

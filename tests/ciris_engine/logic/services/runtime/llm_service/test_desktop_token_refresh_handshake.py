@@ -387,3 +387,62 @@ class TestBillingSharesTheSelector:
         ).read_text(encoding="utf-8")
         handler = src[src.index("async def handle_llm_token_refreshed") : src.index("def update_llm_services_token")]
         assert 'os.getenv("OPENAI_API_KEY"' not in handler
+
+
+class TestTheBillingCallbackCannotUndoARefresh:
+    """The refresh must survive the next billing request.
+
+    `_get_current_token()` runs before every billing call. It used to consult
+    the injected `get_fresh_token` callback FIRST and return the moment that
+    callback produced anything different from the token in hand. That callback
+    was a first-non-empty read of the Google/Apple names — so after a legacy
+    desktop refresh left a stale Google value beside a fresh one, it handed
+    back the STALE token, installed it over the fresh one the refresh handler
+    had just set, and returned before the shared selector was ever reached.
+    Billing then kept answering AUTH_EXPIRED and gating interactions while the
+    LLM key looked perfectly healthy.
+    """
+
+    def _provider(self, installed: str, callback):
+        from ciris_engine.logic.services.infrastructure.resource_monitor.ciris_billing_provider import (
+            CIRISBillingProvider,
+        )
+
+        provider = CIRISBillingProvider.__new__(CIRISBillingProvider)
+        provider._google_id_token = installed
+        provider._token_refresh_callback = callback
+        return provider
+
+    def test_a_stale_callback_cannot_reinstall_the_expired_token(self, monkeypatch):
+        stale, fresh = jwt(-600), jwt(3600)
+        monkeypatch.setenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", stale)
+        monkeypatch.setenv("CIRIS_BILLING_OAUTH_TOKEN", fresh)
+
+        # the old first-non-empty callback, verbatim
+        provider = self._provider(installed=fresh, callback=lambda: stale)
+        assert provider._get_current_token() == fresh, (
+            "the callback reinstalled the expired token, so the very next billing request "
+            "goes out with it and AUTH_EXPIRED resumes"
+        )
+
+    def test_the_same_holds_for_opaque_tokens(self, monkeypatch):
+        """The legacy case has no readable expiry on either side."""
+        monkeypatch.setenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", "opaque-expired")
+        monkeypatch.setenv("CIRIS_BILLING_OAUTH_TOKEN", "opaque-refreshed")
+        provider = self._provider(installed="opaque-expired", callback=lambda: "opaque-expired")
+        assert provider._get_current_token() == "opaque-refreshed"
+
+    def test_the_callback_still_serves_when_the_environment_is_empty(self, monkeypatch):
+        """Demoted, not removed: a caller supplying a token from somewhere
+        other than .env must still be honoured."""
+        for var in ("CIRIS_BILLING_GOOGLE_ID_TOKEN", "CIRIS_BILLING_APPLE_ID_TOKEN", "CIRIS_BILLING_OAUTH_TOKEN"):
+            monkeypatch.delenv(var, raising=False)
+        provider = self._provider(installed="", callback=lambda: "from-the-caller")
+        assert provider._get_current_token() == "from-the-caller"
+
+    def test_the_injected_callback_itself_uses_the_selector(self):
+        src = (
+            Path(__file__).resolve().parents[6] / "ciris_engine/logic/runtime/billing_helpers.py"
+        ).read_text(encoding="utf-8")
+        factory = src[src.index("def create_billing_provider") : src.index("async def reinitialize_billing_provider")]
+        assert "read_proxy_token" in factory, "get_fresh_token must not re-implement the choice"

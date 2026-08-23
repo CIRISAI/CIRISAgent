@@ -197,9 +197,18 @@ class TestGetBillingUrl:
             assert url == custom_url
 
     def test_env_override_ciris_billing_url(self) -> None:
-        """Test CIRIS_BILLING_URL environment override (backward compat)."""
+        """Test CIRIS_BILLING_URL environment override (backward compat).
+
+        CIRIS_BILLING_API_URL is checked FIRST, so this test — which is about
+        the older, lower-precedence name — has to say that the newer one is
+        absent. It used to depend on that being true by luck, and failed
+        whenever anything earlier in the session left CIRIS_BILLING_API_URL in
+        the environment (a `load_dotenv(override=True)` on a real .env will do
+        it), which made an unrelated suite look broken.
+        """
         custom_url = "https://custom-billing.example.com"
         with patch.dict(os.environ, {"CIRIS_BILLING_URL": custom_url}):
+            os.environ.pop("CIRIS_BILLING_API_URL", None)
             url = get_billing_url(use_fallback=False)
             assert url == custom_url
 

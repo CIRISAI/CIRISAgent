@@ -23,11 +23,11 @@ from ciris_engine.schemas.services.credit_gate import (
 logger = logging.getLogger(__name__)
 
 
-def _read_proxy_token() -> str:
+def _read_proxy_token(current: str = "") -> str:
     """The freshest proxy token, chosen exactly as the LLM side chooses it."""
     from ciris_engine.logic.utils.token_handshake import read_proxy_token
 
-    token, _var = read_proxy_token()
+    token, _var = read_proxy_token(current=current)
     return token
 
 
@@ -112,25 +112,51 @@ class CIRISBillingProvider(CreditGateProtocol):
         5. ResourceMonitor reloads .env (via load_dotenv override=True)
         6. This method reads the updated GOOGLE_ID_TOKEN from environment
         """
-        # First, try the callback if available
+        # THE SHARED SELECTOR DECIDES, AND IT GOES FIRST.
+        #
+        # This used to consult the injected callback first and return the
+        # moment that callback produced anything different. The callback is a
+        # first-non-empty read of the Google/Apple names, so when a legacy
+        # desktop client had refreshed under its own name — leaving a stale
+        # Google value beside a fresh one — the callback handed back the STALE
+        # token, installed it over the fresh one the refresh handler had just
+        # set, and returned before this method ever reached the selector. The
+        # fix upstream was undone on the very next billing request, and billing
+        # kept answering AUTH_EXPIRED while the LLM key looked healthy.
+        #
+        # The selector also needs to know what we are holding: with opaque
+        # tokens it cannot rank by expiry, and "the copy that is not the one
+        # currently being rejected" is the only signal left.
+        selected = _read_proxy_token(current=self._google_id_token)
+        if selected:
+            if selected != self._google_id_token:
+                logger.info(
+                    "[TOKEN_HANDSHAKE] billing token updated from the environment: %d chars -> %d chars",
+                    len(self._google_id_token) if self._google_id_token else 0,
+                    len(selected),
+                )
+                self._google_id_token = selected
+            return self._google_id_token
+
+        # Nothing in the environment at all — fall back to the injected
+        # callback, which is how a caller supplies a token from somewhere other
+        # than .env, then to the legacy variable.
         if self._token_refresh_callback:
             try:
                 new_token = self._token_refresh_callback()
                 if new_token and new_token != self._google_id_token:
                     old_len = len(self._google_id_token) if self._google_id_token else 0
-                    new_len = len(new_token)
-                    logger.info("[BILLING_TOKEN] Token refreshed via callback: %d chars -> %d chars", old_len, new_len)
+                    logger.info(
+                        "[TOKEN_HANDSHAKE] billing token refreshed via callback: %d chars -> %d chars",
+                        old_len,
+                        len(new_token),
+                    )
                     self._google_id_token = new_token
                     return self._google_id_token
             except Exception as exc:
-                logger.warning("[BILLING_TOKEN] Token refresh callback failed: %s", exc)
+                logger.warning("[TOKEN_HANDSHAKE] billing token refresh callback failed: %s", exc)
 
-        # Check environment for updated token (set by auth route or ResourceMonitor after .env reload)
-        # Check Google token (Android), Apple token (iOS), and legacy GOOGLE_ID_TOKEN
-        env_token = (
-            _read_proxy_token()
-            or os.environ.get("GOOGLE_ID_TOKEN", "")
-        )
+        env_token = os.environ.get("GOOGLE_ID_TOKEN", "")
         if env_token and env_token != self._google_id_token:
             old_len = len(self._google_id_token) if self._google_id_token else 0
             new_len = len(env_token)

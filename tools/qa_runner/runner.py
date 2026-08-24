@@ -1166,6 +1166,28 @@ class QARunner:
                     break
             time.sleep(8)
 
+        # THE PROBE LINE IS NOT THE ONLY WITNESS. When it never lands — the probe
+        # is best-effort and its line has moved before — `delivery_status()`
+        # still carries the same facts per peer (knows_peer / kex_present /
+        # deliverable), and it is the value the node itself acts on. Reading it
+        # here is what keeps a missing probe line from being reported as a dead
+        # transport: a live run with 300 anti-entropy rounds, 50 inbound
+        # envelopes and zero dropped frames was declared "NOT transport-rooted
+        # (edge.knows_peer=false)" purely because this verdict was absent.
+        if transport_rooted is None:
+            fallback = self._peer_state_from_delivery_status(_read_probe_log)
+            if fallback is not None:
+                transport_rooted = fallback.get("knows_peer")
+                if fallback.get("kex_present") is True:
+                    kex_state = "PRESENT"
+                elif fallback.get("kex_present") is False:
+                    kex_state = "None"
+                canonical_key = canonical_key or fallback.get("key_id")
+                self.console.print(
+                    "  [dim](probe line absent — verdict taken from delivery_status(), "
+                    "which is what the node itself acts on)[/dim]"
+                )
+
         self.console.print(f"  canonical peer      : {canonical_key or '<from probe>'}")
         rooted_str = "✅ YES" if transport_rooted else ("❌ NO" if transport_rooted is False else "❓ probe verdict not found")
         self.console.print(f"  transport-rooted    : {rooted_str}  (edge.knows_peer — authoritative)")
@@ -1222,12 +1244,26 @@ class QARunner:
             )
             self.console.print(f"[bold yellow]{verdict}[/bold yellow]")
             logger.warning("[FEDERATION-DELIVERY] %s", verdict)
-        else:
+        elif transport_rooted is False:
             verdict = (
                 "❌ Canonical NOT transport-rooted (edge.knows_peer=false) — neither rounds nor "
                 "trace envelopes can flow. Check the canonical boot-prime + bootstrap dial."
             )
             self.console.print(f"[bold red]{verdict}[/bold red]")
+            logger.warning("[FEDERATION-DELIVERY] %s", verdict)
+        else:
+            # UNKNOWN IS NOT FALSE. Saying "edge.knows_peer=false" when nothing
+            # ever reported knows_peer sends the reader to the boot-prime and
+            # the bootstrap dial — both of which were fine — and it contradicts
+            # the delivery_status line printed immediately below, which said
+            # deliverable=true. An absent verdict is its own outcome.
+            verdict = (
+                "❓ Federation delivery UNVERIFIED — no probe verdict and no peer entry in "
+                "delivery_status(), so rooting could not be established either way. This is not "
+                "evidence of a broken transport; check the node log for `canonical boot prime: "
+                "rooted` and for anti-entropy rounds before concluding anything."
+            )
+            self.console.print(f"[bold yellow]{verdict}[/bold yellow]")
             logger.warning("[FEDERATION-DELIVERY] %s", verdict)
 
         # Not fully green → surface delivery_status() (CIRISServer#294, >=0.5.125)
@@ -1235,6 +1271,30 @@ class QARunner:
         if not (transport_rooted and kex_state == "PRESENT"):
             self._diagnose_delivery_status(_read_probe_log)
         return rooted
+
+    def _peer_state_from_delivery_status(self, read_probe_log: Callable[[], str]) -> Optional[dict]:
+        """The canonical peer's entry from the last [DELIVERY-STATUS] line.
+
+        Same source `_diagnose_delivery_status` renders, read as data instead of
+        prose so the verdict above can use it when the probe line is missing.
+        Best-effort; returns None when there is nothing to read.
+        """
+        import json as _json
+
+        try:
+            lines = [ln for ln in read_probe_log().splitlines() if "[DELIVERY-STATUS]" in ln]
+            if not lines:
+                return None
+            m = re.search(r"\[DELIVERY-STATUS\]\s+phase=(\S+)\s+(\{.*\})", lines[-1])
+            if not m:
+                return None
+            st = _json.loads(m.group(2))
+            peers = st.get("peers") or []
+            targets = st.get("canonical_targets") or []
+            peer = next((p for p in peers if p.get("key_id") in targets), peers[0] if peers else None)
+            return dict(peer) if peer else None
+        except Exception:  # noqa: BLE001 — diagnostics must never break the run
+            return None
 
     def _diagnose_delivery_status(self, read_probe_log: Callable[[], str]) -> None:
         """Print the ciris_server.delivery_status() snapshot + the #926 decision

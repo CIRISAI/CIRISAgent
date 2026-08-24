@@ -368,28 +368,38 @@ class TestIncompleteIsNotAbsent:
         )
 
 
-class TestTheRetryIsFrontLoaded:
-    """A 180s first nudge spends the whole of a short window doing nothing."""
+class TestTheRetryPolicyLivesWhereItCanBeTested:
+    """The retry behaviour itself is covered in
+    `tests/ciris_engine/logic/runtime/test_delivery_retry_policy.py`, against
+    the imported functions.
 
-    def test_the_schedule_starts_well_before_the_old_cadence(self):
+    What used to be here were two source-greps for literal strings —
+    `"reprime_schedule = (45, 120, 300)"` and the like. They broke the moment
+    the decisions were extracted into `should_reprime` / `peer_is_silent`,
+    which is the third time in this PR a grep-the-source guard has failed on a
+    rename while the behaviour it was guarding stayed correct. A test that
+    breaks on refactor and passes on regression is worse than none, so these
+    assert the seam exists and leave the behaviour to the behavioural tests.
+    """
+
+    def test_the_decisions_are_importable_functions(self):
+        from ciris_engine.logic.runtime.edge_runtime import peer_is_silent, should_reprime
+
+        assert callable(should_reprime) and callable(peer_is_silent)
+
+    def test_the_first_attempt_comes_long_before_the_old_flat_cadence(self):
+        """The one fact worth pinning here: the failing run got ONE reprime in
+        3m16s under a flat 180s cadence."""
+        from ciris_engine.logic.runtime.edge_runtime import REPRIME_SCHEDULE
+
+        assert REPRIME_SCHEDULE[0] < 180
+
+    def test_the_probe_reads_what_the_peer_sent_back(self):
         from pathlib import Path
 
         src = (
             Path(__file__).resolve().parents[3] / "ciris_engine/logic/runtime/edge_runtime.py"
         ).read_text(encoding="utf-8")
-        assert "reprime_schedule = (45, 120, 300)" in src, (
-            "the live run that failed got ONE reprime in 3m16s; the first attempt has to come "
-            "much earlier than 180s"
+        assert "envelopes_received_total" in src, (
+            "silent-vs-slow needs the inbound count; without it both stalls look identical"
         )
-        assert "reprimes_done" in src
-
-    def test_a_silent_peer_is_named_as_such(self):
-        """Zero inbound is a refusal wall, not congestion — and reprime cannot
-        fix it, so the log must stop implying that waiting will help."""
-        from pathlib import Path
-
-        src = (
-            Path(__file__).resolve().parents[3] / "ciris_engine/logic/runtime/edge_runtime.py"
-        ).read_text(encoding="utf-8")
-        assert "envelopes_received_total" in src
-        assert "ZERO" in src and "488" in src

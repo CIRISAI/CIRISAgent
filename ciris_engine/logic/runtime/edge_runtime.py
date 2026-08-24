@@ -288,6 +288,48 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
             )
 
 
+#: When to reprime after rooting, in seconds post-root, before falling back to
+#: the steady cadence. Front-loaded on purpose — see :func:`should_reprime`.
+REPRIME_SCHEDULE = (45, 120, 300)
+
+#: Steady-state reprime cadence (s) once REPRIME_SCHEDULE is spent.
+REPRIME_CADENCE = 180
+
+#: How many reprimes must pass with nothing received before we call the peer
+#: silent rather than slow. Two, so a single unlucky window does not accuse it.
+SILENT_PEER_AFTER_REPRIMES = 2
+
+
+def should_reprime(waited: int, reprimes_done: int, last_reprime: int) -> bool:
+    """Is it time to reprime the canonical?
+
+    Front-loaded, then steady. A flat 180s cadence spends the first three
+    minutes of every window doing nothing, so a run that ends at ~3 minutes
+    gets exactly ONE attempt — which is what a live QA run did: 141 rounds, 21
+    Key envelopes sent, zero inbound, KEX never landed, window torn down
+    before a second nudge. Reprime is idempotent (CIRISServer#288), so an early
+    attempt costs one dial and buys the peer a chance to heal its own
+    dial-cache (CIRISEdge#336) while the window is still young.
+    """
+    if reprimes_done < len(REPRIME_SCHEDULE):
+        return waited >= REPRIME_SCHEDULE[reprimes_done]
+    return waited - last_reprime >= REPRIME_CADENCE
+
+
+def peer_is_silent(received_total: int, reprimes_done: int) -> bool:
+    """Is the peer not answering at all, as opposed to answering slowly?
+
+    Two stalls wear the same `kex_present=false` label and only one is worth
+    waiting through. Inbound arriving means rounds flow and KEX simply has not
+    landed yet — that self-heals. Nothing arriving, after we have asked more
+    than once, is what a fail-closed refusal looks like from this side: a
+    canonical rejects an unknown `attesting_key_id` and says nothing back
+    (CIRISServer#488), so a structural refusal and congestion are
+    indistinguishable to the sender, and reprime cannot fix either.
+    """
+    return received_total == 0 and reprimes_done >= SILENT_PEER_AFTER_REPRIMES
+
+
 def _spawn_delivery_rooting_probe(engine: Any, edge: Any) -> None:
     """One-shot background observability for the trace-delivery last mile.
 
@@ -493,8 +535,6 @@ def _spawn_delivery_rooting_probe(engine: Any, edge: Any) -> None:
             # (CIRISServer#288), so the first one costs a dial and buys the
             # peer an early chance to heal its own cache; only after that does
             # the slow cadence make sense.
-            reprime_schedule = (45, 120, 300)  # s post-root for the first three
-            reprime_cadence = 180  # steady-state cadence (s) once the schedule is spent
             reprimes_done = 0
             inbound_seen = False
             waited = 0
@@ -520,9 +560,7 @@ def _spawn_delivery_rooting_probe(engine: Any, edge: Any) -> None:
                         )
                         _log_delivery_status("kex-present")
                         _log_trace_plane("kex-present")
-                    elif (
-                        reprimes_done < len(reprime_schedule) and waited >= reprime_schedule[reprimes_done]
-                    ) or (reprimes_done >= len(reprime_schedule) and waited - last_reprime >= reprime_cadence):
+                    elif should_reprime(waited, reprimes_done, last_reprime):
                         # KEX stall — reprime rather than give up. Warm-up dial-cache
                         # lag (CIRISEdge#336) means the peer may be dialing our stale
                         # dest for minutes; every reprime re-roots the canonical
@@ -552,7 +590,7 @@ def _spawn_delivery_rooting_probe(engine: Any, edge: Any) -> None:
                             _m = edge.metrics_snapshot() or {}
                             _recv = sum((_m.get("envelopes_received_total") or {}).values())
                             inbound_seen = inbound_seen or _recv > 0
-                            if _recv == 0 and reprimes_done >= 2:
+                            if peer_is_silent(_recv, reprimes_done):
                                 logger.warning(
                                     "[DELIVERY-PROBE] canonical %s: %ss post-root, %d reprimes, and ZERO "
                                     "envelopes received from ANY peer. The peer is not replying — which is "

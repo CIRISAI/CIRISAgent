@@ -207,7 +207,7 @@ class TestSkipDoesNotFailTheRun:
 
 
 class TestTheTracePlaneComesFromTheSubstrate:
-    """Ask the node, do not re-derive it.
+    """Ask the node, do not re-derive it — and READ the answer, do not call it.
 
     Three derivations were tried and all three were wrong:
 
@@ -216,65 +216,73 @@ class TestTheTracePlaneComesFromTheSubstrate:
       * `LIKE '%trace:%'` over the attestations — read 4 against a true 3, and
         at a 1:1 carrier ratio that inflation is enough to report carriers on a
         node that holds none. `trace:` and `trace_summary:` are different
-        namespaces and only one crosses the wire; the trailing colon is what
-        decides, because `covers()` is a prefix test.
+        namespaces and only one crosses the wire; the trailing colon decides,
+        because `covers()` is a prefix test.
       * `trace_events.cohort_scope` — a read-time projection in a different
         table, downstream of the attestation's own scope. 71 rows at
-        `federation` there is fully consistent with the carriers sitting at
-        `self`.
+        `federation` there is fully consistent with carriers sitting at `self`.
 
-    `node_state().trace_plane` is persist's `storage_summary()` verbatim, which
-    is the value the node acts on.
+    And a fourth mistake, mine: calling `node_state()` from the runner. It is
+    in-process to the server, which this runner boots as a subprocess, so the
+    call returns nothing however healthy the node is. The node logs the value;
+    the runner reads the line.
     """
 
-    def test_it_parses_the_standing(self, runner, monkeypatch):
-        import json as _json
-        import sys, types
+    def _line(self, plane: dict, phase: str = "kex-present-await-ship") -> str:
+        return f"[TRACE-PLANE] phase={phase} " + json.dumps(plane)
 
-        fake = types.ModuleType("ciris_server")
-        fake.node_state = lambda *a, **k: _json.dumps(
-            {"trace_plane": {"standing": "live", "band": "green", "carriers": 3,
-                             "last_admitted_at": "2026-08-24T14:41:00Z", "extra": "ignored"}}
+    def test_it_parses_the_logged_standing(self, runner):
+        line = self._line(
+            {"standing": "live", "band": "green", "carriers": 3,
+             "last_admitted_at": "2026-08-24T14:41:00Z", "extra": "ignored"}
         )
-        monkeypatch.setitem(sys.modules, "ciris_server", fake)
-        plane = runner._trace_plane_from_node_state()
+        plane = runner._trace_plane_from_node_state(lambda: line)
         assert plane is not None
         assert (plane.standing, plane.band, plane.carriers) == ("live", "green", 3)
-        assert not hasattr(plane, "extra")
+        assert not hasattr(plane, "extra"), "extra keys ignored, not absorbed untyped"
 
-    def test_a_dark_plane_is_reported_not_swallowed(self, runner, monkeypatch):
-        import json as _json
-        import sys, types
-
-        fake = types.ModuleType("ciris_server")
-        fake.node_state = lambda *a, **k: _json.dumps(
-            {"trace_plane": {"standing": "unreadable", "band": "dark", "carriers": 0}}
-        )
-        monkeypatch.setitem(sys.modules, "ciris_server", fake)
-        plane = runner._trace_plane_from_node_state()
+    def test_a_dark_plane_is_reported_not_swallowed(self, runner):
+        line = self._line({"standing": "unreadable", "band": "dark", "carriers": 0})
+        plane = runner._trace_plane_from_node_state(lambda: line)
         assert plane.band == "dark" and plane.carriers == 0
 
-    def test_no_runtime_is_None_not_an_invented_zero(self, runner, monkeypatch):
-        """A harness that already stopped its server must say it cannot tell —
-        reporting carriers=0 there is the same mistake as reading an absent
-        probe verdict as knows_peer=false."""
-        import sys, types
+    def test_the_last_line_wins(self, runner):
+        log = "\n".join(
+            [self._line({"carriers": 0}, "kex-none-repriming"), self._line({"carriers": 4}, "ship-confirmed")]
+        )
+        assert runner._trace_plane_from_node_state(lambda: log).carriers == 4
 
-        fake = types.ModuleType("ciris_server")
+    @pytest.mark.parametrize("log", ["", "no such line here", "[TRACE-PLANE] phase=x not-json"])
+    def test_no_line_is_None_not_an_invented_zero(self, runner, log):
+        """Saying carriers=0 when nothing reported is the same mistake as
+        reading an absent probe verdict as knows_peer=false."""
+        assert runner._trace_plane_from_node_state(lambda: log) is None
 
-        def _boom(*a, **k):
-            raise RuntimeError("no runtime")
+    def test_an_unreadable_log_is_survivable(self, runner):
+        def boom() -> str:
+            raise OSError("log went away")
 
-        fake.node_state = _boom
-        monkeypatch.setitem(sys.modules, "ciris_server", fake)
-        assert runner._trace_plane_from_node_state() is None
+        assert runner._trace_plane_from_node_state(boom) is None
+
+    def test_the_node_logs_it_because_the_runner_cannot_call_it(self):
+        """The agent side of the pattern must exist, or the runner reads nothing."""
+        from pathlib import Path
+
+        src = (
+            Path(__file__).resolve().parents[3]
+            / "ciris_engine/logic/runtime/edge_runtime.py"
+        ).read_text(encoding="utf-8")
+        assert "def _log_trace_plane" in src
+        assert "[TRACE-PLANE]" in src
+        # logged wherever delivery status is, since the two are read together
+        assert src.count("_log_trace_plane(") >= 6, "every [DELIVERY-STATUS] point needs its twin"
 
     def test_the_harness_does_not_count_trace_kind_envelopes(self):
         """The wire histogram cannot answer this, so no CODE should ask it to.
 
         Checked against executable statements only — the docstrings above name
-        these wrong derivations on purpose, so that the next person to reach
-        for one finds out why it does not work before writing it.
+        these wrong derivations on purpose, so the next person to reach for one
+        finds out why it does not work before writing it.
         """
         import ast
         from pathlib import Path
@@ -282,8 +290,7 @@ class TestTheTracePlaneComesFromTheSubstrate:
         src = (Path(__file__).resolve().parents[3] / "tools/qa_runner/runner.py").read_text(encoding="utf-8")
         tree = ast.parse(src)
         literals = {
-            node.value
-            for node in ast.walk(tree)
+            node.value for node in ast.walk(tree)
             if isinstance(node, ast.Constant) and isinstance(node.value, str)
         }
         docstrings = set()
@@ -292,17 +299,17 @@ class TestTheTracePlaneComesFromTheSubstrate:
                 doc = ast.get_docstring(node, clean=False)
                 if doc:
                     docstrings.add(doc)
-        executable = literals - docstrings
         for banned in ("kind=Trace", "LIKE '%trace:%'", "trace_events.cohort_scope"):
-            offenders = [lit for lit in executable if banned in lit]
-            assert not offenders, (
-                f"{banned!r} appears in executable code, not just in the note explaining "
-                f"why it is wrong: {offenders}"
-            )
+            offenders = [lit for lit in literals - docstrings if banned in lit]
+            assert not offenders, f"{banned!r} appears in executable code: {offenders}"
 
-    def test_the_harness_does_ask_node_state(self):
+    def test_the_value_still_originates_from_the_substrate(self):
+        """The runner reads a line, but the line must carry node_state()'s own
+        answer — not something the agent computed for itself either."""
         from pathlib import Path
 
-        src = (Path(__file__).resolve().parents[3] / "tools/qa_runner/runner.py").read_text(encoding="utf-8")
-        assert "ciris_server.node_state()" in src, "the substrate's own read is the happy path"
-        assert "trace_plane" in src
+        agent = (
+            Path(__file__).resolve().parents[3]
+            / "ciris_engine/logic/runtime/edge_runtime.py"
+        ).read_text(encoding="utf-8")
+        assert "node_state" in agent and "trace_plane" in agent

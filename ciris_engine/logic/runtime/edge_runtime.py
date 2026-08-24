@@ -322,6 +322,45 @@ def _spawn_delivery_rooting_probe(engine: Any, edge: Any) -> None:
         except Exception as exc:  # noqa: BLE001
             logger.debug("[DELIVERY-STATUS] phase=%s accessor error (non-fatal): %s", phase, exc)
 
+    def _log_trace_plane(phase: str) -> None:
+        """Surface `ciris_server.node_state().trace_plane` as a [TRACE-PLANE] line.
+
+        SAME REASON AS _log_delivery_status ABOVE: the accessor is in-process to
+        the server, so a QA runner — which boots this agent as a subprocess —
+        can never call it and gets `None` no matter how healthy the node is.
+        Logging it here is the only way that value reaches a log tail.
+
+        Why this value and not a derived one: "does this node hold offerable
+        carriers" cannot be answered from the wire (carriers ride the
+        Attestation plane, so there is no Trace envelope kind to count), nor
+        from `trace_events.cohort_scope` (a read-time projection in a different
+        table, downstream of the attestation's own scope), nor from a
+        substring match on the dimension (`trace:` and `trace_summary:` are
+        different namespaces and `covers()` is a prefix test, so a loose
+        `%trace:%` over-counts). persist's `storage_summary()` answers it, and
+        `node_state()` carries that verbatim.
+
+        Purely diagnostic; never disturbs the probe.
+        """
+        try:
+            import json as _json
+
+            import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
+
+            ns = getattr(ciris_server, "node_state", None)
+            if ns is None:
+                logger.info("[TRACE-PLANE] phase=%s unavailable (ciris_server has no node_state accessor)", phase)
+                return
+            raw = ns()
+            state = _json.loads(raw) if isinstance(raw, str) else raw
+            plane = (state or {}).get("trace_plane")
+            if plane is None:
+                logger.info("[TRACE-PLANE] phase=%s absent (node_state carries no trace_plane)", phase)
+                return
+            logger.info("[TRACE-PLANE] phase=%s %s", phase, _json.dumps(plane, default=str))
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("[TRACE-PLANE] phase=%s accessor error (non-fatal): %s", phase, exc)
+
     def _user_opted_into_traces() -> bool:
         """Did the OWNER opt in to trace replication? Consent is theirs to give.
 
@@ -424,6 +463,7 @@ def _spawn_delivery_rooting_probe(engine: Any, edge: Any) -> None:
             if not rooted:
                 logger.info("[DELIVERY-PROBE] canonical %s did not root within %ss", ckey, root_deadline)
                 _log_delivery_status("did-not-root")
+                _log_trace_plane("did-not-root")
                 return
 
             # KEX does NOT appear at rooting — it lands only once an inbound
@@ -467,6 +507,7 @@ def _spawn_delivery_rooting_probe(engine: Any, edge: Any) -> None:
                             waited,
                         )
                         _log_delivery_status("kex-present")
+                        _log_trace_plane("kex-present")
                     elif waited - last_reprime >= reprime_cadence:
                         # KEX stall — reprime rather than give up. Warm-up dial-cache
                         # lag (CIRISEdge#336) means the peer may be dialing our stale
@@ -526,10 +567,13 @@ def _spawn_delivery_rooting_probe(engine: Any, edge: Any) -> None:
                         waited,
                     )
                     _log_delivery_status("ship-confirmed")
+                    _log_trace_plane("ship-confirmed")
                     return
                 if waited - last_status >= status_cadence:
                     last_status = waited
-                    _log_delivery_status("kex-present-await-ship" if kex_seen_at is not None else "kex-none-repriming")
+                    _phase = "kex-present-await-ship" if kex_seen_at is not None else "kex-none-repriming"
+                    _log_delivery_status(_phase)
+                    _log_trace_plane(_phase)
             logger.info(
                 "[DELIVERY-PROBE] canonical %s window closed after %ss post-root with SHIP UNCONFIRMED "
                 "(kex=%s, envelopes_sent=0). Do not assume a peer fault: the CIRISEdge#336 dial-cache "
@@ -541,6 +585,7 @@ def _spawn_delivery_rooting_probe(engine: Any, edge: Any) -> None:
                 "present" if kex_seen_at is not None else "none",
             )
             _log_delivery_status("window-closed-unconfirmed")
+            _log_trace_plane("window-closed-unconfirmed")
         except Exception as exc:  # noqa: BLE001 — pure diagnostics, never disturb boot
             logger.debug("[DELIVERY-PROBE] probe error (non-fatal): %s", exc)
 

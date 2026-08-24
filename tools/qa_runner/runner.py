@@ -1266,7 +1266,7 @@ class QARunner:
         # can infer about it. Carriers ride the Attestation plane, so no wire
         # histogram and no trace_events count can answer "do I hold offerable
         # carriers" — persist's storage_summary can, and node_state carries it.
-        plane = self._trace_plane_from_node_state()
+        plane = self._trace_plane_from_node_state(_read_probe_log)
         if plane is not None:
             self.console.print(
                 f"  trace plane         : standing={plane.standing or '?'} band={plane.band or '?'} "
@@ -1275,8 +1275,8 @@ class QARunner:
             )
         else:
             self.console.print(
-                "  trace plane         : (node_state() unavailable — server already stopped, or "
-                "ciris_server not importable here)"
+                "  trace plane         : (no [TRACE-PLANE] line — agent older than this probe, "
+                "or the delivery window never opened)"
             )
         logger.info(
             "[FEDERATION-DELIVERY] canonical=%s transport_rooted=%s kex=%s",
@@ -1358,24 +1358,30 @@ class QARunner:
             self._diagnose_delivery_status(_read_probe_log)
         return rooted
 
-    def _trace_plane_from_node_state(self) -> Optional[TracePlaneStanding]:
-        """`node_state().trace_plane`, or None when the node cannot be asked.
+    def _trace_plane_from_node_state(
+        self, read_probe_log: Callable[[], str]
+    ) -> Optional[TracePlaneStanding]:
+        """The node's `[TRACE-PLANE]` line, or None when it never logged one.
 
-        In-process only, read-only, and safe to poll — but it needs a live
-        runtime, so a harness that has already stopped the server gets None
-        and says so rather than guessing.
+        READ, DO NOT CALL. `node_state()` is in-process to the server, and this
+        runner boots that server as a SUBPROCESS — so calling it here returns
+        nothing no matter how healthy the node is, which is exactly the
+        "unavailable" this printed on its first outing. The node logs the value
+        instead (edge_runtime `_log_trace_plane`), the same in-process-accessor
+        → logged-surface pattern `[DELIVERY-STATUS]` already uses.
         """
+        import json as _json
+
         try:
-            import json as _json
-
-            import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
-
-            raw = ciris_server.node_state()
-            state = _json.loads(raw) if isinstance(raw, str) else raw
-            plane = (state or {}).get("trace_plane")
-            return TracePlaneStanding.model_validate(plane) if plane else None
+            lines = [ln for ln in read_probe_log().splitlines() if "[TRACE-PLANE]" in ln]
+            if not lines:
+                return None
+            m = re.search(r"\[TRACE-PLANE\]\s+phase=\S+\s+(\{.*\})", lines[-1])
+            if not m:
+                return None
+            return TracePlaneStanding.model_validate(_json.loads(m.group(1)))
         except Exception as exc:  # noqa: BLE001 — diagnostics never break a run
-            logger.debug("[FEDERATION-DELIVERY] node_state() unavailable: %s", exc)
+            logger.debug("[FEDERATION-DELIVERY] trace-plane line unreadable: %s", exc)
             return None
 
     def _peer_state_from_delivery_status(

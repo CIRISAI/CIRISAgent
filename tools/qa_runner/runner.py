@@ -223,6 +223,34 @@ def _is_non_failing(status: str) -> bool:
     return "PASS" in status or "SKIP" in status
 
 
+class TracePlaneStanding(BaseModel):
+    """The node's own answer to "is the trace plane alive", from `node_state()`.
+
+    ASK THE SUBSTRATE. The first version of this harness tried to answer the
+    question itself and got it wrong three separate ways: counting `kind=Trace`
+    on the wire (no such envelope kind exists — carriers ride the Attestation
+    plane), a loose `LIKE '%trace:%'` over the attestations (which read 4
+    against a true 3, and at a 1:1 carrier ratio that inflation is enough to
+    report carriers on a node holding none), and `trace_events.cohort_scope`
+    (a read-time projection in a different table, downstream of the
+    attestation's — 71 rows at `federation` there is entirely consistent with
+    the carriers sitting at `self`).
+
+    `ciris_server.node_state()` carries `trace_plane` verbatim from persist's
+    `Engine.storage_summary()`: banded live / quiet / dark, with `standing`
+    separating an unreadable corpus from one that holds traces none of which
+    are recent. That is the value the node itself acts on, so it is the value
+    a verdict should quote.
+    """
+
+    standing: Optional[str] = None
+    band: Optional[str] = None
+    last_admitted_at: Optional[str] = None
+    carriers: Optional[int] = None
+
+    model_config = ConfigDict(extra="ignore")
+
+
 class CanonicalPeerState(BaseModel):
     """One peer entry from `ciris_server.delivery_status()`.
 
@@ -1233,6 +1261,23 @@ class QARunner:
         rooted_str = "✅ YES" if transport_rooted else ("❌ NO" if transport_rooted is False else "❓ probe verdict not found")
         self.console.print(f"  transport-rooted    : {rooted_str}  (edge.knows_peer — authoritative)")
         self.console.print(f"  peer KEX resolvable : {kex_state}  (gates the sealed-envelope TRACE path)")
+
+        # WHAT THE NODE SAYS ABOUT ITS OWN PLANE, rather than what this harness
+        # can infer about it. Carriers ride the Attestation plane, so no wire
+        # histogram and no trace_events count can answer "do I hold offerable
+        # carriers" — persist's storage_summary can, and node_state carries it.
+        plane = self._trace_plane_from_node_state()
+        if plane is not None:
+            self.console.print(
+                f"  trace plane         : standing={plane.standing or '?'} band={plane.band or '?'} "
+                f"carriers={plane.carriers if plane.carriers is not None else '?'} "
+                f"last_admitted={plane.last_admitted_at or 'never'}  (node_state().trace_plane)"
+            )
+        else:
+            self.console.print(
+                "  trace plane         : (node_state() unavailable — server already stopped, or "
+                "ciris_server not importable here)"
+            )
         logger.info(
             "[FEDERATION-DELIVERY] canonical=%s transport_rooted=%s kex=%s",
             canonical_key,
@@ -1312,6 +1357,26 @@ class QARunner:
         if not (transport_rooted and kex_state == "PRESENT"):
             self._diagnose_delivery_status(_read_probe_log)
         return rooted
+
+    def _trace_plane_from_node_state(self) -> Optional[TracePlaneStanding]:
+        """`node_state().trace_plane`, or None when the node cannot be asked.
+
+        In-process only, read-only, and safe to poll — but it needs a live
+        runtime, so a harness that has already stopped the server gets None
+        and says so rather than guessing.
+        """
+        try:
+            import json as _json
+
+            import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
+
+            raw = ciris_server.node_state()
+            state = _json.loads(raw) if isinstance(raw, str) else raw
+            plane = (state or {}).get("trace_plane")
+            return TracePlaneStanding.model_validate(plane) if plane else None
+        except Exception as exc:  # noqa: BLE001 — diagnostics never break a run
+            logger.debug("[FEDERATION-DELIVERY] node_state() unavailable: %s", exc)
+            return None
 
     def _peer_state_from_delivery_status(
         self, read_probe_log: Callable[[], str]

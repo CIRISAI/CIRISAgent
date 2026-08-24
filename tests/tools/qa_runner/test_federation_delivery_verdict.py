@@ -56,12 +56,11 @@ def runner():
 class TestPeerStateFromDeliveryStatus:
     def test_it_reads_the_canonical_peer_entry(self, runner):
         state = runner._peer_state_from_delivery_status(lambda: STATUS_LINE)
-        assert state == {
-            "key_id": "ciris-canonical-1-d7bdeu223k",
-            "knows_peer": True,
-            "kex_present": True,
-            "deliverable": True,
-        }
+        assert state is not None
+        assert state.key_id == "ciris-canonical-1-d7bdeu223k"
+        assert state.knows_peer is True
+        assert state.kex_present is True
+        assert state.deliverable is True
 
     def test_it_prefers_the_canonical_target_over_the_first_peer(self, runner):
         line = "[DELIVERY-STATUS] phase=x " + json.dumps(
@@ -73,7 +72,7 @@ class TestPeerStateFromDeliveryStatus:
                 ],
             }
         )
-        assert runner._peer_state_from_delivery_status(lambda: line)["key_id"] == "canonical-1"
+        assert runner._peer_state_from_delivery_status(lambda: line).key_id == "canonical-1"
 
     @pytest.mark.parametrize(
         "log",
@@ -120,3 +119,88 @@ class TestUnknownIsNotFalse:
             "the unverified verdict must say plainly that it is not a failure, or readers will "
             "treat the yellow as red and chase a healthy transport again"
         )
+
+
+class TestTheFallbackCannotManufactureGreen:
+    """Every way the delivery_status fallback could claim more than it knows."""
+
+    def _status(self, targets, peers, phase="kex-present-await-ship"):
+        return "[DELIVERY-STATUS] phase=%s %s" % (
+            phase,
+            json.dumps({"delivery_started": True, "edge_up": True, "canonical_targets": targets, "peers": peers}),
+        )
+
+    def test_an_unrelated_peer_is_never_substituted_for_the_canonical(self, runner):
+        """The canonical is named. If it has not appeared in `peers` yet, that
+        IS the finding — handing back some other rooted, KEX-ready federation
+        peer would report the canonical's preconditions GREEN under exactly the
+        missing-canonical condition being diagnosed."""
+        line = self._status(
+            targets=["ciris-canonical-1-d7bdeu223k"],
+            peers=[{"key_id": "some-other-peer", "knows_peer": True, "kex_present": True, "deliverable": True}],
+        )
+        assert runner._peer_state_from_delivery_status(lambda: line) is None
+
+    def test_with_no_named_target_the_single_peer_is_still_usable(self, runner):
+        line = self._status(targets=[], peers=[{"key_id": "p1", "knows_peer": True}])
+        state = runner._peer_state_from_delivery_status(lambda: line)
+        assert state is not None and state.key_id == "p1"
+
+    def test_absent_fields_stay_unknown_rather_than_false(self, runner):
+        """The whole point of the change: unknown must not read as false."""
+        line = self._status(targets=["c1"], peers=[{"key_id": "c1"}])
+        state = runner._peer_state_from_delivery_status(lambda: line)
+        assert state.knows_peer is None
+        assert state.kex_present is None
+        assert state.deliverable is None
+
+    def test_the_state_is_a_typed_model_not_a_raw_dict(self, runner):
+        from tools.qa_runner.runner import CanonicalPeerState
+
+        line = self._status(targets=["c1"], peers=[{"key_id": "c1", "knows_peer": True, "junk": "ignored"}])
+        state = runner._peer_state_from_delivery_status(lambda: line)
+        assert isinstance(state, CanonicalPeerState)
+        assert not hasattr(state, "junk"), "extra keys must be ignored, not absorbed untyped"
+
+
+class TestDeliverableIsHonoured:
+    """rooted + KEX does not imply deliverable, and the node says so itself."""
+
+    def test_a_non_deliverable_peer_is_not_reported_as_sealable(self):
+        from tools.qa_runner.runner import CanonicalPeerState
+
+        # the shape: delivery not started / edge down, yet both booleans true
+        state = CanonicalPeerState(key_id="c1", knows_peer=True, kex_present=True, deliverable=False)
+        # mirrors the verdict logic: PRESENT requires deliverable is not False
+        kex_state = "PRESENT" if (state.kex_present is True and state.deliverable is not False) else "not-deliverable"
+        assert kex_state == "not-deliverable", (
+            "reporting PRESENT here would print 'trace envelopes can seal' AND skip the "
+            "diagnosis that names deliverable=false"
+        )
+
+    def test_the_source_gates_PRESENT_on_deliverable(self):
+        from pathlib import Path
+
+        src = (Path(__file__).resolve().parents[3] / "tools/qa_runner/runner.py").read_text(encoding="utf-8")
+        assert "deliverable is not False" in src, (
+            "the fallback must not set kex_state=PRESENT while the node says the peer is not deliverable"
+        )
+
+
+class TestSkipDoesNotFailTheRun:
+    """The fix that was defeated by the aggregator."""
+
+    def test_skip_counts_as_non_failing(self):
+        from tools.qa_runner.runner import _is_non_failing
+
+        assert _is_non_failing("✅ PASS") is True
+        assert _is_non_failing("⏭️  SKIP") is True
+        assert _is_non_failing("❌ FAIL") is False
+
+    def test_the_aggregators_use_the_predicate(self):
+        from pathlib import Path
+
+        src = (Path(__file__).resolve().parents[3] / "tools/qa_runner/runner.py").read_text(encoding="utf-8")
+        assert '"PASS" in result["status"]' not in src, "per-test aggregation still ignores SKIP"
+        assert 'all("PASS" in r["status"] for r in results)' not in src, "module aggregation still ignores SKIP"
+        assert src.count("_is_non_failing(") >= 3, "both aggregation sites must use the shared predicate"

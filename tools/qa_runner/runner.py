@@ -26,6 +26,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from pydantic import BaseModel, ConfigDict
+
 import requests
 from rich.console import Console
 from rich.panel import Panel
@@ -208,6 +210,37 @@ def _closes_identity(test: Any) -> bool:
         name in test.name.lower() and endpoint in test.endpoint
         for name, endpoint in _IDENTITY_CLOSING
     )
+
+
+def _is_non_failing(status: str) -> bool:
+    """Whether a per-test status should let the module pass.
+
+    A check that could not run is not a check that failed — but the aggregation
+    only knew PASS, so recording a retired upstream endpoint as SKIP still made
+    the module fail and still returned a nonzero QA result. The endpoint kept
+    breaking the run; it just stopped looking like it was the reason.
+    """
+    return "PASS" in status or "SKIP" in status
+
+
+class CanonicalPeerState(BaseModel):
+    """One peer entry from `ciris_server.delivery_status()`.
+
+    Typed rather than a raw dict because the verdict above turns these three
+    booleans into a claim about whether traces can flow, and a silently absent
+    or renamed field would read as False — which is the exact failure mode this
+    whole change is correcting.
+
+    Every field is Optional: the node omits what it does not yet know, and
+    "unknown" must stay distinguishable from "false" all the way through.
+    """
+
+    key_id: Optional[str] = None
+    knows_peer: Optional[bool] = None
+    kex_present: Optional[bool] = None
+    deliverable: Optional[bool] = None
+
+    model_config = ConfigDict(extra="ignore")
 
 
 class QARunner:
@@ -1177,12 +1210,20 @@ class QARunner:
         if transport_rooted is None:
             fallback = self._peer_state_from_delivery_status(_read_probe_log)
             if fallback is not None:
-                transport_rooted = fallback.get("knows_peer")
-                if fallback.get("kex_present") is True:
+                transport_rooted = fallback.knows_peer
+                # DELIVERABLE IS THE NODE'S OWN VERDICT, and it is not implied by
+                # rooting plus KEX: delivery may not have started, or the edge may
+                # be down, and the peer still reports both of those true. Treating
+                # rooted+KEX as green there would print "trace envelopes can seal"
+                # AND skip _diagnose_delivery_status — whose decision tree is the
+                # one thing that would have named deliverable=false.
+                if fallback.kex_present is True and fallback.deliverable is not False:
                     kex_state = "PRESENT"
-                elif fallback.get("kex_present") is False:
+                elif fallback.kex_present is False:
                     kex_state = "None"
-                canonical_key = canonical_key or fallback.get("key_id")
+                elif fallback.deliverable is False:
+                    kex_state = "not-deliverable"
+                canonical_key = canonical_key or fallback.key_id
                 self.console.print(
                     "  [dim](probe line absent — verdict taken from delivery_status(), "
                     "which is what the node itself acts on)[/dim]"
@@ -1272,7 +1313,9 @@ class QARunner:
             self._diagnose_delivery_status(_read_probe_log)
         return rooted
 
-    def _peer_state_from_delivery_status(self, read_probe_log: Callable[[], str]) -> Optional[dict]:
+    def _peer_state_from_delivery_status(
+        self, read_probe_log: Callable[[], str]
+    ) -> Optional["CanonicalPeerState"]:
         """The canonical peer's entry from the last [DELIVERY-STATUS] line.
 
         Same source `_diagnose_delivery_status` renders, read as data instead of
@@ -1291,8 +1334,17 @@ class QARunner:
             st = _json.loads(m.group(2))
             peers = st.get("peers") or []
             targets = st.get("canonical_targets") or []
-            peer = next((p for p in peers if p.get("key_id") in targets), peers[0] if peers else None)
-            return dict(peer) if peer else None
+            if targets:
+                # NAMED TARGETS ARE THE ONLY ANSWER. Falling back to peers[0]
+                # when no target has appeared yet hands back SOME OTHER peer —
+                # and an unrelated federation peer that is rooted and KEX-ready
+                # would then be reported as the canonical's own preconditions,
+                # GREEN, under exactly the missing-canonical condition this
+                # diagnosis exists to surface.
+                peer = next((p for p in peers if p.get("key_id") in targets), None)
+            else:
+                peer = peers[0] if peers else None
+            return CanonicalPeerState.model_validate(peer) if peer else None
         except Exception:  # noqa: BLE001 — diagnostics must never break the run
             return None
 
@@ -1822,7 +1874,7 @@ class QARunner:
                 # Store results in runner's results dict
                 for result in results:
                     test_name = result["test"]
-                    passed = "PASS" in result["status"]
+                    passed = _is_non_failing(result["status"])
 
                     self.results[f"{module.value}::{test_name}"] = {
                         "success": passed,
@@ -1837,7 +1889,7 @@ class QARunner:
                 # status counted as Passed in the Total/Passed/Failed summary
                 # yet made this return False, failing the whole leg with
                 # Failed=0 (the exit-1-on-green bug).
-                return all("PASS" in r["status"] for r in results)
+                return all(_is_non_failing(r["status"]) for r in results)
 
         # Run all SDK modules sequentially (they use async internally)
         for module in modules:

@@ -416,7 +416,7 @@ class AccordMetricsTests:
                         "error": detail,
                     }
                 )
-                self.console.print(f" [red][FAIL] FAIL[/red] {name}: {e}")
+                self.console.print(f" [red][FAIL] FAIL[/red] {name}: {detail}")
 
         return self.results
 

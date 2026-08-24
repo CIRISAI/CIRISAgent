@@ -57,7 +57,10 @@ class TestRetirementIsNotFailure:
     def test_the_runner_renders_skips_as_their_own_status(self):
         src = MODULE.read_text(encoding="utf-8")
         assert 'startswith(SKIP_PREFIX)' in src
-        assert '"⏭️  SKIP"' in src, "a skip must not be recorded as a pass or a fail"
+        assert '"[SKIP]"' in src, "a skip must not be recorded as a pass or a fail"
+        # and it must stay ASCII: an emoji here kills the process on a Windows
+        # cp1252 console, which the repo guards against repo-wide
+        assert "⏭" not in src, "the skip marker must be ASCII, like [OK] and [FAIL]"
 
 
 class TestAFailureAlwaysSaysSomething:

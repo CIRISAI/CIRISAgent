@@ -241,12 +241,20 @@ class TracePlaneStanding(BaseModel):
     separating an unreadable corpus from one that holds traces none of which
     are recent. That is the value the node itself acts on, so it is the value
     a verdict should quote.
+
+    THESE FOUR FIELDS AND NO OTHERS. An earlier version modelled `carriers`,
+    which `trace_plane` does not return — the substring appears nowhere in the
+    0.5.188 extension, while `standing`, `band`, `last_admitted_at` and
+    `age_seconds` all do. Because the model ignores extras and defaults to
+    None, every real payload validated and the verdict printed `carriers=?`
+    forever: a diagnostic that could never produce a reading. A carrier count
+    needs a surface that actually exposes one.
     """
 
     standing: Optional[str] = None
     band: Optional[str] = None
     last_admitted_at: Optional[str] = None
-    carriers: Optional[int] = None
+    age_seconds: Optional[float] = None
 
     model_config = ConfigDict(extra="ignore")
 
@@ -1235,6 +1243,7 @@ class QARunner:
         # transport: a live run with 300 anti-entropy rounds, 50 inbound
         # envelopes and zero dropped frames was declared "NOT transport-rooted
         # (edge.knows_peer=false)" purely because this verdict was absent.
+        fallback: Optional[CanonicalPeerState] = None
         if transport_rooted is None:
             fallback = self._peer_state_from_delivery_status(_read_probe_log)
             if fallback is not None:
@@ -1245,12 +1254,19 @@ class QARunner:
                 # rooted+KEX as green there would print "trace envelopes can seal"
                 # AND skip _diagnose_delivery_status — whose decision tree is the
                 # one thing that would have named deliverable=false.
-                if fallback.kex_present is True and fallback.deliverable is not False:
+                # GREEN NEEDS AN AFFIRMATIVE DELIVERABLE. `is not False` let the
+                # unknown case through — and unknown is a state this very model
+                # exists to preserve, so a status snapshot that simply omitted
+                # the field printed "trace envelopes can seal" and skipped the
+                # diagnosis, on no evidence at all.
+                if fallback.kex_present is True and fallback.deliverable is True:
                     kex_state = "PRESENT"
                 elif fallback.kex_present is False:
                     kex_state = "None"
                 elif fallback.deliverable is False:
                     kex_state = "not-deliverable"
+                elif fallback.kex_present is True:
+                    kex_state = "kex-yes-deliverable-unknown"
                 canonical_key = canonical_key or fallback.key_id
                 self.console.print(
                     "  [dim](probe line absent — verdict taken from delivery_status(), "
@@ -1270,8 +1286,9 @@ class QARunner:
         if plane is not None:
             self.console.print(
                 f"  trace plane         : standing={plane.standing or '?'} band={plane.band or '?'} "
-                f"carriers={plane.carriers if plane.carriers is not None else '?'} "
-                f"last_admitted={plane.last_admitted_at or 'never'}  (node_state().trace_plane)"
+                f"last_admitted={plane.last_admitted_at or 'never'} "
+                f"age={f'{plane.age_seconds:.0f}s' if plane.age_seconds is not None else '?'}"
+                "  (node_state().trace_plane)"
             )
         else:
             self.console.print(
@@ -1343,11 +1360,27 @@ class QARunner:
             # the bootstrap dial — both of which were fine — and it contradicts
             # the delivery_status line printed immediately below, which said
             # deliverable=true. An absent verdict is its own outcome.
+            #
+            # AND THE TWO WAYS OF NOT KNOWING ARE DIFFERENT. "No peer entry"
+            # and "an entry that omits knows_peer" send a reader to different
+            # places, and the second one printed a canonical key two lines
+            # above — so claiming there was no entry contradicts the output
+            # immediately preceding it.
+            if fallback is None:
+                why = (
+                    "no probe verdict and no canonical peer entry in delivery_status() — the "
+                    "canonical may not be admitted yet, or no canonical target is named at all"
+                )
+            else:
+                why = (
+                    "the canonical peer entry exists but reports no knows_peer, so the snapshot "
+                    "is incomplete rather than absent — give it another round"
+                )
             verdict = (
-                "❓ Federation delivery UNVERIFIED — no probe verdict and no peer entry in "
-                "delivery_status(), so rooting could not be established either way. This is not "
-                "evidence of a broken transport; check the node log for `canonical boot prime: "
-                "rooted` and for anti-entropy rounds before concluding anything."
+                f"❓ Federation delivery UNVERIFIED — {why}. Rooting could not be established "
+                "either way. This is not evidence of a broken transport; check the node log for "
+                "`canonical boot prime: rooted` and for anti-entropy rounds before concluding "
+                "anything."
             )
             self.console.print(f"[bold yellow]{verdict}[/bold yellow]")
             logger.warning("[FEDERATION-DELIVERY] %s", verdict)
@@ -1405,16 +1438,16 @@ class QARunner:
             st = _json.loads(m.group(2))
             peers = st.get("peers") or []
             targets = st.get("canonical_targets") or []
-            if targets:
-                # NAMED TARGETS ARE THE ONLY ANSWER. Falling back to peers[0]
-                # when no target has appeared yet hands back SOME OTHER peer —
-                # and an unrelated federation peer that is rooted and KEX-ready
-                # would then be reported as the canonical's own preconditions,
-                # GREEN, under exactly the missing-canonical condition this
-                # diagnosis exists to surface.
-                peer = next((p for p in peers if p.get("key_id") in targets), None)
-            else:
-                peer = peers[0] if peers else None
+            # A NAMED TARGET IS THE ONLY THING THAT IDENTIFIES THE CANONICAL.
+            # Two ways this used to guess, and both could report an unrelated
+            # rooted, KEX-ready federation peer as the canonical's own
+            # preconditions — GREEN, under exactly the missing-canonical
+            # condition the diagnosis exists to surface: matching no target and
+            # falling back to peers[0], and having no targets named at all and
+            # taking peers[0] anyway. Neither is an answer about the canonical.
+            if not targets:
+                return None
+            peer = next((p for p in peers if p.get("key_id") in targets), None)
             return CanonicalPeerState.model_validate(peer) if peer else None
         except Exception:  # noqa: BLE001 — diagnostics must never break the run
             return None

@@ -484,7 +484,19 @@ def _spawn_delivery_rooting_probe(engine: Any, edge: Any) -> None:
             #               optimism and never premature peer-blame.
             window_deadline = 900  # full delivery window (s) — mobile test-mode keeps the app alive this long
             status_cadence = 60  # live [DELIVERY-STATUS] emit cadence (s)
-            reprime_cadence = 180  # KEX-stall reprime cadence (s)
+
+            # REPRIME EARLY, THEN SETTLE. A flat 180s cadence spends the first
+            # three minutes of every window doing nothing, and a run that ends
+            # at ~3 minutes therefore gets ONE attempt — which is what a live
+            # QA run did: 141 rounds, zero inbound envelopes, KEX never landed,
+            # window torn down before a second nudge. Reprime is idempotent
+            # (CIRISServer#288), so the first one costs a dial and buys the
+            # peer an early chance to heal its own cache; only after that does
+            # the slow cadence make sense.
+            reprime_schedule = (45, 120, 300)  # s post-root for the first three
+            reprime_cadence = 180  # steady-state cadence (s) once the schedule is spent
+            reprimes_done = 0
+            inbound_seen = False
             waited = 0
             kex_seen_at: Optional[int] = None
             last_status = 0
@@ -508,13 +520,61 @@ def _spawn_delivery_rooting_probe(engine: Any, edge: Any) -> None:
                         )
                         _log_delivery_status("kex-present")
                         _log_trace_plane("kex-present")
-                    elif waited - last_reprime >= reprime_cadence:
+                    elif (
+                        reprimes_done < len(reprime_schedule) and waited >= reprime_schedule[reprimes_done]
+                    ) or (reprimes_done >= len(reprime_schedule) and waited - last_reprime >= reprime_cadence):
                         # KEX stall — reprime rather than give up. Warm-up dial-cache
                         # lag (CIRISEdge#336) means the peer may be dialing our stale
                         # dest for minutes; every reprime re-roots the canonical
                         # against current handles and gives its next round a fresh
                         # chance to route (mirror of the flip that healed OUR dials).
                         last_reprime = waited
+                        reprimes_done += 1
+
+                        # IS ANYTHING COMING BACK AT ALL? Two very different
+                        # stalls wear the same "kex_present=false" label, and
+                        # only one of them is worth waiting through:
+                        #
+                        #   inbound > 0 — rounds are flowing, the peer replies,
+                        #                 KEX simply has not landed yet. Waiting
+                        #                 is the right move; it self-heals.
+                        #   inbound = 0 — the peer is not answering us at all.
+                        #                 A canonical fail-closes on an unknown
+                        #                 attesting_key_id and says nothing back
+                        #                 (CIRISServer#488), so from here a
+                        #                 structural refusal is indistinguishable
+                        #                 from congestion and reprime will not
+                        #                 fix it — our key is not registered
+                        #                 there. Observed live: 141 rounds, 21
+                        #                 Key envelopes sent, ZERO inbound, and
+                        #                 the node never reached the canonical.
+                        try:
+                            _m = edge.metrics_snapshot() or {}
+                            _recv = sum((_m.get("envelopes_received_total") or {}).values())
+                            inbound_seen = inbound_seen or _recv > 0
+                            if _recv == 0 and reprimes_done >= 2:
+                                logger.warning(
+                                    "[DELIVERY-PROBE] canonical %s: %ss post-root, %d reprimes, and ZERO "
+                                    "envelopes received from ANY peer. The peer is not replying — which is "
+                                    "what a fail-closed refusal looks like from this side when the canonical "
+                                    "holds no key for us (CIRISServer#488). Reprime cannot fix that; the key "
+                                    "has to be registered there.",
+                                    ckey,
+                                    waited,
+                                    reprimes_done,
+                                )
+                            else:
+                                logger.info(
+                                    "[DELIVERY-PROBE] canonical %s: %ss post-root, %d reprimes, %d envelopes "
+                                    "received — the peer IS replying, so KEX has not landed yet rather than "
+                                    "being refused. Waiting.",
+                                    ckey,
+                                    waited,
+                                    reprimes_done,
+                                    _recv,
+                                )
+                        except Exception as _m_exc:  # noqa: BLE001 — diagnostics only
+                            logger.debug("[DELIVERY-PROBE] metrics_snapshot unavailable: %s", _m_exc)
                         try:
                             import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
 

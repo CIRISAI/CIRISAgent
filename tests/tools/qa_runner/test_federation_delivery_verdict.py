@@ -141,10 +141,13 @@ class TestTheFallbackCannotManufactureGreen:
         )
         assert runner._peer_state_from_delivery_status(lambda: line) is None
 
-    def test_with_no_named_target_the_single_peer_is_still_usable(self, runner):
+    def test_with_no_named_target_there_is_no_canonical_to_report(self, runner):
+        """This test used to assert the opposite — that a lone peer was usable
+        when no canonical was named. It is not: without a named target, that
+        peer is simply some peer, and reporting its rooting as the canonical's
+        is the same manufactured green as substituting a non-matching one."""
         line = self._status(targets=[], peers=[{"key_id": "p1", "knows_peer": True}])
-        state = runner._peer_state_from_delivery_status(lambda: line)
-        assert state is not None and state.key_id == "p1"
+        assert runner._peer_state_from_delivery_status(lambda: line) is None
 
     def test_absent_fields_stay_unknown_rather_than_false(self, runner):
         """The whole point of the change: unknown must not read as false."""
@@ -172,7 +175,7 @@ class TestDeliverableIsHonoured:
         # the shape: delivery not started / edge down, yet both booleans true
         state = CanonicalPeerState(key_id="c1", knows_peer=True, kex_present=True, deliverable=False)
         # mirrors the verdict logic: PRESENT requires deliverable is not False
-        kex_state = "PRESENT" if (state.kex_present is True and state.deliverable is not False) else "not-deliverable"
+        kex_state = "PRESENT" if (state.kex_present is True and state.deliverable is True) else "not-deliverable"
         assert kex_state == "not-deliverable", (
             "reporting PRESENT here would print 'trace envelopes can seal' AND skip the "
             "diagnosis that names deliverable=false"
@@ -182,8 +185,9 @@ class TestDeliverableIsHonoured:
         from pathlib import Path
 
         src = (Path(__file__).resolve().parents[3] / "tools/qa_runner/runner.py").read_text(encoding="utf-8")
-        assert "deliverable is not False" in src, (
-            "the fallback must not set kex_state=PRESENT while the node says the peer is not deliverable"
+        assert "fallback.deliverable is True" in src, (
+            "PRESENT must require an affirmative deliverable — `is not False` also admitted the "
+            "unknown case, on no evidence"
         )
 
 
@@ -233,24 +237,24 @@ class TestTheTracePlaneComesFromTheSubstrate:
 
     def test_it_parses_the_logged_standing(self, runner):
         line = self._line(
-            {"standing": "live", "band": "green", "carriers": 3,
+            {"standing": "live", "band": "green", "age_seconds": 12.5,
              "last_admitted_at": "2026-08-24T14:41:00Z", "extra": "ignored"}
         )
         plane = runner._trace_plane_from_node_state(lambda: line)
         assert plane is not None
-        assert (plane.standing, plane.band, plane.carriers) == ("live", "green", 3)
+        assert (plane.standing, plane.band, plane.age_seconds) == ("live", "green", 12.5)
         assert not hasattr(plane, "extra"), "extra keys ignored, not absorbed untyped"
 
     def test_a_dark_plane_is_reported_not_swallowed(self, runner):
-        line = self._line({"standing": "unreadable", "band": "dark", "carriers": 0})
+        line = self._line({"standing": "unreadable", "band": "dark"})
         plane = runner._trace_plane_from_node_state(lambda: line)
-        assert plane.band == "dark" and plane.carriers == 0
+        assert plane.band == "dark" and plane.standing == "unreadable"
 
     def test_the_last_line_wins(self, runner):
         log = "\n".join(
-            [self._line({"carriers": 0}, "kex-none-repriming"), self._line({"carriers": 4}, "ship-confirmed")]
+            [self._line({"band": "dark"}, "kex-none-repriming"), self._line({"band": "green"}, "ship-confirmed")]
         )
-        assert runner._trace_plane_from_node_state(lambda: log).carriers == 4
+        assert runner._trace_plane_from_node_state(lambda: log).band == "green"
 
     @pytest.mark.parametrize("log", ["", "no such line here", "[TRACE-PLANE] phase=x not-json"])
     def test_no_line_is_None_not_an_invented_zero(self, runner, log):
@@ -313,3 +317,79 @@ class TestTheTracePlaneComesFromTheSubstrate:
             / "ciris_engine/logic/runtime/edge_runtime.py"
         ).read_text(encoding="utf-8")
         assert "node_state" in agent and "trace_plane" in agent
+
+
+class TestTheModelMatchesTheSubstrate:
+    def test_it_does_not_model_a_field_the_node_never_returns(self):
+        """`carriers` was invented. `trace_plane` does not return it — the
+        substring appears nowhere in the 0.5.188 extension — so because the
+        model ignored extras and defaulted to None, every real payload
+        validated and the verdict printed `carriers=?` forever: a diagnostic
+        incapable of ever producing a reading."""
+        from tools.qa_runner.runner import TracePlaneStanding
+
+        assert "carriers" not in TracePlaneStanding.model_fields
+        for real in ("standing", "band", "last_admitted_at", "age_seconds"):
+            assert real in TracePlaneStanding.model_fields
+
+
+class TestNoNamedTargetIsNotAnAnswer:
+    def test_an_empty_target_list_yields_no_canonical_state(self, runner):
+        """Without a named canonical, peers[0] is just some peer — and a rooted,
+        KEX-ready unrelated peer would be reported as the canonical's own
+        preconditions."""
+        line = "[DELIVERY-STATUS] phase=x " + json.dumps(
+            {"canonical_targets": [], "peers": [{"key_id": "p1", "knows_peer": True, "kex_present": True, "deliverable": True}]}
+        )
+        assert runner._peer_state_from_delivery_status(lambda: line) is None
+
+
+class TestUnknownDeliverabilityIsNotGreen:
+    def test_omitted_deliverable_does_not_reach_PRESENT(self):
+        from pathlib import Path
+
+        src = (Path(__file__).resolve().parents[3] / "tools/qa_runner/runner.py").read_text(encoding="utf-8")
+        assert "fallback.deliverable is True" in src, (
+            "green must require an affirmative deliverable; `is not False` admits the unknown "
+            "state this model exists to preserve"
+        )
+        assert "deliverable is not False" not in src
+
+
+class TestIncompleteIsNotAbsent:
+    def test_the_two_unknowns_read_differently(self):
+        from pathlib import Path
+
+        src = (Path(__file__).resolve().parents[3] / "tools/qa_runner/runner.py").read_text(encoding="utf-8")
+        assert "no canonical peer entry in delivery_status()" in src
+        assert "exists but reports no knows_peer" in src, (
+            "an entry that omits knows_peer printed a canonical key two lines above, so calling "
+            "it 'no peer entry' contradicts the output right before it"
+        )
+
+
+class TestTheRetryIsFrontLoaded:
+    """A 180s first nudge spends the whole of a short window doing nothing."""
+
+    def test_the_schedule_starts_well_before_the_old_cadence(self):
+        from pathlib import Path
+
+        src = (
+            Path(__file__).resolve().parents[3] / "ciris_engine/logic/runtime/edge_runtime.py"
+        ).read_text(encoding="utf-8")
+        assert "reprime_schedule = (45, 120, 300)" in src, (
+            "the live run that failed got ONE reprime in 3m16s; the first attempt has to come "
+            "much earlier than 180s"
+        )
+        assert "reprimes_done" in src
+
+    def test_a_silent_peer_is_named_as_such(self):
+        """Zero inbound is a refusal wall, not congestion — and reprime cannot
+        fix it, so the log must stop implying that waiting will help."""
+        from pathlib import Path
+
+        src = (
+            Path(__file__).resolve().parents[3] / "ciris_engine/logic/runtime/edge_runtime.py"
+        ).read_text(encoding="utf-8")
+        assert "envelopes_received_total" in src
+        assert "ZERO" in src and "488" in src

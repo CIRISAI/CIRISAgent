@@ -389,8 +389,12 @@ class AccordMetricsTests:
                 # as its own status.
                 if not success and message.startswith(SKIP_PREFIX):
                     reason = message[len(SKIP_PREFIX):].strip()
-                    self.results.append({"test": name, "status": "⏭️  SKIP", "error": None, "skipped": reason})
-                    self.console.print(f"  [yellow]⏭️  SKIP[/yellow] {name}: {reason}")
+                    # ASCII ONLY. A Windows cp1252 console raises
+                    # UnicodeEncodeError on an emoji and kills the process —
+                    # the repo has a guard test for exactly this, and my skip
+                    # marker tripped it. [SKIP] reads the same as [OK]/[FAIL].
+                    self.results.append({"test": name, "status": "[SKIP]", "error": None, "skipped": reason})
+                    self.console.print(f"  [yellow][SKIP][/yellow] {name}: {reason}")
                     continue
                 status = "✅ PASS" if success else "❌ FAIL"
                 self.results.append(

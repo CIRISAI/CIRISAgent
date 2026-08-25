@@ -288,6 +288,48 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
             )
 
 
+#: When to reprime after rooting, in seconds post-root, before falling back to
+#: the steady cadence. Front-loaded on purpose — see :func:`should_reprime`.
+REPRIME_SCHEDULE = (45, 120, 300)
+
+#: Steady-state reprime cadence (s) once REPRIME_SCHEDULE is spent.
+REPRIME_CADENCE = 180
+
+#: How many reprimes must pass with nothing received before we call the peer
+#: silent rather than slow. Two, so a single unlucky window does not accuse it.
+SILENT_PEER_AFTER_REPRIMES = 2
+
+
+def should_reprime(waited: int, reprimes_done: int, last_reprime: int) -> bool:
+    """Is it time to reprime the canonical?
+
+    Front-loaded, then steady. A flat 180s cadence spends the first three
+    minutes of every window doing nothing, so a run that ends at ~3 minutes
+    gets exactly ONE attempt — which is what a live QA run did: 141 rounds, 21
+    Key envelopes sent, zero inbound, KEX never landed, window torn down
+    before a second nudge. Reprime is idempotent (CIRISServer#288), so an early
+    attempt costs one dial and buys the peer a chance to heal its own
+    dial-cache (CIRISEdge#336) while the window is still young.
+    """
+    if reprimes_done < len(REPRIME_SCHEDULE):
+        return waited >= REPRIME_SCHEDULE[reprimes_done]
+    return waited - last_reprime >= REPRIME_CADENCE
+
+
+def peer_is_silent(received_total: int, reprimes_done: int) -> bool:
+    """Is the peer not answering at all, as opposed to answering slowly?
+
+    Two stalls wear the same `kex_present=false` label and only one is worth
+    waiting through. Inbound arriving means rounds flow and KEX simply has not
+    landed yet — that self-heals. Nothing arriving, after we have asked more
+    than once, is what a fail-closed refusal looks like from this side: a
+    canonical rejects an unknown `attesting_key_id` and says nothing back
+    (CIRISServer#488), so a structural refusal and congestion are
+    indistinguishable to the sender, and reprime cannot fix either.
+    """
+    return received_total == 0 and reprimes_done >= SILENT_PEER_AFTER_REPRIMES
+
+
 def _spawn_delivery_rooting_probe(engine: Any, edge: Any) -> None:
     """One-shot background observability for the trace-delivery last mile.
 
@@ -321,6 +363,45 @@ def _spawn_delivery_rooting_probe(engine: Any, edge: Any) -> None:
             logger.info("[DELIVERY-STATUS] phase=%s %s", phase, ds())
         except Exception as exc:  # noqa: BLE001
             logger.debug("[DELIVERY-STATUS] phase=%s accessor error (non-fatal): %s", phase, exc)
+
+    def _log_trace_plane(phase: str) -> None:
+        """Surface `ciris_server.node_state().trace_plane` as a [TRACE-PLANE] line.
+
+        SAME REASON AS _log_delivery_status ABOVE: the accessor is in-process to
+        the server, so a QA runner — which boots this agent as a subprocess —
+        can never call it and gets `None` no matter how healthy the node is.
+        Logging it here is the only way that value reaches a log tail.
+
+        Why this value and not a derived one: "does this node hold offerable
+        carriers" cannot be answered from the wire (carriers ride the
+        Attestation plane, so there is no Trace envelope kind to count), nor
+        from `trace_events.cohort_scope` (a read-time projection in a different
+        table, downstream of the attestation's own scope), nor from a
+        substring match on the dimension (`trace:` and `trace_summary:` are
+        different namespaces and `covers()` is a prefix test, so a loose
+        `%trace:%` over-counts). persist's `storage_summary()` answers it, and
+        `node_state()` carries that verbatim.
+
+        Purely diagnostic; never disturbs the probe.
+        """
+        try:
+            import json as _json
+
+            import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
+
+            ns = getattr(ciris_server, "node_state", None)
+            if ns is None:
+                logger.info("[TRACE-PLANE] phase=%s unavailable (ciris_server has no node_state accessor)", phase)
+                return
+            raw = ns()
+            state = _json.loads(raw) if isinstance(raw, str) else raw
+            plane = (state or {}).get("trace_plane")
+            if plane is None:
+                logger.info("[TRACE-PLANE] phase=%s absent (node_state carries no trace_plane)", phase)
+                return
+            logger.info("[TRACE-PLANE] phase=%s %s", phase, _json.dumps(plane, default=str))
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("[TRACE-PLANE] phase=%s accessor error (non-fatal): %s", phase, exc)
 
     def _user_opted_into_traces() -> bool:
         """Did the OWNER opt in to trace replication? Consent is theirs to give.
@@ -424,6 +505,7 @@ def _spawn_delivery_rooting_probe(engine: Any, edge: Any) -> None:
             if not rooted:
                 logger.info("[DELIVERY-PROBE] canonical %s did not root within %ss", ckey, root_deadline)
                 _log_delivery_status("did-not-root")
+                _log_trace_plane("did-not-root")
                 return
 
             # KEX does NOT appear at rooting — it lands only once an inbound
@@ -444,7 +526,17 @@ def _spawn_delivery_rooting_probe(engine: Any, edge: Any) -> None:
             #               optimism and never premature peer-blame.
             window_deadline = 900  # full delivery window (s) — mobile test-mode keeps the app alive this long
             status_cadence = 60  # live [DELIVERY-STATUS] emit cadence (s)
-            reprime_cadence = 180  # KEX-stall reprime cadence (s)
+
+            # REPRIME EARLY, THEN SETTLE. A flat 180s cadence spends the first
+            # three minutes of every window doing nothing, and a run that ends
+            # at ~3 minutes therefore gets ONE attempt — which is what a live
+            # QA run did: 141 rounds, zero inbound envelopes, KEX never landed,
+            # window torn down before a second nudge. Reprime is idempotent
+            # (CIRISServer#288), so the first one costs a dial and buys the
+            # peer an early chance to heal its own cache; only after that does
+            # the slow cadence make sense.
+            reprimes_done = 0
+            inbound_seen = False
             waited = 0
             kex_seen_at: Optional[int] = None
             last_status = 0
@@ -467,13 +559,60 @@ def _spawn_delivery_rooting_probe(engine: Any, edge: Any) -> None:
                             waited,
                         )
                         _log_delivery_status("kex-present")
-                    elif waited - last_reprime >= reprime_cadence:
+                        _log_trace_plane("kex-present")
+                    elif should_reprime(waited, reprimes_done, last_reprime):
                         # KEX stall — reprime rather than give up. Warm-up dial-cache
                         # lag (CIRISEdge#336) means the peer may be dialing our stale
                         # dest for minutes; every reprime re-roots the canonical
                         # against current handles and gives its next round a fresh
                         # chance to route (mirror of the flip that healed OUR dials).
                         last_reprime = waited
+                        reprimes_done += 1
+
+                        # IS ANYTHING COMING BACK AT ALL? Two very different
+                        # stalls wear the same "kex_present=false" label, and
+                        # only one of them is worth waiting through:
+                        #
+                        #   inbound > 0 — rounds are flowing, the peer replies,
+                        #                 KEX simply has not landed yet. Waiting
+                        #                 is the right move; it self-heals.
+                        #   inbound = 0 — the peer is not answering us at all.
+                        #                 A canonical fail-closes on an unknown
+                        #                 attesting_key_id and says nothing back
+                        #                 (CIRISServer#488), so from here a
+                        #                 structural refusal is indistinguishable
+                        #                 from congestion and reprime will not
+                        #                 fix it — our key is not registered
+                        #                 there. Observed live: 141 rounds, 21
+                        #                 Key envelopes sent, ZERO inbound, and
+                        #                 the node never reached the canonical.
+                        try:
+                            _m = edge.metrics_snapshot() or {}
+                            _recv = sum((_m.get("envelopes_received_total") or {}).values())
+                            inbound_seen = inbound_seen or _recv > 0
+                            if peer_is_silent(_recv, reprimes_done):
+                                logger.warning(
+                                    "[DELIVERY-PROBE] canonical %s: %ss post-root, %d reprimes, and ZERO "
+                                    "envelopes received from ANY peer. The peer is not replying — which is "
+                                    "what a fail-closed refusal looks like from this side when the canonical "
+                                    "holds no key for us (CIRISServer#488). Reprime cannot fix that; the key "
+                                    "has to be registered there.",
+                                    ckey,
+                                    waited,
+                                    reprimes_done,
+                                )
+                            else:
+                                logger.info(
+                                    "[DELIVERY-PROBE] canonical %s: %ss post-root, %d reprimes, %d envelopes "
+                                    "received — the peer IS replying, so KEX has not landed yet rather than "
+                                    "being refused. Waiting.",
+                                    ckey,
+                                    waited,
+                                    reprimes_done,
+                                    _recv,
+                                )
+                        except Exception as _m_exc:  # noqa: BLE001 — diagnostics only
+                            logger.debug("[DELIVERY-PROBE] metrics_snapshot unavailable: %s", _m_exc)
                         try:
                             import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
 
@@ -526,10 +665,13 @@ def _spawn_delivery_rooting_probe(engine: Any, edge: Any) -> None:
                         waited,
                     )
                     _log_delivery_status("ship-confirmed")
+                    _log_trace_plane("ship-confirmed")
                     return
                 if waited - last_status >= status_cadence:
                     last_status = waited
-                    _log_delivery_status("kex-present-await-ship" if kex_seen_at is not None else "kex-none-repriming")
+                    _phase = "kex-present-await-ship" if kex_seen_at is not None else "kex-none-repriming"
+                    _log_delivery_status(_phase)
+                    _log_trace_plane(_phase)
             logger.info(
                 "[DELIVERY-PROBE] canonical %s window closed after %ss post-root with SHIP UNCONFIRMED "
                 "(kex=%s, envelopes_sent=0). Do not assume a peer fault: the CIRISEdge#336 dial-cache "
@@ -541,6 +683,7 @@ def _spawn_delivery_rooting_probe(engine: Any, edge: Any) -> None:
                 "present" if kex_seen_at is not None else "none",
             )
             _log_delivery_status("window-closed-unconfirmed")
+            _log_trace_plane("window-closed-unconfirmed")
         except Exception as exc:  # noqa: BLE001 — pure diagnostics, never disturb boot
             logger.debug("[DELIVERY-PROBE] probe error (non-fatal): %s", exc)
 

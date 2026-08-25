@@ -52,6 +52,21 @@ logger = logging.getLogger(__name__)
 # Live Lens server URL
 LENS_SERVER_URL = "https://lens.ciris-services-1.ai/lens-api/api/v1"
 
+#: Returned as the message of a check that could not run at all, so the harness
+#: can separate "the agent is wrong" from "the thing we ask has gone away".
+SKIP_PREFIX = "SKIP:"
+
+
+def _endpoint_retired(status: int, body: str) -> bool:
+    """Whether a non-200 means the endpoint itself is gone, not that we failed it.
+
+    The Lens server answers a retired path with a 404 whose body names its
+    successors ("lens retired; see /v1/identity and /lens/api/v1/*"). That is a
+    deployment fact about someone else's service, and dressing it as an agent
+    failure cost a live run two red tests that had nothing to do with the agent.
+    """
+    return status in (404, 410) and "retired" in (body or "").lower()
+
 
 class AccordMetricsTests:
     """Test module for accord metrics trace capture and signing.
@@ -367,6 +382,20 @@ class AccordMetricsTests:
             try:
                 logger.info(f"Running: {name}")
                 success, message = await test_fn()
+                # A THIRD OUTCOME: the check could not run at all. A dependency
+                # that has been retired upstream is not the agent failing, and
+                # reporting it in red is how a suite teaches people to ignore
+                # red. Such a check says so by returning SKIP_PREFIX, and lands
+                # as its own status.
+                if not success and message.startswith(SKIP_PREFIX):
+                    reason = message[len(SKIP_PREFIX):].strip()
+                    # ASCII ONLY. A Windows cp1252 console raises
+                    # UnicodeEncodeError on an emoji and kills the process —
+                    # the repo has a guard test for exactly this, and my skip
+                    # marker tripped it. [SKIP] reads the same as [OK]/[FAIL].
+                    self.results.append({"test": name, "status": "[SKIP]", "error": None, "skipped": reason})
+                    self.console.print(f"  [yellow][SKIP][/yellow] {name}: {reason}")
+                    continue
                 status = "✅ PASS" if success else "❌ FAIL"
                 self.results.append(
                     {
@@ -380,15 +409,18 @@ class AccordMetricsTests:
                 else:
                     self.console.print(f"  [red]{status}[/red] {name}: {message}")
             except Exception as e:
-                logger.error(f"Error in {name}: {e}")
+                # Same reason as above: an exception whose str() is empty must
+                # still say what it was, or the report reads "FAIL <name>:".
+                detail = f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
+                logger.error(f"Error in {name}: {detail}", exc_info=True)
                 self.results.append(
                     {
                         "test": name,
                         "status": "❌ FAIL",
-                        "error": str(e),
+                        "error": detail,
                     }
                 )
-                self.console.print(f" [red][FAIL] FAIL[/red] {name}: {e}")
+                self.console.print(f" [red][FAIL] FAIL[/red] {name}: {detail}")
 
         return self.results
 
@@ -542,7 +574,14 @@ class AccordMetricsTests:
                 )
             return True, f"Captured VERB_SECOND_PASS_RESULT for both verbs: {sorted(verbs_seen)}"
         except Exception as e:
-            return False, str(e)
+            # NAME THE EXCEPTION. `str(e)` on a bare TimeoutError() is the empty
+            # string, so this test reported "❌ FAIL Verb Second Pass Trace:" with
+            # nothing after the colon — a failure with no content is barely
+            # better than no test. Type plus whatever verbs were captured before
+            # it died is enough to tell a stall from a wrong verb.
+            seen = sorted(locals().get("verbs_seen", set()) or [])
+            detail = f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
+            return False, f"{detail} (verbs captured before the failure: {seen or 'none'})"
 
     async def _test_generic_trace_fields(self) -> tuple[bool, str]:
         """Validate generic traces have all fields required for CIRIS scoring.
@@ -1132,6 +1171,15 @@ class AccordMetricsTests:
                 async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as response:
                     if response.status != 200:
                         error_text = await response.text()
+                        if _endpoint_retired(response.status, error_text):
+                            return False, (
+                                f"{SKIP_PREFIX} the Lens public-keys endpoint is retired upstream "
+                                f"({url} → {response.status}). The server names its successors: "
+                                "/v1/identity and /lens/api/v1/*, neither of which serves this "
+                                "check today. Nothing about the agent is being tested here until "
+                                "the replacement surface exists — failing red would only train "
+                                "readers to ignore red."
+                            )
                         return False, f"Lens server returned {response.status}: {error_text}"
 
                     data = await response.json()
@@ -1165,6 +1213,14 @@ class AccordMetricsTests:
                 keys_url = f"{LENS_SERVER_URL}/accord/public-keys"
                 async with session.get(keys_url, timeout=aiohttp.ClientTimeout(total=10)) as response:
                     if response.status != 200:
+                        body = await response.text()
+                        if _endpoint_retired(response.status, body):
+                            return False, (
+                                f"{SKIP_PREFIX} the Lens public-keys endpoint is retired upstream "
+                                f"({keys_url} → {response.status}); key-id consistency cannot be "
+                                "checked until the successor surface (/v1/identity, /lens/api/v1/*) "
+                                "serves it."
+                            )
                         return False, f"Cannot fetch keys: HTTP {response.status}"
                     keys_data = await response.json()
 

@@ -26,6 +26,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from pydantic import BaseModel, ConfigDict
+
 import requests
 from rich.console import Console
 from rich.panel import Panel
@@ -208,6 +210,73 @@ def _closes_identity(test: Any) -> bool:
         name in test.name.lower() and endpoint in test.endpoint
         for name, endpoint in _IDENTITY_CLOSING
     )
+
+
+def _is_non_failing(status: str) -> bool:
+    """Whether a per-test status should let the module pass.
+
+    A check that could not run is not a check that failed — but the aggregation
+    only knew PASS, so recording a retired upstream endpoint as SKIP still made
+    the module fail and still returned a nonzero QA result. The endpoint kept
+    breaking the run; it just stopped looking like it was the reason.
+    """
+    return "PASS" in status or "SKIP" in status
+
+
+class TracePlaneStanding(BaseModel):
+    """The node's own answer to "is the trace plane alive", from `node_state()`.
+
+    ASK THE SUBSTRATE. The first version of this harness tried to answer the
+    question itself and got it wrong three separate ways: counting `kind=Trace`
+    on the wire (no such envelope kind exists — carriers ride the Attestation
+    plane), a loose `LIKE '%trace:%'` over the attestations (which read 4
+    against a true 3, and at a 1:1 carrier ratio that inflation is enough to
+    report carriers on a node holding none), and `trace_events.cohort_scope`
+    (a read-time projection in a different table, downstream of the
+    attestation's — 71 rows at `federation` there is entirely consistent with
+    the carriers sitting at `self`).
+
+    `ciris_server.node_state()` carries `trace_plane` verbatim from persist's
+    `Engine.storage_summary()`: banded live / quiet / dark, with `standing`
+    separating an unreadable corpus from one that holds traces none of which
+    are recent. That is the value the node itself acts on, so it is the value
+    a verdict should quote.
+
+    THESE FOUR FIELDS AND NO OTHERS. An earlier version modelled `carriers`,
+    which `trace_plane` does not return — the substring appears nowhere in the
+    0.5.188 extension, while `standing`, `band`, `last_admitted_at` and
+    `age_seconds` all do. Because the model ignores extras and defaults to
+    None, every real payload validated and the verdict printed `carriers=?`
+    forever: a diagnostic that could never produce a reading. A carrier count
+    needs a surface that actually exposes one.
+    """
+
+    standing: Optional[str] = None
+    band: Optional[str] = None
+    last_admitted_at: Optional[str] = None
+    age_seconds: Optional[float] = None
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class CanonicalPeerState(BaseModel):
+    """One peer entry from `ciris_server.delivery_status()`.
+
+    Typed rather than a raw dict because the verdict above turns these three
+    booleans into a claim about whether traces can flow, and a silently absent
+    or renamed field would read as False — which is the exact failure mode this
+    whole change is correcting.
+
+    Every field is Optional: the node omits what it does not yet know, and
+    "unknown" must stay distinguishable from "false" all the way through.
+    """
+
+    key_id: Optional[str] = None
+    knows_peer: Optional[bool] = None
+    kex_present: Optional[bool] = None
+    deliverable: Optional[bool] = None
+
+    model_config = ConfigDict(extra="ignore")
 
 
 class QARunner:
@@ -1166,10 +1235,66 @@ class QARunner:
                     break
             time.sleep(8)
 
+        # THE PROBE LINE IS NOT THE ONLY WITNESS. When it never lands — the probe
+        # is best-effort and its line has moved before — `delivery_status()`
+        # still carries the same facts per peer (knows_peer / kex_present /
+        # deliverable), and it is the value the node itself acts on. Reading it
+        # here is what keeps a missing probe line from being reported as a dead
+        # transport: a live run with 300 anti-entropy rounds, 50 inbound
+        # envelopes and zero dropped frames was declared "NOT transport-rooted
+        # (edge.knows_peer=false)" purely because this verdict was absent.
+        fallback: Optional[CanonicalPeerState] = None
+        if transport_rooted is None:
+            fallback = self._peer_state_from_delivery_status(_read_probe_log)
+            if fallback is not None:
+                transport_rooted = fallback.knows_peer
+                # DELIVERABLE IS THE NODE'S OWN VERDICT, and it is not implied by
+                # rooting plus KEX: delivery may not have started, or the edge may
+                # be down, and the peer still reports both of those true. Treating
+                # rooted+KEX as green there would print "trace envelopes can seal"
+                # AND skip _diagnose_delivery_status — whose decision tree is the
+                # one thing that would have named deliverable=false.
+                # GREEN NEEDS AN AFFIRMATIVE DELIVERABLE. `is not False` let the
+                # unknown case through — and unknown is a state this very model
+                # exists to preserve, so a status snapshot that simply omitted
+                # the field printed "trace envelopes can seal" and skipped the
+                # diagnosis, on no evidence at all.
+                if fallback.kex_present is True and fallback.deliverable is True:
+                    kex_state = "PRESENT"
+                elif fallback.kex_present is False:
+                    kex_state = "None"
+                elif fallback.deliverable is False:
+                    kex_state = "not-deliverable"
+                elif fallback.kex_present is True:
+                    kex_state = "kex-yes-deliverable-unknown"
+                canonical_key = canonical_key or fallback.key_id
+                self.console.print(
+                    "  [dim](probe line absent — verdict taken from delivery_status(), "
+                    "which is what the node itself acts on)[/dim]"
+                )
+
         self.console.print(f"  canonical peer      : {canonical_key or '<from probe>'}")
         rooted_str = "✅ YES" if transport_rooted else ("❌ NO" if transport_rooted is False else "❓ probe verdict not found")
         self.console.print(f"  transport-rooted    : {rooted_str}  (edge.knows_peer — authoritative)")
         self.console.print(f"  peer KEX resolvable : {kex_state}  (gates the sealed-envelope TRACE path)")
+
+        # WHAT THE NODE SAYS ABOUT ITS OWN PLANE, rather than what this harness
+        # can infer about it. Carriers ride the Attestation plane, so no wire
+        # histogram and no trace_events count can answer "do I hold offerable
+        # carriers" — persist's storage_summary can, and node_state carries it.
+        plane = self._trace_plane_from_node_state(_read_probe_log)
+        if plane is not None:
+            self.console.print(
+                f"  trace plane         : standing={plane.standing or '?'} band={plane.band or '?'} "
+                f"last_admitted={plane.last_admitted_at or 'never'} "
+                f"age={f'{plane.age_seconds:.0f}s' if plane.age_seconds is not None else '?'}"
+                "  (node_state().trace_plane)"
+            )
+        else:
+            self.console.print(
+                "  trace plane         : (no [TRACE-PLANE] line — agent older than this probe, "
+                "or the delivery window never opened)"
+            )
         logger.info(
             "[FEDERATION-DELIVERY] canonical=%s transport_rooted=%s kex=%s",
             canonical_key,
@@ -1222,12 +1347,42 @@ class QARunner:
             )
             self.console.print(f"[bold yellow]{verdict}[/bold yellow]")
             logger.warning("[FEDERATION-DELIVERY] %s", verdict)
-        else:
+        elif transport_rooted is False:
             verdict = (
                 "❌ Canonical NOT transport-rooted (edge.knows_peer=false) — neither rounds nor "
                 "trace envelopes can flow. Check the canonical boot-prime + bootstrap dial."
             )
             self.console.print(f"[bold red]{verdict}[/bold red]")
+            logger.warning("[FEDERATION-DELIVERY] %s", verdict)
+        else:
+            # UNKNOWN IS NOT FALSE. Saying "edge.knows_peer=false" when nothing
+            # ever reported knows_peer sends the reader to the boot-prime and
+            # the bootstrap dial — both of which were fine — and it contradicts
+            # the delivery_status line printed immediately below, which said
+            # deliverable=true. An absent verdict is its own outcome.
+            #
+            # AND THE TWO WAYS OF NOT KNOWING ARE DIFFERENT. "No peer entry"
+            # and "an entry that omits knows_peer" send a reader to different
+            # places, and the second one printed a canonical key two lines
+            # above — so claiming there was no entry contradicts the output
+            # immediately preceding it.
+            if fallback is None:
+                why = (
+                    "no probe verdict and no canonical peer entry in delivery_status() — the "
+                    "canonical may not be admitted yet, or no canonical target is named at all"
+                )
+            else:
+                why = (
+                    "the canonical peer entry exists but reports no knows_peer, so the snapshot "
+                    "is incomplete rather than absent — give it another round"
+                )
+            verdict = (
+                f"❓ Federation delivery UNVERIFIED — {why}. Rooting could not be established "
+                "either way. This is not evidence of a broken transport; check the node log for "
+                "`canonical boot prime: rooted` and for anti-entropy rounds before concluding "
+                "anything."
+            )
+            self.console.print(f"[bold yellow]{verdict}[/bold yellow]")
             logger.warning("[FEDERATION-DELIVERY] %s", verdict)
 
         # Not fully green → surface delivery_status() (CIRISServer#294, >=0.5.125)
@@ -1235,6 +1390,67 @@ class QARunner:
         if not (transport_rooted and kex_state == "PRESENT"):
             self._diagnose_delivery_status(_read_probe_log)
         return rooted
+
+    def _trace_plane_from_node_state(
+        self, read_probe_log: Callable[[], str]
+    ) -> Optional[TracePlaneStanding]:
+        """The node's `[TRACE-PLANE]` line, or None when it never logged one.
+
+        READ, DO NOT CALL. `node_state()` is in-process to the server, and this
+        runner boots that server as a SUBPROCESS — so calling it here returns
+        nothing no matter how healthy the node is, which is exactly the
+        "unavailable" this printed on its first outing. The node logs the value
+        instead (edge_runtime `_log_trace_plane`), the same in-process-accessor
+        → logged-surface pattern `[DELIVERY-STATUS]` already uses.
+        """
+        import json as _json
+
+        try:
+            lines = [ln for ln in read_probe_log().splitlines() if "[TRACE-PLANE]" in ln]
+            if not lines:
+                return None
+            m = re.search(r"\[TRACE-PLANE\]\s+phase=\S+\s+(\{.*\})", lines[-1])
+            if not m:
+                return None
+            return TracePlaneStanding.model_validate(_json.loads(m.group(1)))
+        except Exception as exc:  # noqa: BLE001 — diagnostics never break a run
+            logger.debug("[FEDERATION-DELIVERY] trace-plane line unreadable: %s", exc)
+            return None
+
+    def _peer_state_from_delivery_status(
+        self, read_probe_log: Callable[[], str]
+    ) -> Optional["CanonicalPeerState"]:
+        """The canonical peer's entry from the last [DELIVERY-STATUS] line.
+
+        Same source `_diagnose_delivery_status` renders, read as data instead of
+        prose so the verdict above can use it when the probe line is missing.
+        Best-effort; returns None when there is nothing to read.
+        """
+        import json as _json
+
+        try:
+            lines = [ln for ln in read_probe_log().splitlines() if "[DELIVERY-STATUS]" in ln]
+            if not lines:
+                return None
+            m = re.search(r"\[DELIVERY-STATUS\]\s+phase=(\S+)\s+(\{.*\})", lines[-1])
+            if not m:
+                return None
+            st = _json.loads(m.group(2))
+            peers = st.get("peers") or []
+            targets = st.get("canonical_targets") or []
+            # A NAMED TARGET IS THE ONLY THING THAT IDENTIFIES THE CANONICAL.
+            # Two ways this used to guess, and both could report an unrelated
+            # rooted, KEX-ready federation peer as the canonical's own
+            # preconditions — GREEN, under exactly the missing-canonical
+            # condition the diagnosis exists to surface: matching no target and
+            # falling back to peers[0], and having no targets named at all and
+            # taking peers[0] anyway. Neither is an answer about the canonical.
+            if not targets:
+                return None
+            peer = next((p for p in peers if p.get("key_id") in targets), None)
+            return CanonicalPeerState.model_validate(peer) if peer else None
+        except Exception:  # noqa: BLE001 — diagnostics must never break the run
+            return None
 
     def _diagnose_delivery_status(self, read_probe_log: Callable[[], str]) -> None:
         """Print the ciris_server.delivery_status() snapshot + the #926 decision
@@ -1762,7 +1978,7 @@ class QARunner:
                 # Store results in runner's results dict
                 for result in results:
                     test_name = result["test"]
-                    passed = "PASS" in result["status"]
+                    passed = _is_non_failing(result["status"])
 
                     self.results[f"{module.value}::{test_name}"] = {
                         "success": passed,
@@ -1777,7 +1993,7 @@ class QARunner:
                 # status counted as Passed in the Total/Passed/Failed summary
                 # yet made this return False, failing the whole leg with
                 # Failed=0 (the exit-1-on-green bug).
-                return all("PASS" in r["status"] for r in results)
+                return all(_is_non_failing(r["status"]) for r in results)
 
         # Run all SDK modules sequentially (they use async internally)
         for module in modules:

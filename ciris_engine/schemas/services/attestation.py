@@ -5,9 +5,39 @@ CIRISVerify is REQUIRED for CIRIS 2.0+ agents.
 """
 
 from datetime import datetime
+from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
+
+
+class AttestationGateOutcome(str, Enum):
+    """How the startup-attestation gate resolved.
+
+    The gate is a latency pre-warm, not the enforcement point — batch_context
+    blocks on the same call and refuses to build a thought without an
+    attestation result — so a latency-SLO breach is reported rather than
+    raised. The caller still has to KNOW a breach happened, though, or the
+    receipts that make it a fileable ciris_verify issue never get dumped.
+    That is what this outcome carries.
+    """
+
+    READY = "ready"
+    """Attestation completed within the gate deadline."""
+
+    SLO_BREACH_COMPLETED = "slo_breach_completed"
+    """Attestation succeeded but overran the budget. The result is VALID — a
+    slow filesystem does not make the tree hash wrong — so this is a latency
+    regression, not a correctness failure."""
+
+    SLO_BREACH_PENDING = "slo_breach_pending"
+    """Still running past deadline + grace, so verifier_runner's own bounded
+    degrade did not land either. That is a verifier bug, and the gate degrades
+    rather than aborting the runtime."""
+
+    def is_breach(self) -> bool:
+        """True when receipts should be dumped for a ciris_verify issue."""
+        return self is not AttestationGateOutcome.READY
 
 
 class AttestationResult(BaseModel):

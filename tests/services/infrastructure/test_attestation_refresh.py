@@ -14,6 +14,8 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
+from ciris_engine.schemas.services.attestation import AttestationGateOutcome
+
 from ciris_engine.schemas.services.attestation import AttestationResult
 
 # This file tests the real bodies of run_startup_attestation and
@@ -698,7 +700,7 @@ class TestStartupAttestationBudget:
         assert svc._attestation_task.done()
 
     @pytest.mark.asyncio
-    async def test_fast_path_raises_when_completed_run_exceeded_budget(self):
+    async def test_fast_path_reports_when_completed_run_exceeded_budget(self):
         """Codex P1: a caller arriving AFTER the task already finished
         must still see the budget breach. Without this check, a 20s
         attestation that completed before the gate ran would silently
@@ -725,8 +727,10 @@ class TestStartupAttestationBudget:
             "function_integrity": "verified",
         }
 
-        with pytest.raises(RuntimeError, match="completed but exceeded"):
-            await svc.await_attestation_ready(budget_seconds=15.0)
+        # Reported, not raised: the attestation SUCCEEDED, it was merely slow,
+        # and a slow filesystem does not make the tree hash wrong.
+        outcome = await svc.await_attestation_ready(budget_seconds=15.0)
+        assert outcome is AttestationGateOutcome.SLO_BREACH_COMPLETED
 
     @pytest.mark.asyncio
     async def test_fast_path_passes_when_completed_run_within_budget(self):
@@ -768,7 +772,7 @@ class TestStartupAttestationBudget:
         await svc.await_attestation_ready(budget_seconds=15.0)
 
     @pytest.mark.asyncio
-    async def test_raises_runtime_error_on_budget_breach(self):
+    async def test_reports_breach_outcome_on_budget_overshoot(self):
         """A task that exceeds the budget raises RuntimeError with the
         contract message — not a TimeoutError or a silent stall."""
         svc = self._make_bare_service()
@@ -782,9 +786,14 @@ class TestStartupAttestationBudget:
         svc._attestation_task = asyncio.create_task(slow_attestation())
 
         # Use a tiny budget so the test stays fast. The behavior under 15s
-        # and 0.1s is identical — both surface a RuntimeError on overshoot.
-        with pytest.raises(RuntimeError, match=r"exceeded the .* budget"):
-            await svc.await_attestation_ready(budget_seconds=0.1)
+        # and 0.1s is identical — both surface the breach as an outcome.
+        #
+        # Not a raise: raising was permanent for the process, because
+        # `remaining` is measured from task-creation time, so every later
+        # caller — batch_context included, per thought — then computed
+        # max(0.0, ...) == 0.0 and failed instantly.
+        outcome = await svc.await_attestation_ready(budget_seconds=0.1)
+        assert outcome is AttestationGateOutcome.SLO_BREACH_PENDING
 
         # Clean up the lingering task to keep the test loop tidy.
         svc._attestation_task.cancel()
@@ -796,7 +805,7 @@ class TestStartupAttestationBudget:
             pass
 
     @pytest.mark.asyncio
-    async def test_budget_message_names_verifier_as_owner(self):
+    async def test_budget_message_names_verifier_as_owner(self, caplog):
         """The error message must point at the verifier as the thing to
         fix, not at the budget itself. This is the "do not raise the
         budget" load-bearing assertion."""
@@ -809,16 +818,14 @@ class TestStartupAttestationBudget:
         svc._attestation_started_at = loop.time()
         svc._attestation_task = asyncio.create_task(slow_attestation())
 
-        try:
+        with caplog.at_level("WARNING"):
             await svc.await_attestation_ready(budget_seconds=0.05)
-        except RuntimeError as exc:
-            msg = str(exc)
-            assert "verifier" in msg.lower(), msg
-            assert "budget" in msg.lower(), msg
-            # No "increase the timeout" framing.
-            assert "raise the budget" in msg.lower() or "investigate" in msg.lower(), msg
-        else:  # pragma: no cover
-            pytest.fail("await_attestation_ready did not raise on overshoot")
+
+        msg = "\n".join(r.getMessage() for r in caplog.records if r.levelname == "WARNING")
+        assert "verifier" in msg.lower(), msg
+        assert "budget" in msg.lower() or "deadline" in msg.lower(), msg
+        # No "increase the timeout" framing.
+        assert "raise the budget" in msg.lower() or "investigate" in msg.lower(), msg
 
         svc._attestation_task.cancel()
         try:
@@ -845,8 +852,8 @@ class TestStartupAttestationBudget:
         svc._attestation_task = asyncio.create_task(slow_attestation())
 
         gate_start = loop.time()
-        with pytest.raises(RuntimeError, match="budget"):
-            await svc.await_attestation_ready(budget_seconds=0.5)
+        outcome = await svc.await_attestation_ready(budget_seconds=0.5)
+        assert outcome is AttestationGateOutcome.SLO_BREACH_PENDING
         gate_elapsed = loop.time() - gate_start
         # Only ~0.1s remained when the gate ran. Generous upper bound for
         # CI jitter, but well below the 0.5s caller-time budget.
@@ -878,8 +885,8 @@ class TestStartupAttestationBudget:
         svc._attestation_started_at = loop.time() - 1.0
         svc._attestation_task = asyncio.create_task(slow_attestation())
 
-        with pytest.raises(RuntimeError, match="budget"):
-            await svc.await_attestation_ready(budget_seconds=0.1)
+        outcome = await svc.await_attestation_ready(budget_seconds=0.1)
+        assert outcome is AttestationGateOutcome.SLO_BREACH_PENDING
 
         svc._attestation_task.cancel()
         try:
@@ -904,10 +911,7 @@ class TestStartupAttestationBudget:
         svc._attestation_started_at = loop.time()
         svc._attestation_task = asyncio.create_task(slow_attestation())
 
-        try:
-            await svc.await_attestation_ready(budget_seconds=0.05)
-        except RuntimeError:
-            pass
+        await svc.await_attestation_ready(budget_seconds=0.05)
 
         assert not svc._attestation_task.done(), (
             "Gate must not cancel the in-flight attestation task on a budget "

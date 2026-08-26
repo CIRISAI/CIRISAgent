@@ -18,6 +18,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from ciris_engine.schemas.services.attestation import AttestationGateOutcome
+
 from ciris_engine.logic.runtime.ciris_runtime import CIRISRuntime
 
 
@@ -117,10 +119,15 @@ class TestAwaitAttestationGate:
         assert any("AuthenticationService unavailable" in m for m in msgs), msgs
 
     @pytest.mark.asyncio
-    async def test_gate_reraises_attestation_failure(self):
-        """An exception from await_attestation_ready propagates so
-        startup fails loudly — the whole point of the gate is to refuse
-        to start the processor on a broken attestation."""
+    async def test_gate_degrades_instead_of_aborting_on_failure(self, caplog):
+        """A breach must NOT propagate. The gate is a latency pre-warm, not
+        the enforcement point — batch_context refuses to build a thought
+        without an attestation result, so starting the processor here cannot
+        produce an unattested thought.
+
+        Aborting instead bricked a Windows install: 2.9.37 on py3.14 spent
+        >18s in one ciris_verify_tree() call, blew the budget, and the runtime
+        shut down 22s after boot with no UI and no way into the wizard."""
         runtime = _bare_runtime()
         auth = _make_auth_service(
             await_side_effect=RuntimeError(
@@ -129,8 +136,12 @@ class TestAwaitAttestationGate:
         )
         runtime.service_initializer = MagicMock(auth_service=auth)
 
-        with pytest.raises(RuntimeError, match="exceeded the 15s budget"):
-            await runtime._await_attestation_ready()
+        with caplog.at_level("WARNING"):
+            await runtime._await_attestation_ready()  # must not raise
+
+        warnings = "\n".join(r.getMessage() for r in caplog.records if r.levelname == "WARNING")
+        assert "DEGRADED" in warnings
+        assert "exceeded the 15s budget" in warnings
 
     @pytest.mark.asyncio
     async def test_gate_dumps_receipts_on_failure(self, caplog):
@@ -150,8 +161,7 @@ class TestAwaitAttestationGate:
         runtime.service_initializer = MagicMock(auth_service=auth)
 
         with caplog.at_level("ERROR"):
-            with pytest.raises(RuntimeError):
-                await runtime._await_attestation_ready()
+            await runtime._await_attestation_ready()  # degrades, does not raise
 
         joined = "\n".join(r.getMessage() for r in caplog.records if r.levelname == "ERROR")
 
@@ -185,8 +195,7 @@ class TestAwaitAttestationGate:
         runtime.service_initializer = MagicMock(auth_service=auth)
 
         with caplog.at_level("ERROR"):
-            with pytest.raises(RuntimeError):
-                await runtime._await_attestation_ready()
+            await runtime._await_attestation_ready()  # degrades, does not raise
 
         joined = "\n".join(r.getMessage() for r in caplog.records if r.levelname == "ERROR")
         assert "ATTESTATION GATE BUDGET BREACH" in joined
@@ -212,8 +221,7 @@ class TestAwaitAttestationGate:
         runtime.service_initializer = MagicMock(auth_service=auth)
 
         with caplog.at_level("ERROR"):
-            with pytest.raises(RuntimeError):
-                await runtime._await_attestation_ready()
+            await runtime._await_attestation_ready()  # degrades, does not raise
 
         joined = "\n".join(r.getMessage() for r in caplog.records if r.levelname == "ERROR")
         assert "Exception chain" in joined
@@ -254,3 +262,69 @@ class TestProcessorGateOrdering:
             "_await_attestation_ready must be a coroutine — awaiting "
             "the attestation task synchronously would freeze the runtime."
         )
+
+
+class TestBreachOutcomeStillFilesReceipts:
+    """The gate stopped raising on a latency breach, so the RETURNED OUTCOME is
+    now the only channel that can trigger the receipts dump. If the gate ignored
+    it, the wedged-verifier case — the one this path exists for — would log
+    "complete" and file nothing."""
+
+    @pytest.mark.asyncio
+    async def test_pending_breach_dumps_receipts_and_degrades(self, caplog):
+        runtime = _bare_runtime()
+        auth = _make_auth_service()
+        auth.await_attestation_ready = AsyncMock(
+            return_value=AttestationGateOutcome.SLO_BREACH_PENDING
+        )
+        runtime.service_initializer = MagicMock(auth_service=auth)
+
+        with caplog.at_level("INFO"):
+            await runtime._await_attestation_ready()  # degrades, does not raise
+
+        errors = "\n".join(r.getMessage() for r in caplog.records if r.levelname == "ERROR")
+        warnings = "\n".join(r.getMessage() for r in caplog.records if r.levelname == "WARNING")
+        infos = "\n".join(r.getMessage() for r in caplog.records if r.levelname == "INFO")
+
+        # Receipts still land, still fileable.
+        assert "ATTESTATION GATE BUDGET BREACH" in errors
+        assert "run_attestation_total_seconds" in errors
+        assert "CIRISVerify/issues" in errors
+        # And the run continues, loudly.
+        assert "DEGRADED" in warnings
+        # It must NOT claim success.
+        assert "Startup attestation complete" not in infos
+
+    @pytest.mark.asyncio
+    async def test_completed_breach_also_files(self, caplog):
+        """A slow-but-successful attestation is still a latency regression
+        worth filing — the result is valid, the timing is not."""
+        runtime = _bare_runtime()
+        auth = _make_auth_service()
+        auth.await_attestation_ready = AsyncMock(
+            return_value=AttestationGateOutcome.SLO_BREACH_COMPLETED
+        )
+        runtime.service_initializer = MagicMock(auth_service=auth)
+
+        with caplog.at_level("ERROR"):
+            await runtime._await_attestation_ready()
+
+        errors = "\n".join(r.getMessage() for r in caplog.records if r.levelname == "ERROR")
+        assert "ATTESTATION GATE BUDGET BREACH" in errors
+
+    @pytest.mark.asyncio
+    async def test_ready_outcome_does_not_file_anything(self, caplog):
+        """A healthy boot must stay quiet — receipts on every start would
+        train everyone to ignore them."""
+        runtime = _bare_runtime()
+        auth = _make_auth_service()
+        auth.await_attestation_ready = AsyncMock(return_value=AttestationGateOutcome.READY)
+        runtime.service_initializer = MagicMock(auth_service=auth)
+
+        with caplog.at_level("INFO"):
+            await runtime._await_attestation_ready()
+
+        errors = "\n".join(r.getMessage() for r in caplog.records if r.levelname == "ERROR")
+        infos = "\n".join(r.getMessage() for r in caplog.records if r.levelname == "INFO")
+        assert "ATTESTATION GATE BUDGET BREACH" not in errors
+        assert "Startup attestation complete" in infos

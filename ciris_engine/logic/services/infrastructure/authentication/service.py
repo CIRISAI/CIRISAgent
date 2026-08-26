@@ -36,7 +36,11 @@ from ciris_engine.logic.utils.path_resolution import get_secrets_home
 from ciris_engine.logic.utils.shutdown_manager import request_global_shutdown
 from ciris_engine.protocols.services.infrastructure.authentication import AuthenticationServiceProtocol
 from ciris_engine.schemas.runtime.enums import ServiceType
-from ciris_engine.schemas.services.attestation import AttestationCacheStatus, AttestationResult
+from ciris_engine.schemas.services.attestation import (
+    AttestationCacheStatus,
+    AttestationGateOutcome,
+    AttestationResult,
+)
 from ciris_engine.schemas.services.authority.wise_authority import AuthenticationResult, TokenVerification, WAUpdate
 from ciris_engine.schemas.services.authority_core import (
     AuthorizationContext,
@@ -108,6 +112,49 @@ def _startup_attestation_budget() -> float:
 # print. Anything ENFORCING the budget must call _startup_attestation_budget()
 # so a late override is honoured.
 STARTUP_ATTESTATION_BUDGET_SECONDS = _startup_attestation_budget()
+
+
+# THE GATE MUST NOT RACE THE DEGRADE IT IS WAITING FOR.
+#
+# verifier_runner already keeps the promise that "an attestation is always
+# produced within the budget": attestation_deadline_seconds() bounds its own
+# run and hands back a degraded `level=0, binary=FAIL` result instead of
+# hanging. The gate below waits for that result.
+#
+# Both were bounded by the SAME budget, measured from (within milliseconds of)
+# the same instant — so the gate's wait expired just before the runner could
+# assemble and cache its degraded result, and the gate lost the race every
+# time. Field report (2.9.37, Windows 11 / py3.14): one ciris_verify_tree()
+# call, `elapsed=20.0s` dead on the budget, `attestation_task_done: False`,
+# `stage_timings_seconds: {}` — the runner was mid-degrade — and the runtime
+# aborted 22s after boot with no UI and no way into the setup wizard.
+#
+# The grace is what lets the runner's bounded degrade actually land. It is not
+# "more budget for a slow verifier": past deadline+grace the runner's own
+# timeout has failed, which is a different bug (see the ceiling branch below).
+ATTESTATION_GATE_GRACE_SECONDS = 5.0
+
+
+def _attestation_gate_deadline(budget_seconds: float) -> float:
+    """How long the gate waits, given the CALLER's budget.
+
+    The grace exists for one reason: to outlast verifier_runner's own bounded
+    degrade so its result can land. It therefore applies only when the caller
+    is actually long enough to be racing that degrade.
+
+    A caller asking for LESS than the runner's deadline (refresh and audit
+    paths pass budgets as short as 0.05s) is deliberately giving up early and
+    is not racing anything — honour that budget exactly rather than silently
+    stretching it to the global deadline.
+
+    Read at call time, like every other budget knob here: a value frozen at
+    import silently discards the override mobile_main sets during startup.
+    """
+    from .attestation.verifier_runner import attestation_deadline_seconds
+
+    if budget_seconds < attestation_deadline_seconds():
+        return budget_seconds
+    return budget_seconds + ATTESTATION_GATE_GRACE_SECONDS
 
 
 class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProtocol):
@@ -186,6 +233,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         # bools/strs/ints for stage outcomes, plus exception receipts on
         # the failure branch.
         self._attestation_stage_timings: Dict[str, Any] = {}
+        self._attestation_slo_breach_logged: bool = False
         self._baseline_attestation: Optional[AttestationResult] = (
             None  # First successful result for degradation detection
         )
@@ -2499,10 +2547,28 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         result = build_attestation_result(verify_result, attestation_mode)
         return result
 
+    def _log_attestation_slo_breach(self, message: str) -> None:
+        """Report a startup-attestation latency-SLO breach without killing the run.
+
+        One definition so the two breach sites (completed-but-slow, and
+        still-running-past-budget) read identically in the log and stay in
+        step. Logged at WARNING, not ERROR: the run continues, and the
+        incident-capture handler already promotes a repeated warning. The
+        fileable receipts dump still happens at the processor gate.
+        """
+        # Once at WARNING, then DEBUG. Every per-thought batch_context call
+        # lands here too once the deadline has passed, and a warning per
+        # thought buries the one that matters.
+        if getattr(self, "_attestation_slo_breach_logged", False):
+            logger.debug("[attestation] SLO BREACH (repeat): %s", message)
+            return
+        self._attestation_slo_breach_logged = True
+        logger.warning("[attestation] SLO BREACH: %s", message)
+
     async def await_attestation_ready(
         self,
         budget_seconds: Optional[float] = None,
-    ) -> None:
+    ) -> AttestationGateOutcome:
         """Block until the startup attestation task has completed.
 
         ciris_verify is a hard runtime dependency — there is no path that
@@ -2524,8 +2590,9 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         Behavior:
           - If start() never ran: RuntimeError (no task to await).
           - If task is still running and budget remains: await up to
-            the remaining budget. On timeout: raise RuntimeError with
-            the "attestation exceeded budget — this is a bug" message,
+            the remaining budget. On timeout: report an SLO breach and
+            keep waiting to the hard ceiling (the breach is a latency
+            regression, not a correctness failure),
             because per the contract any run that takes >15s should be
             investigated as a verifier regression, not waited out.
           - If task already finished: returns immediately.
@@ -2561,47 +2628,71 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         if self._attestation_task.done():
             total = getattr(self, "_attestation_stage_timings", {}).get("run_attestation_total_seconds")
             if isinstance(total, (int, float)) and total > budget_seconds:
-                raise RuntimeError(
+                # SLO breach on a SUCCESSFUL attestation. The result is valid —
+                # a slow filesystem does not make the tree hash wrong — so this
+                # is reported, not raised. Raising here used to poison every
+                # later caller for the life of the process.
+                self._log_attestation_slo_breach(
                     f"Startup attestation completed but exceeded the "
                     f"{budget_seconds:.0f}s budget (total={total:.1f}s). "
-                    f"This is a bug — the verifier should complete within "
-                    f"the contract window on a clean run. Investigate the "
-                    f"verifier (slow filesystem walk? blocking I/O? network "
-                    f"probe?) rather than raising the budget."
+                    f"The attestation is VALID and startup continues — this is "
+                    f"a latency regression, not a correctness failure. "
+                    f"Investigate the verifier (slow filesystem walk? blocking "
+                    f"I/O? network probe? CIRISVerify#212 registry fetch?) "
+                    f"rather than raising the budget."
                 )
-            # Awaiting a completed task is a no-op except that exceptions
-            # raised inside the task are re-raised here.
+                # Awaiting a completed task is a no-op except that exceptions
+                # raised inside the task are re-raised here.
+                await self._attestation_task
+                return AttestationGateOutcome.SLO_BREACH_COMPLETED
             await self._attestation_task
-            return
+            return AttestationGateOutcome.READY
 
         # Compute remaining budget from task-creation time. If for any
         # reason the timestamp wasn't recorded (shouldn't happen — set
         # alongside task creation), fall back to the full budget.
+        # Wait against the GATE deadline, not the raw budget: the runner
+        # degrades at attestation_deadline_seconds(), and the gate has to
+        # outlast that by the grace or it times out mid-degrade and loses the
+        # race it is supposed to be observing.
+        gate_deadline = _attestation_gate_deadline(budget_seconds)
         if started_at is not None:
             elapsed = asyncio.get_event_loop().time() - started_at
-            remaining = max(0.0, budget_seconds - elapsed)
+            remaining = max(0.0, gate_deadline - elapsed)
         else:
-            remaining = budget_seconds
+            remaining = gate_deadline
 
         try:
             await asyncio.wait_for(
                 asyncio.shield(self._attestation_task),
                 timeout=remaining,
             )
+            return AttestationGateOutcome.READY
         except asyncio.TimeoutError as exc:
-            # Don't cancel the task — let it keep running so refresh/audit
-            # paths still benefit from an eventual result. But surface the
-            # contract violation immediately so the caller (processor gate)
-            # aborts startup rather than absorbing the latency silently.
+            # Past deadline+grace the runner's OWN bounded degrade did not
+            # land, so this is not "a slow verifier" — verifier_runner's
+            # timeout has itself failed. Report it as a fileable bug.
+            #
+            # Never cancel the task: refresh/audit paths still want the result.
+            #
+            # Reported, not raised. Raising here was permanent for the process:
+            # `remaining` is measured from task-creation time, so once elapsed
+            # passed the deadline every later caller found max(0.0, ...) == 0.0
+            # and timed out instantly. The per-thought batch_context gate calls
+            # this same method, so one slow boot meant the agent could never
+            # think again — even after the attestation landed a second later.
             elapsed_total = asyncio.get_event_loop().time() - started_at if started_at is not None else None
             elapsed_str = f"{elapsed_total:.1f}s" if elapsed_total is not None else "unknown"
-            raise RuntimeError(
-                f"Startup attestation exceeded the {budget_seconds:.0f}s budget "
-                f"(elapsed={elapsed_str}). This is a bug — the verifier should "
-                f"complete within the contract window on a clean run. Investigate "
-                f"the verifier (slow filesystem walk? blocking I/O? network probe?) "
-                f"rather than raising the budget."
-            ) from exc
+            self._log_attestation_slo_breach(
+                f"Startup attestation exceeded the {gate_deadline:.0f}s gate deadline "
+                f"(budget {budget_seconds:.0f}s + {ATTESTATION_GATE_GRACE_SECONDS:.0f}s grace, "
+                f"elapsed={elapsed_str}) and is STILL RUNNING. verifier_runner's own "
+                f"bounded degrade should have produced a result by now — investigate "
+                f"the verifier (slow filesystem walk? blocking I/O? network probe? "
+                f"CIRISVerify#212 registry fetch?) rather than raising the budget. "
+                f"Startup continues; callers get the result when it lands. ({exc!r})"
+            )
+            return AttestationGateOutcome.SLO_BREACH_PENDING
 
     def get_cached_attestation(self, allow_stale: bool = False) -> Optional[AttestationResult]:
         """Get the cached attestation result if available.

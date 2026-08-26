@@ -1582,10 +1582,11 @@ class CIRISRuntime(ServicePropertyMixin):
         # processor only starts once the attestation cache is populated and
         # every subsequent thought sees a no-op await.
         #
-        # Auth service enforces a 15s end-to-end budget; if blown, the gate
-        # raises (with a verifier-debugging receipts dump — see _await_
-        # attestation_ready) and startup fails loudly. Silently absorbing
-        # 60-120s would mask a verifier regression.
+        # Auth service enforces an end-to-end latency budget. If blown, the
+        # gate dumps verifier-debugging receipts and starts the processor
+        # DEGRADED rather than aborting — see _await_attestation_ready. The
+        # breach is never silent (that would mask a verifier regression), but
+        # it is also never fatal: a slow disk must not brick the install.
         await self._await_attestation_ready()
 
         effective_num_rounds = DEFAULT_NUM_ROUNDS
@@ -1596,12 +1597,17 @@ class CIRISRuntime(ServicePropertyMixin):
         await self.agent_processor.start_processing(effective_num_rounds)
 
     async def _await_attestation_ready(self) -> None:
-        """Block on the AuthenticationService's 15s attestation budget.
+        """Block on the AuthenticationService's attestation budget.
+
+        Non-fatal by design: a budget breach is a latency regression, not a
+        correctness failure, so it degrades to a warning and lets the
+        processor start. Enforcement lives in batch_context, which refuses
+        to build a thought without an attestation result.
 
         Looks up the service by capability (await_attestation_ready) rather
         than registry type, mirroring batch_context's lookup so the two gate
-        sites stay aligned. The 15s budget is enforced by the auth service
-        itself; budget breach raises here and aborts processor start.
+        sites stay aligned. The budget is enforced by the auth service
+        itself; a breach is reported here and startup continues degraded.
 
         On budget breach we dump receipts (per-stage timings, cache state,
         baseline_attestation, the active verifier mode) at ERROR level so
@@ -1623,8 +1629,27 @@ class CIRISRuntime(ServicePropertyMixin):
             await auth_service.await_attestation_ready()
             logger.info("Startup attestation complete — processor cleared to start.")
         except Exception as e:
+            # Receipts first: this stays a fileable ciris_verify issue.
             self._log_attestation_failure_receipts(auth_service, e)
-            raise
+            # Then DEGRADE rather than abort. This gate is a latency pre-warm,
+            # not the enforcement point — per-thought batch_context blocks on
+            # the same await_attestation_ready() and refuses to build a thought
+            # without an attestation result, so starting the processor here
+            # cannot produce an unattested thought.
+            #
+            # Aborting instead cost a Windows user the whole app: 2.9.37 on
+            # py3.14 spent >18s inside one ciris_verify_tree() call, blew the
+            # 20s budget, and the runtime shut down 22s after boot — no UI, no
+            # setup wizard, no way in. A slow disk should degrade first-thought
+            # latency, not brick the install.
+            logger.warning(
+                "Startup attestation did not complete within budget — starting the "
+                "processor anyway (DEGRADED). First-thought latency will absorb the "
+                "remaining attestation time, and batch_context still refuses to build "
+                "a thought without an attestation result, so nothing runs unattested. "
+                "Receipts above are a fileable ciris_verify issue: %s",
+                e,
+            )
 
     def _log_attestation_failure_receipts(self, auth_service: Any, exc: BaseException) -> None:
         """Dump everything an upstream ciris_verify maintainer would need to

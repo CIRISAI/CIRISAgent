@@ -86,6 +86,7 @@ class AppleRemindersAdapter(Service):
             await agent_task
         except asyncio.CancelledError:
             logger.info("AppleReminders adapter lifecycle cancelled")
+            raise
         finally:
             await self.stop()
 

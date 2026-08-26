@@ -86,6 +86,7 @@ class NotionAdapter(Service):
             await agent_task
         except asyncio.CancelledError:
             logger.info("Notion adapter lifecycle cancelled")
+            raise
         finally:
             await self.stop()
 

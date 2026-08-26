@@ -156,7 +156,10 @@ class BalanceMonitor:
                 if self._running:  # Check again after sleep
                     await self._poll_once()
             except asyncio.CancelledError:
-                break
+                # Re-raise rather than break: swallowing the cancellation let this
+                # poll task finish NORMALLY, so shutdown saw a completed task instead
+                # of a cancelled one and could not tell the loop had been torn down.
+                raise
             except Exception as e:
                 logger.error(f"BalanceMonitor {self.provider_id} poll loop error: {e}")
                 self._consecutive_errors += 1

@@ -86,6 +86,7 @@ class BlogwatcherAdapter(Service):
             await agent_task
         except asyncio.CancelledError:
             logger.info("Blogwatcher adapter lifecycle cancelled")
+            raise
         finally:
             await self.stop()
 

@@ -346,6 +346,7 @@ class AccordMetricsAdapter(Service):
             await agent_task
         except asyncio.CancelledError:
             logger.info("AccordMetricsAdapter lifecycle cancelled")
+            raise
         finally:
             await self.stop()
 

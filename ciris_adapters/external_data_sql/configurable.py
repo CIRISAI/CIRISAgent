@@ -9,6 +9,7 @@ Provides interactive configuration workflow for SQL database connections:
 5. Confirm - Review and apply configuration
 """
 
+import asyncio
 import json
 import logging
 import os
@@ -301,9 +302,15 @@ class SQLConfigurableAdapter:
         config_file = Path(config_path) / "sql_config.json"
         config_file.parent.mkdir(parents=True, exist_ok=True)
 
-        try:
+        def _write_config() -> None:
             with open(config_file, "w") as f:
                 json.dump(config_dict, f, indent=2)
+
+        try:
+            # Off the event loop: a synchronous write here blocks every other
+            # coroutine on this loop for the duration of the disk I/O
+            # (Sonar python:S7493). Mirrors profile_loader.py's to_thread use.
+            await asyncio.to_thread(_write_config)
             logger.info(f"SQL configuration saved to {config_file}")
         except Exception as e:
             logger.error(f"Failed to save config file: {e}")

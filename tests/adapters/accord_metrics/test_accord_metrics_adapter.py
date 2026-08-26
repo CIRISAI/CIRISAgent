@@ -507,9 +507,16 @@ class TestAccordMetricsAdapterLifecycle:
         # Cancel the agent task
         agent_task.cancel()
 
-        # Wait for lifecycle to complete
-        await lifecycle_task
+        # The lifecycle PROPAGATES the cancellation rather than swallowing it.
+        # Absorbing it made the lifecycle task look like it had completed
+        # normally, so a shutdown awaiting these tasks could not tell a torn-down
+        # adapter from a finished one (Sonar python:S7497). "Gracefully" means
+        # the `finally: await self.stop()` cleanup still runs -- asserted below --
+        # not that the cancellation disappears.
+        with pytest.raises(asyncio.CancelledError):
+            await lifecycle_task
 
+        # Cleanup ran despite the propagation.
         assert adapter._running is False
 
 

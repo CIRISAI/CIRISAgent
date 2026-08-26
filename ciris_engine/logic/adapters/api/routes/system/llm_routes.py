@@ -718,13 +718,20 @@ async def update_provider_priority(
             )
             result = await update_provider(name, updated_config, config_service)
             if result.success:
-                logger.info(f"Provider '{name}' priority persisted: {body.priority.value}")
+                logger.info("Provider %r priority persisted: %s", name, body.priority.value)
             else:
-                logger.warning(f"Provider '{name}' priority updated but not persisted: {result.error}")
+                logger.warning(
+                    "Provider %r priority updated but not persisted: %s", name, result.error
+                )
     except Exception as e:
-        logger.warning(f"Failed to persist priority for '{name}': {e}")
+        logger.warning("Failed to persist priority for %r: %s", name, e)
 
-    logger.info(f"Provider '{name}' priority changed from {previous_priority} to {body.priority}")
+    # %r escapes newlines / CR / non-printables in `name`, an unvalidated
+    # FastAPI path param (PUT /providers/{name}/priority), so a crafted
+    # provider name cannot forge log lines (CWE-117 / Sonar S5145).
+    logger.info(
+        "Provider %r priority changed from %s to %s", name, previous_priority, body.priority
+    )
 
     return SuccessResponse(
         data=ProviderPriorityUpdateResponse(

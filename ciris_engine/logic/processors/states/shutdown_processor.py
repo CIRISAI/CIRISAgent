@@ -351,9 +351,14 @@ class ShutdownProcessor(BaseProcessor):
             await self._process_shutdown_thoughts()
 
             # Re-fetch task to check updated status
-            assert self.shutdown_task is not None  # Already validated above
+            # Keyed off current_task, not self.shutdown_task: the two carry the same
+            # ids by construction (_validate_shutdown_task fetches by exactly those
+            # two fields) and current_task is already known non-None here. The
+            # narrowing assert this replaces sat inside a try that catches Exception,
+            # so a failure would have been swallowed as an ordinary error (Sonar
+            # python:S5779) -- and asserts vanish entirely under `python -O`.
             current_task = persistence.get_task_by_id(
-                self.shutdown_task.task_id, self.shutdown_task.agent_occurrence_id
+                current_task.task_id, current_task.agent_occurrence_id
             )
             if not current_task:
                 logger.error("Current task is None after fetching")

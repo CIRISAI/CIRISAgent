@@ -201,7 +201,7 @@ class Adapter(Service):
                     logger.error(f"Error handling stdio message: {e}")
 
         except asyncio.CancelledError:
-            pass
+            raise
         finally:
             writer.close()
 

@@ -147,14 +147,17 @@ class SampleConfigurableAdapter:
         """
         # For real OAuth, you'd register redirect URIs with the provider
         # RFC 8252 allows loopback without pre-registration
-        redirect_uri = f"http://{self.LOOPBACK_REDIRECT_HOST}:{{PORT}}/callback"
+        # Named separately rather than overwriting the `redirect_uri` parameter:
+        # silently discarding a caller's argument is how a real adapter ends up
+        # authorizing against the wrong callback.
+        loopback_redirect_uri = redirect_uri or f"http://{self.LOOPBACK_REDIRECT_HOST}:{{PORT}}/callback"
 
         # Generate mock OAuth URL (in production, use real OAuth provider URL)
         oauth_url = (
             f"{base_url}/oauth/authorize"
             f"?client_id={self.MOCK_CLIENT_ID}"
             f"&response_type=code"
-            f"&redirect_uri={redirect_uri}"
+            f"&redirect_uri={loopback_redirect_uri}"
             f"&scope={'+'.join(self.MOCK_SCOPES)}"
             f"&state={state}"
             f"&code_challenge={{CHALLENGE}}"  # PKCE challenge placeholder

@@ -86,6 +86,7 @@ class SpotifyPlayerAdapter(Service):
             await agent_task
         except asyncio.CancelledError:
             logger.info("SpotifyPlayer adapter lifecycle cancelled")
+            raise
         finally:
             await self.stop()
 

@@ -86,6 +86,7 @@ class GifgrepAdapter(Service):
             await agent_task
         except asyncio.CancelledError:
             logger.info("Gifgrep adapter lifecycle cancelled")
+            raise
         finally:
             await self.stop()
 

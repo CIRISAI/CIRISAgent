@@ -86,6 +86,7 @@ class ObsidianAdapter(Service):
             await agent_task
         except asyncio.CancelledError:
             logger.info("Obsidian adapter lifecycle cancelled")
+            raise
         finally:
             await self.stop()
 

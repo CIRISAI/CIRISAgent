@@ -86,6 +86,7 @@ class GoplacesAdapter(Service):
             await agent_task
         except asyncio.CancelledError:
             logger.info("Goplaces adapter lifecycle cancelled")
+            raise
         finally:
             await self.stop()
 

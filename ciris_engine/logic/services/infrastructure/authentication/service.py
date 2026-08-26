@@ -36,7 +36,11 @@ from ciris_engine.logic.utils.path_resolution import get_secrets_home
 from ciris_engine.logic.utils.shutdown_manager import request_global_shutdown
 from ciris_engine.protocols.services.infrastructure.authentication import AuthenticationServiceProtocol
 from ciris_engine.schemas.runtime.enums import ServiceType
-from ciris_engine.schemas.services.attestation import AttestationCacheStatus, AttestationResult
+from ciris_engine.schemas.services.attestation import (
+    AttestationCacheStatus,
+    AttestationGateOutcome,
+    AttestationResult,
+)
 from ciris_engine.schemas.services.authority.wise_authority import AuthenticationResult, TokenVerification, WAUpdate
 from ciris_engine.schemas.services.authority_core import (
     AuthorizationContext,
@@ -131,15 +135,26 @@ STARTUP_ATTESTATION_BUDGET_SECONDS = _startup_attestation_budget()
 ATTESTATION_GATE_GRACE_SECONDS = 5.0
 
 
-def _attestation_gate_deadline() -> float:
-    """How long the processor gate waits: the runner's deadline, plus grace.
+def _attestation_gate_deadline(budget_seconds: float) -> float:
+    """How long the gate waits, given the CALLER's budget.
 
-    Read at call time, like every other budget knob here — a value frozen at
+    The grace exists for one reason: to outlast verifier_runner's own bounded
+    degrade so its result can land. It therefore applies only when the caller
+    is actually long enough to be racing that degrade.
+
+    A caller asking for LESS than the runner's deadline (refresh and audit
+    paths pass budgets as short as 0.05s) is deliberately giving up early and
+    is not racing anything — honour that budget exactly rather than silently
+    stretching it to the global deadline.
+
+    Read at call time, like every other budget knob here: a value frozen at
     import silently discards the override mobile_main sets during startup.
     """
     from .attestation.verifier_runner import attestation_deadline_seconds
 
-    return attestation_deadline_seconds() + ATTESTATION_GATE_GRACE_SECONDS
+    if budget_seconds < attestation_deadline_seconds():
+        return budget_seconds
+    return budget_seconds + ATTESTATION_GATE_GRACE_SECONDS
 
 
 class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProtocol):
@@ -2553,7 +2568,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
     async def await_attestation_ready(
         self,
         budget_seconds: Optional[float] = None,
-    ) -> None:
+    ) -> AttestationGateOutcome:
         """Block until the startup attestation task has completed.
 
         ciris_verify is a hard runtime dependency — there is no path that
@@ -2626,10 +2641,12 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                     f"I/O? network probe? CIRISVerify#212 registry fetch?) "
                     f"rather than raising the budget."
                 )
-            # Awaiting a completed task is a no-op except that exceptions
-            # raised inside the task are re-raised here.
+                # Awaiting a completed task is a no-op except that exceptions
+                # raised inside the task are re-raised here.
+                await self._attestation_task
+                return AttestationGateOutcome.SLO_BREACH_COMPLETED
             await self._attestation_task
-            return
+            return AttestationGateOutcome.READY
 
         # Compute remaining budget from task-creation time. If for any
         # reason the timestamp wasn't recorded (shouldn't happen — set
@@ -2638,7 +2655,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         # degrades at attestation_deadline_seconds(), and the gate has to
         # outlast that by the grace or it times out mid-degrade and loses the
         # race it is supposed to be observing.
-        gate_deadline = _attestation_gate_deadline()
+        gate_deadline = _attestation_gate_deadline(budget_seconds)
         if started_at is not None:
             elapsed = asyncio.get_event_loop().time() - started_at
             remaining = max(0.0, gate_deadline - elapsed)
@@ -2650,6 +2667,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 asyncio.shield(self._attestation_task),
                 timeout=remaining,
             )
+            return AttestationGateOutcome.READY
         except asyncio.TimeoutError as exc:
             # Past deadline+grace the runner's OWN bounded degrade did not
             # land, so this is not "a slow verifier" — verifier_runner's
@@ -2674,6 +2692,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 f"CIRISVerify#212 registry fetch?) rather than raising the budget. "
                 f"Startup continues; callers get the result when it lands. ({exc!r})"
             )
+            return AttestationGateOutcome.SLO_BREACH_PENDING
 
     def get_cached_attestation(self, allow_stale: bool = False) -> Optional[AttestationResult]:
         """Get the cached attestation result if available.

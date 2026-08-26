@@ -252,6 +252,17 @@ jobs:
           # repo. SIGTERM at 45m inside a 60m job leaves room for that; sizing
           # the inner bounds closer to 60 would recreate the exact failure above,
           # where the outer bound wins and the inner ones never report.
+          # COVERAGE_FILE: emit the raw coverage DATA file, not a per-shard XML
+          # report. The old flow wrote 8 full-tree XMLs and "merged" them by
+          # appending <package> elements, which never OR'd the per-line hits, so
+          # Sonar resolved each file to ONE arbitrary shard's view and scored lines
+          # as uncovered that other shards had covered (CIRISAgent#1116).
+          # `coverage combine` unions properly, and is the only thing that can
+          # merge BRANCH data at all.
+          #
+          # No leading dot in the name: upload-artifact skips hidden files unless
+          # include-hidden-files is set, which would silently drop the data.
+          COVERAGE_FILE=coverage-data-shard-${{ matrix.shard }} \
           CIRIS_TEST_CONTROLLER_DEADLINE_SECONDS=2580 \
           timeout --signal=SIGTERM --kill-after=30 2700 \
             pytest tests/ -n 4 --dist=loadgroup \
@@ -260,13 +271,13 @@ jobs:
             --store-durations --durations-path=test_durations_shard_${{ matrix.shard }} \
             --reruns=2 --reruns-delay=1 --max-worker-restart=4 \
             --session-timeout=2520 \
-            --cov=./ --cov-report=xml:coverage-shard-${{ matrix.shard }}.xml
+            --cov=./ --cov-report=
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v6
         with:
-          name: coverage-shard-${{ matrix.shard }}
-          path: coverage-shard-${{ matrix.shard }}.xml
+          name: coverage-data-shard-${{ matrix.shard }}
+          path: coverage-data-shard-${{ matrix.shard }}
           retention-days: 1
 
       - name: Upload durations artifact
@@ -664,37 +675,43 @@ jobs:
       - name: Download all coverage artifacts
         uses: actions/download-artifact@v7
         with:
-          pattern: coverage-shard-*
+          pattern: coverage-data-shard-*
           path: coverage/
           merge-multiple: true
 
       - name: Combine coverage reports
         run: |
           pip install coverage
-          # Combine XML reports into single coverage.xml
-          python -c "
-          import xml.etree.ElementTree as ET
-          import glob
-
-          files = glob.glob('coverage/coverage-shard-*.xml')
-          if not files:
-              print('No coverage files found')
-              exit(0)
-
-          # Use first file as base
-          base = ET.parse(files[0])
-          base_root = base.getroot()
-
-          # Merge others
-          for f in files[1:]:
-              tree = ET.parse(f)
-              for pkg in tree.findall('.//package'):
-                  base_root.find('.//packages').append(pkg)
-
-          base.write('coverage.xml')
-          print(f'Combined {len(files)} coverage reports')
-          "
-          ls -la coverage*.xml || true
+          # UNION the shards, do not concatenate them.
+          #
+          # This used to parse the 8 per-shard XMLs and append their <package>
+          # elements into one tree. That produced a coverage.xml with 8 entries
+          # per file — one per shard, each holding only that shard's hits — and
+          # nothing ever OR'd the per-line counts. Sonar resolved the duplicate
+          # keys to a single arbitrary shard, so lines covered by tests in a
+          # different shard were reported UNCOVERED, and new_coverage came out
+          # far below the truth (CIRISAgent#1116: edge_runtime.py lines 314-316
+          # and 330 were covered by shards 1-6 and scored as uncovered).
+          #
+          # `coverage combine` is what actually merges: it unions line hits and
+          # arc/branch data, which the XML append could not do at all.
+          shopt -s nullglob
+          files=(coverage/coverage-data-shard-*)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::error::No coverage data files found — every shard's data is missing."
+            exit 1
+          fi
+          echo "Combining ${#files[@]} shard data file(s):"
+          printf '  %s\n' "${files[@]}"
+          # A shard whose data is missing must be LOUD: a silently absent shard
+          # is exactly the failure mode that produced the wrong number before.
+          if [ ${#files[@]} -ne 8 ]; then
+            echo "::warning::Expected 8 shard data files, found ${#files[@]} — coverage is understated."
+          fi
+          coverage combine "${files[@]}"
+          coverage xml            # [xml] output = coverage.xml in .coveragerc
+          coverage report --format=total | sed 's/^/Combined line coverage: /'
+          ls -la coverage.xml
 
       - name: Download all duration artifacts
         uses: actions/download-artifact@v7

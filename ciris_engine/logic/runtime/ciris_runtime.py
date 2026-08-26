@@ -87,6 +87,8 @@ from .shutdown_continuity import (
     update_identity_with_shutdown_reference,
 )
 
+from ciris_engine.schemas.services.attestation import AttestationGateOutcome
+
 logger = logging.getLogger(__name__)
 
 # Keep single domain for backwards compatibility (tests)
@@ -1626,7 +1628,24 @@ class CIRISRuntime(ServicePropertyMixin):
 
         logger.info("Awaiting startup attestation (15s budget) before processor start...")
         try:
-            await auth_service.await_attestation_ready()
+            outcome = await auth_service.await_attestation_ready()
+            if isinstance(outcome, AttestationGateOutcome) and outcome.is_breach():
+                # The gate no longer raises on a latency breach, so the receipts
+                # have to be driven off the returned outcome instead. Without
+                # this the wedged-verifier case — the one this whole path exists
+                # for — would log "complete" and dump nothing.
+                self._log_attestation_failure_receipts(
+                    auth_service,
+                    RuntimeError(f"Startup attestation SLO breach: {outcome.value}"),
+                )
+                logger.warning(
+                    "Startup attestation breached its latency budget (%s) — starting the "
+                    "processor anyway (DEGRADED). batch_context still refuses to build a "
+                    "thought without an attestation result, so nothing runs unattested. "
+                    "Receipts above are a fileable ciris_verify issue.",
+                    outcome.value,
+                )
+                return
             logger.info("Startup attestation complete — processor cleared to start.")
         except Exception as e:
             # Receipts first: this stays a fileable ciris_verify issue.

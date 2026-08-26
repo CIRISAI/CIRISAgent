@@ -16,23 +16,27 @@ no UI and no way into the setup wizard.
 """
 
 import asyncio
+from typing import Dict
 
 import pytest
 
 from ciris_engine.logic.services.infrastructure.authentication.attestation.verifier_runner import (
     attestation_deadline_seconds,
+    startup_attestation_budget_seconds,
 )
 from ciris_engine.logic.services.infrastructure.authentication.service import (
     ATTESTATION_GATE_GRACE_SECONDS,
     AuthenticationService,
     _attestation_gate_deadline,
 )
+from ciris_engine.schemas.services.attestation import AttestationGateOutcome
 
 
 def test_gate_deadline_outlasts_the_runner_deadline(monkeypatch: pytest.MonkeyPatch) -> None:
     """The whole defect in one assertion."""
     monkeypatch.delenv("CIRIS_STARTUP_ATTESTATION_BUDGET_SECONDS", raising=False)
-    assert _attestation_gate_deadline() > attestation_deadline_seconds(), (
+    budget = startup_attestation_budget_seconds()
+    assert _attestation_gate_deadline(budget) > attestation_deadline_seconds(), (
         "the gate must not expire while the runner is still producing the "
         "degraded result it was told to wait for"
     )
@@ -48,9 +52,9 @@ def test_gate_deadline_tracks_a_late_budget_override(monkeypatch: pytest.MonkeyP
     mobile_main sets during startup — the Android log read 'exceeded the 20s
     budget' on a runtime that had explicitly asked for 45."""
     monkeypatch.setenv("CIRIS_STARTUP_ATTESTATION_BUDGET_SECONDS", "45")
-    assert _attestation_gate_deadline() == 45.0 + ATTESTATION_GATE_GRACE_SECONDS
+    assert _attestation_gate_deadline(startup_attestation_budget_seconds()) == 45.0 + ATTESTATION_GATE_GRACE_SECONDS
     monkeypatch.setenv("CIRIS_STARTUP_ATTESTATION_BUDGET_SECONDS", "7")
-    assert _attestation_gate_deadline() == 7.0 + ATTESTATION_GATE_GRACE_SECONDS
+    assert _attestation_gate_deadline(startup_attestation_budget_seconds()) == 7.0 + ATTESTATION_GATE_GRACE_SECONDS
 
 
 class _Svc:
@@ -59,7 +63,7 @@ class _Svc:
     def __init__(self, task: asyncio.Task, started_at: float) -> None:
         self._attestation_task = task
         self._attestation_started_at = started_at
-        self._attestation_stage_timings: dict = {}
+        self._attestation_stage_timings: Dict[str, float] = {}
         self._attestation_slo_breach_logged = False
 
     # The real reporter, so the stand-in exercises the shipped logging path.
@@ -134,3 +138,51 @@ async def test_slow_but_successful_attestation_is_not_an_error(
 
     await AuthenticationService.await_attestation_ready(svc)  # must not raise
     assert svc._attestation_slo_breach_logged, "a breach must still be reported"
+
+
+def test_a_short_explicit_budget_is_honoured_exactly(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Refresh and audit paths pass budgets as short as 0.05s. They are not
+    racing the runner's degrade, so the grace must not silently stretch them
+    to the global deadline — a caller asking for 0.1s must not wait ~25s."""
+    monkeypatch.delenv("CIRIS_STARTUP_ATTESTATION_BUDGET_SECONDS", raising=False)
+    for short in (0.05, 0.1, 0.5):
+        assert _attestation_gate_deadline(short) == short
+
+
+@pytest.mark.asyncio
+async def test_breach_outcome_is_reported_to_the_caller(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The gate no longer raises, so the outcome is the ONLY channel telling
+    the runtime to dump receipts. Without it the wedged-verifier case logs
+    'complete' and files nothing."""
+    monkeypatch.setenv("CIRIS_STARTUP_ATTESTATION_BUDGET_SECONDS", "1")
+
+    async def _never_finishes_in_time() -> str:
+        await asyncio.sleep(30)
+        return "late"
+
+    loop = asyncio.get_event_loop()
+    task = loop.create_task(_never_finishes_in_time())
+    svc = _Svc(task, loop.time() - 600)
+
+    outcome = await AuthenticationService.await_attestation_ready(svc)
+    assert outcome is AttestationGateOutcome.SLO_BREACH_PENDING
+    assert outcome.is_breach()
+
+    task.cancel()
+
+
+@pytest.mark.asyncio
+async def test_clean_run_reports_ready() -> None:
+    """A healthy attestation must not look like a breach."""
+
+    async def _done() -> str:
+        return "ok"
+
+    loop = asyncio.get_event_loop()
+    task = loop.create_task(_done())
+    await task
+    svc = _Svc(task, loop.time())
+
+    outcome = await AuthenticationService.await_attestation_ready(svc)
+    assert outcome is AttestationGateOutcome.READY
+    assert not outcome.is_breach()

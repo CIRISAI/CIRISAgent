@@ -129,10 +129,25 @@ important one.
    agent's controls along exactly this axis and is the document to read against any
    implementation claim here before relying on it. Two concrete corrections landed in this pass:
    - **D19** described `ToolDMAGuidance(requires_approval=True)` as "the partner-role financial-tool
-     gate". It gates nothing ([#942](https://github.com/CIRISAI/CIRISAgent/issues/942)).
+     gate". At the time it gated nothing. **[#942](https://github.com/CIRISAI/CIRISAgent/issues/942)
+     has since landed and it is now a real control**: `ThoughtProcessor._enforce_tool_approval`
+     (`logic/processors/core/thought_processor/main.py:257`) runs as Phase 4.9, fail-closed on
+     every axis — no envelope, wrong issuer kind, or tool absent from `granted_tools` all deny —
+     and rewrites the action to DEFER. It sits after conscience deliberately, so a conscience
+     cannot override an authorization denial. What remains ungated is every *other* tool
+     ([#905](https://github.com/CIRISAI/CIRISAgent/issues/905)).
    - **D23** said WA escalations are recorded with "the human's signed response", named by "Ed25519
-     public-key hash". The resolution signature is a formatted string that nothing reads
-     ([#944](https://github.com/CIRISAI/CIRISAgent/issues/944)).
+     public-key hash". The resolution signature was a formatted string that nothing read.
+     **[#944](https://github.com/CIRISAI/CIRISAgent/issues/944) has since landed**: resolutions are
+     hybrid-signed (Ed25519 + ML-DSA-65) and verified before any state change
+     (`wise_authority/service.py` `sign_deferral_resolution` / `_verify_resolution:749`, called at
+     `:811`). Signing with the *owner's own* key rather than the node's delegate stays blocked on
+     CIRISServer#342.
+
+   > Both corrections above were themselves stale for a period: the code closed the gap and this
+   > file went on conceding it. Prose that concedes a hole which no longer exists is its own
+   > hazard — someone will design around it. `tools/check_evidence.py` guards the evidence TSV
+   > against drift in both directions but does not read prose, which is why these survived.
 2. **The substrate-enforced facet table is credited by citation, not by CI.** The
    CIRISConformance evidence is real and was run against the published wheels, but nothing in this
    repo re-checks it on each change. Until the CI lane in the TODO above exists, a wheel-matrix

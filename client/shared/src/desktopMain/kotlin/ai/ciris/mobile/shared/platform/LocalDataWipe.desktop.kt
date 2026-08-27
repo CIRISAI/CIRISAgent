@@ -3,23 +3,32 @@ package ai.ciris.mobile.shared.platform
 import java.io.File
 
 /**
+ * Generated state a node writes into its home. Everything here is recreated on
+ * the next boot; nothing here is authored by a human.
+ *
+ * This list is what makes a checkout-mode reset safe. It is deliberately an
+ * ALLOW-LIST: an unknown directory is left alone, because the cost of missing
+ * one is a stale file and the cost of guessing wrong is someone's source tree.
+ */
+private val GENERATED_STATE = listOf(
+    ".env",
+    "ceg",
+    "claim_pin",
+    "config",
+    "data",
+    "data_archive",
+    "identity",
+    "keys",
+    "logs",
+    "secrets",
+    "startup_python_hashes.json",
+)
+
+/**
  * Desktop wipe target, resolved the way the BACKEND resolves it.
  *
  * Mirrors `ciris_engine.logic.utils.path_resolution.get_ciris_home()`:
- *
- *   /app (CIRIS-Manager-managed)  ->  $CIRIS_HOME  ->  the dev checkout when
- *   running from a source tree  ->  ~/ciris (installed)
- *
- * The dev-checkout case is the one that matters and the one an earlier version
- * of this file omitted. `get_ciris_home()` returns the CURRENT DIRECTORY when it
- * is a git checkout, so a desktop client run from source has its home INSIDE the
- * repo. Resolving to `~/ciris` there would have deleted a completely unrelated
- * installed agent while leaving the active node fully configured — a reset that
- * destroys the wrong data and then reports success.
- *
- * `$CIRIS_DATA_DIR` was also consulted, and is not part of the backend's rule at
- * all: it names a subdirectory, so honouring it would delete `data/` and leave
- * `.env` and `identity/` behind — a half-wipe that still reads as configured.
+ *   /app (managed) -> $CIRIS_HOME -> the dev checkout -> ~/ciris (installed)
  */
 private fun resolveNodeHome(): File? {
     if (File("/app/agent").isDirectory || File("/app/.ciris_manager").isDirectory) {
@@ -27,7 +36,6 @@ private fun resolveNodeHome(): File? {
     }
     System.getenv("CIRIS_HOME")?.takeIf { it.isNotBlank() }?.let { return File(it) }
 
-    // Dev checkout: walk up looking for the repo markers the launcher uses.
     var dir: File? = File(System.getProperty("user.dir", "."))
     repeat(5) {
         val d = dir ?: return@repeat
@@ -38,33 +46,60 @@ private fun resolveNodeHome(): File? {
     return System.getProperty("user.home")?.let { File(it, "ciris") }
 }
 
-/**
- * Does this directory actually look like a CIRIS home?
- *
- * The backstop for every resolution mistake, present and future. Recursive
- * deletion of a path derived from environment guesswork is worth exactly one
- * cheap sanity check: if none of these markers are here, we are not looking at a
- * node's home and must not delete it, whatever the resolver said.
- */
 private fun looksLikeCirisHome(dir: File): Boolean =
-    File(dir, ".env").exists() ||
-        File(dir, "identity").isDirectory ||
-        File(dir, "data").isDirectory ||
-        File(dir, "keys").isDirectory
+    GENERATED_STATE.any { File(dir, it).exists() }
 
+/**
+ * Erase local node state.
+ *
+ * TWO MODES, and the distinction is the whole safety story.
+ *
+ * When the home is a DEDICATED directory (`$CIRIS_HOME`, `~/ciris`, `/app`),
+ * the directory itself is state and is removed whole.
+ *
+ * When the home is a SOURCE CHECKOUT — which `get_ciris_home()` returns for a
+ * desktop client launched from a repo — the directory is NOT ours to delete. It
+ * holds tracked source and uncommitted work, and a previous revision of this
+ * file would have recursively deleted all of it: the checkout has `.env` and
+ * `data/`, so the marker check waved it through. Deleting a developer's
+ * repository is a far worse outcome than the stale-config bug this function
+ * exists to fix.
+ *
+ * So a checkout is wiped ENTRY BY ENTRY from [GENERATED_STATE], and never as a
+ * whole. `.git` is the discriminator, and it is also checked directly as a
+ * belt: no path containing a `.git` directory is ever recursively deleted,
+ * regardless of how it was resolved.
+ */
 actual fun wipeLocalData(): Boolean {
     val home = resolveNodeHome() ?: return false
-    if (!home.exists()) return true // already absent is the state we want
+    if (!home.exists()) return true
 
     if (!looksLikeCirisHome(home)) {
-        // Refuse rather than guess. The caller surfaces this to the user instead
-        // of restarting into an unchanged node.
-        println("[LocalDataWipe] refusing to delete ${home.absolutePath} — no CIRIS home markers")
+        println("[LocalDataWipe] refusing ${home.absolutePath} — no CIRIS state markers")
         return false
+    }
+
+    val isCheckout = File(home, ".git").exists() ||
+        (File(home, "main.py").exists() && File(home, "ciris_engine").isDirectory)
+
+    if (isCheckout) {
+        // Selective: only what the node generated.
+        var ok = true
+        for (name in GENERATED_STATE) {
+            val f = File(home, name)
+            if (!f.exists()) continue
+            runCatching { if (f.isDirectory) f.deleteRecursively() else f.delete() }
+            if (f.exists()) {
+                println("[LocalDataWipe] could not remove ${f.absolutePath}")
+                ok = false
+            }
+        }
+        println("[LocalDataWipe] checkout mode: wiped generated state under ${home.absolutePath}, ok=$ok")
+        return ok
     }
 
     runCatching { home.deleteRecursively() }
     val gone = !home.exists()
-    println("[LocalDataWipe] ${home.absolutePath} gone=$gone")
+    println("[LocalDataWipe] dedicated home ${home.absolutePath} gone=$gone")
     return gone
 }

@@ -114,18 +114,39 @@ def test_provisioning_runs_before_edge_init(
     )
 
 
-def test_edge_is_told_to_use_the_node_identity(
+@pytest.mark.asyncio
+async def test_edge_does_NOT_yet_carry_the_node_identity(
     monkeypatch: pytest.MonkeyPatch, calls: Dict[str, Any], engine: Any, tmp_path: Path
 ) -> None:
-    """Provisioning alone changes nothing unless edge is told to carry it."""
+    """Provisioned, deliberately not carried — and this must stay true until the
+    actor/node accessor split lands.
+
+    `get_federation_address()` returns `_edge.signer_key_id()`, and the runtime
+    treats that as the ACTOR everywhere: consent attestation resolves the
+    attesting key from it, AccordMetrics passes it as consent_attesting_key_id,
+    and edge-init calls `register_self_federation_key("agent", key_id, ...)`.
+
+    Passing `use_node_identity=True` before splitting those accessors would
+    register the NODE key as an `agent` and stamp actor-authored rows with the
+    node identity — re-fusing the two roles CC 3.4.7.3 Clause A separates, while
+    looking like adoption. This test stops someone flipping it back on without
+    doing the split first.
+    """
     from ciris_engine.logic.runtime.edge_runtime import initialize_edge_runtime
 
     _install_fake_substrate(monkeypatch, calls, "ciris-agent-bootstrap-node")
     initialize_edge_runtime(tmp_path / "identity")
 
+    # Provisioning DID run — the node key is minted and the owner-binding moved.
+    assert "provision_node_identity" in calls["order"]
+
     kwargs = calls["edge_kwargs"]
-    assert kwargs.get("use_node_identity") is True
-    assert kwargs.get("node_identity_dir") == str(tmp_path / "identity")
+    assert "use_node_identity" not in kwargs, (
+        "the edge must keep the ACTOR transport identity until "
+        "get_federation_address() has an actor/node counterpart"
+    )
+    assert "node_identity_dir" not in kwargs
+
 
 
 def test_older_wheel_does_not_pass_unknown_kwargs(

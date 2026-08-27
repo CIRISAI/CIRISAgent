@@ -101,6 +101,10 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
     # Idempotent: every boot after the first re-opens and re-registers the same
     # row, so it is called unconditionally.
     node_key_id: Optional[str] = None
+    # Bound here, not inside the branch below: it is read again at the
+    # init_edge_runtime call, and "defined only on the path that also sets
+    # node_key_id" is an invariant a reader has to reconstruct rather than see.
+    federation_identity_dir: Optional[Path] = None
     try:
         import ciris_server as _cs_prov  # type: ignore[import-not-found, import-untyped, unused-ignore]
 
@@ -127,7 +131,22 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
             # exist until after the call below. Asked upstream whether provisioning
             # can resolve it from (alias, identity_dir); it already opens that
             # keystore.
-            node_key_id = _provision(get_federation_alias(), str(identity_dir))
+            # NOT `identity_dir`. That parameter is the RETICULUM identity path
+            # (`<home>/data/edge/edge_identity.rid`) and is a different thing
+            # from the federation keystore. The persist Engine is constructed
+            # with get_identity_dir(), and the folded server derives its keystore
+            # from `<home>/identity` — get_identity_dir()'s own docstring says
+            # "Both must resolve to the SAME directory".
+            #
+            # Provisioning into <home>/data/edge would therefore either fail to
+            # resolve the existing actor, or mint a SECOND node key that the
+            # later server fold never opens — a key that exists, is registered,
+            # and signs nothing, which is the half-measure shape this whole cut
+            # is about. The identity directory is always <home>/identity.
+            from ciris_engine.logic.utils.path_resolution import get_identity_dir
+
+            federation_identity_dir = get_identity_dir()  # <home>/identity
+            node_key_id = _provision(get_federation_alias(), str(federation_identity_dir))
             logger.info("[NODE-KEY] node identity provisioned: %s", node_key_id)
     except Exception as _prov_exc:  # noqa: BLE001
         # Fail-closed is the substrate's job here, not ours: a provisioning failure
@@ -242,11 +261,37 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
             agent_mode=agent_mode_value,
             enable_transport=_delivery_on,
         )
+        # NOT PASSING use_node_identity YET — deliberately, and this is the
+        # whole reason the node key is provisioned but not yet carried.
+        #
+        # `get_federation_address()` returns `_edge.signer_key_id()`, and the
+        # runtime treats that value as the ACTOR everywhere: consent attestation
+        # resolves the attesting key from it, AccordMetrics passes it as
+        # consent_attesting_key_id, and the post-init block below calls
+        # `register_self_federation_key("agent", key_id, ...)`.
+        #
+        # Flipping the edge to the node identity without splitting those
+        # accessors would therefore register the NODE key as an `agent` and
+        # stamp actor-authored consent and attestations with the node identity —
+        # re-fusing precisely the two roles CC 3.4.7.3 Clause A separates, while
+        # appearing to adopt the split. Admission would then reject those rows,
+        # or worse, accept them under a wrong derived id.
+        #
+        # The substrate's own FSD says this state is safe: until the engine
+        # signer swaps, "the node keeps the actor's transport identity and its
+        # existing topology, which is the pre-split behaviour". So we mint and
+        # register the node key now (idempotent, and it moves the owner-binding),
+        # and carry it only once `get_federation_address()` has an actor/node
+        # counterpart. Tracked at CIRISAgent#1119.
         if node_key_id is not None:
-            # Only when provisioning actually ran: on an older wheel these kwargs
-            # do not exist and would TypeError the whole boot.
-            _edge_kwargs["use_node_identity"] = True
-            _edge_kwargs["node_identity_dir"] = str(identity_dir)
+            logger.info(
+                "[NODE-KEY] node identity %s provisioned in %s; edge still carries the "
+                "ACTOR transport identity until the actor/node accessor split lands "
+                "(CIRISAgent#1119) — flipping it now would register the node key as an "
+                "agent and stamp actor-authored rows with it.",
+                node_key_id,
+                federation_identity_dir,
+            )
         edge = init_edge_runtime(
             engine,
             str(identity_path),

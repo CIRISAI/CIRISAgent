@@ -1,6 +1,7 @@
 package ai.ciris.mobile.shared.ui.screens
 
 import ai.ciris.mobile.shared.localization.localizedString
+import ai.ciris.mobile.shared.platform.testableWithHandler
 import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.platform.TestAutomation
 import ai.ciris.mobile.shared.platform.getOAuthProviderName
@@ -452,7 +453,14 @@ fun LoginScreen(
                                     )
                                     showResetConfirm = true
                                 }
-                                .testable("btn_login_reset_device")
+                                // testableWithHandler, not testable: `testable` only
+                            // TAGS. The tag appeared in /tree so the link looked
+                            // automatable, but the test server had no action to
+                            // invoke — a driven click returned (False, coords) and
+                            // no UI test could exercise the reset flow at all.
+                            .testableWithHandler("btn_login_reset_device") {
+                                showResetConfirm = true
+                            }
                         )
                     }
 
@@ -517,7 +525,13 @@ fun LoginScreen(
                                 showResetConfirm = false
                                 onResetSetup()
                             },
-                            modifier = Modifier.testable("btn_reset_device_confirm"),
+                            // Same reason as the link above: TextButton handles
+                            // its own click, so the test server needs a registered
+                            // handler or the reset flow stays undrivable.
+                            modifier = Modifier.testableWithHandler("btn_reset_device_confirm") {
+                                showResetConfirm = false
+                                onResetSetup()
+                            },
                         ) {
                             Text(localizedString("mobile.login_reset_device"))
                         }
@@ -525,7 +539,9 @@ fun LoginScreen(
                     dismissButton = {
                         TextButton(
                             onClick = { showResetConfirm = false },
-                            modifier = Modifier.testable("btn_reset_device_cancel"),
+                            modifier = Modifier.testableWithHandler("btn_reset_device_cancel") {
+                                showResetConfirm = false
+                            },
                         ) {
                             Text(localizedString("mobile.login_reset_device_cancel"))
                         }

@@ -1895,19 +1895,50 @@ fun CIRISApp(
                         }
                     },
                     onResetSetup = {
-                        // 2.9.2 — graceful escape hatch: clear local state
-                        // and bounce to setup so a legitimate new owner
-                        // can claim the device. Mirrors the existing
-                        // settings-screen reset flow.
-                        platformLog(TAG, "[INFO][onResetSetup] User initiated device reset from observer-blocked recovery")
+                        // ERASE, because that is what the dialog promises:
+                        // "This will erase all local data and return to the setup
+                        // wizard. This cannot be undone."
+                        //
+                        // This used to call logout() and nothing else. The node
+                        // kept its .env and database, so getSetupStatus still
+                        // reported configExists=true/firstRun=false, the app
+                        // returned to Login instead of the wizard, and the next
+                        // Google sign-in failed 403 auth.oauth.no_local_identity
+                        // — signed in fine, node had no identity linked to that
+                        // account. The user was told "data wiped" and had no way
+                        // to see that nothing had been.
+                        //
+                        // The authenticated reset (POST /v1/system/data/reset-account)
+                        // is AuthAdminDep-gated and therefore unreachable here:
+                        // having no token is why this screen is showing. So the
+                        // wipe is client-side, deleting the app's own state.
+                        platformLog(TAG, "[INFO][onResetSetup] User initiated device reset — wiping local data")
                         observerBlocked = false
                         loginErrorMessage = null
                         interactViewModel.resetState()
-                        settingsViewModel.logout {
+
+                        val wiped = ai.ciris.mobile.shared.platform.wipeLocalData()
+                        platformLog(TAG, "[INFO][onResetSetup] wipeLocalData -> $wiped")
+
+                        if (!wiped) {
+                            // Say so rather than restarting into an unchanged
+                            // node and letting the user rediscover it as a login
+                            // failure — the exact loop this fix removes.
+                            loginErrorMessage =
+                                "Reset did not complete: local data could not be erased. " +
+                                "Reinstalling the app clears it."
                             currentAccessToken = null
                             startupViewModel.retry()
                             checkingFirstRun = false
                             currentScreen = Screen.Startup
+                        } else {
+                            settingsViewModel.logout {
+                                currentAccessToken = null
+                                // Full process restart: the running node still
+                                // holds the deleted config in memory, so only a
+                                // restart makes the next boot a real first run.
+                                ai.ciris.mobile.shared.platform.AppRestarter.restartApp()
+                            }
                         }
                     },
                     connectionStatus = serverConnectionViewModel.connectionStatus.collectAsState().value,

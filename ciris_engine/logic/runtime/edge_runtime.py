@@ -997,6 +997,15 @@ def get_federation_address() -> Optional[str]:
 
 
 def reset_edge_runtime() -> None:
-    """Test-only: clear the singleton. Production code MUST NOT call this."""
-    global _edge
+    """Test-only: clear the singleton. Production code MUST NOT call this.
+
+    Clears the cached actor/node ids too. `get_federation_address()` now returns
+    `_actor_key_id` BEFORE it looks at `_edge`, so leaving them set would make a
+    reset runtime keep answering with the previous run's actor id instead of
+    None — a stale identity that survives exactly the teardown meant to remove
+    it, and one that only shows up as cross-test bleed.
+    """
+    global _edge, _actor_key_id, _node_key_id
     _edge = None
+    _actor_key_id = None
+    _node_key_id = None

@@ -7,6 +7,7 @@ import platform.CoreFoundation.kCFAllocatorDefault
 import platform.Foundation.CFBridgingRetain
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSHomeDirectory
+import platform.Foundation.NSUserDefaults
 import platform.Security.SecItemDelete
 import platform.Security.errSecItemNotFound
 import platform.Security.errSecSuccess
@@ -52,6 +53,17 @@ actual fun wipeLocalData(): Boolean {
 
     // errSecItemNotFound means there was nothing stored — already the goal.
     if (status != errSecSuccess && status != errSecItemNotFound) ok = false
+
+    // 3. The remembered Apple account. AppleSignInHelper persists
+    //    `appleSignInUserId` in UserDefaults (AppleSignInHelper.swift:158) and
+    //    drives silentSignIn from it. Leaving it means a "wiped" device still
+    //    silently re-authenticates as the previous owner on next launch — the
+    //    node is fresh, the account is not, which is the same
+    //    signed-in-but-no-local-identity mismatch that started this whole thread.
+    runCatching {
+        NSUserDefaults.standardUserDefaults.removeObjectForKey("appleSignInUserId")
+        NSUserDefaults.standardUserDefaults.synchronize()
+    }.onFailure { ok = false }
 
     return ok
 }

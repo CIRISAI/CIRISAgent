@@ -216,3 +216,32 @@ def test_provisioning_failure_is_not_swallowed(
         initialize_edge_runtime(tmp_path / "identity")
 
     assert calls["order"] == [], "edge must not init when provisioning failed"
+
+
+@pytest.mark.asyncio
+async def test_reset_clears_the_cached_identities(
+    monkeypatch: pytest.MonkeyPatch, calls: Dict[str, Any], engine: Any, tmp_path: Path
+) -> None:
+    """A reset runtime must not keep answering with the previous run's actor id.
+
+    `get_federation_address()` returns `_actor_key_id` BEFORE it checks `_edge`,
+    so clearing only `_edge` left a stale identity surviving the teardown meant
+    to remove it — visible only as cross-test bleed, which is the kind of thing
+    that gets blamed on the test that observes it rather than the reset that
+    caused it.
+    """
+    from ciris_engine.logic.runtime.edge_runtime import (
+        get_federation_address,
+        get_node_key_id,
+        initialize_edge_runtime,
+        reset_edge_runtime,
+    )
+
+    _install_fake_substrate(monkeypatch, calls, "ciris-agent-bootstrap-node")
+    initialize_edge_runtime(tmp_path / "identity")
+    assert get_node_key_id() is not None
+
+    reset_edge_runtime()
+
+    assert get_federation_address() is None, "actor id survived the reset"
+    assert get_node_key_id() is None, "node id survived the reset"

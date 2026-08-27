@@ -185,11 +185,17 @@ fun DebugLogsBlock(
                         fontSize = 9.sp,
                         fontFamily = FontFamily.Monospace,
                         color = MaterialTheme.colorScheme.onSurface,
+                        // testable() BEFORE verticalScroll: onGloballyPositioned
+                        // reports the node's size at its own point in the chain,
+                        // so registering inside the scroll captured the CONTENT
+                        // height -- 17952px for a full bundle. /tree then showed
+                        // an element taller than any screen, and automation
+                        // aiming at its centre would target y~10000.
                         modifier = Modifier
                             .heightIn(max = 220.dp)
+                            .testable("txt_debug_bundle")
                             .verticalScroll(rememberScrollState())
-                            .padding(8.dp)
-                            .testable("txt_debug_bundle"),
+                            .padding(8.dp),
                     )
                 }
             }

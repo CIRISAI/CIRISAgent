@@ -1895,62 +1895,61 @@ fun CIRISApp(
                         }
                     },
                     onResetSetup = {
-                        // ERASE, because that is what the dialog promises:
-                        // "This will erase all local data and return to the setup
-                        // wizard. This cannot be undone."
+                        // ERASE, because that is what the dialog promises: "This will erase
+                        // all local data and return to the setup wizard. This cannot be
+                        // undone." It used to call logout() and nothing else, so the node
+                        // kept its .env and database, the app returned to Login instead of
+                        // the wizard, and the next Google sign-in failed 403
+                        // auth.oauth.no_local_identity. The user was told "data wiped" with
+                        // no way to see that nothing had been.
                         //
-                        // This used to call logout() and nothing else. The node
-                        // kept its .env and database, so getSetupStatus still
-                        // reported configExists=true/firstRun=false, the app
-                        // returned to Login instead of the wizard, and the next
-                        // Google sign-in failed 403 auth.oauth.no_local_identity
-                        // — signed in fine, node had no identity linked to that
-                        // account. The user was told "data wiped" and had no way
-                        // to see that nothing had been.
-                        //
-                        // The authenticated reset (POST /v1/system/data/reset-account)
-                        // is AuthAdminDep-gated and therefore unreachable here:
-                        // having no token is why this screen is showing. So the
-                        // wipe is client-side, deleting the app's own state.
+                        // The authenticated reset (POST /v1/system/data/reset-account) is
+                        // AuthAdminDep-gated and unreachable here: having no token is WHY
+                        // this screen is showing. So the wipe is client-side.
                         platformLog(TAG, "[INFO][onResetSetup] User initiated device reset — wiping local data")
                         observerBlocked = false
                         loginErrorMessage = null
                         interactViewModel.resetState()
 
-                        val wiped = ai.ciris.mobile.shared.platform.wipeLocalData()
-                        platformLog(TAG, "[INFO][onResetSetup] wipeLocalData -> $wiped")
+                        // OFF THE UI THREAD. Every actual does synchronous filesystem work —
+                        // recursive deletes across databases, logs and downloaded models — and
+                        // this callback runs on Compose's main thread. On a populated install
+                        // that freezes the reset screen for seconds and can trip an Android
+                        // ANR before any feedback appears, which reads as the reset hanging
+                        // rather than working.
+                        coroutineScope.launch {
+                            val wiped = withContext(Dispatchers.Default) {
+                                ai.ciris.mobile.shared.platform.wipeLocalData()
+                            }
+                            platformLog(TAG, "[INFO][onResetSetup] wipeLocalData -> $wiped")
 
-                        if (!wiped) {
-                            // Say so rather than restarting into an unchanged
-                            // node and letting the user rediscover it as a login
-                            // failure — the exact loop this fix removes.
-                            loginErrorMessage =
-                                "Reset did not complete: local data could not be erased. " +
-                                "Reinstalling the app clears it."
-                            currentAccessToken = null
-                            startupViewModel.retry()
-                            checkingFirstRun = false
-                            currentScreen = Screen.Startup
-                        } else {
-                            settingsViewModel.logout {
+                            if (!wiped) {
+                                // Say so rather than restarting into an unchanged node and
+                                // letting the user rediscover it as a login failure — the
+                                // exact loop this fix removes.
+                                loginErrorMessage =
+                                    "Reset did not complete: local data could not be erased. " +
+                                        "Reinstalling the app clears it."
                                 currentAccessToken = null
-                                // STOP THE BACKEND FIRST on desktop.
-                                //
-                                // AppRestarter.restartApp() is exitProcess(0) there,
-                                // and the Python node is a CHILD PROCESS we launched
-                                // — exiting the UI does not take it with us. It would
-                                // keep serving from open handles to files we just
-                                // deleted, and the next launch would reconnect to a
-                                // still-healthy configured node instead of entering
-                                // first-run. pythonRuntime.shutdown() destroys it
-                                // (destroy, wait 5s, destroyForcibly).
-                                //
-                                // On mobile the runtime is in-process, so the restart
-                                // is the teardown.
-                                if (ai.ciris.mobile.shared.platform.isDesktop()) {
-                                    runCatching { pythonRuntime.shutdown() }
+                                startupViewModel.retry()
+                                checkingFirstRun = false
+                                currentScreen = Screen.Startup
+                            } else {
+                                settingsViewModel.logout {
+                                    currentAccessToken = null
+                                    // STOP THE BACKEND FIRST on desktop. restartApp() is
+                                    // exitProcess(0) there, and the Python node is a CHILD
+                                    // PROCESS — exiting the UI does not take it with us. It
+                                    // would keep serving from open handles to files we just
+                                    // deleted, and the next launch would reconnect to a
+                                    // still-healthy configured node instead of first-run.
+                                    // On mobile the runtime is in-process, so the restart IS
+                                    // the teardown.
+                                    if (ai.ciris.mobile.shared.platform.isDesktop()) {
+                                        runCatching { pythonRuntime.shutdown() }
+                                    }
+                                    ai.ciris.mobile.shared.platform.AppRestarter.restartApp()
                                 }
-                                ai.ciris.mobile.shared.platform.AppRestarter.restartApp()
                             }
                         }
                     },

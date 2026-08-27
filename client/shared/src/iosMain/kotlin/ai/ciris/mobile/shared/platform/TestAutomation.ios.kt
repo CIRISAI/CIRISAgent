@@ -122,6 +122,27 @@ actual fun Modifier.testableClickable(tag: String, text: String?, onClick: () ->
 actual fun Modifier.testableWithHandler(tag: String, onClick: () -> Unit): Modifier {
     if (TestAutomation.isEnabled()) {
         TestAutomation.registerClickHandler(tag, onClick)
+        // ALSO register the element, matching the Android and desktop actuals.
+        //
+        // /tree is populated from the element registry, not from testTag, so
+        // registering only a handler made a control invokable but INVISIBLE to
+        // automation. Switching call sites from `testable` to
+        // `testableWithHandler` — done to make the reset flow and the new
+        // diagnostics buttons drivable — therefore removed those same controls
+        // from the iOS tree, trading one half of automation for the other.
+        //
+        // The identical defect existed on Android and was fixed there; this is
+        // its twin, and it went unnoticed because iOS has no build on the host
+        // that found the Android one.
+        return this.testTag(tag).onGloballyPositioned { coords ->
+            val bounds = coords.boundsInWindow()
+            TestAutomation.registerElement(
+                tag,
+                bounds.left.toInt(), bounds.top.toInt(),
+                bounds.width.toInt(), bounds.height.toInt(),
+                null
+            )
+        }
     }
     return this.testTag(tag)
 }

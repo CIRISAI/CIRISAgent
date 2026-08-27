@@ -49,10 +49,20 @@ actual fun saveDebugBundle(fileName: String, content: String): String? {
             // A name the user can search for, not a URI they cannot act on.
             "Downloads/$fileName"
         } else {
-            // Pre-Q: the public Downloads dir is directly writable.
-            @Suppress("DEPRECATION")
-            val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-            dir.mkdirs()
+            // Pre-Q (API 24-28): the app-specific external dir, NOT public
+            // Downloads.
+            //
+            // Public Downloads needs WRITE_EXTERNAL_STORAGE on these versions —
+            // which this app does not declare, and which would have to be
+            // requested at runtime from an Activity that the screens using this
+            // (a login that cannot exchange a token, a startup that never
+            // completes) may not have. The write would simply throw and the
+            // Download button would silently do nothing.
+            //
+            // The app-specific dir needs no permission, and on API 24-28 it is
+            // genuinely browsable — scoped storage only hides it from Android 11
+            // onward, which is exactly why the Q+ branch above exists.
+            val dir = ctx.getExternalFilesDir(null) ?: ctx.filesDir
             val out = File(dir, fileName)
             out.writeText(content)
             out.absolutePath

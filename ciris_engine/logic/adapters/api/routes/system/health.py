@@ -878,7 +878,10 @@ async def get_federation_address(_auth: AuthObserverDep) -> SuccessResponse[Fede
     if not edge_runtime.is_available():
         return SuccessResponse(data=FederationAddressResponse(available=False, key_id=None, edge_version=None))
 
-    key_id = edge_runtime.get_federation_address()
+    # TRANSPORT: this is the address an operator hands a peer to dial us, so it
+    # must be the NODE key the edge actually carries — not the actor id, which
+    # authors rows and is not a routable identity.
+    key_id = edge_runtime.get_node_key_id() or edge_runtime.get_federation_address()
     edge_version: Optional[str] = None
     try:
         edge = edge_runtime.get_edge()

@@ -175,6 +175,15 @@ class SampleConfigurableAdapter:
                 "code_challenge_method": "S256",
             }
         )
+        # Restore the loopback PORT placeholder that urlencode escaped.
+        #
+        # The default redirect is `http://127.0.0.1:{PORT}/callback`, and the
+        # launcher substitutes {PORT} only after it binds the callback server.
+        # urlencode turns it into %7BPORT%7D, which no launcher looks for — so
+        # the provider would receive a callback whose port is the literal string
+        # {PORT}. Caller-supplied URIs stay fully encoded; only OUR OWN token is
+        # put back.
+        params = params.replace("%7BPORT%7D", "{PORT}")
         oauth_url = f"{base_url}/oauth/authorize?{params}&code_challenge={{CHALLENGE}}"
 
         logger.info(f"Generated OAuth URL for state: {state[:8]}...")

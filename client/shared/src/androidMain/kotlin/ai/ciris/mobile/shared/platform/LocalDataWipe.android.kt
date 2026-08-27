@@ -13,6 +13,14 @@ private const val TAG = "LocalDataWipe"
  * rebuilt here — two spellings of that path is how a wipe half-succeeds.
  */
 actual fun wipeLocalData(): Boolean {
+    // Symmetry with desktop. Always false on a phone today, but the predicate is
+    // the feature's one boundary and reading it here keeps that true if the
+    // platform set ever changes.
+    if (isManagedDeployment()) {
+        Log.w(TAG, "refusing: managed deployment")
+        return false
+    }
+
     var ok = true
 
     // 1. The node's state: .env (the CIRIS_CONFIGURED flag the setup check reads),

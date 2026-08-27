@@ -54,7 +54,10 @@ def engine(tmp_path: Path) -> Iterator[Any]:
 
 class _FakeEdge:
     def signer_key_id(self) -> str:
-        return "ciris-agent-bootstrap-deadbeef"
+        # The NODE key: this is what the real edge returns once
+        # use_node_identity is on, which is precisely why authorship must not
+        # be read from here.
+        return "ciris-agent-bootstrap-node"
 
     def local_addr(self) -> str:
         return "0.0.0.0:4242"
@@ -115,37 +118,62 @@ def test_provisioning_runs_before_edge_init(
 
 
 @pytest.mark.asyncio
-async def test_edge_does_NOT_yet_carry_the_node_identity(
+async def test_edge_carries_the_node_identity(
     monkeypatch: pytest.MonkeyPatch, calls: Dict[str, Any], engine: Any, tmp_path: Path
 ) -> None:
-    """Provisioned, deliberately not carried — and this must stay true until the
-    actor/node accessor split lands.
+    """The last open item of the split: the wire identity is the node's.
 
-    `get_federation_address()` returns `_edge.signer_key_id()`, and the runtime
-    treats that as the ACTOR everywhere: consent attestation resolves the
-    attesting key from it, AccordMetrics passes it as consent_attesting_key_id,
-    and edge-init calls `register_self_federation_key("agent", key_id, ...)`.
-
-    Passing `use_node_identity=True` before splitting those accessors would
-    register the NODE key as an `agent` and stamp actor-authored rows with the
-    node identity — re-fusing the two roles CC 3.4.7.3 Clause A separates, while
-    looking like adoption. This test stops someone flipping it back on without
-    doing the split first.
+    Edge takes its Reticulum transport identity from the engine's signer capsule,
+    and in the embedded fold the edge is already running when compose folds onto
+    it — so this call is the only place it can be set. With it, the lightnet door
+    (`is_bootstrap()` kinds, attributed via the link's transport identity) is
+    walked by a key with no agency to exercise.
     """
     from ciris_engine.logic.runtime.edge_runtime import initialize_edge_runtime
 
     _install_fake_substrate(monkeypatch, calls, "ciris-agent-bootstrap-node")
     initialize_edge_runtime(tmp_path / "identity")
 
-    # Provisioning DID run — the node key is minted and the owner-binding moved.
-    assert "provision_node_identity" in calls["order"]
+    assert calls["order"] == ["provision_node_identity", "init_edge_runtime"]
+    assert calls["edge_kwargs"].get("use_node_identity") is True
 
-    kwargs = calls["edge_kwargs"]
-    assert "use_node_identity" not in kwargs, (
-        "the edge must keep the ACTOR transport identity until "
-        "get_federation_address() has an actor/node counterpart"
+
+@pytest.mark.asyncio
+async def test_authorship_does_not_follow_the_transport(
+    monkeypatch: pytest.MonkeyPatch, calls: Dict[str, Any], engine: Any, tmp_path: Path
+) -> None:
+    """The invariant that makes carrying the node key safe.
+
+    Edge exposes ONE key accessor, `signer_key_id()`, returning whatever the
+    transport carries. Everything asking "who authored this" — consent
+    attestation, AccordMetrics' consent_attesting_key_id, the self-key
+    registration, health, my_data — goes through `get_federation_address()`.
+
+    If that still read the edge, enabling use_node_identity would register the
+    NODE key as an `agent` and stamp actor-authored rows with the node identity:
+    re-fusing the two roles CC 3.4.7.3 Clause A separates, while looking like
+    adoption. Authorship therefore comes from the engine, whose derived key id
+    the transport cannot move.
+    """
+    from ciris_engine.logic.runtime import edge_runtime
+    from ciris_engine.logic.runtime.edge_runtime import (
+        get_federation_address,
+        get_node_key_id,
+        initialize_edge_runtime,
     )
-    assert "node_identity_dir" not in kwargs
+
+    _install_fake_substrate(monkeypatch, calls, "ciris-agent-bootstrap-node")
+    initialize_edge_runtime(tmp_path / "identity")
+
+    actor = get_federation_address()
+    node = get_node_key_id()
+
+    assert edge_runtime._edge is not None
+    assert (
+        edge_runtime._edge.signer_key_id() != actor
+    ), "get_federation_address() must not return the transport identity"
+    assert node == "ciris-agent-bootstrap-node"
+    assert actor is not None and actor != node, "actor and node must be distinct ids"
 
 
 

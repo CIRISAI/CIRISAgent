@@ -25,15 +25,30 @@ private val GENERATED_STATE = listOf(
 )
 
 /**
+ * Entries from [GENERATED_STATE] that are TRACKED SOURCE in a checkout and must
+ * never be deleted there.
+ *
+ * `config/` is generated state in a dedicated home and repository source in a
+ * checkout — it holds `config/essential.yaml` and
+ * `config/environment_variables.md`. The same name means two different things
+ * depending on where the home is, which is exactly the kind of ambiguity that
+ * turns a reset into data loss.
+ *
+ * A dedicated home is still wiped whole, so nothing is missed there; this
+ * exclusion applies only to the selective checkout path.
+ */
+private val TRACKED_IN_CHECKOUT = setOf("config")
+
+/**
  * Desktop wipe target, resolved the way the BACKEND resolves it.
  *
  * Mirrors `ciris_engine.logic.utils.path_resolution.get_ciris_home()`:
  *   /app (managed) -> $CIRIS_HOME -> the dev checkout -> ~/ciris (installed)
  */
 private fun resolveNodeHome(): File? {
-    if (File("/app/agent").isDirectory || File("/app/.ciris_manager").isDirectory) {
-        return File("/app")
-    }
+    // Kept so the resolver still MIRRORS get_ciris_home() exactly; wipeLocalData
+    // refuses on managed before it ever gets here.
+    if (isManagedDeployment()) return File("/app")
     System.getenv("CIRIS_HOME")?.takeIf { it.isNotBlank() }?.let { return File(it) }
 
     var dir: File? = File(System.getProperty("user.dir", "."))
@@ -71,6 +86,15 @@ private fun looksLikeCirisHome(dir: File): Boolean =
  * regardless of how it was resolved.
  */
 actual fun wipeLocalData(): Boolean {
+    // Managed deployments are not ours to wipe. `/app` belongs to CIRIS-Manager,
+    // the operator owns its lifecycle, and the person in front of this UI is not
+    // necessarily the person entitled to destroy it. Refusing is reported to the
+    // user rather than silently doing nothing.
+    if (isManagedDeployment()) {
+        println("[LocalDataWipe] refusing: CIRIS-Manager-managed deployment (/app)")
+        return false
+    }
+
     val home = resolveNodeHome() ?: return false
     if (!home.exists()) return true
 
@@ -86,6 +110,10 @@ actual fun wipeLocalData(): Boolean {
         // Selective: only what the node generated.
         var ok = true
         for (name in GENERATED_STATE) {
+            if (name in TRACKED_IN_CHECKOUT) {
+                println("[LocalDataWipe] skipping $name — tracked source in a checkout")
+                continue
+            }
             val f = File(home, name)
             if (!f.exists()) continue
             runCatching { if (f.isDirectory) f.deleteRecursively() else f.delete() }

@@ -30,6 +30,23 @@ logger = logging.getLogger(__name__)
 
 _edge: Optional[Any] = None
 
+# THE ACTOR/NODE SPLIT (CC 3.4.7.3, CIRISAgent#1119).
+#
+# Two identities, two accessors, because one accessor is how they got fused.
+# Edge exposes exactly ONE key accessor -- `signer_key_id()` -- and once it
+# carries the node identity that accessor returns the NODE key. Everything in
+# this runtime that asks "who are we" for AUTHORSHIP (consent attestations,
+# AccordMetrics' consent_attesting_key_id, the self-key registration, health,
+# my_data) went through `get_federation_address()`, which read exactly that.
+#
+# So the actor id is taken from the ENGINE instead, which is unaffected by what
+# the transport carries: `local_derived_key_id()` is persist's own
+# `derive_key_id(<alias>, <pubkey>)` = `<label>-<fingerprint>`, documented as
+# "the value that FKs to federation_keys(key_id) ... use this for anything the
+# substrate later verifies".
+_actor_key_id: Optional[str] = None
+_node_key_id: Optional[str] = None
+
 
 def _edge_disabled() -> bool:
     """Edge init skipped under pytest or explicit CIRIS_EDGE_DISABLED=true."""
@@ -261,37 +278,37 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
             agent_mode=agent_mode_value,
             enable_transport=_delivery_on,
         )
-        # NOT PASSING use_node_identity YET — deliberately, and this is the
-        # whole reason the node key is provisioned but not yet carried.
+        # CARRY THE NODE IDENTITY ON THE WIRE (CC 3.4.7.3, CIRISAgent#1119).
         #
-        # `get_federation_address()` returns `_edge.signer_key_id()`, and the
-        # runtime treats that value as the ACTOR everywhere: consent attestation
-        # resolves the attesting key from it, AccordMetrics passes it as
-        # consent_attesting_key_id, and the post-init block below calls
-        # `register_self_federation_key("agent", key_id, ...)`.
+        # This is the last open item of the split. Edge takes its Reticulum
+        # transport identity from the engine's signer capsule, and in the
+        # embedded fold the edge is already running when compose folds onto it —
+        # so it is set HERE, by this call, and nowhere else.
         #
-        # Flipping the edge to the node identity without splitting those
-        # accessors would therefore register the NODE key as an `agent` and
-        # stamp actor-authored consent and attestations with the node identity —
-        # re-fusing precisely the two roles CC 3.4.7.3 Clause A separates, while
-        # appearing to adopt the split. Admission would then reject those rows,
-        # or worse, accept them under a wrong derived id.
+        # Safe now, and it was NOT safe before the accessor split above. Edge has
+        # exactly one key accessor, `signer_key_id()`, and it returns whatever the
+        # transport carries. Everything that asks "who authored this" used to read
+        # it, so flipping this flag would have registered the node key as an
+        # `agent` and stamped actor-authored consent and attestations with the
+        # node identity — re-fusing the two roles Clause A separates, while
+        # looking like adoption. Authorship now comes from
+        # `engine.local_derived_key_id()`, which the transport cannot move.
         #
-        # The substrate's own FSD says this state is safe: until the engine
-        # signer swaps, "the node keeps the actor's transport identity and its
-        # existing topology, which is the pre-split behaviour". So we mint and
-        # register the node key now (idempotent, and it moves the owner-binding),
-        # and carry it only once `get_federation_address()` has an actor/node
-        # counterpart. Tracked at CIRISAgent#1119.
+        # What changes on the wire: the lightnet door (`is_bootstrap()` kinds,
+        # attributed via the link's transport identity) is now walked by a key
+        # with no agency to exercise, which is the point of the split.
         if node_key_id is not None:
+            _edge_kwargs["use_node_identity"] = True
+            # The directory the key was provisioned into — edge opens it with
+            # `open_existing` and refuses when absent, so this must be the
+            # federation identity dir, never the Reticulum one.
+            _edge_kwargs["node_identity_dir"] = str(federation_identity_dir)
             logger.info(
-                "[NODE-KEY] node identity %s provisioned in %s; edge still carries the "
-                "ACTOR transport identity until the actor/node accessor split lands "
-                "(CIRISAgent#1119) — flipping it now would register the node key as an "
-                "agent and stamp actor-authored rows with it.",
+                "[NODE-KEY] edge will carry node identity %s from %s (actor authorship unaffected)",
                 node_key_id,
                 federation_identity_dir,
             )
+
         edge = init_edge_runtime(
             engine,
             str(identity_path),
@@ -324,10 +341,30 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
 
     _edge = edge
 
+    global _actor_key_id, _node_key_id
+    _node_key_id = node_key_id
+
     try:
-        key_id = edge.signer_key_id()
+        # AUTHORSHIP id, from the engine — NOT edge.signer_key_id(), which is the
+        # transport identity and becomes the node key once use_node_identity is on.
+        try:
+            _actor_key_id = engine.local_derived_key_id()
+        except Exception as _actor_exc:  # noqa: BLE001 — older persist
+            _actor_key_id = None
+            logger.debug("local_derived_key_id unavailable: %s", _actor_exc)
+
+        key_id = _actor_key_id or edge.signer_key_id()
         logger.info(
-            "Edge runtime initialized: key_id=%s identity=%s listen=%s peers=%d",
+            "Edge runtime initialized: actor=%s node=%s transport=%s identity=%s listen=%s peers=%d",
+            _actor_key_id,
+            _node_key_id,
+            edge.signer_key_id(),
+            identity_path,
+            listen_addr,
+            len(bootstrap_peers),
+        )
+        logger.debug(
+            "Edge runtime detail: key_id=%s identity=%s listen=%s peers=%d",
             key_id,
             identity_path,
             listen_addr,
@@ -350,7 +387,16 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
             # takes a SignedKeyRecord JSON, so that call silently no-op'd and
             # left the signer unregistered → lens receive_and_persist rejected
             # every trace with `verify_unknown_key`.
+            # `key_id` here is the ACTOR id (engine-sourced above), never
+            # edge.signer_key_id(). register_self_federation_key registers THIS
+            # ENGINE's local pubkey, so the row is the actor's either way — but
+            # passing the transport id would LABEL the row with the node key,
+            # registering a node-only identity as an `agent`: exactly the
+            # cohabitation CC 3.4.7.3 Clause A forbids.
             derived_kid = engine.register_self_federation_key("agent", key_id, None, None, None)
+            if derived_kid and derived_kid != _actor_key_id:
+                # persist's own derivation is authoritative over ours.
+                _actor_key_id = derived_kid
             logger.info("Federation self key registered with persist: %s (derived %s)", key_id, derived_kid)
         except Exception as reg_exc:
             if "conflict" in str(reg_exc).lower():
@@ -903,8 +949,40 @@ def is_available() -> bool:
     return _edge is not None
 
 
+def get_node_key_id() -> Optional[str]:
+    """The NODE key id — carriage: transport, replication, consent, de-admission.
+
+    `<alias>-node`, minted by `provision_node_identity` at boot and registered
+    `identity_type = node`. None on a substrate older than 0.5.189, or before
+    edge init has run.
+
+    Distinct from [get_federation_address] on purpose: CC 3.4.7.3 Clause A
+    forbids `node` cohabiting with `agent` on one key, and a single accessor
+    serving both is how they were fused in the first place. Anything the
+    substrate verifies as AUTHORSHIP wants the actor id, not this.
+    """
+    return _node_key_id
+
+
 def get_federation_address() -> Optional[str]:
-    """Return the local agent's federation key_id, or None if Edge unavailable."""
+    """The ACTOR key id — authorship: traces, attestations, on_behalf_of.
+
+    Named for its history, not its meaning: every existing caller means "which
+    key authored this", and they must keep getting the actor even after the edge
+    starts carrying the node identity on the wire.
+
+    Sourced from the engine (`local_derived_key_id`), NOT from
+    `edge.signer_key_id()`. Edge has exactly one key accessor, and it returns
+    whatever the transport carries — so reading the actor from it silently
+    returned the NODE key the moment `use_node_identity` was enabled, which
+    would have registered the node key as an `agent` and stamped actor-authored
+    consent and attestations with the node identity.
+
+    Falls back to the edge signer only when the engine cannot answer (older
+    persist), where the two are still the same key anyway.
+    """
+    if _actor_key_id is not None:
+        return _actor_key_id
     if _edge is None:
         return None
     try:

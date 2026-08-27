@@ -1,6 +1,7 @@
 package ai.ciris.mobile.shared.ui.components
 
 import ai.ciris.mobile.shared.platform.copyToClipboard
+import ai.ciris.mobile.shared.platform.isDebugExportAvailable
 import ai.ciris.mobile.shared.platform.saveDebugBundle
 import ai.ciris.mobile.shared.platform.testable
 import ai.ciris.mobile.shared.platform.testableWithHandler
@@ -60,6 +61,14 @@ fun DebugLogsBlock(
     initiallyExpanded: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
+    // Desktop and mobile only. On web there is nothing to export — the node is
+    // remote and the log buffer is deliberately not populated there — and under
+    // CIRIS-Manager the operator owns the logs by a better route, on a
+    // deployment where the person at the UI is not necessarily entitled to the
+    // node's diagnostics. Rendering nothing beats rendering an empty bundle that
+    // looks like diagnostics which ran and found nothing.
+    if (!isDebugExportAvailable()) return
+
     var expanded by remember { mutableStateOf(initiallyExpanded) }
     var result by remember { mutableStateOf<String?>(null) }
 

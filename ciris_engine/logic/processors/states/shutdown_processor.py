@@ -379,7 +379,11 @@ class ShutdownProcessor(BaseProcessor):
             # Still processing - return status
             # CRITICAL: Query with self.agent_occurrence_id, not shutdown_task.agent_occurrence_id
             # After thought ownership transfer (line 140-154), thoughts belong to this occurrence
-            thoughts = persistence.get_thoughts_by_task_id(self.shutdown_task.task_id, self.agent_occurrence_id)
+            # current_task, not self.shutdown_task: same task_id by construction, and it
+            # is already known non-None here (guarded above), so this needs no narrowing
+            # assert. The occurrence id stays self.agent_occurrence_id -- that half is
+            # the point of the comment above.
+            thoughts = persistence.get_thoughts_by_task_id(current_task.task_id, self.agent_occurrence_id)
             thought_statuses = [(t.thought_id, t.status.value) for t in thoughts] if thoughts else []
 
             return ShutdownResult(

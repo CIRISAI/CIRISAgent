@@ -16,6 +16,7 @@ For production OAuth flows:
 - Consider using authorization code flow with PKCE (recommended)
 """
 
+from urllib.parse import urlencode
 import logging
 import secrets
 from typing import Any, Dict, List, Optional, Tuple
@@ -152,17 +153,29 @@ class SampleConfigurableAdapter:
         # authorizing against the wrong callback.
         loopback_redirect_uri = redirect_uri or f"http://{self.LOOPBACK_REDIRECT_HOST}:{{PORT}}/callback"
 
-        # Generate mock OAuth URL (in production, use real OAuth provider URL)
-        oauth_url = (
-            f"{base_url}/oauth/authorize"
-            f"?client_id={self.MOCK_CLIENT_ID}"
-            f"&response_type=code"
-            f"&redirect_uri={loopback_redirect_uri}"
-            f"&scope={'+'.join(self.MOCK_SCOPES)}"
-            f"&state={state}"
-            f"&code_challenge={{CHALLENGE}}"  # PKCE challenge placeholder
-            f"&code_challenge_method=S256"
+        # Generate mock OAuth URL (in production, use real OAuth provider URL).
+        #
+        # urlencode, not f-string concatenation. Interpolating redirect_uri raw
+        # was harmless while it was a fixed loopback literal; now that a CALLER's
+        # value is honoured, a redirect containing a query or fragment — say
+        # `https://client.example/callback?source=ciris` — would have its `?` and
+        # `&` become separators of the OUTER url, so the provider receives a
+        # truncated redirect and rejects it as a mismatch. Same construction the
+        # home_assistant adapter uses.
+        #
+        # code_challenge stays a literal placeholder: it is substituted later,
+        # and encoding the braces here would corrupt the token.
+        params = urlencode(
+            {
+                "client_id": self.MOCK_CLIENT_ID,
+                "response_type": "code",
+                "redirect_uri": loopback_redirect_uri,
+                "scope": " ".join(self.MOCK_SCOPES),
+                "state": state,
+                "code_challenge_method": "S256",
+            }
         )
+        oauth_url = f"{base_url}/oauth/authorize?{params}&code_challenge={{CHALLENGE}}"
 
         logger.info(f"Generated OAuth URL for state: {state[:8]}...")
         return oauth_url

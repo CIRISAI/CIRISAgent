@@ -1934,9 +1934,22 @@ fun CIRISApp(
                         } else {
                             settingsViewModel.logout {
                                 currentAccessToken = null
-                                // Full process restart: the running node still
-                                // holds the deleted config in memory, so only a
-                                // restart makes the next boot a real first run.
+                                // STOP THE BACKEND FIRST on desktop.
+                                //
+                                // AppRestarter.restartApp() is exitProcess(0) there,
+                                // and the Python node is a CHILD PROCESS we launched
+                                // — exiting the UI does not take it with us. It would
+                                // keep serving from open handles to files we just
+                                // deleted, and the next launch would reconnect to a
+                                // still-healthy configured node instead of entering
+                                // first-run. pythonRuntime.shutdown() destroys it
+                                // (destroy, wait 5s, destroyForcibly).
+                                //
+                                // On mobile the runtime is in-process, so the restart
+                                // is the teardown.
+                                if (ai.ciris.mobile.shared.platform.isDesktop()) {
+                                    runCatching { pythonRuntime.shutdown() }
+                                }
                                 ai.ciris.mobile.shared.platform.AppRestarter.restartApp()
                             }
                         }

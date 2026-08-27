@@ -900,16 +900,16 @@ jobs:
             # makes it impossible for them is exactly what we lack. Assert instead.
             EXPECTED=$(grep -oE 'packageVersion\s*=\s*"[^"]+"' desktopApp/build.gradle.kts | grep -oE '[0-9][^"]*' | head -1)
             [ -n "$EXPECTED" ] || { echo "::error::could not read packageVersion from desktopApp/build.gradle.kts"; exit 1; }
-            
+
             shopt -s nullglob
             jars=(desktopApp/build/compose/jars/CIRIS-*.jar)
             [ ${#jars[@]} -eq 1 ] || { echo "::error::expected exactly ONE desktop jar, found ${#jars[@]}: ${jars[*]:-none}. A leftover artifact would be copied by the glob."; exit 1; }
-            
+
             case "${jars[0]}" in
               *"$EXPECTED"*) echo "desktop jar is fresh: $(basename "${jars[0]}") matches packageVersion $EXPECTED" ;;
               *) echo "::error::desktop jar $(basename "${jars[0]}") does not carry packageVersion $EXPECTED — this is a STALE artifact, not a fresh build"; exit 1 ;;
             esac
-            
+
             cp desktopApp/build/compose/jars/CIRIS-*.jar ../ciris_engine/desktop_app/
             echo "Desktop JAR:"
             ls -lh ../ciris_engine/desktop_app/

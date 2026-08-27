@@ -153,8 +153,7 @@ def _check_substrate_client_version() -> list[str]:
         g = re.search(r'install "ciris-server==([^"]+)"', gradle.read_text())
         if g and g.group(1) != pin.group(1):
             errors.append(
-                f"androidApp/build.gradle ciris-server pin: {g.group(1)} != "
-                f"{pin.group(1)} (requirements.txt)"
+                f"androidApp/build.gradle ciris-server pin: {g.group(1)} != " f"{pin.group(1)} (requirements.txt)"
             )
 
     return errors

@@ -1,8 +1,8 @@
 # Build Information
-Code Hash: 8f5bf9d8bcf7
-Build Time: 2026-08-21T19:11:19.704386
-Git Commit: c26cb366a61849e98ceffa973bbdf2c47e2fb0fc
-Git Branch: fix/byok-wizard-automation
+Code Hash: 591723f464a7
+Build Time: 2026-08-27T18:19:32.810269
+Git Commit: 2fda435c28d6eedd947fc1e2bb23869ad45ef349
+Git Branch: fix/sonar-reliability-security
 
 This hash is a SHA-256 of all Python source files in the repository.
 It provides a deterministic version identifier based on the actual code content.

@@ -216,9 +216,7 @@ def bump_version(bump_type: str):
     # Compose's packageVersion must be plain MAJOR.MINOR.PATCH — a stage suffix
     # like "-stable" makes the packaging task fail, which is why display_version
     # is used rather than the full version string.
-    desktop_gradle_file = (
-        Path(__file__).parent.parent.parent / "client" / "desktopApp" / "build.gradle.kts"
-    )
+    desktop_gradle_file = Path(__file__).parent.parent.parent / "client" / "desktopApp" / "build.gradle.kts"
     if desktop_gradle_file.exists():
         with open(desktop_gradle_file, "r") as f:
             desktop_content = f.read()
@@ -252,10 +250,8 @@ def bump_version(bump_type: str):
         )
         with open(desktop_platform_file, "w") as f:
             f.write(platform_content)
-        print(
-            f"  Updated DESKTOP_VERSION_FALLBACK: "
-            f"{old_fb.group(1) if old_fb else '?'} -> {display_version}"
-        )
+        previous = old_fb.group(1) if old_fb else "?"
+        print(f"  Updated DESKTOP_VERSION_FALLBACK: {previous} -> {display_version}")
 
     # Update client Python version files (android + iOS)
     display_version = f"{major}.{minor}.{patch}"

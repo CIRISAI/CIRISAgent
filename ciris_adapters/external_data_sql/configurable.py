@@ -310,9 +310,7 @@ class SQLConfigurableAdapter:
             # file or two users' connection settings interleaved. Truncating the
             # destination in place was safe only while this ran inline on the
             # event loop; moving it to a worker thread removed that guarantee.
-            tmp_fd, tmp_name = tempfile.mkstemp(
-                dir=str(config_file.parent), prefix=".sql_config-", suffix=".tmp"
-            )
+            tmp_fd, tmp_name = tempfile.mkstemp(dir=str(config_file.parent), prefix=".sql_config-", suffix=".tmp")
             try:
                 with os.fdopen(tmp_fd, "w") as f:
                     json.dump(config_dict, f, indent=2)

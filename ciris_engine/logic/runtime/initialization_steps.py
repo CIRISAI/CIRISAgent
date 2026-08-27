@@ -93,8 +93,9 @@ async def verify_database_integrity() -> bool:
     We probe with a cheap `task_list` call to confirm the engine is healthy.
     """
     try:
-        from ciris_engine.logic.persistence.models.graph import get_persist_engine
         import json
+
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
 
         engine = get_persist_engine()
         if engine is None:

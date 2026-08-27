@@ -59,6 +59,34 @@ private fun isSourceCheckout(home: File): Boolean =
         (File(home, "main.py").exists() && File(home, "ciris_engine").isDirectory)
 
 /**
+ * True when the backend this client is driving is one we could own locally.
+ *
+ * Resolved the way `PythonRuntime.desktop` resolves it: `CIRIS_API_URL`, else
+ * `http://localhost:8080`. That default is the common case — the client boots
+ * the node itself — but the variable is a supported way to point the client at
+ * a node on another host, and then nothing on this disk belongs to the session
+ * the user is looking at.
+ *
+ * Loopback is the test because it is the one the *node* would have to satisfy
+ * for our home resolution to describe it. A remote node keeps its state on its
+ * own disk under its own `CIRIS_HOME`; we cannot resolve it, wipe it, or know
+ * whether the local home we CAN resolve belongs to some other node entirely.
+ */
+/**
+ * `127.x.y.z` as an ADDRESS, not as a prefix. `127.0.0.1.evil.com` is a
+ * perfectly ordinary hostname that a prefix test reads as loopback.
+ */
+private val LOOPBACK_IPV4 = Regex("""^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$""")
+
+private fun ownsLocalBackend(): Boolean {
+    val url = System.getenv("CIRIS_API_URL")?.takeIf { it.isNotBlank() } ?: return true
+    val host = runCatching { java.net.URI(url).host }.getOrNull()
+        ?: return false // unparseable: assume not ours
+    val h = host.trim().removePrefix("[").removeSuffix("]").lowercase()
+    return h == "localhost" || h == "::1" || h == "0.0.0.0" || LOOPBACK_IPV4.matches(h)
+}
+
+/**
  * Erase local node state.
  *
  * ONE PATH: the home directory itself is NEVER deleted, anywhere.
@@ -77,6 +105,10 @@ private fun isSourceCheckout(home: File): Boolean =
  *      `CIRIS_HOME` pointed at `$HOME` or any shared directory would take
  *      everything in it with it.
  *
+ * A fourth was the same error one level up: the home resolved correctly and
+ * belonged to a node we were not talking to, because `CIRIS_API_URL` pointed
+ * the client somewhere else. Hence `ownsLocalBackend()`.
+ *
  * The mode bought nothing that justified that. Removing only what the node
  * generates reaches the identical end state — no `.env`, so the next boot is a
  * genuine first run — and leaves no input, resolved or misresolved, that can
@@ -88,6 +120,14 @@ actual fun wipeLocalData(): Boolean {
     // and the person at this UI is not necessarily entitled to destroy it.
     if (isManagedDeployment()) {
         println("[LocalDataWipe] refusing: CIRIS-Manager-managed deployment (/app)")
+        return false
+    }
+
+    // A client pointed at a remote node owns nothing here. Wiping would leave
+    // the node the user is actually using untouched while destroying the state
+    // of whatever local node happens to share this disk.
+    if (!ownsLocalBackend()) {
+        println("[LocalDataWipe] refusing: CIRIS_API_URL points at a node we do not own")
         return false
     }
 

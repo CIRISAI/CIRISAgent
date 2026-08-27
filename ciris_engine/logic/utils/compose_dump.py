@@ -1555,13 +1555,26 @@ def _sig_path_for(dump_path: str) -> str:
 
 
 def sign_dump(out_path: str, arm: str) -> str:
-    """Sign the emitted dump with the node's key — ``ciris_server.sign_object``.
+    """Sign the emitted dump with the ACTOR key — ``ciris_server.sign_object``.
+
+    Not "the node's key", which is what this said before ciris-server 0.5.189.
+    That was the fused-key era, when one key answered two questions: the embedded
+    fold handed the substrate CIRISAgent's own bootstrap key
+    (``identity_type = agent``) and it served as the node identity too. CC 3.4.7.3
+    forbids that cohabitation, and the substrate now mints a separate
+    ``<alias>-node`` key for carriage (transport, replication, consent,
+    de-admission) at boot.
+
+    ``sign_object`` rides the engine's composed signer, which is the ACTOR key —
+    authorship, which is what a dump signature is. See
+    CIRISServer FSD/ACTOR_NODE_KEY_SPLIT.md for the three-key table.
 
     ``label`` = the arm name, and it rides INSIDE the signed manifest, so a
     dump cannot be relabelled into a different arm after the fact — for a
     campaign with hidden and visible arms that is the property that matters
     most, and it is why the label goes here rather than into a filename. The
-    signature claims only provenance: this node's key saw exactly these bytes.
+    signature claims only provenance: this agent's actor key saw exactly these
+    bytes.
 
     This is the #977 replacement for the FSD §13 ``local_sign_hybrid``
     descope: same "locally signed, not CEG-signed" honesty, but the manifest
@@ -1586,7 +1599,7 @@ def sign_dump(out_path: str, arm: str) -> str:
     except Exception as exc:  # noqa: BLE001
         raise SystemExit(
             f"--sign FAILED for {out_path}: {exc} "
-            f"(sign_object signs with the live node's key — it needs the in-process "
+            f"(sign_object signs with the live actor key — it needs the in-process "
             f"Engine + edge + federation delivery running; a bare CLI process has none)"
         )
     sig_path = _sig_path_for(out_path)
@@ -1952,7 +1965,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     dump_p.add_argument(
         "--sign",
         action="store_true",
-        help="sign the emitted JSONL with the node's key (ciris_server.sign_object, >=0.5.154); "
+        help="sign the emitted JSONL with the actor key (ciris_server.sign_object, >=0.5.154); "
         "label = the arm name, sealed inside the signed manifest so the dump cannot be relabelled. "
         "Writes <out>.sig.json. Requires --out and a live node runtime in-process.",
     )

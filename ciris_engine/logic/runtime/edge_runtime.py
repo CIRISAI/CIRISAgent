@@ -163,6 +163,31 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
     except Exception as _trace_exc:  # noqa: BLE001 — observability must never block boot
         logger.debug("ciris_server.init_tracing unavailable/failed (non-fatal): %s", _trace_exc)
 
+    # WHICH KEY THIS EDGE CARRIES (ciris-server 0.5.189, CC 3.4.7.3).
+    #
+    # The substrate now splits the fused key: the configured key is the ACTOR
+    # (`identity_type = agent`, authorship — traces, attestations, on_behalf_of),
+    # and boot mints a separate `<alias>-node` key for CARRIAGE (transport,
+    # replication, consent, de-admission). Before 0.5.189 one key did both jobs,
+    # which is how a node ran for months on the brain's key with every gate green.
+    #
+    # As of that cut every CEG row — ownership, consent, attestations — is
+    # authored by the correct key. The RETICULUM TRANSPORT identity is the one
+    # thing that still follows the engine, because edge takes it from
+    # `engine.local_signer_capsule()` and in the embedded fold the edge is already
+    # running when compose folds onto it — so it is set HERE, by this call.
+    #
+    # We cannot fix that from Python yet: `node_key::node_signer` is public in
+    # Rust for exactly this caller, but it has no PyO3 export and returns an
+    # `Arc<LocalSigner>`, not a Python object. `init_edge_runtime` takes no signer
+    # argument. Tracked at CIRISServer#492 — the ask is a flag on this call, not a
+    # key export, so the key material stays behind the substrate boundary the way
+    # `resolve_user_signer` already does.
+    #
+    # Until then this edge carries the ACTOR key's transport identity. That is the
+    # pre-split behaviour and is safe, but it means the lightnet door
+    # (`is_bootstrap()` kinds, attributed via the link's transport identity) is
+    # still walked by an agency-bearing key.
     try:
         edge = init_edge_runtime(
             engine,

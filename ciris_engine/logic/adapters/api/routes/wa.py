@@ -313,12 +313,23 @@ async def resolve_deferral(
         # TODO(CIRISServer#342): sign with the RESOLVING USER'S CEG fedID, not
         # the node's delegate key.
         #
-        # Today the node's persist key signs and the record names the owner
+        # Today the ACTOR key signs and the record names the owner
         # (`owner_key_id`, re-resolved from the federation directory at verify
         # time, never trusted from the record). That is a real delegation chain
-        # — the node key is the one the owner's fedID delegates to in order to
-        # let the agent operate at all — but it is one hop short of what this
-        # artifact should carry. For a control whose entire purpose is "a human
+        # — the owner's fedID binds that key in order to let the agent operate
+        # at all — but it is one hop short of what this artifact should carry.
+        #
+        # "Actor", not "node", since ciris-server 0.5.189 (CC 3.4.7.3): the
+        # configured key is the actor (authorship), and boot mints a separate
+        # `<alias>-node` key for carriage. The engine's composed signer — which
+        # signs this resolution — is still the actor key.
+        #
+        # The chain survives the split. `move_owner_binding_to_node_key` is
+        # additive despite the name: it builds and applies an owner-binding for
+        # the NODE key and never revokes the actor's, so `owner_of(actor_key)`
+        # still resolves and this signature still verifies against the owner.
+        # Checked in the substrate source rather than assumed, because a
+        # genuinely-moved binding would have silently broken verification here. For a control whose entire purpose is "a human
         # authorized this consequential action", the difference between *signed
         # by the delegate, naming the human* and *signed by the human* is
         # exactly what an external auditor will ask about.

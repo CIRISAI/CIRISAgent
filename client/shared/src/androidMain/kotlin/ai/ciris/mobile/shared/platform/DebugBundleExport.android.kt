@@ -2,18 +2,28 @@ package ai.ciris.mobile.shared.platform
 
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.ContentValues
 import android.content.Context
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import java.io.File
 
 /**
- * Android debug-bundle export.
+ * Android debug-bundle export — into the shared Downloads collection.
  *
- * Writes into the app's external files dir rather than shared Downloads: it
- * needs no runtime permission on any supported API level, survives the app
- * being stuck pre-login (which is exactly when this is used), and is reachable
- * over USB/adb and by most file managers. A share sheet was the alternative and
- * was rejected — it requires an Activity, and the login screen this must work on
- * is precisely where the app is least healthy.
+ * NOT `getExternalFilesDir()`. That resolves under
+ * `Android/data/<package>/files`, which scoped storage hides from ordinary file
+ * managers and the system document picker on Android 11+. The UI would report
+ * an absolute path as a successful "Download" that the user then cannot reach
+ * without adb — the same "it said it worked" failure this whole change exists to
+ * remove, one layer out.
+ *
+ * MediaStore rather than a share intent: this runs from screens where the app is
+ * least healthy (a login that cannot exchange a token, a startup that never
+ * completes), and a share sheet needs a live Activity. Writing a file needs only
+ * a Context, and on Android 10+ MediaStore Downloads requires no runtime
+ * permission.
  */
 private var appContext: Context? = null
 
@@ -24,10 +34,29 @@ fun initDebugBundleExport(context: Context) {
 actual fun saveDebugBundle(fileName: String, content: String): String? {
     val ctx = appContext ?: return null
     return runCatching {
-        val dir = ctx.getExternalFilesDir(null) ?: ctx.filesDir
-        val out = File(dir, fileName)
-        out.writeText(content)
-        out.absolutePath
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val values = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                put(MediaStore.MediaColumns.MIME_TYPE, "text/plain")
+                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+            }
+            val uri = ctx.contentResolver.insert(
+                MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                values,
+            ) ?: return@runCatching null
+            ctx.contentResolver.openOutputStream(uri)?.use { it.write(content.toByteArray()) }
+                ?: return@runCatching null
+            // A name the user can search for, not a URI they cannot act on.
+            "Downloads/$fileName"
+        } else {
+            // Pre-Q: the public Downloads dir is directly writable.
+            @Suppress("DEPRECATION")
+            val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            dir.mkdirs()
+            val out = File(dir, fileName)
+            out.writeText(content)
+            out.absolutePath
+        }
     }.getOrNull()
 }
 

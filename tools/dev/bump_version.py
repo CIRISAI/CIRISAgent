@@ -231,6 +231,32 @@ def bump_version(bump_type: str):
             f.write(desktop_content)
         print(f"  Updated desktop packageVersion: {old.group(1) if old else '?'} -> {display_version}")
 
+    # DESKTOP_VERSION_FALLBACK is what getAppVersion() actually returns on
+    # desktop: the Compose uber-jar builds its own manifest and carries only
+    # Main-Class, so the manifest branch never fires. The constant's comment
+    # used to say "keep in sync" — an instruction to a human, which is why it
+    # sat at 2.3.2 while builds shipped 2.9.x and the diagnostics bundle named
+    # the wrong build. Rewrite it here so the sync is nobody's job to remember.
+    desktop_platform_file = (
+        Path(__file__).parent.parent.parent
+        / "client/shared/src/desktopMain/kotlin/ai/ciris/mobile/shared/platform/Platform.desktop.kt"
+    )
+    if desktop_platform_file.exists():
+        with open(desktop_platform_file, "r") as f:
+            platform_content = f.read()
+        old_fb = re.search(r'DESKTOP_VERSION_FALLBACK\s*=\s*"([^"]+)"', platform_content)
+        platform_content = re.sub(
+            r'DESKTOP_VERSION_FALLBACK\s*=\s*"[^"]+"',
+            f'DESKTOP_VERSION_FALLBACK = "{display_version}"',
+            platform_content,
+        )
+        with open(desktop_platform_file, "w") as f:
+            f.write(platform_content)
+        print(
+            f"  Updated DESKTOP_VERSION_FALLBACK: "
+            f"{old_fb.group(1) if old_fb else '?'} -> {display_version}"
+        )
+
     # Update client Python version files (android + iOS)
     display_version = f"{major}.{minor}.{patch}"
     client_version_files = [

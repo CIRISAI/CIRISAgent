@@ -54,7 +54,19 @@ actual fun startTestAutomationServer() {
 }
 
 /**
- * Fallback version if JAR manifest is unavailable.
- * Keep in sync with mobile/androidApp/build.gradle versionName.
+ * The desktop version.
+ *
+ * Named "fallback" for history: `getAppVersion()` prefers the JAR manifest's
+ * `Implementation-Version`, but the Compose uber-jar task builds its manifest
+ * itself and carries only Main-Class, so this constant is in practice the ONLY
+ * value desktop ever reports.
+ *
+ * It used to say "keep in sync with androidApp versionName" — an instruction to
+ * a human that nobody ran. It sat at 2.3.2 while builds shipped 2.9.x, so the
+ * diagnostics bundle confidently named the wrong build, which is the one field
+ * a bundle exists to get right.
+ *
+ * `tools/dev/bump_version.py` now rewrites it, so it moves with every release
+ * and the sync is no longer anyone's job to remember.
  */
-private const val DESKTOP_VERSION_FALLBACK = "2.3.2"
+private const val DESKTOP_VERSION_FALLBACK = "2.9.41"

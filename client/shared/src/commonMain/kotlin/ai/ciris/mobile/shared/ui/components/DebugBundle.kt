@@ -40,7 +40,10 @@ object DebugBundle {
      * token-exchange error, the interact screen's connection state. They ride
      * ABOVE the logs because they are usually the answer.
      */
-    fun render(extra: Map<String, String> = emptyMap()): String = buildString {
+    fun render(extra: Map<String, String> = emptyMap()): String =
+        redactSecrets(renderRaw(extra))
+
+    private fun renderRaw(extra: Map<String, String>): String = buildString {
         appendLine("CIRIS debug bundle")
         appendLine("==================")
         appendLine()
@@ -69,6 +72,49 @@ object DebugBundle {
             .replace(":", "-").replace(" ", "_").take(24)
         return "ciris-debug-$stamp.txt"
     }
+
+    /**
+     * Patterns that must never leave the device inside a bundle.
+     *
+     * Nothing logs a credential today — this was checked, not assumed. But the
+     * bundle exists to be SENT to us: a user pastes it into an issue or mails
+     * it to support, and at that moment whatever the log buffer happened to
+     * hold becomes public. The gap between "nothing logs a secret" and "a
+     * secret cannot escape" is one future `platformLog("token=$t")` written by
+     * someone debugging at 2am, and nothing in review would flag that line as
+     * dangerous, because on its own it isn't.
+     *
+     * Narrow on purpose. A redactor that eats ordinary log text destroys the
+     * artifact's whole reason for existing, so these match credential SHAPES
+     * (a JWT, a bearer header, an explicit assignment to a secret-ish name)
+     * rather than anything that merely looks high-entropy.
+     */
+    private val SECRET_PATTERNS: List<Pair<Regex, String>> = listOf(
+        // JWTs — the shape is unmistakable and never appears in prose.
+        Regex("""eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}(\.[A-Za-z0-9_-]+)?""") to "<redacted:jwt>",
+        // Authorization headers, including the `service:TOKEN` form.
+        Regex("""(?i)\b(bearer\s+)(service:)?[A-Za-z0-9._~+/=-]{12,}""") to "$1<redacted>",
+        // name = value, where the name is one people give to secrets.
+        Regex(
+            """(?i)\b(api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|"""
+                + """auth[_-]?token|token|secret|password|passwd|client[_-]?secret)"""
+                + """(\s*["']?\s*[:=]\s*["']?)"""
+                // `token: expired` is a STATE, not a credential. Redacting it
+                // costs the reader the one fact the line carried.
+                + """(?!(?:expired|missing|present|invalid|unknown|revoked|pending|"""
+                + """refreshed|required|rejected|absent)\b)"""
+                + """([^\s"',;)}\]]{6,})"""
+        ) to "$1$2<redacted>",
+    )
+
+    /**
+     * Strip credential-shaped substrings. Internal so it can be tested directly
+     * — a redactor nobody has watched fail is not a redactor.
+     */
+    internal fun redactSecrets(text: String): String =
+        SECRET_PATTERNS.fold(text) { acc, (pattern, replacement) ->
+            pattern.replace(acc, replacement)
+        }
 
     private inline fun safely(block: () -> String): String =
         runCatching(block).getOrElse { "unknown" }

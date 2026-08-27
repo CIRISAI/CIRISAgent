@@ -78,13 +78,15 @@ private fun isSourceCheckout(home: File): Boolean =
  */
 private val LOOPBACK_IPV4 = Regex("""^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$""")
 
-private fun ownsLocalBackend(): Boolean {
-    val url = System.getenv("CIRIS_API_URL")?.takeIf { it.isNotBlank() } ?: return true
+internal fun ownsLocalBackend(apiUrl: String?): Boolean {
+    val url = apiUrl?.takeIf { it.isNotBlank() } ?: return true
     val host = runCatching { java.net.URI(url).host }.getOrNull()
         ?: return false // unparseable: assume not ours
     val h = host.trim().removePrefix("[").removeSuffix("]").lowercase()
     return h == "localhost" || h == "::1" || h == "0.0.0.0" || LOOPBACK_IPV4.matches(h)
 }
+
+private fun ownsLocalBackend(): Boolean = ownsLocalBackend(System.getenv("CIRIS_API_URL"))
 
 /**
  * Erase local node state.
@@ -132,9 +134,20 @@ actual fun wipeLocalData(): Boolean {
     }
 
     val home = resolveNodeHome() ?: return false
+    return wipeGeneratedState(home, isSourceCheckout(home))
+}
+
+/**
+ * Remove the generated entries from [home]. Never removes [home] itself.
+ *
+ * Separated from resolution so it can be tested against a real directory: the
+ * three shipped bugs in this file were all "deleted more than it should have",
+ * and that is only observable by pointing it at a populated tree and asserting
+ * what SURVIVES.
+ */
+internal fun wipeGeneratedState(home: File, checkout: Boolean): Boolean {
     if (!home.exists()) return true
 
-    val checkout = isSourceCheckout(home)
     var ok = true
     var removed = 0
 

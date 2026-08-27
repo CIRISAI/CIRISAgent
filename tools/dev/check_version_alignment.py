@@ -62,6 +62,51 @@ def check_all() -> list[str]:
                 errors.append(f"{rel_path}: {m.group(1)} != {expected}")
 
     errors.extend(_check_substrate_client_version())
+    errors.extend(_check_desktop_version_fallback(display_version))
+
+    return errors
+
+
+def _check_desktop_version_fallback(display_version: str) -> list[str]:
+    """DESKTOP_VERSION_FALLBACK is the version desktop actually reports.
+
+    Its name says fallback, which is why it was allowed to drift to 2.3.2 while
+    builds shipped 2.9.x. It is not a fallback in practice: `getAppVersion()`
+    prefers the JAR manifest, and the Compose uber-jar writes only `Main-Class`
+    into that manifest, so the constant is the ONLY value desktop ever reports.
+    A diagnostics bundle from a 2.9.40 build named 2.3.2 as its version.
+
+    The comment beside it asked a human to keep it in sync. `bump_version.py`
+    now rewrites it, but a hand-edited version would still drift silently, and
+    the failure is invisible: everything runs, the number is just wrong -- and
+    wrong specifically in the artifact people attach to bug reports.
+    """
+    errors: list[str] = []
+    platform_kt = (
+        ROOT
+        / "client"
+        / "shared"
+        / "src"
+        / "desktopMain"
+        / "kotlin"
+        / "ai"
+        / "ciris"
+        / "mobile"
+        / "shared"
+        / "platform"
+        / "Platform.desktop.kt"
+    )
+    if not platform_kt.exists():
+        return errors
+
+    m = re.search(r'DESKTOP_VERSION_FALLBACK\s*=\s*"([^"]+)"', platform_kt.read_text())
+    if m is None:
+        errors.append(
+            "Platform.desktop.kt: DESKTOP_VERSION_FALLBACK not found "
+            "(renamed? bump_version.py and this check both rewrite it by name)"
+        )
+    elif m.group(1) != display_version:
+        errors.append(f"DESKTOP_VERSION_FALLBACK: {m.group(1)} != {display_version}")
 
     return errors
 

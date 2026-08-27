@@ -11,6 +11,7 @@ import ai.ciris.mobile.shared.platform.testableClickable
 import ai.ciris.mobile.shared.ui.components.CIRISSignet
 import ai.ciris.mobile.shared.ui.components.LanguageSelector
 import ai.ciris.mobile.shared.viewmodels.ConnectionStatus
+import ai.ciris.mobile.shared.ui.components.DebugLogsBlock
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -454,6 +455,26 @@ fun LoginScreen(
                                 .testable("btn_login_reset_device")
                         )
                     }
+
+                    // Log export lives in the footer, NOT behind an error branch.
+                    //
+                    // It was error-gated first, and that was wrong. The install this was
+                    // asked for happened to show a token-exchange 503, but the state that
+                    // really strands a user is the one with NO error on screen. Someone who
+                    // cannot sign in cannot reach Settings or the logs screen either, so if
+                    // it is not here it is nowhere.
+                    //
+                    // The error rendered above is truncated to 100 chars to fit; the bundle
+                    // carries the whole thing.
+                    DebugLogsBlock(
+                        extra = mapOf(
+                            "screen" to "login",
+                            "error (full)" to (errorMessage ?: "(none on screen)"),
+                        ),
+                        modifier = Modifier
+                            .width(280.dp)
+                            .padding(top = 12.dp),
+                    )
 
                     Spacer(modifier = Modifier.height(16.dp))
 

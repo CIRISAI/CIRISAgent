@@ -317,11 +317,12 @@ private fun reportUrl(
         appendLine()
         appendLine("- context: `$context`")
         appendLine("- failure kind: `$kindLabel`")
-        appendLine("- platform: `${runCatching { getPlatform().name }.getOrDefault("unknown")}`")
-        appendLine("- app version: `${runCatching { getAppVersion() }.getOrDefault("unknown")}` " +
-            "(build `${runCatching { getAppBuildNumber() }.getOrDefault("unknown")}`)")
-        appendLine("- client version: `$CLIENT_VERSION`")
-        appendLine("- device: `${runCatching { getDeviceDebugInfo() }.getOrDefault("unknown")}`")
+        // One environment fetch, shared with the three DebugLogsBlock call
+        // sites. This was the first copy; keeping it separate meant a report
+        // filed from here and a bundle saved from the login screen could
+        // describe the same build differently, which costs a support thread
+        // its first two replies.
+        for ((k, v) in DebugBundle.environment()) appendLine("- $k: `$v`")
         appendLine()
         appendLine("<details><summary>Error detail</summary>")
         appendLine()

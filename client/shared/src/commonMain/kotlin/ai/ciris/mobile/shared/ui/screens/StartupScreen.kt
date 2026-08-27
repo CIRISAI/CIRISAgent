@@ -13,6 +13,7 @@ import ai.ciris.mobile.shared.ui.components.CIRISSignet
 import ai.ciris.mobile.shared.ui.theme.CIRISColors
 import ai.ciris.mobile.shared.viewmodels.StartupPhase
 import ai.ciris.mobile.shared.viewmodels.StartupViewModel
+import ai.ciris.mobile.shared.ui.components.DebugLogsBlock
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
@@ -379,14 +380,18 @@ fun StartupScreen(
                             modifier = Modifier.padding(bottom = 4.dp)
                         )
 
-                        // Platform-specific debug info will be provided by expect/actual
-                        val debugInfo = getDeviceDebugInfo()
-                        Text(
-                            text = debugInfo,
-                            fontSize = 10.sp,
-                            color = CIRISColors.TextDim,
-                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                            modifier = Modifier.padding(bottom = 12.dp)
+                        // Was a bare getDeviceDebugInfo() line: device string only — no
+                        // version, no build, no logs, and no route off the phone, so a user
+                        // could read it and then only retype it.
+                        //
+                        // Now the shared block, so this screen reports the same environment
+                        // in the same words as login and interact, and offers both routes out.
+                        DebugLogsBlock(
+                            extra = mapOf(
+                                "screen" to "startup",
+                                "error (full)" to error,
+                            ),
+                            modifier = Modifier.padding(bottom = 12.dp),
                         )
 
                         // Help text

@@ -13,6 +13,7 @@ import asyncio
 import json
 import logging
 import os
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, TypedDict
 
@@ -303,8 +304,28 @@ class SQLConfigurableAdapter:
         config_file.parent.mkdir(parents=True, exist_ok=True)
 
         def _write_config() -> None:
-            with open(config_file, "w") as f:
-                json.dump(config_dict, f, indent=2)
+            # Write-and-rename, not truncate-and-write. Two sessions completing
+            # at once each get their own temp file, and `os.replace` is atomic,
+            # so a reader sees one config or the other -- never a half-written
+            # file or two users' connection settings interleaved. Truncating the
+            # destination in place was safe only while this ran inline on the
+            # event loop; moving it to a worker thread removed that guarantee.
+            tmp_fd, tmp_name = tempfile.mkstemp(
+                dir=str(config_file.parent), prefix=".sql_config-", suffix=".tmp"
+            )
+            try:
+                with os.fdopen(tmp_fd, "w") as f:
+                    json.dump(config_dict, f, indent=2)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(tmp_name, config_file)
+            except BaseException:
+                # Never leave a partial file behind for the next reader to find.
+                try:
+                    os.unlink(tmp_name)
+                except OSError:
+                    pass
+                raise
 
         try:
             # Off the event loop: a synchronous write here blocks every other

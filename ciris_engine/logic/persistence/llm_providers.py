@@ -611,7 +611,9 @@ def disable_adapter_in_env(adapter_name: str) -> bool:
     adapters = read_enabled_adapters_from_env()
 
     if adapter_name not in adapters:
-        logger.info(f"Adapter '{adapter_name}' already disabled")
+        # %r escapes newlines / CR / non-printables so a crafted adapter
+        # name cannot forge log lines (CWE-117 / Sonar S5145).
+        logger.info("Adapter %r already disabled", adapter_name)
         return True
 
     adapters.remove(adapter_name)

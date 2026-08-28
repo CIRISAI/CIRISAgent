@@ -653,6 +653,7 @@ class A2AAdapter(Service):
             await agent_task
         except asyncio.CancelledError:
             logger.info("A2A adapter lifecycle cancelled")
+            raise
         finally:
             await self.stop()
 

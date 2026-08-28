@@ -102,6 +102,7 @@ class MockLLMAdapter(Service):
             await agent_task
         except asyncio.CancelledError:
             logger.info("Mock LLM adapter lifecycle cancelled")
+            raise
         finally:
             await self.stop()
 

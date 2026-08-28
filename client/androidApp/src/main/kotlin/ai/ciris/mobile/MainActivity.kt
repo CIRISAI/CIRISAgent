@@ -15,6 +15,8 @@ import ai.ciris.mobile.shared.PurchaseResultCallback
 import ai.ciris.mobile.shared.PurchaseResultType
 import ai.ciris.mobile.shared.api.CIRISApiClient
 import ai.ciris.mobile.shared.config.CIRISConfig
+import ai.ciris.mobile.shared.platform.initDebugBundleExport
+import ai.ciris.mobile.shared.platform.initLocalDataWipe
 import ai.ciris.mobile.shared.platform.AppRestarter
 import ai.ciris.mobile.shared.platform.PythonRuntime
 import ai.ciris.mobile.shared.localization.LocalizationResourceLoader
@@ -91,6 +93,13 @@ class MainActivity : ComponentActivity() {
 
         // Initialize AppRestarter for app restart functionality (used by Settings reset)
         AppRestarter.init(this, MainActivity::class.java)
+        // Debug-bundle export needs an application Context to reach external
+        // files + the clipboard. Initialised here, beside the other platform
+        // singletons, because the screens that use it (login, startup) run
+        // BEFORE anything else is wired — without this the save button would
+        // return null and read as "it didn't work" rather than "it wasn't set up".
+        initDebugBundleExport(this)
+        initLocalDataWipe(this)
 
         // Initialize URL opener for browser links
         initUrlOpener(this)

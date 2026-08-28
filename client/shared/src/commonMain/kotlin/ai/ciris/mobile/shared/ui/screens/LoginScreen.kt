@@ -1,6 +1,7 @@
 package ai.ciris.mobile.shared.ui.screens
 
 import ai.ciris.mobile.shared.localization.localizedString
+import ai.ciris.mobile.shared.platform.testableWithHandler
 import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.platform.TestAutomation
 import ai.ciris.mobile.shared.platform.getOAuthProviderName
@@ -11,6 +12,7 @@ import ai.ciris.mobile.shared.platform.testableClickable
 import ai.ciris.mobile.shared.ui.components.CIRISSignet
 import ai.ciris.mobile.shared.ui.components.LanguageSelector
 import ai.ciris.mobile.shared.viewmodels.ConnectionStatus
+import ai.ciris.mobile.shared.ui.components.DebugLogsBlock
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -451,9 +453,36 @@ fun LoginScreen(
                                     )
                                     showResetConfirm = true
                                 }
-                                .testable("btn_login_reset_device")
+                                // testableWithHandler, not testable: `testable` only
+                            // TAGS. The tag appeared in /tree so the link looked
+                            // automatable, but the test server had no action to
+                            // invoke — a driven click returned (False, coords) and
+                            // no UI test could exercise the reset flow at all.
+                            .testableWithHandler("btn_login_reset_device") {
+                                showResetConfirm = true
+                            }
                         )
                     }
+
+                    // Log export lives in the footer, NOT behind an error branch.
+                    //
+                    // It was error-gated first, and that was wrong. The install this was
+                    // asked for happened to show a token-exchange 503, but the state that
+                    // really strands a user is the one with NO error on screen. Someone who
+                    // cannot sign in cannot reach Settings or the logs screen either, so if
+                    // it is not here it is nowhere.
+                    //
+                    // The error rendered above is truncated to 100 chars to fit; the bundle
+                    // carries the whole thing.
+                    DebugLogsBlock(
+                        extra = mapOf(
+                            "screen" to "login",
+                            "error (full)" to (errorMessage ?: "(none on screen)"),
+                        ),
+                        modifier = Modifier
+                            .width(280.dp)
+                            .padding(top = 12.dp),
+                    )
 
                     Spacer(modifier = Modifier.height(16.dp))
 
@@ -496,7 +525,13 @@ fun LoginScreen(
                                 showResetConfirm = false
                                 onResetSetup()
                             },
-                            modifier = Modifier.testable("btn_reset_device_confirm"),
+                            // Same reason as the link above: TextButton handles
+                            // its own click, so the test server needs a registered
+                            // handler or the reset flow stays undrivable.
+                            modifier = Modifier.testableWithHandler("btn_reset_device_confirm") {
+                                showResetConfirm = false
+                                onResetSetup()
+                            },
                         ) {
                             Text(localizedString("mobile.login_reset_device"))
                         }
@@ -504,7 +539,9 @@ fun LoginScreen(
                     dismissButton = {
                         TextButton(
                             onClick = { showResetConfirm = false },
-                            modifier = Modifier.testable("btn_reset_device_cancel"),
+                            modifier = Modifier.testableWithHandler("btn_reset_device_cancel") {
+                                showResetConfirm = false
+                            },
                         ) {
                             Text(localizedString("mobile.login_reset_device_cancel"))
                         }

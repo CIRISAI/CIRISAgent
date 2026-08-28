@@ -86,6 +86,7 @@ class ImsgAdapter(Service):
             await agent_task
         except asyncio.CancelledError:
             logger.info("Imsg adapter lifecycle cancelled")
+            raise
         finally:
             await self.stop()
 

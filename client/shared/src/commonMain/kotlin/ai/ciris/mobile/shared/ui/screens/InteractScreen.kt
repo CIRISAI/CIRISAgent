@@ -5,6 +5,7 @@ import ai.ciris.mobile.shared.localization.localizedString
 import ai.ciris.mobile.shared.models.ActionDetails
 import ai.ciris.mobile.shared.models.ActionType
 import ai.ciris.mobile.shared.models.ChatMessage
+import ai.ciris.mobile.shared.ui.components.DebugLogsBlock
 import ai.ciris.mobile.shared.ui.components.ActionTypeIcon
 import ai.ciris.mobile.shared.ui.components.CIRISIcons
 import ai.ciris.mobile.shared.ui.components.emojiToIconOrDefault
@@ -21,6 +22,7 @@ import ai.ciris.mobile.shared.viewmodels.ModerationViewModel
 import ai.ciris.mobile.shared.viewmodels.TimelineEvent
 import ai.ciris.mobile.shared.viewmodels.TrustStatus
 import ai.ciris.mobile.shared.viewmodels.WalletStatus
+import ai.ciris.mobile.shared.platform.testableWithHandler
 import ai.ciris.mobile.shared.platform.PlatformLogger
 import ai.ciris.mobile.shared.platform.probeCellVizCapability
 import androidx.compose.animation.*
@@ -3240,42 +3242,36 @@ private fun VisualizationLegendButton(
                 color = theme.surface.copy(alpha = 0.9f),
                 shadowElevation = 4.dp,
                 modifier = Modifier
-                    .widthIn(max = 200.dp)
+                    // Widened from 200dp: the panel now carries the debug
+                    // bundle rather than a colour key, and a monospace log at
+                    // 200dp wraps into unreadable ribbons.
+                    .widthIn(max = 320.dp)
                     .padding(bottom = 8.dp)
             ) {
                 Column(
                     modifier = Modifier.padding(12.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // Title
-                    Text(
-                        text = localizedString("mobile.interact_viz_title"),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = theme.textPrimary
-                    )
-
-                    // Pipeline stages (bottom to top to match visualization)
-                    VisualizationLegendItem("THINK", Color(0xFF60A5FA), localizedString("mobile.interact_viz_think"), theme)
-                    VisualizationLegendItem("CONTEXT", Color(0xFF34D399), localizedString("mobile.interact_viz_context"), theme)
-                    VisualizationLegendItem("DMA", Color(0xFFFBBF24), localizedString("mobile.interact_viz_dma"), theme)
-                    VisualizationLegendItem("IDMA", Color(0xFFF97316), localizedString("mobile.interact_viz_idma"), theme)
-                    VisualizationLegendItem("SELECT", Color(0xFFA78BFA), localizedString("mobile.interact_viz_select"), theme)
-                    VisualizationLegendItem("ETHICS", Color(0xFF38BDF8), localizedString("mobile.interact_viz_ethics"), theme)
-                    VisualizationLegendItem("ACT", Color(0xFF4ADE80), localizedString("mobile.interact_viz_act"), theme)
-
-                    Divider(color = theme.textMuted.copy(alpha = 0.3f))
-
-                    // Graph nodes
-                    Text(
-                        text = localizedString("mobile.interact_viz_memory"),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = theme.textSecondary
-                    )
-                    VisualizationLegendItem("LOCAL", theme.textAccent, localizedString("mobile.interact_viz_local"), theme)
-                    VisualizationLegendItem("IDENTITY", theme.textSecondary, localizedString("mobile.interact_viz_identity"), theme)
-                    VisualizationLegendItem("ENVIRON", theme.statusConnected, localizedString("mobile.interact_viz_environ"), theme)
+                        // DEBUG VIEW, replacing the pipeline-colour legend (user request).
+                        //
+                        // The legend explained what the cell visualisation MEANS. That is a
+                        // nice-to-know; the screen it sits on is where a user watches a
+                        // message get no reply and no error — the exact state a field report
+                        // came in for — and from there the logs are three navigations away
+                        // through a Settings screen a disconnected app may not render.
+                        //
+                        // Same block as the login and startup screens, so a bundle from here
+                        // is comparable with a bundle from there.
+                        Text(
+                            text = "Diagnostics",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = theme.textPrimary
+                        )
+                        DebugLogsBlock(
+                            extra = mapOf("screen" to "interact"),
+                            initiallyExpanded = true,
+                        )
                 }
             }
         }
@@ -3290,7 +3286,13 @@ private fun VisualizationLegendButton(
             shape = CircleShape,
             color = theme.surface.copy(alpha = 0.70f),
             border = BorderStroke(1.dp, theme.textAccent.copy(alpha = 0.45f)),
-            modifier = Modifier.size(40.dp),
+            // Tagged so the panel behind it is reachable from automation. It
+            // carried NO test tag while it opened a colour legend, which cost
+            // nothing; now it is the only route to the diagnostics on the one
+            // screen where a user watches a message get no reply and no error.
+            modifier = Modifier
+                .size(40.dp)
+                .testableWithHandler("btn_interact_debug_toggle") { onToggle() },
         ) {
             Box(
                 contentAlignment = Alignment.Center,

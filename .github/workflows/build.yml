@@ -852,6 +852,26 @@ jobs:
         with:
           cache-read-only: false
 
+      - name: Run shared Kotlin tests
+        # The KMP client had NO automated verification in CI: this job built the
+        # jar and the APK, neither of which runs a test, and Sonar does not scan
+        # Kotlin at all. Every Kotlin defect therefore had to be caught by a
+        # human reading a diff.
+        #
+        # desktopTest is the target that runs them with real threads, which the
+        # concurrency tests need — on a single-threaded target the coroutines
+        # interleave without overlapping and a lost-update bug passes.
+        #
+        # Linux only: these are JVM tests, so the other two matrix legs would
+        # re-run identical assertions on slower runners. `shell: bash` is
+        # required — a bare `run:` is pwsh on the Windows leg, where `./gradlew`
+        # is not a command.
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          cd client
+          ./gradlew :shared:desktopTest --no-daemon
+
       - name: Build CIRIS Desktop UberJar
         # Retry-wrapped per 2.8.11 CI hardening: gradle's distribution
         # download from services.gradle.org has a 10s socket timeout by
@@ -880,16 +900,16 @@ jobs:
             # makes it impossible for them is exactly what we lack. Assert instead.
             EXPECTED=$(grep -oE 'packageVersion\s*=\s*"[^"]+"' desktopApp/build.gradle.kts | grep -oE '[0-9][^"]*' | head -1)
             [ -n "$EXPECTED" ] || { echo "::error::could not read packageVersion from desktopApp/build.gradle.kts"; exit 1; }
-            
+
             shopt -s nullglob
             jars=(desktopApp/build/compose/jars/CIRIS-*.jar)
             [ ${#jars[@]} -eq 1 ] || { echo "::error::expected exactly ONE desktop jar, found ${#jars[@]}: ${jars[*]:-none}. A leftover artifact would be copied by the glob."; exit 1; }
-            
+
             case "${jars[0]}" in
               *"$EXPECTED"*) echo "desktop jar is fresh: $(basename "${jars[0]}") matches packageVersion $EXPECTED" ;;
               *) echo "::error::desktop jar $(basename "${jars[0]}") does not carry packageVersion $EXPECTED — this is a STALE artifact, not a fresh build"; exit 1 ;;
             esac
-            
+
             cp desktopApp/build/compose/jars/CIRIS-*.jar ../ciris_engine/desktop_app/
             echo "Desktop JAR:"
             ls -lh ../ciris_engine/desktop_app/

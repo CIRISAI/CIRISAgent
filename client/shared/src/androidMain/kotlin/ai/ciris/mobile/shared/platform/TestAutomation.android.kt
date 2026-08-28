@@ -145,8 +145,33 @@ actual fun Modifier.testableWithHandler(tag: String, onClick: () -> Unit): Modif
     if (TestAutomation.isEnabled()) {
         DisposableEffect(tag) {
             TestAutomation.registerClickHandler(tag, onClick)
-            onDispose { TestAutomation.unregisterClickHandler(tag) }
+            onDispose {
+                TestAutomation.unregisterClickHandler(tag)
+                TestAutomation.unregisterElement(tag)
+            }
         }
+        // ALSO register the element, matching the desktop actual.
+        //
+        // This registered only a click handler, so a tagged element was
+        // clickable by the test server but absent from /tree — the same
+        // modifier made a button assertable on desktop and invisible on
+        // Android. A test that asserts a control is present before driving it
+        // therefore passed on desktop and failed on Android against a screen
+        // rendering perfectly. Found while driving the new debug block: the
+        // click worked and the assertion did not.
+        //
+        // The docstring already promised this ("tracks an element AND registers
+        // a click handler") — the implementation was what disagreed.
+        this.testTag(tag).onGloballyPositioned { coords ->
+            val bounds = coords.boundsInWindow()
+            TestAutomation.registerElement(
+                tag,
+                bounds.left.toInt(), bounds.top.toInt(),
+                bounds.width.toInt(), bounds.height.toInt(),
+                null
+            )
+        }
+    } else {
+        this.testTag(tag)
     }
-    this.testTag(tag)
 }

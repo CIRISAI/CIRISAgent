@@ -566,7 +566,9 @@ class AccordMetricsService:
         # across the Android UI "restart", so the boot-time derivation never
         # re-runs) arms the seal without a process restart. Monotonic seconds of
         # the last re-check; 0.0 = never checked.
-        self._last_consent_recheck: float = 0.0
+        # None, not 0.0: a float sentinel forces an exact float comparison to
+        # decide "never re-checked", which is both fragile and unreadable.
+        self._last_consent_recheck: Optional[float] = None
         self._consent_recheck_interval: float = 10.0
 
         # In-flight thought_ids → monotonic open time (from capture_event
@@ -2349,7 +2351,10 @@ class AccordMetricsService:
         # First re-check (sentinel 0.0) is always allowed — don't let a small
         # monotonic epoch right after boot throttle the very first opportunity
         # to arm. Subsequent re-checks are interval-throttled.
-        if self._last_consent_recheck != 0.0 and now - self._last_consent_recheck < self._consent_recheck_interval:
+        if (
+            self._last_consent_recheck is not None
+            and now - self._last_consent_recheck < self._consent_recheck_interval
+        ):
             return
         self._last_consent_recheck = now
         grant_id = self._derive_consent_from_ceg()

@@ -182,7 +182,11 @@ class EdgeCommunicationService(BaseService, CommunicationServiceProtocol):
         """The local agent's own federation address — `edge:{signer_key_id}`."""
         from ciris_engine.logic.runtime import edge_runtime
 
-        addr = edge_runtime.get_federation_address()
+        # TRANSPORT, so the NODE key — `edge:{signer_key_id}` names the endpoint a
+        # peer dials, not who authored anything. Since CC 3.4.7.3 the edge carries
+        # the node identity, so reading the actor accessor here would advertise a
+        # home channel that is not the transport's address.
+        addr = edge_runtime.get_node_key_id() or edge_runtime.get_federation_address()
         if not addr:
             return None
         return f"{EDGE_CHANNEL_PREFIX}{addr}"

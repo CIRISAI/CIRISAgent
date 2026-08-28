@@ -86,6 +86,7 @@ class LocalPlacesAdapter(Service):
             await agent_task
         except asyncio.CancelledError:
             logger.info("LocalPlaces adapter lifecycle cancelled")
+            raise
         finally:
             await self.stop()
 

@@ -86,6 +86,7 @@ class VoiceCallAdapter(Service):
             await agent_task
         except asyncio.CancelledError:
             logger.info("VoiceCall adapter lifecycle cancelled")
+            raise
         finally:
             await self.stop()
 

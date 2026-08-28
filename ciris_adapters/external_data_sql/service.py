@@ -1,5 +1,6 @@
 """SQL Tool Service for external data access - Refactored with dialects."""
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -393,12 +394,17 @@ class SQLToolService(BaseService, ToolService):
 
             # Option 1: Load from file path
             if privacy_schema_path and isinstance(privacy_schema_path, str):
-                try:
-                    with open(privacy_schema_path, "r") as f:
-                        import yaml
+                def _load_schema(path: str) -> Any:
+                    import yaml
 
-                        schema_data = yaml.safe_load(f)
-                        privacy_schema = PrivacySchemaConfig(**schema_data)
+                    with open(path, "r") as f:
+                        return yaml.safe_load(f)
+
+                try:
+                    # Off the event loop (Sonar python:S7493): a synchronous read
+                    # blocks every other coroutine for the duration of the I/O.
+                    schema_data = await asyncio.to_thread(_load_schema, privacy_schema_path)
+                    privacy_schema = PrivacySchemaConfig(**schema_data)
                 except Exception as e:
                     self._logger.error(f"Failed to load privacy schema from {privacy_schema_path}: {e}")
                     return ToolExecutionResult(
@@ -1011,18 +1017,20 @@ class SQLToolService(BaseService, ToolService):
 
             zero_data_confirmed = len(remaining_data) == 0
 
-            # Check if time_service is available
+            # This timestamp is signed into a GDPR Article 17 deletion proof, so it
+            # must come from the injected clock when there is one. Both branches were
+            # byte-identical -- the comment claimed TimeServiceProtocol had no suitable
+            # method, but it has now_iso() -- so the service was injected and then
+            # ignored, and the signed proof carried a wall clock no test could control.
             if self._time_service is None:
-                # Fallback timestamp using datetime
-                from datetime import datetime
+                from datetime import datetime, timezone
 
-                timestamp = datetime.utcnow().isoformat() + "Z"
+                # utcnow() is deprecated and returns a naive datetime.
+                timestamp = datetime.now(timezone.utc).isoformat()
             else:
-                # Try to get timestamp from time service
-                # TimeServiceProtocol doesn't have get_utc_timestamp_str, use alternative
-                from datetime import datetime
-
-                timestamp = datetime.utcnow().isoformat() + "Z"
+                timestamp = self._time_service.now_iso()
+            # Normalise both to a trailing Z so the signed payload is stable.
+            timestamp = timestamp.replace("+00:00", "Z")
 
             # Generate Ed25519 signature for GDPR Article 17 deletion verification
             cryptographic_proof = None

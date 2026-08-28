@@ -30,6 +30,23 @@ logger = logging.getLogger(__name__)
 
 _edge: Optional[Any] = None
 
+# THE ACTOR/NODE SPLIT (CC 3.4.7.3, CIRISAgent#1119).
+#
+# Two identities, two accessors, because one accessor is how they got fused.
+# Edge exposes exactly ONE key accessor -- `signer_key_id()` -- and once it
+# carries the node identity that accessor returns the NODE key. Everything in
+# this runtime that asks "who are we" for AUTHORSHIP (consent attestations,
+# AccordMetrics' consent_attesting_key_id, the self-key registration, health,
+# my_data) went through `get_federation_address()`, which read exactly that.
+#
+# So the actor id is taken from the ENGINE instead, which is unaffected by what
+# the transport carries: `local_derived_key_id()` is persist's own
+# `derive_key_id(<alias>, <pubkey>)` = `<label>-<fingerprint>`, documented as
+# "the value that FKs to federation_keys(key_id) ... use this for anything the
+# substrate later verifies".
+_actor_key_id: Optional[str] = None
+_node_key_id: Optional[str] = None
+
 
 def _edge_disabled() -> bool:
     """Edge init skipped under pytest or explicit CIRIS_EDGE_DISABLED=true."""
@@ -86,6 +103,76 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
 
     identity_dir.mkdir(parents=True, exist_ok=True)
     identity_path = identity_dir / "edge_identity.rid"
+
+    # PROVISION THE NODE KEY BEFORE EDGE INIT (ciris-server 0.5.189, CIRISAgent#1119).
+    #
+    # Order is load-bearing, not incidental. Edge resolves the node key with
+    # `open_existing` and REFUSES when it is absent — correct, because a key edge
+    # minted itself would be registered by no directory and owner-bound by nobody
+    # (the CIRISAgent#1009 shape). Edge also inits before CIRISServer's compose
+    # folds on, so without this a first boot has nothing to open.
+    #
+    # No key material crosses the boundary: a key_id comes back, the signer stays
+    # in Rust — the property `resolve_user_signer` already holds.
+    #
+    # Idempotent: every boot after the first re-opens and re-registers the same
+    # row, so it is called unconditionally.
+    node_key_id: Optional[str] = None
+    # Bound here, not inside the branch below: it is read again at the
+    # init_edge_runtime call, and "defined only on the path that also sets
+    # node_key_id" is an invariant a reader has to reconstruct rather than see.
+    federation_identity_dir: Optional[Path] = None
+    try:
+        import ciris_server as _cs_prov  # type: ignore[import-not-found, import-untyped, unused-ignore]
+
+        _provision = getattr(_cs_prov, "provision_node_identity", None)
+        if _provision is None:
+            # <0.5.189. The edge then carries the ACTOR key's transport identity,
+            # which is the pre-split behaviour: safe, but the lightnet door is
+            # walked by an agency-bearing key. Say so rather than pass silently.
+            logger.warning(
+                "[NODE-KEY] ciris_server.provision_node_identity absent (<0.5.189) — "
+                "this edge will carry the ACTOR key's transport identity. CC 3.4.7.3 "
+                "wants a node-only key on that door; upgrade the substrate to split them."
+            )
+        else:
+            from ciris_engine.logic.utils.path_resolution import get_federation_alias
+
+            # actor_key_id is deliberately omitted — see CIRISAgent#1119. Passing it
+            # buys a startup check that our actor key is registered AND is an actor,
+            # which is what catches the "attesting_key_id does not exist in
+            # federation_keys" refusal storm in front of whoever started the node
+            # rather than in a peer's log. We cannot supply it yet: the registered
+            # actor id is the DERIVED `<alias>-<fingerprint>`, and the only Python
+            # surface that yields it is `edge.signer_key_id()` — which does not
+            # exist until after the call below. Asked upstream whether provisioning
+            # can resolve it from (alias, identity_dir); it already opens that
+            # keystore.
+            # NOT `identity_dir`. That parameter is the RETICULUM identity path
+            # (`<home>/data/edge/edge_identity.rid`) and is a different thing
+            # from the federation keystore. The persist Engine is constructed
+            # with get_identity_dir(), and the folded server derives its keystore
+            # from `<home>/identity` — get_identity_dir()'s own docstring says
+            # "Both must resolve to the SAME directory".
+            #
+            # Provisioning into <home>/data/edge would therefore either fail to
+            # resolve the existing actor, or mint a SECOND node key that the
+            # later server fold never opens — a key that exists, is registered,
+            # and signs nothing, which is the half-measure shape this whole cut
+            # is about. The identity directory is always <home>/identity.
+            from ciris_engine.logic.utils.path_resolution import get_identity_dir
+
+            federation_identity_dir = get_identity_dir()  # <home>/identity
+            node_key_id = _provision(get_federation_alias(), str(federation_identity_dir))
+            logger.info("[NODE-KEY] node identity provisioned: %s", node_key_id)
+    except Exception as _prov_exc:  # noqa: BLE001
+        # Fail-closed is the substrate's job here, not ours: a provisioning failure
+        # leaves the node unowned or unpeered, and CC 3.4.7.3 Clause D says that is
+        # the correct outcome for "we could not establish who owns this". Surface it
+        # loudly and let edge init refuse below rather than swallowing it — swallowed
+        # is exactly how the fused key survived for months.
+        logger.error("[NODE-KEY] provision_node_identity FAILED: %s", _prov_exc)
+        raise
 
     listen_addr = os.environ.get("CIRIS_EDGE_LISTEN_ADDR", "0.0.0.0:4242")
     bootstrap_peers_raw = os.environ.get("CIRIS_EDGE_BOOTSTRAP_PEERS", "")
@@ -163,14 +250,69 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
     except Exception as _trace_exc:  # noqa: BLE001 — observability must never block boot
         logger.debug("ciris_server.init_tracing unavailable/failed (non-fatal): %s", _trace_exc)
 
+    # WHICH KEY THIS EDGE CARRIES (ciris-server 0.5.189, CC 3.4.7.3).
+    #
+    # Before 0.5.189 one key answered two questions: the embedded fold handed the
+    # substrate CIRISAgent's own bootstrap key (`identity_type = agent`) and it
+    # served as the node identity too — so the Reticulum transport identity,
+    # `self_key_id` and the de-admission self all named a key carrying AGENCY.
+    # `register_self_key` had tried to re-register it as `node`, persist refused
+    # with a typed Conflict, and that Conflict was mapped to Ok(()) at debug as
+    # benign. persist told us, and the message had already been decided harmless.
+    #
+    # Fusing the roles was never the fix: persist's agency gate constrains a
+    # recipient resolving to a NODE-ONLY identity, so a {node,agent} hybrid passes
+    # it. That does not blur "infrastructure must not have agency" — it switches
+    # the rule off. Hence CC 3.4.7.3 Clause A, and hence a second KEY.
+    #
+    # `use_node_identity=True` makes this edge carry the node key provisioned
+    # above, so the lightnet door (`is_bootstrap()` kinds, attributed via the
+    # link's transport identity) is walked by a key with no agency to exercise.
+    # Our bootstrap key is untouched: it keeps its type, its signatures, and every
+    # row it authored — its envelope binds identity_type inside the signed bytes,
+    # so re-typing it would retroactively make historical traces node-authored.
     try:
-        edge = init_edge_runtime(
-            engine,
-            str(identity_path),
+        _edge_kwargs = dict(
             listen_addr=listen_addr,
             bootstrap_peers=bootstrap_peers,
             agent_mode=agent_mode_value,
             enable_transport=_delivery_on,
+        )
+        # CARRY THE NODE IDENTITY ON THE WIRE (CC 3.4.7.3, CIRISAgent#1119).
+        #
+        # This is the last open item of the split. Edge takes its Reticulum
+        # transport identity from the engine's signer capsule, and in the
+        # embedded fold the edge is already running when compose folds onto it —
+        # so it is set HERE, by this call, and nowhere else.
+        #
+        # Safe now, and it was NOT safe before the accessor split above. Edge has
+        # exactly one key accessor, `signer_key_id()`, and it returns whatever the
+        # transport carries. Everything that asks "who authored this" used to read
+        # it, so flipping this flag would have registered the node key as an
+        # `agent` and stamped actor-authored consent and attestations with the
+        # node identity — re-fusing the two roles Clause A separates, while
+        # looking like adoption. Authorship now comes from
+        # `engine.local_derived_key_id()`, which the transport cannot move.
+        #
+        # What changes on the wire: the lightnet door (`is_bootstrap()` kinds,
+        # attributed via the link's transport identity) is now walked by a key
+        # with no agency to exercise, which is the point of the split.
+        if node_key_id is not None:
+            _edge_kwargs["use_node_identity"] = True
+            # The directory the key was provisioned into — edge opens it with
+            # `open_existing` and refuses when absent, so this must be the
+            # federation identity dir, never the Reticulum one.
+            _edge_kwargs["node_identity_dir"] = str(federation_identity_dir)
+            logger.info(
+                "[NODE-KEY] edge will carry node identity %s from %s (actor authorship unaffected)",
+                node_key_id,
+                federation_identity_dir,
+            )
+
+        edge = init_edge_runtime(
+            engine,
+            str(identity_path),
+            **_edge_kwargs,
         )
     except TypeError as e:
         # PyO3 cross-crate PyClass identity failure — Edge v0.9.1's bundled
@@ -199,10 +341,30 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
 
     _edge = edge
 
+    global _actor_key_id, _node_key_id
+    _node_key_id = node_key_id
+
     try:
-        key_id = edge.signer_key_id()
+        # AUTHORSHIP id, from the engine — NOT edge.signer_key_id(), which is the
+        # transport identity and becomes the node key once use_node_identity is on.
+        try:
+            _actor_key_id = engine.local_derived_key_id()
+        except Exception as _actor_exc:  # noqa: BLE001 — older persist
+            _actor_key_id = None
+            logger.debug("local_derived_key_id unavailable: %s", _actor_exc)
+
+        key_id = _actor_key_id or edge.signer_key_id()
         logger.info(
-            "Edge runtime initialized: key_id=%s identity=%s listen=%s peers=%d",
+            "Edge runtime initialized: actor=%s node=%s transport=%s identity=%s listen=%s peers=%d",
+            _actor_key_id,
+            _node_key_id,
+            edge.signer_key_id(),
+            identity_path,
+            listen_addr,
+            len(bootstrap_peers),
+        )
+        logger.debug(
+            "Edge runtime detail: key_id=%s identity=%s listen=%s peers=%d",
             key_id,
             identity_path,
             listen_addr,
@@ -225,7 +387,16 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
             # takes a SignedKeyRecord JSON, so that call silently no-op'd and
             # left the signer unregistered → lens receive_and_persist rejected
             # every trace with `verify_unknown_key`.
+            # `key_id` here is the ACTOR id (engine-sourced above), never
+            # edge.signer_key_id(). register_self_federation_key registers THIS
+            # ENGINE's local pubkey, so the row is the actor's either way — but
+            # passing the transport id would LABEL the row with the node key,
+            # registering a node-only identity as an `agent`: exactly the
+            # cohabitation CC 3.4.7.3 Clause A forbids.
             derived_kid = engine.register_self_federation_key("agent", key_id, None, None, None)
+            if derived_kid and derived_kid != _actor_key_id:
+                # persist's own derivation is authoritative over ours.
+                _actor_key_id = derived_kid
             logger.info("Federation self key registered with persist: %s (derived %s)", key_id, derived_kid)
         except Exception as reg_exc:
             if "conflict" in str(reg_exc).lower():
@@ -778,8 +949,40 @@ def is_available() -> bool:
     return _edge is not None
 
 
+def get_node_key_id() -> Optional[str]:
+    """The NODE key id — carriage: transport, replication, consent, de-admission.
+
+    `<alias>-node`, minted by `provision_node_identity` at boot and registered
+    `identity_type = node`. None on a substrate older than 0.5.189, or before
+    edge init has run.
+
+    Distinct from [get_federation_address] on purpose: CC 3.4.7.3 Clause A
+    forbids `node` cohabiting with `agent` on one key, and a single accessor
+    serving both is how they were fused in the first place. Anything the
+    substrate verifies as AUTHORSHIP wants the actor id, not this.
+    """
+    return _node_key_id
+
+
 def get_federation_address() -> Optional[str]:
-    """Return the local agent's federation key_id, or None if Edge unavailable."""
+    """The ACTOR key id — authorship: traces, attestations, on_behalf_of.
+
+    Named for its history, not its meaning: every existing caller means "which
+    key authored this", and they must keep getting the actor even after the edge
+    starts carrying the node identity on the wire.
+
+    Sourced from the engine (`local_derived_key_id`), NOT from
+    `edge.signer_key_id()`. Edge has exactly one key accessor, and it returns
+    whatever the transport carries — so reading the actor from it silently
+    returned the NODE key the moment `use_node_identity` was enabled, which
+    would have registered the node key as an `agent` and stamped actor-authored
+    consent and attestations with the node identity.
+
+    Falls back to the edge signer only when the engine cannot answer (older
+    persist), where the two are still the same key anyway.
+    """
+    if _actor_key_id is not None:
+        return _actor_key_id
     if _edge is None:
         return None
     try:
@@ -794,6 +997,15 @@ def get_federation_address() -> Optional[str]:
 
 
 def reset_edge_runtime() -> None:
-    """Test-only: clear the singleton. Production code MUST NOT call this."""
-    global _edge
+    """Test-only: clear the singleton. Production code MUST NOT call this.
+
+    Clears the cached actor/node ids too. `get_federation_address()` now returns
+    `_actor_key_id` BEFORE it looks at `_edge`, so leaving them set would make a
+    reset runtime keep answering with the previous run's actor id instead of
+    None — a stale identity that survives exactly the teardown meant to remove
+    it, and one that only shows up as cross-test bleed.
+    """
+    global _edge, _actor_key_id, _node_key_id
     _edge = None
+    _actor_key_id = None
+    _node_key_id = None

@@ -86,6 +86,7 @@ class VideoFramesAdapter(Service):
             await agent_task
         except asyncio.CancelledError:
             logger.info("VideoFrames adapter lifecycle cancelled")
+            raise
         finally:
             await self.stop()
 

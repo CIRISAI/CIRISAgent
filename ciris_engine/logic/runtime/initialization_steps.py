@@ -93,8 +93,9 @@ async def verify_database_integrity() -> bool:
     We probe with a cheap `task_list` call to confirm the engine is healthy.
     """
     try:
-        from ciris_engine.logic.persistence.models.graph import get_persist_engine
         import json
+
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
 
         engine = get_persist_engine()
         if engine is None:
@@ -141,7 +142,7 @@ async def init_edge_runtime(runtime: Any) -> None:
 
 
 async def verify_edge_runtime() -> bool:
-    """Verify Edge runtime is healthy and signer_key_id is queryable."""
+    """Verify Edge runtime is healthy and the federation address is queryable."""
     from ciris_engine.logic.runtime import edge_runtime
 
     if not edge_runtime.is_available():
@@ -155,7 +156,7 @@ async def verify_edge_runtime() -> bool:
 
     addr = edge_runtime.get_federation_address()
     if not addr:
-        logger.error("Edge runtime up but signer_key_id() returned empty")
+        logger.error("Edge runtime up but get_federation_address() returned empty")
         return False
 
     logger.info("Edge runtime verified: federation_address=%s", addr)

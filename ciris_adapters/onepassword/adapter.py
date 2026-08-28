@@ -86,6 +86,7 @@ class OnepasswordAdapter(Service):
             await agent_task
         except asyncio.CancelledError:
             logger.info("Onepassword adapter lifecycle cancelled")
+            raise
         finally:
             await self.stop()
 

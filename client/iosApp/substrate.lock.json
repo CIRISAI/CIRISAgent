@@ -1,7 +1,7 @@
 {
   "_comment": "What the iOS Resources.zip was BUILT FROM. Written by tools/update_substrate_libs.py --platform ios. The bundle itself records no version, so this is the only thing a non-macOS runner can check against requirements.txt.",
   "libs": {
-    "server": "0.5.188",
+    "server": "0.5.190",
     "verify": "10.3.0"
   },
   "updated_at": "2026-08-24T13:05:19+00:00"

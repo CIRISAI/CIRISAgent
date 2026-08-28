@@ -85,13 +85,17 @@ class AdaptiveFilterService(BaseService, AdaptiveFilterServiceProtocol):
 
     async def _initialize(self) -> None:
         """Load or create initial configuration"""
-        if not self.config_service:
+        # Bind to a local rather than asserting inside the try: an assert there
+        # raises AssertionError, which the broad `except Exception` below would
+        # swallow (Sonar python:S5779) -- and asserts vanish entirely under
+        # `python -O`. The local also gives MyPy real narrowing.
+        config_service = self.config_service
+        if config_service is None:
             raise RuntimeError("GraphConfigService is required for AdaptiveFilterService")
 
         try:
             # Use GraphConfigService for proper config management
-            assert self.config_service is not None  # Type narrowing for MyPy
-            config_node = await self.config_service.get_config(self._config_key)
+            config_node = await config_service.get_config(self._config_key)
             if config_node and config_node.value.dict_value:
                 # Load from properly stored config
                 self._config = AdaptiveFilterConfig(**config_node.value.dict_value)
@@ -648,13 +652,14 @@ class AdaptiveFilterService(BaseService, AdaptiveFilterServiceProtocol):
         if not self._config:
             return
 
-        if not self.config_service:
+        # Local binding, not an in-try assert -- see _load_config above.
+        config_service = self.config_service
+        if config_service is None:
             raise RuntimeError("GraphConfigService is required for saving config")
 
         try:
             # Use GraphConfigService to properly store config
-            assert self.config_service is not None  # Type narrowing for MyPy
-            await self.config_service.set_config(
+            await config_service.set_config(
                 key=self._config_key,
                 value=self._config.model_dump(),  # Store as dict
                 updated_by=f"AdaptiveFilterService: {reason}",

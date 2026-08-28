@@ -351,9 +351,14 @@ class ShutdownProcessor(BaseProcessor):
             await self._process_shutdown_thoughts()
 
             # Re-fetch task to check updated status
-            assert self.shutdown_task is not None  # Already validated above
+            # Keyed off current_task, not self.shutdown_task: the two carry the same
+            # ids by construction (_validate_shutdown_task fetches by exactly those
+            # two fields) and current_task is already known non-None here. The
+            # narrowing assert this replaces sat inside a try that catches Exception,
+            # so a failure would have been swallowed as an ordinary error (Sonar
+            # python:S5779) -- and asserts vanish entirely under `python -O`.
             current_task = persistence.get_task_by_id(
-                self.shutdown_task.task_id, self.shutdown_task.agent_occurrence_id
+                current_task.task_id, current_task.agent_occurrence_id
             )
             if not current_task:
                 logger.error("Current task is None after fetching")
@@ -374,7 +379,11 @@ class ShutdownProcessor(BaseProcessor):
             # Still processing - return status
             # CRITICAL: Query with self.agent_occurrence_id, not shutdown_task.agent_occurrence_id
             # After thought ownership transfer (line 140-154), thoughts belong to this occurrence
-            thoughts = persistence.get_thoughts_by_task_id(self.shutdown_task.task_id, self.agent_occurrence_id)
+            # current_task, not self.shutdown_task: same task_id by construction, and it
+            # is already known non-None here (guarded above), so this needs no narrowing
+            # assert. The occurrence id stays self.agent_occurrence_id -- that half is
+            # the point of the comment above.
+            thoughts = persistence.get_thoughts_by_task_id(current_task.task_id, self.agent_occurrence_id)
             thought_statuses = [(t.thought_id, t.status.value) for t in thoughts] if thoughts else []
 
             return ShutdownResult(

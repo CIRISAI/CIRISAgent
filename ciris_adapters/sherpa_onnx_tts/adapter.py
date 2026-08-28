@@ -86,6 +86,7 @@ class SherpaOnnxTtsAdapter(Service):
             await agent_task
         except asyncio.CancelledError:
             logger.info("SherpaOnnxTts adapter lifecycle cancelled")
+            raise
         finally:
             await self.stop()
 

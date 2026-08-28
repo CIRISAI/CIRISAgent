@@ -496,12 +496,13 @@ class WalletAdapter(Service):
                 try:
                     await asyncio.Event().wait()
                 except asyncio.CancelledError:
-                    pass
+                    raise
                 return
 
             await agent_task
         except asyncio.CancelledError:
             logger.info("Wallet adapter lifecycle cancelled")
+            raise
         finally:
             await self.stop()
 

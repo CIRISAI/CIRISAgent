@@ -86,6 +86,7 @@ class GeminiAdapter(Service):
             await agent_task
         except asyncio.CancelledError:
             logger.info("Gemini adapter lifecycle cancelled")
+            raise
         finally:
             await self.stop()
 

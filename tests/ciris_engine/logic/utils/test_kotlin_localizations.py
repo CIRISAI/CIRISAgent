@@ -170,7 +170,7 @@ class TestKotlinLocalizations:
         carrying every correct key with entirely wrong text passed clean.
 
         That is not hypothetical. The Ukrainian retranslation (#949) landed in
-        five of six copies; `client/iosApp/Resources/app/localization/uk.json`
+        five of six copies; `apps/ios/Resources/app/localization/uk.json`
         kept 658 Russian values and this test stayed green, because the Russian
         strings sat under the same keys. It is the copy iOS ships from, so the
         release would have shown Ukrainian users Russian on the one platform
@@ -181,20 +181,20 @@ class TestKotlinLocalizations:
 
         Source of truth: localization/*.json
         Copies that must stay in sync:
-        1. client/iosApp/iosApp/localization/     (iOS app bundle)
-        2. client/iosApp/Resources/app/localization/ (iOS Python Resources)
-        3. client/androidApp/src/main/assets/localization/ (Android assets)
-        4. client/desktopApp/src/main/resources/localization/ (Desktop resources)
-        5. client/shared/src/desktopMain/resources/localization/ (Desktop KMP)
+        1. apps/ios/iosApp/localization/     (iOS app bundle)
+        2. apps/ios/Resources/app/localization/ (iOS Python Resources)
+        3. apps/android/src/main/assets/localization/ (Android assets)
+        (the two desktop mirrors moved to CIRISAI/CIRISClient with the shared
+        client and are checked there)
         """
         source_dir = project_root / "ciris_engine" / "data" / "localized"
         if not source_dir.exists():
             pytest.skip("localization/ directory not found")
 
         copy_dirs = [
-            project_root / "client" / "iosApp" / "iosApp" / "localization",
-            project_root / "client" / "iosApp" / "Resources" / "app" / "localization",
-            project_root / "client" / "androidApp" / "src" / "main" / "assets" / "localization",
+            project_root / "apps" / "ios" / "iosApp" / "localization",
+            project_root / "apps" / "ios" / "Resources" / "app" / "localization",
+            project_root / "apps" / "android" / "src" / "main" / "assets" / "localization",
             project_root / "client" / "desktopApp" / "src" / "main" / "resources" / "localization",
             project_root / "client" / "shared" / "src" / "desktopMain" / "resources" / "localization",
         ]
@@ -246,11 +246,10 @@ class TestKotlinLocalizations:
 
         if errors:
             fix_cmd = (
-                "cp localization/*.json client/iosApp/iosApp/localization/ && "
-                "cp localization/*.json client/iosApp/Resources/app/localization/ && "
-                "cp localization/*.json client/androidApp/src/main/assets/localization/ && "
-                "cp localization/*.json client/desktopApp/src/main/resources/localization/ && "
-                "cp localization/*.json client/shared/src/desktopMain/resources/localization/"
+                "cp localization/*.json apps/ios/iosApp/localization/ && "
+                "cp localization/*.json apps/ios/Resources/app/localization/ && "
+                "cp localization/*.json apps/android/src/main/assets/localization/ && "
+                "cp localization/*.json apps/android/src/main/assets/localization/"
             )
             pytest.fail(
                 f"\n{len(errors)} localization sync issues:\n"

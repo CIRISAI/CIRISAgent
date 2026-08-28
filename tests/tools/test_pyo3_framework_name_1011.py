@@ -4,7 +4,7 @@ Two files compute the iOS framework name independently:
 
   * ``tools/update_substrate_libs.py`` writes the ``.fwork`` redirect, whose
     contents point at ``Frameworks/<name>.framework/<name>``.
-  * ``client/iosApp/scripts/embed_native_frameworks.sh`` builds the framework
+  * ``apps/ios/scripts/embed_native_frameworks.sh`` builds the framework
     from the ``.so`` sitting under ``app_packages_native/``, deriving the name
     from that path.
 
@@ -36,7 +36,7 @@ import pytest
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 BUILDER = REPO / "tools/update_substrate_libs.py"
-EMBED = REPO / "client/iosApp/scripts/embed_native_frameworks.sh"
+EMBED = REPO / "apps/ios/scripts/embed_native_frameworks.sh"
 
 sys.path.insert(0, str(REPO))
 

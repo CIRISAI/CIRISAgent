@@ -58,7 +58,7 @@ def test_blocks_even_when_forced_past_gitignore() -> None:
     "path",
     [
         "ciris_engine/constants.py",
-        "client/androidApp/build.gradle",
+        "apps/android/build.gradle",
         "tools/dev/check_no_key_material.py",
         "README.md",
     ],

@@ -540,7 +540,7 @@ def build_command(args) -> int:
 
         # Create config
         config = iOSBuildConfig(
-            project_dir=Path(__file__).parent.parent.parent.parent.parent / "client" / "iosApp",
+            project_dir=Path(__file__).parent.parent.parent.parent.parent / "apps" / "ios",
             scheme=args.scheme,
             configuration=args.configuration,
             prepare_bundle=not args.no_prepare,
@@ -587,9 +587,9 @@ def build_command(args) -> int:
         mobile_dir = Path(__file__).parent.parent.parent.parent.parent / "client"
 
         # Build APK
-        gradle_cmd = ["./gradlew", ":androidApp:assembleDebug"]
+        gradle_cmd = ["./gradlew", ":android:assembleDebug"]
         if args.clean:
-            gradle_cmd = ["./gradlew", "clean", ":androidApp:assembleDebug"]
+            gradle_cmd = ["./gradlew", "clean", ":android:assembleDebug"]
 
         result = subprocess.run(gradle_cmd, cwd=mobile_dir, capture_output=not args.verbose, text=True)
 
@@ -1060,7 +1060,7 @@ def test_command(args) -> int:
         import subprocess
 
         result = subprocess.run(
-            ["./gradlew", ":androidApp:assembleDebug"],
+            ["./gradlew", ":android:assembleDebug"],
             cwd=Path(__file__).parent.parent.parent.parent.parent / "client",
             capture_output=True,
             text=True,
@@ -1476,7 +1476,7 @@ Examples:
     test_parser.add_argument("--adb-path", help="Path to adb binary (Android only)")
     test_parser.add_argument(
         "--apk",
-        default="client/androidApp/build/outputs/apk/debug/androidApp-debug.apk",
+        default="apps/android/build/outputs/apk/debug/androidApp-debug.apk",
         help="Path to APK file",
     )
     test_parser.add_argument("--no-reinstall", action="store_true", help="Don't reinstall the app")

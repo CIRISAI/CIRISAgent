@@ -20,11 +20,11 @@ Per library, per platform:
 Android:
   1. Download ``{prefix}-v{ver}-android.tar.gz`` from the GitHub Release
      (verified against the release's SHA256SUMS asset when one is published)
-  2. Copy per-ABI .so files into client/androidApp/src/main/jniLibs/{abi}/
+  2. Copy per-ABI .so files into apps/android/src/main/jniLibs/{abi}/
   3. For PyO3 libs the agent must `import`: download
      ``{prefix}-v{ver}-android-wheels.tar.gz`` and drop the Chaquopy-shaped
-     wheels into client/androidApp/wheels/ (pruning stale versions), then
-     pin ``install "{pkg}=={ver}"`` in client/androidApp/build.gradle
+     wheels into apps/android/wheels/ (pruning stale versions), then
+     pin ``install "{pkg}=={ver}"`` in apps/android/build.gradle
   4. Update agent-side Python bindings from PyPI wheel (when has_adapter)
   5. Update __version__ in the agent's adapter ffi_bindings/__init__.py
 
@@ -68,7 +68,7 @@ REPO_ROOT = Path(__file__).parent.parent
 CLIENT_ROOT = REPO_ROOT / "client"
 
 # Android paths
-ANDROID_APP_DIR = CLIENT_ROOT / "androidApp"
+ANDROID_APP_DIR = CLIENT_ROOT / "android"
 JNI_LIBS_DIR = ANDROID_APP_DIR / "src" / "main" / "jniLibs"
 WHEELS_DIR = ANDROID_APP_DIR / "wheels"
 ANDROID_BUILD_GRADLE = ANDROID_APP_DIR / "build.gradle"
@@ -113,9 +113,9 @@ class SubstrateLib:
     # tarball (`{prefix}-v{version}-android-wheels.tar.gz`) containing one
     # `*-cp310-abi3-android_24_{abi}.whl` per supported ABI. When True the
     # tarball is downloaded and its wheels are dropped into
-    # client/androidApp/wheels/ so Chaquopy's `--find-links wheels` resolves
+    # apps/android/wheels/ so Chaquopy's `--find-links wheels` resolves
     # them at gradle build time, and the matching `install "{pkg}==X"` pin in
-    # client/androidApp/build.gradle is rewritten (or activated). Required
+    # apps/android/build.gradle is rewritten (or activated). Required
     # for PyO3 libs whose Python module has to be `import`-able from the
     # agent (persist/edge/lens) — vs. ctypes-FFI libs whose .so is loaded
     # directly via JNI (verify), which don't need this.
@@ -125,7 +125,7 @@ class SubstrateLib:
     # and does NOT publish an `-android-wheels.tar.gz` release asset, so the
     # release-tarball path silently finds nothing for it.
     android_wheels_from_pypi: bool = False
-    # Whether the lib ships loose per-ABI .so files for client/androidApp/src/
+    # Whether the lib ships loose per-ABI .so files for apps/android/src/
     # main/jniLibs/. False for wheel-only libs: the wheel already carries its
     # own .so, and there is no `-android.tar.gz` release asset to fetch.
     has_jni_libs: bool = True
@@ -215,7 +215,7 @@ LIBS: Dict[str, SubstrateLib] = {
         # CIRISEdge 1.0+ ships all three Android ABIs in the wheels tarball.
         abis=["arm64-v8a", "x86_64", "armeabi-v7a"],
         # The agent's `init_edge_runtime` imports `ciris_edge` directly, so
-        # the Chaquopy-shaped wheels MUST land in client/androidApp/wheels/ —
+        # the Chaquopy-shaped wheels MUST land in apps/android/wheels/ —
         # otherwise the Android-bundled Python raises "ciris-edge not
         # importable but is REQUIRED for 2.9.4+" at boot and
         # `/v1/federation/identity` returns 503 to the UI.
@@ -243,7 +243,7 @@ LIBS: Dict[str, SubstrateLib] = {
         # observability orchestrator. PyO3 abi3 module like persist/edge —
         # the agent imports `ciris_lens_core` directly, so once upstream
         # ships `ciris-lens-core-v{ver}-android-wheels.tar.gz` the wheels go
-        # into client/androidApp/wheels/ and the (currently commented)
+        # into apps/android/wheels/ and the (currently commented)
         # `install "ciris-lens-core==X"` gradle pin gets activated.
         has_android_wheels=True,
         framework_name="CIRISLensCore",
@@ -264,7 +264,7 @@ LIBS: Dict[str, SubstrateLib] = {
     # longer fetched directly by this repo — it arrives transitively through
     # ciris-server, which ships every wheel the agent needs.
     #
-    # This entry exists because its ABSENCE cost a day. `client/androidApp/
+    # This entry exists because its ABSENCE cost a day. `apps/android/
     # build.gradle` carries an EXACT pin, `install "ciris-server==X"`, which no
     # tool updated: bumping the requirements.txt floor to 0.5.146 left the pin
     # at 0.5.138, so every APK shipped a wheel eight releases stale. The node
@@ -434,7 +434,7 @@ def install_jni_libs(lib: SubstrateLib, extract_dir: Path) -> bool:
     """Copy per-ABI .so files from extracted tarball into the Android app.
 
     Tarball layout: ``android/{abi}/{so_filename}``.
-    Destination:    ``client/androidApp/src/main/jniLibs/{abi}/{so_filename}``.
+    Destination:    ``apps/android/src/main/jniLibs/{abi}/{so_filename}``.
     """
     print(f"\n  Installing JNI libs for {lib.name}...")
     any_installed = False
@@ -480,7 +480,7 @@ def _install_android_wheels_from_pypi(lib: SubstrateLib, version: str) -> bool:
 
     ciris-server publishes its Chaquopy-shaped Android wheels to PyPI, not as a
     GitHub release asset. The release-tarball path finds nothing for it and
-    returns a warning, which is how `client/androidApp/build.gradle` sat at an
+    returns a warning, which is how `apps/android/build.gradle` sat at an
     exact pin of ciris-server==0.5.138 while requirements.txt moved to 0.5.146:
     a SIXTH copy of a version that is supposed to have one source, and the only
     one no tool was updating. Every APK built from it shipped the stale wheel,
@@ -604,7 +604,7 @@ def install_android_wheels(lib: SubstrateLib, version: str, skip_checksums: bool
 
 
 def update_gradle_pin(lib: SubstrateLib, version: str) -> None:
-    """Pin ``install "{pkg}==X"`` in client/androidApp/build.gradle.
+    """Pin ``install "{pkg}==X"`` in apps/android/build.gradle.
 
     Chaquopy resolves the substrate wheels from wheels/ via --find-links;
     the gradle pin MUST match the wheel version dropped there or the build
@@ -820,7 +820,7 @@ def update_lib_android(
             if not install_jni_libs(lib, extract_dir):
                 return UpdateStatus.FAILED
 
-    # Chaquopy-shaped Android wheels go into client/androidApp/wheels/ for
+    # Chaquopy-shaped Android wheels go into apps/android/wheels/ for
     # PyO3 libs the agent has to `import` from Python (separate release
     # asset). Failure here is non-fatal so a transient gh / network blip
     # doesn't trash the run, but logged loudly. The gradle pin is only
@@ -854,7 +854,7 @@ _PLIST_SHORT_VERSION_RE = re.compile(
 
 def repair_xcframework_info_plists() -> int:
     """Idempotently add a missing CFBundleVersion key to every XCFramework's
-    inner framework Info.plist under client/iosApp/Frameworks/.
+    inner framework Info.plist under apps/ios/Frameworks/.
 
     Apple App Store validation (error 90056) requires every framework bundle
     Info.plist to carry both CFBundleShortVersionString AND CFBundleVersion.
@@ -1652,7 +1652,7 @@ def main(argv: Optional[List[str]] = None) -> None:
 
     if android_ok:
         print("\nAndroid next steps:")
-        print("  1. cd client && ./gradlew :androidApp:assembleDebug")
+        print("  1. cd client && ./gradlew :android:assembleDebug")
         print("  2. adb shell am force-stop ai.ciris.mobile.debug")
         print("  3. adb install -r androidApp/build/outputs/apk/debug/androidApp-debug.apk")
 

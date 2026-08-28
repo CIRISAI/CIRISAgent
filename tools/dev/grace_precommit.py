@@ -42,12 +42,30 @@ async def check_merge_conflicts() -> Optional[str]:
     return None
 
 
+#: Paths whose name trips the heuristic below but which carry PUBLIC material.
+#:
+#: The check matches on filename alone, so a vendored CA bundle -- thousands of
+#: public root certificates, shipped by certifi inside the iOS app -- reads as a
+#: private key. It blocked the client migration, where renaming the iOS tree
+#: restaged 2,468 already-committed files.
+#:
+#: Keep this list SHORT and specific. It is an exception for public certificate
+#: bundles, not a way to land a key: the dedicated `no-key-material` hook
+#: (identity/, keys/, *.master.key) is the real gate and has no allowlist.
+PUBLIC_CERT_BUNDLES = (
+    "certifi/cacert.pem",
+)
+
+
 async def check_private_keys() -> Optional[str]:
     """Check for private keys in staged files."""
     code, stdout, _ = await run_command_async(["git", "diff", "--cached", "--name-only"])
     dangerous_files = []
     for file in stdout.splitlines():
-        if any(pattern in file.lower() for pattern in [".pem", ".key", "id_rsa", "id_dsa", ".env"]):
+        lowered = file.lower()
+        if any(allowed in lowered for allowed in PUBLIC_CERT_BUNDLES):
+            continue
+        if any(pattern in lowered for pattern in [".pem", ".key", "id_rsa", "id_dsa", ".env"]):
             dangerous_files.append(file)
 
     if dangerous_files:

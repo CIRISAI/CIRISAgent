@@ -1,7 +1,7 @@
 """
 Conftest for client/Android tests.
 
-Sets up sys.path to allow importing from the client/androidApp/src/main/python directory.
+Sets up sys.path to allow importing from the apps/android/src/main/python directory.
 Creates a mock 'android' package structure for backward compatibility with existing imports.
 """
 
@@ -13,7 +13,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 
 # Path to the Python source files in the client directory
-PYTHON_SRC_PATH = PROJECT_ROOT / "client" / "androidApp" / "src" / "main" / "python"
+PYTHON_SRC_PATH = PROJECT_ROOT / "apps" / "android" / "src" / "main" / "python"
 
 # Add the Python source path to sys.path (at the FRONT to override system modules)
 if str(PYTHON_SRC_PATH) not in sys.path:

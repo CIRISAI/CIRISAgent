@@ -148,9 +148,11 @@ jobs:
           retry_wait_seconds: 60
           shell: bash
           command: |
-            cd client
-            ./gradlew :desktopApp:packageUberJarForCurrentOS --no-daemon
-            ls -lh desktopApp/build/compose/jars/
+            # :desktopApp is gone; the jar ships in the pinned ciris-client wheel.
+            CLIENT_VERSION=$(grep -oE '^ciris-client==[0-9.]+' requirements.txt | cut -d= -f3)
+            python -m pip download "ciris-client==${CLIENT_VERSION}" --no-deps -d /tmp/clientwheel
+            python tools/dev/vendor_desktop_jar.py /tmp/clientwheel ciris_engine/desktop_app "$CLIENT_VERSION"
+            ls -lh ciris_engine/desktop_app/
 
       - name: Build PyInstaller bundle (under the Win7 interpreter)
         shell: pwsh
@@ -172,7 +174,7 @@ jobs:
       - name: Trim JRE via jlink (Liberica)
         shell: pwsh
         run: |
-          $jar = Get-ChildItem -Path 'client\desktopApp\build\compose\jars' -Filter 'CIRIS-windows-*.jar' | Select-Object -First 1
+          $jar = Get-ChildItem -Path 'ciris_engine\desktop_app' -Filter 'CIRIS-*.jar' | Select-Object -First 1
           if (-not $jar) { Write-Error "No CIRIS-windows-*.jar found"; exit 1 }
           .\installers\windows\bundle-jre.ps1 -JarPath $jar.FullName -OutputDir dist\runtime
 

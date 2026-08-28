@@ -41,11 +41,9 @@ ROOT = Path(__file__).resolve().parents[2]
 #: build if these diverge, and #1012 showed that "four of six" is a silent gap.
 MIRRORS = [
     "ciris_engine/data/localized",
-    "client/androidApp/src/main/assets/localization",
-    "client/desktopApp/src/main/resources/localization",
-    "client/iosApp/iosApp/localization",
-    "client/iosApp/Resources/app/localization",
-    "client/shared/src/desktopMain/resources/localization",
+    "apps/android/src/main/assets/localization",
+    "apps/ios/iosApp/localization",
+    "apps/ios/Resources/app/localization",
 ]
 
 RU_ONLY = set("ыъэё")

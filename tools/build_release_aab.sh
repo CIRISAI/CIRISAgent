@@ -3,9 +3,9 @@
 # This script produces a signed AAB bundle with arm64-v8a support
 #
 # 2.8.1 update: the standalone `android/` project was retired in favor
-# of the KMP shape under `client/androidApp/`. Build target is now the
-# `:androidApp:bundleRelease` gradle task in the `client/` module;
-# AAB output is `client/androidApp/build/outputs/bundle/release/
+# of the KMP shape under `apps/android/`. Build target is now the
+# `:android:bundleRelease` gradle task in the `client/` module;
+# AAB output is `apps/android/build/outputs/bundle/release/
 # androidApp-release.aab`. Static-GUI assets are pulled from
 # `android_gui_static/` into the androidApp's main assets.
 
@@ -35,7 +35,7 @@ echo -e "${YELLOW}[1/6] Checking prerequisites...${NC}"
 
 # Check if we're in the right directory
 if [ ! -f "$ANDROID_APP_DIR/build.gradle" ]; then
-    echo -e "${RED}ERROR: Cannot find client/androidApp/build.gradle${NC}"
+    echo -e "${RED}ERROR: Cannot find apps/android/build.gradle${NC}"
     echo "Please run this script from the CIRISAgent root directory"
     exit 1
 fi
@@ -80,16 +80,16 @@ fi
 echo ""
 echo -e "${YELLOW}[3/6] Cleaning previous builds...${NC}"
 cd "$CLIENT_DIR"
-./gradlew :androidApp:clean --quiet
+./gradlew :android:clean --quiet
 echo -e "${GREEN}  ✓ Clean complete${NC}"
 
 # Step 4: Build the release AAB
 echo ""
 echo -e "${YELLOW}[4/6] Building release AAB (this may take a few minutes)...${NC}"
-echo "  Building :androidApp:bundleRelease (KMP shape; signing config in androidApp/build.gradle)"
+echo "  Building :android:bundleRelease (KMP shape; signing config in androidApp/build.gradle)"
 
 # Build release bundle. Output is androidApp-release.aab in the KMP layout.
-./gradlew :androidApp:bundleRelease --warning-mode=none
+./gradlew :android:bundleRelease --warning-mode=none
 
 AAB_FILE="$OUTPUT_DIR/androidApp-release.aab"
 if [ ! -f "$AAB_FILE" ]; then
@@ -124,7 +124,7 @@ echo -e "${GREEN}  ✓ Verification complete${NC}"
 echo ""
 echo -e "${YELLOW}[6/6] Finalizing...${NC}"
 
-# Get version from build.gradle (KMP layout: client/androidApp/build.gradle)
+# Get version from build.gradle (KMP layout: apps/android/build.gradle)
 VERSION_NAME=$(grep "versionName" "$ANDROID_APP_DIR/build.gradle" | head -1 | sed 's/.*"\(.*\)".*/\1/')
 VERSION_CODE=$(grep "versionCode" "$ANDROID_APP_DIR/build.gradle" | head -1 | sed 's/[^0-9]*//g')
 

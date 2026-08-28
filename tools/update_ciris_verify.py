@@ -45,7 +45,7 @@ REPO_ROOT = Path(__file__).parent.parent
 CLIENT_ROOT = REPO_ROOT / "client"
 
 # Android paths
-JNI_LIBS_DIR = CLIENT_ROOT / "androidApp" / "src" / "main" / "jniLibs"
+JNI_LIBS_DIR = CLIENT_ROOT / "android" / "src" / "main" / "jniLibs"
 
 # Canonical FFI bindings location (used by both mobile and server)
 FFI_BINDINGS_DIR = REPO_ROOT / "ciris_adapters" / "ciris_verify" / "ffi_bindings"
@@ -1008,13 +1008,13 @@ def update_from_local(ciris_verify_root: Path, android: bool, ios: bool) -> None
 
     if ios:
         print("\niOS next steps:")
-        print("  1. Open client/iosApp/iosApp.xcodeproj in Xcode")
+        print("  1. Open apps/ios/iosApp.xcodeproj in Xcode")
         print("  2. DELETE the app from the device (Resources.zip cache!)")
         print("  3. Cmd+R to build and run")
 
     if android:
         print("\nAndroid next steps:")
-        print("  1. cd client && ./gradlew :androidApp:assembleDebug")
+        print("  1. cd client && ./gradlew :android:assembleDebug")
         print("  2. adb install -r androidApp/build/outputs/apk/debug/androidApp-debug.apk")
 
 
@@ -1199,7 +1199,7 @@ after bumping the `ciris-verify` floor in requirements.txt.
 
     if do_android:
         print("\nAndroid next steps:")
-        print("  1. cd client && ./gradlew :androidApp:assembleDebug")
+        print("  1. cd client && ./gradlew :android:assembleDebug")
         print("  2. adb install -r androidApp/build/outputs/apk/debug/androidApp-debug.apk")
 
     if do_ios:

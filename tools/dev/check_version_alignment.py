@@ -32,7 +32,7 @@ def check_all() -> list[str]:
     display_version, major, minor, patch = get_engine_version()
 
     # iOS Info.plist CFBundleShortVersionString
-    plist = ROOT / "client" / "iosApp" / "iosApp" / "Info.plist"
+    plist = ROOT / "apps" / "ios" / "iosApp" / "Info.plist"
     if plist.exists():
         content = plist.read_text()
         m = re.search(r"<key>CFBundleShortVersionString</key>\s*<string>([^<]+)</string>", content)
@@ -40,7 +40,7 @@ def check_all() -> list[str]:
             errors.append(f"iOS CFBundleShortVersionString: {m.group(1)} != {display_version}")
 
     # Android build.gradle versionName
-    gradle = ROOT / "client" / "androidApp" / "build.gradle"
+    gradle = ROOT / "apps" / "android" / "build.gradle"
     if gradle.exists():
         content = gradle.read_text()
         m = re.search(r'versionName "([^"]+)"', content)
@@ -49,7 +49,7 @@ def check_all() -> list[str]:
 
     # Client Python version files
     version_files = [
-        ("client/androidApp/src/main/python/version.py", f"android-{display_version}"),
+        ("apps/android/src/main/python/version.py", f"android-{display_version}"),
         ("android/app/src/main/python/version.py", f"android-{display_version}"),
         ("ios/CirisiOS/src/ciris_ios/version.py", f"ios-{display_version}"),
     ]
@@ -62,57 +62,12 @@ def check_all() -> list[str]:
                 errors.append(f"{rel_path}: {m.group(1)} != {expected}")
 
     errors.extend(_check_substrate_client_version())
-    errors.extend(_check_desktop_version_fallback(display_version))
-
-    return errors
-
-
-def _check_desktop_version_fallback(display_version: str) -> list[str]:
-    """DESKTOP_VERSION_FALLBACK is the version desktop actually reports.
-
-    Its name says fallback, which is why it was allowed to drift to 2.3.2 while
-    builds shipped 2.9.x. It is not a fallback in practice: `getAppVersion()`
-    prefers the JAR manifest, and the Compose uber-jar writes only `Main-Class`
-    into that manifest, so the constant is the ONLY value desktop ever reports.
-    A diagnostics bundle from a 2.9.40 build named 2.3.2 as its version.
-
-    The comment beside it asked a human to keep it in sync. `bump_version.py`
-    now rewrites it, but a hand-edited version would still drift silently, and
-    the failure is invisible: everything runs, the number is just wrong -- and
-    wrong specifically in the artifact people attach to bug reports.
-    """
-    errors: list[str] = []
-    platform_kt = (
-        ROOT
-        / "client"
-        / "shared"
-        / "src"
-        / "desktopMain"
-        / "kotlin"
-        / "ai"
-        / "ciris"
-        / "mobile"
-        / "shared"
-        / "platform"
-        / "Platform.desktop.kt"
-    )
-    if not platform_kt.exists():
-        return errors
-
-    m = re.search(r'DESKTOP_VERSION_FALLBACK\s*=\s*"([^"]+)"', platform_kt.read_text())
-    if m is None:
-        errors.append(
-            "Platform.desktop.kt: DESKTOP_VERSION_FALLBACK not found "
-            "(renamed? bump_version.py and this check both rewrite it by name)"
-        )
-    elif m.group(1) != display_version:
-        errors.append(f"DESKTOP_VERSION_FALLBACK: {m.group(1)} != {display_version}")
 
     return errors
 
 
 def _check_substrate_client_version() -> list[str]:
-    """CLIENT_VERSION must equal the ciris-server wheel the app ships with.
+    """The substrate pins this repo still owns must agree.
 
     The client shows a VERSION-MISMATCH banner whenever the node it talks to
     reports a different version than `CLIENT_VERSION` (ClientMode.kt). On mobile
@@ -128,32 +83,39 @@ def _check_substrate_client_version() -> list[str]:
     errors: list[str] = []
 
     req = ROOT / "requirements.txt"
-    kt = ROOT / "client/shared/src/commonMain/kotlin/ai/ciris/mobile/shared/models/ClientMode.kt"
-    if not (req.exists() and kt.exists()):
+    if not req.exists():
+        return errors
+    req_text = req.read_text()
+
+    pin = re.search(r"^ciris-server==([0-9][^\s#]*)", req_text, re.M)
+    if not pin:
         return errors
 
-    pin = re.search(r"^ciris-server==([0-9][^\s#]*)", req.read_text(), re.M)
-    client = re.search(r'const val CLIENT_VERSION = "([^"]+)"', kt.read_text())
-    if not (pin and client):
-        return errors
-
-    if pin.group(1) != client.group(1):
+    # The CLIENT_VERSION half of this check is GONE, not broken. It compared a
+    # Kotlin constant in client/shared against the server pin; that module is
+    # built by CIRISAI/CIRISClient now, so the constant is theirs and the drift
+    # it caught cannot happen here. It was removed rather than left to skip on a
+    # missing file -- a check that can never fire reads as coverage.
+    #
+    # What replaces it is the pin this repo still owns: ciris-client must BE
+    # pinned. ciris-server requires a RANGE, so without an explicit pin the .aar
+    # in apps/android/libs, the .xcframework, and the client inside the wheel can
+    # all be different builds that merely satisfy the same constraint.
+    if not re.search(r"^ciris-client==([0-9][^\s#]*)", req_text, re.M):
         errors.append(
-            f"ClientMode.kt CLIENT_VERSION: {client.group(1)} != {pin.group(1)} "
-            f"(the ciris-server pin in requirements.txt). The app would show a "
-            f"VERSION-MISMATCH banner against the node it bundles. Fix: set "
-            f"CLIENT_VERSION to {pin.group(1)}, and keep the Android gradle pin "
-            f"in lockstep too."
+            "requirements.txt has no `ciris-client==` pin. ciris-server requires a "
+            "RANGE, so the app shells and the wheel would each resolve their own "
+            "client build. tools/fetch_client_artifacts.py reads this pin."
         )
 
     # The Android gradle pin installs the wheel; if it disagrees with
     # requirements.txt the device runs a different substrate than CI tested.
-    gradle = ROOT / "client/androidApp/build.gradle"
+    gradle = ROOT / "apps/android/build.gradle"
     if gradle.exists():
         g = re.search(r'install "ciris-server==([^"]+)"', gradle.read_text())
         if g and g.group(1) != pin.group(1):
             errors.append(
-                f"androidApp/build.gradle ciris-server pin: {g.group(1)} != " f"{pin.group(1)} (requirements.txt)"
+                f"apps/android/build.gradle ciris-server pin: {g.group(1)} != {pin.group(1)} (requirements.txt)"
             )
 
     return errors

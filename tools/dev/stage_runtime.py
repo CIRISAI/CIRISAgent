@@ -215,7 +215,7 @@ def stage_runtime(
     dest = dest.resolve()
     # Refuse to clobber the actual source — staging on top of src itself, or
     # into one of the include_roots whose contents we'd rmtree first. A
-    # generic build dir under the repo (e.g., client/androidApp/build/python-src)
+    # generic build dir under the repo (e.g., apps/android/build/python-src)
     # is fine — that's exactly where Gradle wants the staged Python tree for
     # Chaquopy bundling.
     if src == dest:

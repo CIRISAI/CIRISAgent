@@ -52,7 +52,7 @@ on:
       # It appeared to work only because GitHub's path filter is cumulative
       # across a PR: once any commit matched, every later push re-triggered.
       - 'requirements.txt'
-      - 'client/iosApp/substrate.lock.json'
+      - 'apps/ios/substrate.lock.json'
       - '.github/workflows/refresh-ios-substrate.yml'
   push:
     branches: [main, 'release/**']
@@ -79,7 +79,7 @@ on:
       # It appeared to work only because GitHub's path filter is cumulative
       # across a PR: once any commit matched, every later push re-triggered.
       - 'requirements.txt'
-      - 'client/iosApp/substrate.lock.json'
+      - 'apps/ios/substrate.lock.json'
       - '.github/workflows/refresh-ios-substrate.yml'
 
 permissions:
@@ -216,15 +216,15 @@ jobs:
             echo
             echo '```bash'
             # Via a temp dir: `gh run download` REFUSES to overwrite, so
-            # extracting straight into client/iosApp/ aborts on the first file
+            # extracting straight into apps/ios/ aborts on the first file
             # that already exists — which is all of them — and lands nothing.
             echo "T=\$(mktemp -d)"
             echo "gh run download ${{ github.run_id }} -R ${{ github.repository }} \\"
             echo "  -n ios-substrate-refresh -D \"\$T\""
-            echo "cp -a \"\$T\"/. client/iosApp/"
-            echo "git add -f client/iosApp/app_packages_native client/iosApp/Frameworks \\"
-            echo "  client/iosApp/Resources/app_packages client/iosApp/Resources.zip \\"
-            echo "  client/iosApp/substrate.lock.json"
+            echo "cp -a \"\$T\"/. apps/ios/"
+            echo "git add -f apps/ios/app_packages_native apps/ios/Frameworks \\"
+            echo "  apps/ios/Resources/app_packages apps/ios/Resources.zip \\"
+            echo "  apps/ios/substrate.lock.json"
             echo "git commit -m 'chore(ios): refresh iOS substrate to the pinned ciris-server'"
             echo '```'
             echo

@@ -1600,16 +1600,16 @@ def _ensure_emulator(args: argparse.Namespace) -> Optional[str]:
 
 def _find_debug_apk() -> Optional[Path]:
     repo_root = Path(__file__).resolve().parents[4]
-    candidate = repo_root / "client" / "androidApp" / "build" / "outputs" / "apk" / "debug" / "androidApp-debug.apk"
+    candidate = repo_root / "apps" / "android" / "build" / "outputs" / "apk" / "debug" / "androidApp-debug.apk"
     return candidate if candidate.exists() else None
 
 
 def _build_debug_apk() -> bool:
     repo_root = Path(__file__).resolve().parents[4]
     client_dir = repo_root / "client"
-    print("  building debug APK (./gradlew :androidApp:assembleDebug)…")
+    print("  building debug APK (./gradlew :android:assembleDebug)…")
     r = subprocess.run(
-        ["./gradlew", ":androidApp:assembleDebug"],
+        ["./gradlew", ":android:assembleDebug"],
         cwd=str(client_dir),
         capture_output=True,
         text=True,

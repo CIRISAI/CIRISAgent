@@ -54,18 +54,17 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # it mirrors the server-side data/localized subset, not the UI bundle.)
 UI_MIRRORS: Tuple[str, ...] = (
     "ciris_engine/data/localized",
-    "client/androidApp/src/main/assets/localization",
-    "client/desktopApp/src/main/resources/localization",
-    "client/iosApp/iosApp/localization",
-    "client/iosApp/Resources/app/localization",
-    "client/shared/src/desktopMain/resources/localization",
+    "apps/android/src/main/assets/localization",
+    "apps/ios/iosApp/localization",
+    "apps/ios/Resources/app/localization",
 )
 
 # Primary bundle used for cross-language parity reporting + manifest read.
-PRIMARY_BUNDLE = "client/androidApp/src/main/assets/localization"
+PRIMARY_BUNDLE = "apps/android/src/main/assets/localization"
 
 # Kotlin source set whose literal string keys must resolve against en.json.
-COMMON_MAIN = "client/shared/src/commonMain"
+# The Kotlin sources moved to CIRISAI/CIRISClient; nothing here scans them now.
+COMMON_MAIN = None
 
 # localizedString("key" …) / getString("key" …) — capture the literal first arg.
 # ``[^"$]`` rejects interpolated keys ("mobile.foo_${x}") which can't be checked

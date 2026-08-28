@@ -124,6 +124,22 @@ jobs:
 
       # Build and install the WHEEL, not the checkout. `pip install .` would
       # exercise a source tree users never receive.
+        # The desktop app is no longer built here: :desktopApp lives in
+        # CIRISAI/CIRISClient and ships as the uber-jar inside the pinned
+        # ciris-client wheel. It must land in ciris_engine/desktop_app/ BEFORE
+        # the wheel is built, because that is what setup.py packages and what
+        # ciris_engine/desktop_launcher.py globs at runtime -- the old gradle
+        # step ran AFTER the wheel build and so was never in the artifact under
+        # test.
+      - name: Vendor the CIRIS Desktop UberJar from the client wheel
+        shell: bash
+        run: |
+          set -euo pipefail
+          CLIENT_VERSION=$(grep -oE '^ciris-client==[0-9.]+' requirements.txt | cut -d= -f3)
+          python -m pip download "ciris-client==${CLIENT_VERSION}" --no-deps -d /tmp/clientwheel
+          python tools/dev/vendor_desktop_jar.py /tmp/clientwheel ciris_engine/desktop_app "$CLIENT_VERSION"
+
+
       - name: Build and install the wheel
         shell: pwsh
         run: |
@@ -133,11 +149,6 @@ jobs:
           Write-Host "installing $wheel"
           python -m pip install "$wheel"
           python -m pip install requests
-
-      - name: Build the desktop app
-        shell: pwsh
-        working-directory: client
-        run: ./gradlew.bat :desktopApp:packageUberJarForCurrentOS --no-daemon --stacktrace
 
       # ── BOOT 1 — first run, full setup driven through the UI ──────────────
       - name: Boot 1 — setup wizard and local login, via the UI

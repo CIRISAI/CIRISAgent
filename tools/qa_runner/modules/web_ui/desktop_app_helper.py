@@ -467,7 +467,7 @@ class DesktopAppHelper:
         # Input credentials. On iOS/Android, KMP TextField uses a StateFlow
         # for the bound value — text entered via /input doesn't reach the
         # view model synchronously, and back-to-back inputs race the
-        # StateFlow commit (documented in client/iosApp/CLAUDE.md as
+        # StateFlow commit (documented in apps/ios/CLAUDE.md as
         # "Text input needs 2-second delay between fields"). Insert that
         # delay only on mobile; desktop's Compose state updates are
         # synchronous and don't need it.

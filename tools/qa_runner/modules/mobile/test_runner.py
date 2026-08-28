@@ -52,7 +52,7 @@ class MobileTestConfig:
     adb_path: Optional[str] = None
 
     # App settings
-    apk_path: str = "client/androidApp/build/outputs/apk/debug/androidApp-debug.apk"
+    apk_path: str = "apps/android/build/outputs/apk/debug/androidApp-debug.apk"
     package_name: str = "ai.ciris.mobile.debug"  # matches the default debug apk_path
     reinstall_app: bool = True
     clear_data: bool = True
@@ -590,7 +590,7 @@ def main():
     # App settings
     parser.add_argument(
         "--apk",
-        default="client/androidApp/build/outputs/apk/debug/androidApp-debug.apk",
+        default="apps/android/build/outputs/apk/debug/androidApp-debug.apk",
         help="Path to APK file",
     )
     parser.add_argument("--no-reinstall", action="store_true", help="Don't reinstall the app")

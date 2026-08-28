@@ -324,11 +324,9 @@ def test_mirrors_carry_the_same_split_as_the_source_bundle() -> None:
     """The five client bundles are byte-mirrors. A split that lands in the
     source and not in the mirrors ships a different prompt on mobile."""
     mirrors = [
-        "client/androidApp/src/main/assets/localization",
-        "client/desktopApp/src/main/resources/localization",
-        "client/iosApp/iosApp/localization",
-        "client/iosApp/Resources/app/localization",
-        "client/shared/src/desktopMain/resources/localization",
+        "apps/android/src/main/assets/localization",
+        "apps/ios/iosApp/localization",
+        "apps/ios/Resources/app/localization",
     ]
     source = {lang: _bundle_value(lang) for lang in _manifest_languages()}
     for mirror in mirrors:

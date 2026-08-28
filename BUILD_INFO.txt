@@ -1,8 +1,8 @@
 # Build Information
-Code Hash: 591723f464a7
-Build Time: 2026-08-27T18:19:32.810269
-Git Commit: 2fda435c28d6eedd947fc1e2bb23869ad45ef349
-Git Branch: fix/sonar-reliability-security
+Code Hash: 0d76d6ada496
+Build Time: 2026-08-28T18:58:29.358541
+Git Commit: e51c600ed313cda7ae7bc2d50928a96fa76898a3
+Git Branch: chore/adopt-server-0.5.194
 
 This hash is a SHA-256 of all Python source files in the repository.
 It provides a deterministic version identifier based on the actual code content.

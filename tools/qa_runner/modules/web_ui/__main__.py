@@ -1436,6 +1436,38 @@ def _wipe_dev_data() -> None:
     env_path.write_text('CIRIS_CONFIGURED="true"\n', encoding="utf-8")
 
 
+#: The folded node's read-API port (`ciris_engine/logic/runtime/node_fold.py`).
+NODE_FOLD_PORT = 4243
+
+
+def _desktop_api_url(brain_base_url: str) -> str:
+    """The URL the desktop app should be pointed at: the NODE, not the brain.
+
+    The published client's readiness probe is `GET /v1/identity`, which is a NODE
+    route. The brain answers 404 there — it serves `/v1/agent/identity` — so an
+    app pointed at the brain loops its health check forever, never leaves the
+    Startup screen, and composes no tagged elements. That is the whole of the
+    `elements=0 / screen='Startup'` failure: not a rendering problem, an address
+    problem.
+
+    The node fold reverse-proxies the brain prefixes back to :8080, so pointing
+    at the node gives the app BOTH surfaces; pointing at the brain gives it one
+    and omits the one it boots against.
+
+    Override with CIRIS_DESKTOP_API_URL when the node is elsewhere (or absent, in
+    which case the brain URL is the only thing to try and the failure is at least
+    the honest one).
+    """
+    override = os.environ.get("CIRIS_DESKTOP_API_URL", "").strip()
+    if override:
+        return override
+
+    from urllib.parse import urlparse
+
+    host = urlparse(brain_base_url).hostname or "localhost"
+    return f"http://{host}:{NODE_FOLD_PORT}"
+
+
 def _find_desktop_jar() -> Optional[Path]:
     """Locate the desktop uber jar.
 
@@ -1895,7 +1927,7 @@ async def run_desktop_up(args: argparse.Namespace) -> int:
         env = os.environ.copy()
         env["CIRIS_TEST_MODE"] = "true"
         env["CIRIS_TEST_PORT"] = str(args.desktop_port)
-        env["CIRIS_API_URL"] = server.base_url
+        env["CIRIS_API_URL"] = _desktop_api_url(server.base_url)
         log_path = temp_path("ciris_desktop_up.log")
         with open(log_path, "w") as log:
             subprocess.Popen(
@@ -2019,7 +2051,7 @@ async def run_desktop_first_run_up(args: argparse.Namespace) -> int:
     env = os.environ.copy()
     env["CIRIS_TEST_MODE"] = "true"
     env["CIRIS_TEST_PORT"] = str(args.desktop_port)
-    env["CIRIS_API_URL"] = server.base_url
+    env["CIRIS_API_URL"] = _desktop_api_url(server.base_url)
     log_path = temp_path("ciris_desktop_setup.log")
     with open(log_path, "w") as log:
         subprocess.Popen(

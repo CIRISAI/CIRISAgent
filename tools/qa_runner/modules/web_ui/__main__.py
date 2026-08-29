@@ -684,7 +684,10 @@ class DesktopAppTestRunner:
             # wizard's first screen. At 6s a loaded agent build looks exactly
             # like a node-client build that has no AI screen at all, and the run
             # walks past the whole LLM step reporting nothing wrong.
-            if not await self.helper.wait_for_element("input_llm_provider", timeout=20000):
+            # wait_for_OPTIONAL_element: the plain one RAISES on timeout and never
+            # returns False, so this accommodation was dead code and the run
+            # failed on exactly the build it was written to tolerate.
+            if not await self.helper.wait_for_optional_element("input_llm_provider", timeout=20000):
                 self._log("No AI screen (node-client build) — the wizard is finishing")
                 return
             if llm_api_key:

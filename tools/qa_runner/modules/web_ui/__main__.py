@@ -61,7 +61,7 @@ import subprocess
 import sys
 import time
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -312,6 +312,9 @@ class DesktopAppTestRunner:
 
         await self.run_test("enter_message", enter_message)
 
+        # Baseline BEFORE sending, so "did anything come back" is answerable.
+        baseline_elements = len(await self.helper.get_elements())
+
         # Click send button
         async def click_send():
             self._log("Clicking send button...")
@@ -320,10 +323,40 @@ class DesktopAppTestRunner:
 
         await self.run_test("click_send_button", click_send)
 
-        # Wait a bit for response (we don't have a way to detect response yet)
         async def wait_for_response():
-            self._log("Waiting for response (5s)...")
-            await asyncio.sleep(5)
+            """The agent must actually answer.
+
+            This used to be `await asyncio.sleep(5)` with the comment "we don't
+            have a way to detect response yet" — so the step passed whether the
+            agent replied, errored, or was never wired to an LLM at all. A chat
+            test that cannot fail on silence is not testing the chat; it is the
+            same class of hole as the Amharic install that sent two messages,
+            showed "Disconnected", and produced no reply and no error.
+
+            We are the AI: a message in must produce a message out. With the mock
+            LLM that is deterministic, so silence here is a real defect.
+
+            Asserted through the UI rather than the API because this is the UI
+            suite, and because the API answering while the screen stays empty is
+            precisely the failure worth catching. The signal is the composed tree
+            growing: a rendered reply is new elements.
+            """
+            deadline = datetime.now() + timedelta(seconds=45)
+            while datetime.now() < deadline:
+                await asyncio.sleep(1.0)
+                grown = len(await self.helper.get_elements()) - baseline_elements
+                if grown > 0:
+                    elapsed = 45 - (deadline - datetime.now()).total_seconds()
+                    self._log(f"Response rendered (+{grown} elements) after {elapsed:.1f}s")
+                    return
+            raise RuntimeError(
+                "No response rendered within 45s: the message was sent and the UI "
+                "never changed.\n"
+                "        The agent either did not answer or answered somewhere the "
+                "screen does not show.\n"
+                "        Check the LLM is configured (the wizard's AI screen) and the "
+                "app log for send/receive errors."
+            )
 
         await self.run_test("wait_for_response", wait_for_response)
 
@@ -684,12 +717,27 @@ class DesktopAppTestRunner:
             # wizard's first screen. At 6s a loaded agent build looks exactly
             # like a node-client build that has no AI screen at all, and the run
             # walks past the whole LLM step reporting nothing wrong.
-            # wait_for_OPTIONAL_element: the plain one RAISES on timeout and never
-            # returns False, so this accommodation was dead code and the run
-            # failed on exactly the build it was written to tolerate.
+            # REQUIRED, not probed. This repo builds the AGENT: it is the brain,
+            # it needs an LLM, and a wizard that never offers to configure one has
+            # not set the product up. Tolerating absence here is what let the
+            # whole LLM step vanish silently while the run still reported 4/5.
+            #
+            # If it is missing, the cause is almost never the screen. It is
+            # clientMode: the client resolves NODE when it cannot read the node's
+            # `folded`/`reachable`, and a node has no brain to configure. So say
+            # that, rather than making the operator rediscover it.
             if not await self.helper.wait_for_optional_element("input_llm_provider", timeout=20000):
-                self._log("No AI screen (node-client build) — the wizard is finishing")
-                return
+                raise RuntimeError(
+                    "No AI screen. This build is the AGENT and MUST offer LLM "
+                    "configuration.\n"
+                    "        Most likely the client resolved clientMode=NODE: it reads "
+                    "role/services from the brain\n"
+                    "        (CIRIS_API_URL) but folded/reachable from the node "
+                    "(CIRIS_NODE_URL). With the node URL\n"
+                    "        unset it defaults both to false and renders the node "
+                    "surface, which has no AI screen.\n"
+                    "        Check the app log for the '[gate] clientMode=' line."
+                )
             if llm_api_key:
                 # BYOK path (#1062): real provider + key + Test Connection +
                 # live-model dropdown. This exercises the accommodation that
@@ -1443,32 +1491,38 @@ def _wipe_dev_data() -> None:
 NODE_FOLD_PORT = 4243
 
 
-def _desktop_api_url(brain_base_url: str) -> str:
-    """The URL the desktop app should be pointed at: the NODE, not the brain.
+def _desktop_urls(brain_base_url: str) -> "tuple[str, str]":
+    """(CIRIS_API_URL, CIRIS_NODE_URL) for the desktop app. It needs BOTH.
 
-    The published client's readiness probe is `GET /v1/identity`, which is a NODE
-    route. The brain answers 404 there — it serves `/v1/agent/identity` — so an
-    app pointed at the brain loops its health check forever, never leaves the
-    Startup screen, and composes no tagged elements. That is the whole of the
-    `elements=0 / screen='Startup'` failure: not a rendering problem, an address
-    problem.
+    The client decides its surface with
+    `clientModeFrom(role, services, folded, reachable, version)`, and those inputs
+    come from two different services:
 
-    The node fold reverse-proxies the brain prefixes back to :8080, so pointing
-    at the node gives the app BOTH surfaces; pointing at the brain gives it one
-    and omits the one it boots against.
+      * `role` / `services`  <- the BRAIN's /v1/system/health
+      * `folded` / `reachable` <- the NODE's /v1/system/health `agent` block
 
-    Override with CIRIS_DESKTOP_API_URL when the node is elsewhere (or absent, in
-    which case the brain URL is the only thing to try and the failure is at least
-    the honest one).
+    Set only CIRIS_API_URL and the client cannot read the node, defaults folded
+    and reachable to false, and resolves clientMode=NODE despite role=agent. A
+    node has no brain to configure, so the wizard renders no AI screen — which is
+    how `ai_configuration` failed while every other wizard step passed.
+
+    WE ARE THE AI. The AI screen is required, and it needs the node URL to appear.
+
+    The node reports this correctly — `{"folded": true, "reachable": true}` once
+    the brain answers on :8080 — so nothing upstream is at fault here; the app was
+    simply never told where the node is.
+
+    CIRIS_DESKTOP_API_URL / CIRIS_DESKTOP_NODE_URL override either side.
     """
-    override = os.environ.get("CIRIS_DESKTOP_API_URL", "").strip()
-    if override:
-        return override
-
     from urllib.parse import urlparse
 
-    host = urlparse(brain_base_url).hostname or "localhost"
-    return f"http://{host}:{NODE_FOLD_PORT}"
+    api = os.environ.get("CIRIS_DESKTOP_API_URL", "").strip() or brain_base_url
+
+    node = os.environ.get("CIRIS_DESKTOP_NODE_URL", "").strip()
+    if not node:
+        host = urlparse(brain_base_url).hostname or "localhost"
+        node = f"http://{host}:{NODE_FOLD_PORT}"
+    return api, node
 
 
 def _find_desktop_jar() -> Optional[Path]:
@@ -1930,7 +1984,7 @@ async def run_desktop_up(args: argparse.Namespace) -> int:
         env = os.environ.copy()
         env["CIRIS_TEST_MODE"] = "true"
         env["CIRIS_TEST_PORT"] = str(args.desktop_port)
-        env["CIRIS_API_URL"] = _desktop_api_url(server.base_url)
+        env["CIRIS_API_URL"], env["CIRIS_NODE_URL"] = _desktop_urls(server.base_url)
         log_path = temp_path("ciris_desktop_up.log")
         with open(log_path, "w") as log:
             subprocess.Popen(
@@ -2054,7 +2108,7 @@ async def run_desktop_first_run_up(args: argparse.Namespace) -> int:
     env = os.environ.copy()
     env["CIRIS_TEST_MODE"] = "true"
     env["CIRIS_TEST_PORT"] = str(args.desktop_port)
-    env["CIRIS_API_URL"] = _desktop_api_url(server.base_url)
+    env["CIRIS_API_URL"], env["CIRIS_NODE_URL"] = _desktop_urls(server.base_url)
     log_path = temp_path("ciris_desktop_setup.log")
     with open(log_path, "w") as log:
         subprocess.Popen(

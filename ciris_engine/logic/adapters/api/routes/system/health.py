@@ -22,9 +22,10 @@ from ...constants import ERROR_TIME_SERVICE_NOT_AVAILABLE
 from ...dependencies.auth import AuthContext, optional_auth, require_observer
 from ...services.auth_service import APIAuthService
 from .helpers import (
-    collect_agent_capabilities,
     check_initialization_status,
     check_processor_health,
+    collect_agent_capabilities,
+    collect_node_fold_state,
     collect_service_health,
     determine_overall_status,
     get_cognitive_state_safe,
@@ -136,9 +137,7 @@ def _provider_fault_code(service_provider: object) -> str:
 _HTTP_401 = re.compile(r"\b(?:http|https|status|code|error)\b[^0-9a-z]{0,4}401\b")
 
 
-async def _identify_caller(
-    request: Request, authorization: Optional[str] = Header(None)
-) -> Optional[AuthContext]:
+async def _identify_caller(request: Request, authorization: Optional[str] = Header(None)) -> Optional[AuthContext]:
     """Identify the caller if possible, and NEVER fail if not.
 
     Deliberately not ``OptionalAuthDep``. That resolves ``optional_auth``,
@@ -851,6 +850,9 @@ async def get_system_health(
     # scopes. `None` here is UNDETERMINED and reaches the wire as `null` — the
     # one state a reader must not see as `[]`.
     agent_capabilities = collect_agent_capabilities(request, has_working_llm=not degraded_mode)
+    # The node facts the client reads to pick its surface, mirrored onto the
+    # agent's address so it needs only one.
+    node_fold_state = collect_node_fold_state()
 
     response = SystemHealthResponse(
         status=status,
@@ -865,6 +867,7 @@ async def get_system_health(
         warnings=warnings,
         degraded_mode=degraded_mode,
         agent_capabilities=agent_capabilities,
+        agent=node_fold_state,
     )
 
     return SuccessResponse(data=response)

@@ -51,6 +51,20 @@ class SystemHealthResponse(BaseModel):
     timestamp: datetime = Field(..., description="Current server time")
     warnings: List[SystemWarning] = Field(default_factory=list, description="System warnings requiring attention")
     degraded_mode: bool = Field(False, description="True when running without a working LLM provider")
+    agent: Optional[Dict[str, bool]] = Field(
+        None,
+        description=(
+            "Whether this agent's node is folded in and answering, in the shape the "
+            'node itself reports it: {"folded": bool, "reachable": bool}. The '
+            "client resolves AGENT vs NODE mode from these — a node has no brain to "
+            "configure, so getting this wrong costs the user the LLM setup screen. "
+            "Mirrored here so the agent is ONE address: the client should not need "
+            "to know the node's port to find out whether the brain it is talking to "
+            "is really there. None when the node fold is disabled or unreachable, "
+            "which is distinct from {folded: false} — could-not-determine is not the "
+            "same fact as is-not-folded."
+        ),
+    )
     agent_capabilities: Optional[List[str]] = Field(
         None,
         description=(
@@ -84,8 +98,13 @@ class FederationAddressResponse(BaseModel):
     """
 
     available: bool = Field(..., description="True when Edge runtime is initialized and key_id queryable")
-    key_id: Optional[str] = Field(None, description="Federation key_id (the local agent's federation address); null when Edge runtime is disabled or not yet initialized")
-    edge_version: Optional[str] = Field(None, description="Live ciris-edge crate version, or null when Edge runtime unavailable")
+    key_id: Optional[str] = Field(
+        None,
+        description="Federation key_id (the local agent's federation address); null when Edge runtime is disabled or not yet initialized",
+    )
+    edge_version: Optional[str] = Field(
+        None, description="Live ciris-edge crate version, or null when Edge runtime unavailable"
+    )
 
 
 class SystemTimeResponse(BaseModel):

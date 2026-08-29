@@ -172,12 +172,41 @@ async def check_provider_health(provider: Any) -> Optional[bool]:
 #: hold. `agent:reason` additionally requires a working LLM: a brain with a
 #: registered-but-unusable provider cannot reason, and saying otherwise is the
 #: permissive error the capability gate is explicitly not there to catch.
+#: The folded node's read-API port (`ciris_engine/logic/runtime/node_fold.py`).
+NODE_FOLD_PORT = 4243
+
 AGENT_CAPABILITY_SERVICES: Dict[str, ServiceType] = {
     "agent:converse": ServiceType.COMMUNICATION,
     "agent:tools": ServiceType.TOOL,
     "agent:defer": ServiceType.WISE_AUTHORITY,
     "agent:remember": ServiceType.MEMORY,
 }
+
+
+def collect_node_fold_state() -> Optional[Dict[str, bool]]:
+    """Is this agent's node folded in and serving?
+
+    Mirrors the node's own `agent` block onto the AGENT's address so a client
+    needs one base URL, not two. The client resolves AGENT vs NODE mode from
+    exactly these booleans, and resolving NODE costs the user the LLM
+    configuration screen — on the build that cannot run without an LLM.
+
+    Read from the fold's own module state, NOT over HTTP. The first version of
+    this asked the node for its health with a 3s timeout on every call, and
+    /v1/system/health went to 6-11 seconds. The desktop client polls this
+    endpoint.
+
+    ``None`` = the fold is disabled, i.e. COULD NOT DETERMINE rather than
+    ``{"folded": false}`` — the same distinct-zeroes rule the capability wire
+    uses.
+    """
+    try:
+        from ciris_engine.logic.runtime.node_fold import fold_status
+
+        return fold_status()
+    except Exception as e:
+        logger.debug("Node fold state unavailable: %s: %s", type(e).__name__, e)
+        return None
 
 
 def collect_agent_capabilities(request: Request, has_working_llm: bool) -> Optional[List[str]]:

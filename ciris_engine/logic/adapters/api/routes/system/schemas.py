@@ -51,6 +51,24 @@ class SystemHealthResponse(BaseModel):
     timestamp: datetime = Field(..., description="Current server time")
     warnings: List[SystemWarning] = Field(default_factory=list, description="System warnings requiring attention")
     degraded_mode: bool = Field(False, description="True when running without a working LLM provider")
+    agent_capabilities: Optional[List[str]] = Field(
+        None,
+        description=(
+            "What the BRAIN can do, as distinct from what the node is conferred. "
+            "FOUR STATES, and the middle two are different facts: the key ABSENT "
+            "means this agent predates the field (upgrade it); `null` means the "
+            "agent could not read its own service registry (retry); `[]` means it "
+            "read and holds nothing (use another agent); a list is the set. "
+            "Collapsing null into [] tells an operator a still-initialising brain "
+            "can do nothing, permanently. "
+            "Named distinctly from the node's conferred `capabilities` ON PURPOSE: "
+            "this document is the node's health merged with the brain's, so a bare "
+            "`capabilities` here could not be attributed to either tier by a reader "
+            "holding only the parsed set. Conferred scopes are signed by the trust "
+            "root; these are not, and the two must never be unioned. Read by "
+            "CIRISClient's CapabilityWire as FIELD_AGENT."
+        ),
+    )
 
     @field_serializer("timestamp")
     def serialize_ts(self, timestamp: datetime, _info: Any) -> Optional[str]:

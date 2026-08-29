@@ -22,6 +22,7 @@ from ...constants import ERROR_TIME_SERVICE_NOT_AVAILABLE
 from ...dependencies.auth import AuthContext, optional_auth, require_observer
 from ...services.auth_service import APIAuthService
 from .helpers import (
+    collect_agent_capabilities,
     check_initialization_status,
     check_processor_health,
     collect_service_health,
@@ -846,6 +847,11 @@ async def get_system_health(
             )
         status = "critical"
 
+    # The brain's own capabilities, kept separate from the node's conferred
+    # scopes. `None` here is UNDETERMINED and reaches the wire as `null` — the
+    # one state a reader must not see as `[]`.
+    agent_capabilities = collect_agent_capabilities(request, has_working_llm=not degraded_mode)
+
     response = SystemHealthResponse(
         status=status,
         # We are the brain. Say so — never make a client infer it.
@@ -858,6 +864,7 @@ async def get_system_health(
         timestamp=current_time,
         warnings=warnings,
         degraded_mode=degraded_mode,
+        agent_capabilities=agent_capabilities,
     )
 
     return SuccessResponse(data=response)

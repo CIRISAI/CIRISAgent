@@ -9,7 +9,7 @@ import asyncio
 import logging
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException, Request
 
@@ -157,6 +157,85 @@ async def check_provider_health(provider: Any) -> Optional[bool]:
         return None
     except Exception:
         return False
+
+
+#: The agent tier's own capability vocabulary, namespaced to mirror the fabric's
+#: conferred scopes (`infra:serve`) without being mistakable for one.
+#:
+#: These describe what the BRAIN adds to a node. Nothing attests them — they are
+#: read off the live service registry, not signed by the trust root — which is
+#: exactly why they travel under `agent_capabilities` and never under
+#: `capabilities`. CIRISServer refuses to launder a locally-detected capability
+#: into its conferred list; this is the other half of that rule, kept on our side.
+#:
+#: Each entry is a service type that must be REGISTERED for the capability to
+#: hold. `agent:reason` additionally requires a working LLM: a brain with a
+#: registered-but-unusable provider cannot reason, and saying otherwise is the
+#: permissive error the capability gate is explicitly not there to catch.
+AGENT_CAPABILITY_SERVICES: Dict[str, ServiceType] = {
+    "agent:converse": ServiceType.COMMUNICATION,
+    "agent:tools": ServiceType.TOOL,
+    "agent:defer": ServiceType.WISE_AUTHORITY,
+    "agent:remember": ServiceType.MEMORY,
+}
+
+
+def collect_agent_capabilities(request: Request, has_working_llm: bool) -> Optional[List[str]]:
+    """The agent tier's capabilities, or ``None`` when we cannot determine them.
+
+    FOUR WIRE SHAPES, THREE OF WHICH THIS FUNCTION CAN PRODUCE. The reader on the
+    other side (CIRISClient `CapabilityWire`) distinguishes:
+
+    ==================  ==============  ===========================================
+    wire                state           remedy
+    ==================  ==============  ===========================================
+    key absent          UNDECLARED      upgrade the agent (it predates this field)
+    ``null``            UNDETERMINED    it could not read its own registry — retry
+    ``[]``              ABSENT          it read, and the brain holds nothing
+    ``[...]``           membership      the declared set
+    ==================  ==============  ===========================================
+
+    ``None`` HERE MEANS UNDETERMINED AND MUST REACH THE WIRE AS ``null``, never as
+    an omitted key and never as ``[]``. CIRISServer's `conformance.rs` draws the
+    same line on its own field and says why:
+
+        `null` when this node could not read its own key record, which is NOT the
+        same fact as `[]` — "no capabilities" and "could not determine" must not
+        collapse into one answer, or a client renders a transient directory error
+        as a node with no authority.
+
+    The distinction is load-bearing in one direction in particular: a brain that
+    is still initialising has no registry yet, and reporting `[]` there would tell
+    an operator their agent can do nothing, permanently, on the strength of a
+    condition that resolves in seconds.
+
+    NOT A SECURITY BOUNDARY. `TRUST_ROOT_CAPABILITY_GATE.md` §5 — the server
+    enforces the reality whether or not the client showed it. This decides what a
+    client SHOWS.
+    """
+    registry = getattr(request.app.state, "service_registry", None)
+    if registry is None:
+        # We cannot read our own state. That is not "the brain holds nothing".
+        return None
+
+    try:
+        held: List[str] = []
+        for capability, service_type in AGENT_CAPABILITY_SERVICES.items():
+            if registry.get_services_by_type(service_type):
+                held.append(capability)
+
+        # Reasoning is the one capability a registration does not establish. An
+        # LLM provider can be registered and unusable (no key, dead endpoint),
+        # and `degraded_mode` already tracks exactly that.
+        if has_working_llm and registry.get_services_by_type(ServiceType.LLM):
+            held.append("agent:reason")
+
+        return sorted(held)
+    except Exception as e:
+        # A registry that raises is a registry we did not read. Same fact as
+        # absent, same answer — not an empty set.
+        logger.warning("Could not determine agent capabilities: %s: %s", type(e).__name__, e)
+        return None
 
 
 async def collect_service_health(request: Request) -> Dict[str, Dict[str, int]]:

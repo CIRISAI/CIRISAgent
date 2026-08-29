@@ -10,6 +10,7 @@ Android emulator running CIRIS. It provides:
 - Bridge to main QA runner
 """
 
+import re
 import subprocess
 import time
 from dataclasses import dataclass
@@ -19,6 +20,24 @@ from typing import Optional, Tuple
 import requests
 
 from .config import MobileQAConfig
+
+#: Assignments whose VALUE must never be printed.
+#:
+#: `_run_adb` echoes the command it is about to run when verbose, and one of
+#: those commands writes the device .env -- carrying ADMIN_PASSWORD and
+#: OPENAI_API_KEY as a single shell argument. On a CI runner that print lands in
+#: the job log, which outlives the run and is readable by anyone with repo
+#: access. CodeQL flagged it as clear-text logging of a password and was right.
+#:
+#: Matches NAME=value where NAME looks like a credential, and keeps the name so
+#: the log still shows WHICH variable was set -- redacting the whole command
+#: would make the verbose mode useless for the debugging it exists for.
+_SECRET_ASSIGNMENT = re.compile(r"(?i)\b([A-Z0-9_]*(?:PASSWORD|PASSWD|API_KEY|APIKEY|TOKEN|SECRET))\s*=\s*[^\s'\"]+")
+
+
+def _redact_secrets(text: str) -> str:
+    """Mask credential values in a string bound for a log."""
+    return _SECRET_ASSIGNMENT.sub(lambda m: f"{m.group(1)}=<redacted>", text)
 
 
 @dataclass
@@ -65,7 +84,7 @@ class EmulatorBridge:
         cmd.extend(args)
 
         if self.config.verbose:
-            print(f"[ADB] {' '.join(cmd)}")
+            print(f"[ADB] {_redact_secrets(' '.join(cmd))}")
 
         return subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=check)
 

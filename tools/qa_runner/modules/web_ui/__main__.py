@@ -397,8 +397,7 @@ class DesktopAppTestRunner:
         for attempt in range(1, 6):
             if not await self.helper.click("btn_test_connection"):
                 raise RuntimeError(
-                    "Failed to click btn_test_connection — is the app built with the "
-                    "testableClickable fix? (#1062)"
+                    "Failed to click btn_test_connection — is the app built with the " "testableClickable fix? (#1062)"
                 )
             self._log(f"AI (BYOK): Test Connection attempt {attempt}/5")
             await asyncio.sleep(3)  # let one checkLlmConfig produce its verdict rows
@@ -693,7 +692,9 @@ class DesktopAppTestRunner:
                 # live-model dropdown. This exercises the accommodation that
                 # made btn_test_connection reachable by automation.
                 await self._drive_llm_step_byok(
-                    llm_provider or "openrouter", llm_api_key, llm_model,
+                    llm_provider or "openrouter",
+                    llm_api_key,
+                    llm_model,
                     expect_key_rejected=llm_key_expect_rejected,
                     require_live_models=llm_require_live_models,
                 )
@@ -811,8 +812,7 @@ class DesktopAppTestRunner:
             nav_candidates = [
                 e.test_tag
                 for e in elements
-                if "node" in e.test_tag.lower()
-                and ("nav" in e.test_tag.lower() or "manage" in e.test_tag.lower())
+                if "node" in e.test_tag.lower() and ("nav" in e.test_tag.lower() or "manage" in e.test_tag.lower())
             ]
             for tag in nav_candidates:
                 self._log(f"trying nav candidate: {tag}")
@@ -1437,14 +1437,41 @@ def _wipe_dev_data() -> None:
 
 
 def _find_desktop_jar() -> Optional[Path]:
-    """Locate the built desktop uber jar."""
+    """Locate the desktop uber jar.
+
+    The jar is no longer BUILT here — :desktopApp lives in CIRISAI/CIRISClient
+    and ships inside the pinned `ciris-client` wheel. Three places it can be,
+    newest first, because this runs against three different trees:
+
+      1. ciris_engine/desktop_app/  — where CI vendors it and where the wheel
+         packages it (`setup.py` derives the wheel's platform tag from it).
+      2. the INSTALLED ciris_client package — what a user who pip-installed has,
+         and the only copy present when the repo checkout carries no artifacts.
+      3. the legacy gradle output — a stale local build from before the client
+         adoption. Last, so it can never shadow a current jar.
+    """
     repo_root = Path(__file__).resolve().parents[4]
-    candidates = sorted(
-        glob.glob(str(repo_root / "client" / "desktopApp" / "build" / "compose" / "jars" / "CIRIS-*.jar")),
-        key=os.path.getmtime,
-        reverse=True,
-    )
-    return Path(candidates[0]) if candidates else None
+
+    search: list[str] = [
+        str(repo_root / "ciris_engine" / "desktop_app" / "CIRIS-*.jar"),
+    ]
+
+    try:
+        import ciris_client
+
+        search.append(str(Path(ciris_client.__file__).parent / "_artifacts" / "CIRIS-*.jar"))
+    except ImportError:
+        # The jar-free universal wheel is a supported configuration, and so is
+        # a checkout with nothing installed. Not an error; just one fewer place.
+        pass
+
+    search.append(str(repo_root / "client" / "desktopApp" / "build" / "compose" / "jars" / "CIRIS-*.jar"))
+
+    for pattern in search:
+        candidates = sorted(glob.glob(pattern), key=os.path.getmtime, reverse=True)
+        if candidates:
+            return Path(candidates[0])
+    return None
 
 
 def _complete_setup(base_url: str, mock_llm: bool) -> bool:
@@ -1801,6 +1828,7 @@ async def run_desktop_up(args: argparse.Namespace) -> int:
     _kill_port(args.port)
     _kill_port(args.desktop_port)
     from tools.qa_runner.platform_procs import desktop_process_pattern, kill_processes_matching
+
     kill_processes_matching(desktop_process_pattern())
     # CIRIS-linux handled by desktop_process_pattern() above; pkill is POSIX-only.
     time.sleep(1)
@@ -1857,7 +1885,11 @@ async def run_desktop_up(args: argparse.Namespace) -> int:
         print("[4/5] Launching desktop app (CIRIS_TEST_MODE=true)...")
         jar = _find_desktop_jar()
         if not jar:
-            print(" [FAIL] No desktop jar found — run: cd client && ./gradlew :desktopApp:packageUberJarForCurrentOS")
+            print(
+                " [FAIL] No desktop jar found. It ships in the ciris-client wheel now, not gradle.\n"
+                "        Install the pinned client, or vendor it with\n"
+                "        tools/dev/vendor_desktop_jar.py <wheel-dir> ciris_engine/desktop_app"
+            )
             server.stop()
             return 1
         env = os.environ.copy()
@@ -1916,8 +1948,11 @@ async def run_desktop_up(args: argparse.Namespace) -> int:
     print(f"[OK] Ready. Backend: {server.base_url} Desktop test server: http://localhost:{args.desktop_port}")
     # Username only — see the note at the admin-created line above.
     print(f"   Admin: {TEST_ADMIN_USERNAME} (password: see TEST_ADMIN_PASSWORD)")
-    _hint = ("taskkill /F /IM CIRIS-windows.exe" if sys.platform == "win32"
-             else "pkill -9 -f 'CIRIS-(macos|linux)|main.py --adapter api'")
+    _hint = (
+        "taskkill /F /IM CIRIS-windows.exe"
+        if sys.platform == "win32"
+        else "pkill -9 -f 'CIRIS-(macos|linux)|main.py --adapter api'"
+    )
     print(f"   Processes left running — kill with: {_hint}")
     return 0
 
@@ -1940,6 +1975,7 @@ async def run_desktop_first_run_up(args: argparse.Namespace) -> int:
     _kill_port(args.port)
     _kill_port(args.desktop_port)
     from tools.qa_runner.platform_procs import desktop_process_pattern, kill_processes_matching
+
     kill_processes_matching(desktop_process_pattern())
     # CIRIS-linux handled by desktop_process_pattern() above; pkill is POSIX-only.
     time.sleep(1)
@@ -1973,7 +2009,11 @@ async def run_desktop_first_run_up(args: argparse.Namespace) -> int:
     print("[3/3] Launching desktop app (CIRIS_TEST_MODE=true)...")
     jar = _find_desktop_jar()
     if not jar:
-        print(" [FAIL] No desktop jar found — run: cd client && ./gradlew :desktopApp:packageUberJarForCurrentOS")
+        print(
+            " [FAIL] No desktop jar found. It ships in the ciris-client wheel now, not gradle.\n"
+            "        Install the pinned client, or vendor it with\n"
+            "        tools/dev/vendor_desktop_jar.py <wheel-dir> ciris_engine/desktop_app"
+        )
         server.stop()
         return 1
     env = os.environ.copy()

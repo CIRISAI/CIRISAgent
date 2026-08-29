@@ -135,7 +135,7 @@ repos:
       # and en.json mirror drift. Fires when any bundle JSON or commonMain Kotlin
       # (the localizedString/getString call sites) changes.
       - id: localization-sync
-        name: Localization Guard (reference coverage + mirror parity)
+        name: Localization Guard (mirror parity + locale lag)
         entry: python tools/dev/check_localization_sync.py
         language: python
         pass_filenames: false

@@ -63,8 +63,6 @@ UI_MIRRORS: Tuple[str, ...] = (
 PRIMARY_BUNDLE = "apps/android/src/main/assets/localization"
 
 # Kotlin source set whose literal string keys must resolve against en.json.
-# The Kotlin sources moved to CIRISAI/CIRISClient; nothing here scans them now.
-COMMON_MAIN = None
 
 # localizedString("key" …) / getString("key" …) — capture the literal first arg.
 # ``[^"$]`` rejects interpolated keys ("mobile.foo_${x}") which can't be checked
@@ -128,29 +126,20 @@ def manifest_languages(bundle: Path) -> List[str]:
     raise SystemExit("❌ ERROR: could not read 'languages' from manifest.json")
 
 
-def referenced_keys() -> Dict[str, Path]:
-    """Map each statically-extractable localization key -> first call site."""
-    keys: Dict[str, Path] = {}
-    for kt in (REPO_ROOT / COMMON_MAIN).rglob("*.kt"):
-        text = kt.read_text(encoding="utf-8")
-        for m in _KEY_CALL.finditer(text):
-            keys.setdefault(m.group(1), kt.relative_to(REPO_ROOT))
-    return keys
-
-
-def check_reference_coverage(en_keys: Set[str]) -> List[str]:
-    """ERROR: every literal key in commonMain must resolve in en.json."""
-    errors: List[str] = []
-    refs = referenced_keys()
-    unresolved = sorted((k, p) for k, p in refs.items() if k not in en_keys)
-    if unresolved:
-        errors.append(
-            f"{len(unresolved)} key(s) referenced in commonMain are undefined in en.json "
-            f"(they render RAW on every platform):"
-        )
-        for key, site in unresolved:
-            errors.append(f"    - {key}    ({site})")
-    return errors
+# REFERENCE COVERAGE MOVED UPSTREAM
+#
+# `referenced_keys()` / `check_reference_coverage()` scanned commonMain Kotlin for
+# `getString("some.key")` literals and asserted each resolves in en.json — the
+# guard against a key rendering RAW on every platform.
+#
+# That source is built by CIRISAI/CIRISClient now. The functions were REMOVED
+# rather than pointed at an empty directory: a scan with nothing to scan reports
+# zero unresolved keys and passes, which is indistinguishable from a clean tree.
+#
+# THE COVERAGE IS GONE FROM THIS REPO. Nothing here catches a getString() typo;
+# that check belongs beside the code it guards. What remains below is what this
+# repo still owns — mirror parity and cross-language lag over the bundles the
+# app shells actually ship.
 
 
 def check_mirror_parity() -> List[str]:
@@ -177,8 +166,7 @@ def check_mirror_parity() -> List[str]:
         extra = keys - baseline
         if missing or extra:
             errors.append(
-                f"{m}/en.json diverges from {baseline_name}/en.json: "
-                f"missing={len(missing)} extra={len(extra)}"
+                f"{m}/en.json diverges from {baseline_name}/en.json: " f"missing={len(missing)} extra={len(extra)}"
             )
             for k in sorted(missing)[:8]:
                 errors.append(f"    - missing: {k}")
@@ -233,7 +221,6 @@ def main() -> int:
     print()
 
     errors: List[str] = []
-    errors += check_reference_coverage(en_keys)
     errors += check_mirror_parity()
 
     warnings = check_cross_language(bundle, langs, en_keys)
@@ -244,7 +231,7 @@ def main() -> int:
             print(f"  {e}" if e.startswith("    ") else f"  • {e}")
         print()
     else:
-        print("[OK] reference coverage + mirror parity OK")
+        print("[OK] mirror parity OK (reference coverage now lives upstream with the Kotlin)")
         print()
 
     if warnings:

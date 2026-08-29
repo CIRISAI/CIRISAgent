@@ -730,13 +730,14 @@ class DesktopAppTestRunner:
                 raise RuntimeError(
                     "No AI screen. This build is the AGENT and MUST offer LLM "
                     "configuration.\n"
-                    "        Most likely the client resolved clientMode=NODE: it reads "
-                    "role/services from the brain\n"
-                    "        (CIRIS_API_URL) but folded/reachable from the node "
-                    "(CIRIS_NODE_URL). With the node URL\n"
-                    "        unset it defaults both to false and renders the node "
-                    "surface, which has no AI screen.\n"
-                    "        Check the app log for the '[gate] clientMode=' line."
+                    "        The app's own verdict:\n"
+                    + _gate_verdict()
+                    + "        AGENT requires folded && reachable && !veto. folded and "
+                    "reachable come from the NODE\n"
+                    "        (CIRIS_NODE_URL, :4243 `agent` block); role and services "
+                    "come from the BRAIN (CIRIS_API_URL).\n"
+                    "        A node has no brain to configure, so clientMode=NODE means "
+                    "no AI screen."
                 )
             if llm_api_key:
                 # BYOK path (#1062): real provider + key + Test Connection +
@@ -1523,6 +1524,31 @@ def _desktop_urls(brain_base_url: str) -> "tuple[str, str]":
         host = urlparse(brain_base_url).hostname or "localhost"
         node = f"http://{host}:{NODE_FOLD_PORT}"
     return api, node
+
+
+def _gate_verdict() -> str:
+    """The app's own clientMode line, pulled out of its log.
+
+    The desktop app logs `[gate] clientMode=... (role=..., services=..., folded=...,
+    reachable=...)` — the single line that says which surface it chose and on what
+    evidence. Two wrong diagnoses were made without it, because the agent and node
+    logs both show healthy services while the app renders the wrong surface.
+
+    Returned as part of the failure text so a CI run is diagnosable from its own
+    output, not only from a downloaded artifact.
+    """
+    import re as _re
+
+    for name in ("ciris_desktop_setup.log", "ciris_desktop_up.log"):
+        path = temp_path(name)
+        try:
+            with open(path, "r", encoding="utf-8", errors="replace") as fh:
+                lines = [ln for ln in fh if "[gate]" in ln]
+        except OSError:
+            continue
+        if lines:
+            return "".join(f"        {ln.strip()}\n" for ln in lines[-3:])
+    return "        (no [gate] line found in the desktop app log)\n"
 
 
 def _find_desktop_jar() -> Optional[Path]:

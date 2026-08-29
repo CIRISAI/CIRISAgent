@@ -257,6 +257,12 @@ jobs:
           New-Item -ItemType Directory -Force -Path artifacts | Out-Null
           Copy-Item boot1.json,boot2.json,oauth_up.json artifacts -ErrorAction SilentlyContinue
           if (Test-Path "$env:CIRIS_HOME\logs") { Copy-Item "$env:CIRIS_HOME\logs" artifacts\logs -Recurse -ErrorAction SilentlyContinue }
+          # THE DESKTOP APP'S OWN LOG. Without it a UI failure is undiagnosable
+          # from CI: the agent and node logs show both services healthy while the
+          # app renders the wrong surface, and the line that explains WHICH
+          # surface it chose -- "[gate] clientMode=..." -- exists only here.
+          # Two wrong diagnoses were made from its absence.
+          Copy-Item "$env:TEMP\ciris_desktop*.log" artifacts -ErrorAction SilentlyContinue
           # .env carries secrets — ship the SHAPE, never the values, so a failed
           # run is diagnosable without leaking keys into a public artifact.
           if (Test-Path "$env:CIRIS_HOME\.env") {

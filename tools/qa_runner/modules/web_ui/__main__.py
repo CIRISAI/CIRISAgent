@@ -1488,67 +1488,24 @@ def _wipe_dev_data() -> None:
     env_path.write_text('CIRIS_CONFIGURED="true"\n', encoding="utf-8")
 
 
-#: The folded node's read-API port (`ciris_engine/logic/runtime/node_fold.py`).
-NODE_FOLD_PORT = 4243
-
-
 def _desktop_urls(brain_base_url: str) -> "tuple[str, str]":
-    """(CIRIS_API_URL, CIRIS_NODE_URL) for the desktop app. It needs BOTH.
+    """(CIRIS_API_URL, CIRIS_NODE_URL) for the desktop app — BOTH the brain.
 
-    The client decides its surface with
-    `clientModeFrom(role, services, folded, reachable, version)`, and those inputs
-    come from two different services:
+    The client splits its calls across two configured addresses: role/services
+    from CIRIS_API_URL, and the setup flow plus folded/reachable from
+    CIRIS_NODE_URL. Pointed at the real node, `listModels` 404s, because
+    /v1/setup is split and the node owns only half of it.
 
-      * `role` / `services`  <- the BRAIN's /v1/system/health
-      * `folded` / `reachable` <- the NODE's /v1/system/health `agent` block
+    The agent now serves BOTH halves — its own routes plus anything unmatched
+    forwarded to the node (routes/node_proxy.py) — and reports the node's
+    folded/reachable in its own health. So the node address IS the brain address:
+    one surface, no split, nothing for the client to get wrong.
 
-    Set only CIRIS_API_URL and the client cannot read the node, defaults folded
-    and reachable to false, and resolves clientMode=NODE despite role=agent. A
-    node has no brain to configure, so the wizard renders no AI screen — which is
-    how `ai_configuration` failed while every other wizard step passed.
-
-    WE ARE THE AI. The AI screen is required, and it needs the node URL to appear.
-
-    The node reports this correctly — `{"folded": true, "reachable": true}` once
-    the brain answers on :8080 — so nothing upstream is at fault here; the app was
-    simply never told where the node is.
-
-    CIRIS_DESKTOP_API_URL / CIRIS_DESKTOP_NODE_URL override either side.
+    Set CIRIS_DESKTOP_NODE_URL to drive a bare node deliberately.
     """
-    from urllib.parse import urlparse
-
     api = os.environ.get("CIRIS_DESKTOP_API_URL", "").strip() or brain_base_url
-
-    node = os.environ.get("CIRIS_DESKTOP_NODE_URL", "").strip()
-    if not node:
-        host = urlparse(brain_base_url).hostname or "localhost"
-        node = f"http://{host}:{NODE_FOLD_PORT}"
+    node = os.environ.get("CIRIS_DESKTOP_NODE_URL", "").strip() or api
     return api, node
-
-
-def _gate_verdict() -> str:
-    """The app's own clientMode line, pulled out of its log.
-
-    The desktop app logs `[gate] clientMode=... (role=..., services=..., folded=...,
-    reachable=...)` — the single line that says which surface it chose and on what
-    evidence. Two wrong diagnoses were made without it, because the agent and node
-    logs both show healthy services while the app renders the wrong surface.
-
-    Returned as part of the failure text so a CI run is diagnosable from its own
-    output, not only from a downloaded artifact.
-    """
-    import re as _re
-
-    for name in ("ciris_desktop_setup.log", "ciris_desktop_up.log"):
-        path = temp_path(name)
-        try:
-            with open(path, "r", encoding="utf-8", errors="replace") as fh:
-                lines = [ln for ln in fh if "[gate]" in ln]
-        except OSError:
-            continue
-        if lines:
-            return "".join(f"        {ln.strip()}\n" for ln in lines[-3:])
-    return "        (no [gate] line found in the desktop app log)\n"
 
 
 def _find_desktop_jar() -> Optional[Path]:

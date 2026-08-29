@@ -66,8 +66,20 @@ def asset_url(version: str, name: str) -> str:
         ["gh", "release", "view", f"v{version}", "--repo", REPO, "--json", "assets"],
         capture_output=True,
         text=True,
-        check=True,
+        check=False,
     )
+    if out.returncode != 0:
+        # PyPI and GitHub Releases are SEPARATE publications. The wheels can be
+        # up (carrying the desktop jar) while the .aar and .xcframework, which
+        # only exist as release assets, are not. Say which channel is missing --
+        # "release not found" alone reads as "the version does not exist".
+        raise SystemExit(
+            f"{REPO} has no GitHub release v{version}.\n"
+            f"  The PyPI wheels for {version} may already be published -- they are a\n"
+            f"  DIFFERENT channel. The .aar and .xcframework exist only as release\n"
+            f"  assets, so Android and iOS cannot be built against {version} until the\n"
+            f"  release is cut. Desktop is unaffected: its jar ships inside the wheel."
+        )
     for asset in json.loads(out.stdout)["assets"]:
         if asset["name"] == name:
             return asset["url"]
@@ -112,13 +124,17 @@ def prune_stale(directory: Path, keep: str, pattern: str) -> None:
 
 def fetch_android(version: str) -> None:
     name = f"ciris-client-{version}.aar"
-    prune_stale(ANDROID_LIBS, version, "ciris-client-*.aar")
+    # DOWNLOAD FIRST, PRUNE AFTER. Pruning first meant a fetch that failed for
+    # any reason -- an uncut release, a network blip -- deleted the working .aar
+    # and left the tree unbuildable, turning "could not update" into "cannot
+    # build at all". A failed fetch must be a no-op.
     download(asset_url(version, name), ANDROID_LIBS / name)
+    prune_stale(ANDROID_LIBS, version, "ciris-client-*.aar")
 
 
 def fetch_ios(version: str) -> None:
     name = f"ciris-client-{version}.xcframework.zip"
-    prune_stale(IOS_FRAMEWORKS, version, "ciris-client-*.xcframework")
+    # Download before pruning, for the reason in fetch_android().
     zip_path = download(asset_url(version, name), IOS_FRAMEWORKS / name)
     target = IOS_FRAMEWORKS / f"ciris-client-{version}.xcframework"
     if not target.exists():
@@ -126,6 +142,7 @@ def fetch_ios(version: str) -> None:
         with zipfile.ZipFile(zip_path) as z:
             z.extractall(IOS_FRAMEWORKS)
     zip_path.unlink(missing_ok=True)
+    prune_stale(IOS_FRAMEWORKS, version, "ciris-client-*.xcframework")
 
 
 def main() -> int:

@@ -85,7 +85,6 @@ def find_kotlin_keys(kotlin_dir: Path) -> set[str]:
     return keys
 
 
-
 def _flat_values(path: Path) -> dict:
     """Dotted-key -> string value, for comparing a copy's TEXT against source.
 
@@ -195,8 +194,6 @@ class TestKotlinLocalizations:
             project_root / "apps" / "ios" / "iosApp" / "localization",
             project_root / "apps" / "ios" / "Resources" / "app" / "localization",
             project_root / "apps" / "android" / "src" / "main" / "assets" / "localization",
-            project_root / "client" / "desktopApp" / "src" / "main" / "resources" / "localization",
-            project_root / "client" / "shared" / "src" / "desktopMain" / "resources" / "localization",
         ]
 
         # UI locale bundles only — {lang}.json per the manifest. Glob-everything

@@ -100,7 +100,19 @@ def _manifest_languages() -> list[str]:
 def _referenced_keys() -> dict[str, list[str]]:
     """key -> the source files that ask for it."""
     found: dict[str, list[str]] = {}
-    for kt in (REPO / "client" / "shared" / "src").rglob("*.kt"):
+    roots = [r for r in (REPO / "apps" / "android" / "src", REPO / "apps" / "ios") if r.exists()]
+    if not roots:
+        # NOT an empty dict. `_referenced_keys()` used to scan client/shared/src,
+        # which the CIRISClient migration deleted; rglob on a missing directory
+        # yields nothing, so "no key is missing" and "every locale has every
+        # referenced key" both became trivially true. Two guards passed on an
+        # empty set for as long as the path was wrong.
+        pytest.skip(
+            "no client sources in this checkout — the Kotlin that references these "
+            "keys is built by CIRISAI/CIRISClient now, so this guard belongs there. "
+            "Skipping is honest; returning {} would have looked like a pass."
+        )
+    for kt in [f for r in roots for f in r.rglob("*.kt")]:
         try:
             text = kt.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
@@ -162,7 +174,6 @@ def test_a_new_english_key_reached_every_locale() -> None:
         "across shards, which reads as a suite-wide collapse.\n  "
         + "\n  ".join(f"{k}: missing in {', '.join(v)}" for k, v in sorted(gaps.items()))
     )
-
 
 
 # REMOVED WITH THE CLIENT MIGRATION

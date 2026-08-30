@@ -80,7 +80,18 @@ NODE_OWNED_PREFIXES = (
     "/v1/federation",
     "/v1/self",
     "/v1/accord",
-    "/v1/setup/claim-remote",
+    # `/v1/setup` is the SPLIT prefix: the brain owns list-models/models/status,
+    # the node owns claim-remote/owned-nodes. Registration order settles it —
+    # every brain setup route is mounted before this catch-all and wins — so
+    # "unmatched under /v1/setup" means "the node's".
+    #
+    # Listed as the whole prefix rather than route by route on purpose. The first
+    # version named `/v1/setup/claim-remote` alone; `/v1/setup/owned-nodes`
+    # existed too, was not in the list, and 404'd — which left the app stuck on
+    # the Setup screen forever on the SECOND boot, because ownership could not be
+    # probed. Enumerating one half of a split someone else controls is a list
+    # that is wrong the moment they add a route.
+    "/v1/setup",
 )
 
 

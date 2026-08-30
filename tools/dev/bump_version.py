@@ -10,8 +10,8 @@ Usage:
 
 This tool updates version in:
     - ciris_engine/constants.py (main version source)
-    - client/iosApp/iosApp/Info.plist (iOS CFBundleVersion)
-    - client/androidApp/build.gradle (Android versionCode + versionName)
+    - apps/ios/iosApp/Info.plist (iOS CFBundleVersion)
+    - apps/android/build.gradle (Android versionCode + versionName)
     - CIRISGUI/apps/agui/package.json (GUI version)
     - CIRISGUI/apps/agui/lib/ciris-sdk/version.ts (SDK version)
     - README.md (automatically switches between STABLE/BETA RELEASE based on version stage)
@@ -148,7 +148,7 @@ def bump_version(bump_type: str):
         print(f"  Updated README.md to {release_type} {new_version}")
 
     # Update iOS Info.plist CFBundleVersion + CFBundleShortVersionString
-    ios_plist_file = Path(__file__).parent.parent.parent / "client" / "iosApp" / "iosApp" / "Info.plist"
+    ios_plist_file = Path(__file__).parent.parent.parent / "apps" / "ios" / "iosApp" / "Info.plist"
     if ios_plist_file.exists():
         with open(ios_plist_file, "r") as f:
             plist_content = f.read()
@@ -181,7 +181,7 @@ def bump_version(bump_type: str):
             f.write(plist_content)
 
     # Update Android build.gradle
-    android_gradle_file = Path(__file__).parent.parent.parent / "client" / "androidApp" / "build.gradle"
+    android_gradle_file = Path(__file__).parent.parent.parent / "apps" / "android" / "build.gradle"
     if android_gradle_file.exists():
         with open(android_gradle_file, "r") as f:
             gradle_content = f.read()
@@ -204,59 +204,19 @@ def bump_version(bump_type: str):
 
     # Update the DESKTOP Compose packageVersion.
     #
-    # This tool knew about Android and iOS and not about desktopApp, so
-    # `packageVersion` sat at 2.6.0 while the wheel said 2.9.10 — the JAR is
-    # rebuilt every CI run, so the CODE was current and only its IDENTITY was
-    # stale. That is the worse half of the two: the binary reports a version
-    # from many releases back, and anyone diagnosing a desktop issue reaches for
-    # the wrong tree. The APK-shipping-a-wheel-eight-releases-stale note in
-    # tools/update_substrate_libs.py is the same trap, and a whole diagnosis was
-    # conducted against that stale runtime before it was caught.
+    # Desktop versioning moved UPSTREAM with the client. The desktop app is now
+    # the uber-jar inside the `ciris-client` wheel, built by CIRISAI/CIRISClient,
+    # so neither desktopApp/build.gradle.kts nor DESKTOP_VERSION_FALLBACK exists
+    # in this tree any more. The blocks that maintained them were removed rather
+    # than left to no-op: a version check that cannot fire reads as coverage.
     #
-    # Compose's packageVersion must be plain MAJOR.MINOR.PATCH — a stage suffix
-    # like "-stable" makes the packaging task fail, which is why display_version
-    # is used rather than the full version string.
-    desktop_gradle_file = Path(__file__).parent.parent.parent / "client" / "desktopApp" / "build.gradle.kts"
-    if desktop_gradle_file.exists():
-        with open(desktop_gradle_file, "r") as f:
-            desktop_content = f.read()
-        display_version = f"{major}.{minor}.{patch}"
-        old = re.search(r'packageVersion\s*=\s*"([^"]+)"', desktop_content)
-        desktop_content = re.sub(
-            r'packageVersion\s*=\s*"[^"]+"', f'packageVersion = "{display_version}"', desktop_content
-        )
-        with open(desktop_gradle_file, "w") as f:
-            f.write(desktop_content)
-        print(f"  Updated desktop packageVersion: {old.group(1) if old else '?'} -> {display_version}")
-
-    # DESKTOP_VERSION_FALLBACK is what getAppVersion() actually returns on
-    # desktop: the Compose uber-jar builds its own manifest and carries only
-    # Main-Class, so the manifest branch never fires. The constant's comment
-    # used to say "keep in sync" — an instruction to a human, which is why it
-    # sat at 2.3.2 while builds shipped 2.9.x and the diagnostics bundle named
-    # the wrong build. Rewrite it here so the sync is nobody's job to remember.
-    desktop_platform_file = (
-        Path(__file__).parent.parent.parent
-        / "client/shared/src/desktopMain/kotlin/ai/ciris/mobile/shared/platform/Platform.desktop.kt"
-    )
-    if desktop_platform_file.exists():
-        with open(desktop_platform_file, "r") as f:
-            platform_content = f.read()
-        old_fb = re.search(r'DESKTOP_VERSION_FALLBACK\s*=\s*"([^"]+)"', platform_content)
-        platform_content = re.sub(
-            r'DESKTOP_VERSION_FALLBACK\s*=\s*"[^"]+"',
-            f'DESKTOP_VERSION_FALLBACK = "{display_version}"',
-            platform_content,
-        )
-        with open(desktop_platform_file, "w") as f:
-            f.write(platform_content)
-        previous = old_fb.group(1) if old_fb else "?"
-        print(f"  Updated DESKTOP_VERSION_FALLBACK: {previous} -> {display_version}")
-
+    # NOTE for whoever bumps the client pin: upstream's uber-jar manifest carries
+    # only Main-Class, exactly as ours did, so their build has the same structural
+    # trap that made desktop report 2.3.2 on 2.9.x builds here.
     # Update client Python version files (android + iOS)
     display_version = f"{major}.{minor}.{patch}"
     client_version_files = [
-        ("client/androidApp/src/main/python/version.py", f"android-{display_version}"),
+        ("apps/android/src/main/python/version.py", f"android-{display_version}"),
         ("android/app/src/main/python/version.py", f"android-{display_version}"),
         ("ios/CirisiOS/src/ciris_ios/version.py", f"ios-{display_version}"),
     ]

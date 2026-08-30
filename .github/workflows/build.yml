@@ -852,67 +852,41 @@ jobs:
         with:
           cache-read-only: false
 
-      - name: Run shared Kotlin tests
-        # The KMP client had NO automated verification in CI: this job built the
-        # jar and the APK, neither of which runs a test, and Sonar does not scan
-        # Kotlin at all. Every Kotlin defect therefore had to be caught by a
-        # human reading a diff.
+      - name: Vendor the CIRIS Desktop UberJar from the client wheel
+        # WAS two steps: `./gradlew :shared:desktopTest` and
+        # `./gradlew :desktopApp:packageUberJarForCurrentOS`, plus a freshness
+        # assertion against packageVersion in desktopApp/build.gradle.kts.
         #
-        # desktopTest is the target that runs them with real threads, which the
-        # concurrency tests need — on a single-threaded target the coroutines
-        # interleave without overlapping and a lost-update bug passes.
+        # Both modules are gone. The shared client and the desktop app are built
+        # by CIRISAI/CIRISClient; the desktop app ships as the uber-jar inside the
+        # `ciris-client` platform wheel, which `ciris-server` already depends on.
+        # So the jar arrives with `pip install` and is copied into
+        # ciris_engine/desktop_app/ -- exactly where the gradle build used to put
+        # it. (The Kotlin tests went upstream with the source they cover.)
         #
-        # Linux only: these are JVM tests, so the other two matrix legs would
-        # re-run identical assertions on slower runners. `shell: bash` is
-        # required — a bare `run:` is pwsh on the Windows leg, where `./gradlew`
-        # is not a command.
-        if: matrix.os == 'ubuntu-latest'
+        # The wheel layout is deliberately unchanged: setup.py derives this
+        # wheel's PLATFORM TAG from the bundled jar's filename, MANIFEST.in ships
+        # the directory, and ciris_engine/desktop_launcher.py globs it at runtime.
+        # Sourcing the jar differently is a small change; moving it would have
+        # rewritten all three.
+        #
+        # The freshness check survives in the form that still applies: it can no
+        # longer compare against a local packageVersion, so it asserts the pinned
+        # client version instead. The failure it prevents is unchanged -- a stale
+        # jar shipping as fresh, reaching users as "Node is vX - app built for Y".
         shell: bash
         run: |
-          cd client
-          ./gradlew :shared:desktopTest --no-daemon
+          set -euo pipefail
+          CLIENT_VERSION=$(grep -oE '^ciris-client==[0-9.]+' requirements.txt | cut -d= -f3)
+          [ -n "$CLIENT_VERSION" ] || { echo "::error::no ciris-client== pin in requirements.txt"; exit 1; }
 
-      - name: Build CIRIS Desktop UberJar
-        # Retry-wrapped per 2.8.11 CI hardening: gradle's distribution
-        # download from services.gradle.org has a 10s socket timeout by
-        # default and DOES fail in the wild (caused the 2.8.10 merge-commit
-        # CI flake on main). Tier 2 will swap raw gradlew → setup-gradle
-        # action with caching; this retry handles the remaining tail risk.
-        uses: nick-fields/retry@v4
-        with:
-          timeout_minutes: 20
-          max_attempts: 3
-          retry_wait_seconds: 60
-          shell: bash
-          command: |
-            cd client
-            ./gradlew :desktopApp:packageUberJarForCurrentOS --no-daemon
-            mkdir -p ../ciris_engine/desktop_app
-            # PROVE THE JAR IS FRESH before it goes in the wheel.
-            #
-            # This is a GLOB copy out of a gradle output dir. A stale jar left from an
-            # earlier build, or a gradle failure that leaves the previous artifact in
-            # place, is copied silently and ships — and the symptom reaches users as
-            # "Node is vX - app built for Y", the banner we already shipped once.
-            #
-            # Upstream cannot hit this: their jar version is DERIVED from Cargo.toml at
-            # build time. Ours is a literal in build.gradle.kts, so the derivation that
-            # makes it impossible for them is exactly what we lack. Assert instead.
-            EXPECTED=$(grep -oE 'packageVersion\s*=\s*"[^"]+"' desktopApp/build.gradle.kts | grep -oE '[0-9][^"]*' | head -1)
-            [ -n "$EXPECTED" ] || { echo "::error::could not read packageVersion from desktopApp/build.gradle.kts"; exit 1; }
-
-            shopt -s nullglob
-            jars=(desktopApp/build/compose/jars/CIRIS-*.jar)
-            [ ${#jars[@]} -eq 1 ] || { echo "::error::expected exactly ONE desktop jar, found ${#jars[@]}: ${jars[*]:-none}. A leftover artifact would be copied by the glob."; exit 1; }
-
-            case "${jars[0]}" in
-              *"$EXPECTED"*) echo "desktop jar is fresh: $(basename "${jars[0]}") matches packageVersion $EXPECTED" ;;
-              *) echo "::error::desktop jar $(basename "${jars[0]}") does not carry packageVersion $EXPECTED — this is a STALE artifact, not a fresh build"; exit 1 ;;
-            esac
-
-            cp desktopApp/build/compose/jars/CIRIS-*.jar ../ciris_engine/desktop_app/
-            echo "Desktop JAR:"
-            ls -lh ../ciris_engine/desktop_app/
+          python -m pip download "ciris-client==${CLIENT_VERSION}" --no-deps -d /tmp/clientwheel
+          # The freshness assertion lives in the script: upstream names the jar
+          # for its own product version (client 0.5.192 -> CIRIS-*-1.5.192.jar),
+          # so a naive "does the filename contain 0.5.192" check fails on every
+          # correct build. The script compares the shared minor.patch tail.
+          python tools/dev/vendor_desktop_jar.py /tmp/clientwheel ciris_engine/desktop_app "$CLIENT_VERSION"
+          ls -lh ciris_engine/desktop_app/
 
       # NOTE: JRE bundling removed to keep wheel size under PyPI's 100MB limit.
       # The desktop JAR (~60MB) is included; users must have Java 17+ installed.
@@ -1001,21 +975,20 @@ jobs:
             pip install -r requirements.txt
             pip install pyinstaller
 
-      - name: Build CIRIS Desktop UberJar
-        # Same step as the matrix wheel build — installer needs the JAR
-        # whether or not the wheel build runs in the same workflow.
-        # Retry-wrapped per 2.8.11 CI hardening (this step was the cause
-        # of the 2.8.10 merge-commit flake on main; see notes above).
-        uses: nick-fields/retry@v4
-        with:
-          timeout_minutes: 20
-          max_attempts: 3
-          retry_wait_seconds: 60
-          shell: bash
-          command: |
-            cd client
-            ./gradlew :desktopApp:packageUberJarForCurrentOS --no-daemon
-            ls -lh desktopApp/build/compose/jars/
+      - name: Vendor the CIRIS Desktop UberJar from the client wheel
+        # Same source as the matrix wheel build: the installer needs the jar
+        # whether or not the wheel job ran in this workflow. No gradle here any
+        # more -- :desktopApp is gone, and the jar comes from the pinned
+        # ciris-client wheel. That also retires the retry wrapper, which existed
+        # for gradle's distribution download; pip has its own retries.
+        shell: bash
+        run: |
+          set -euo pipefail
+          CLIENT_VERSION=$(grep -oE '^ciris-client==[0-9.]+' requirements.txt | cut -d= -f3)
+          [ -n "$CLIENT_VERSION" ] || { echo "::error::no ciris-client== pin in requirements.txt"; exit 1; }
+          python -m pip download "ciris-client==${CLIENT_VERSION}" --no-deps -d /tmp/clientwheel
+          python tools/dev/vendor_desktop_jar.py /tmp/clientwheel ciris_engine/desktop_app "$CLIENT_VERSION"
+          ls -lh ciris_engine/desktop_app/
 
       - name: Build PyInstaller bundle
         run: |
@@ -1034,14 +1007,14 @@ jobs:
         run: |
           mkdir -p dist
           mv installers/windows/dist/ciris-agent dist/
-          # The .iss references ..\..\client\desktopApp\build\compose\jars\
-          # which already exists from the gradle step above.
+          # The desktop jar now lives in ciris_engine/desktop_app/, vendored
+          # from the ciris-client wheel above; the .iss path was updated to match.
           ls dist/ciris-agent/ | head -10
         shell: bash
 
       - name: Trim JRE via jlink
         run: |
-          $jar = Get-ChildItem -Path 'client\desktopApp\build\compose\jars' -Filter 'CIRIS-windows-*.jar' | Select-Object -First 1
+          $jar = Get-ChildItem -Path 'ciris_engine\desktop_app' -Filter 'CIRIS-*.jar' | Select-Object -First 1
           if (-not $jar) { Write-Error "No CIRIS-windows-*.jar found"; exit 1 }
           .\installers\windows\bundle-jre.ps1 -JarPath $jar.FullName -OutputDir dist\runtime
         shell: pwsh
@@ -1476,8 +1449,8 @@ jobs:
 
       - name: Extract mobile Resources.zip
         run: |
-          mkdir -p client/iosApp/Resources/app
-          cd client/iosApp/Resources && unzip -qo ../Resources.zip
+          mkdir -p apps/ios/Resources/app
+          cd apps/ios/Resources && unzip -qo ../Resources.zip
 
       - name: Sign mobile build manifest
         env:
@@ -1505,7 +1478,7 @@ jobs:
           GIT_SHA=$(git rev-parse HEAD)
           ciris-build-sign sign \
             --primitive agent \
-            --tree client/iosApp/Resources/app \
+            --tree apps/ios/Resources/app \
             --tree-include ciris_engine ciris_adapters ciris_ios ciris_sdk \
             --tree-exempt-dir __pycache__ .venv venv node_modules logs .pytest_cache .mypy_cache dist build .ruff_cache .coverage .tox .nox .git tests examples gui_static desktop_app \
             --tree-exempt-ext pyc pyo env log audit db sqlite sqlite3 md pyi deleted \
@@ -1822,16 +1795,16 @@ jobs:
 
       - name: Build debug APK
         run: |
-          cd client
-          ./gradlew :androidApp:syncPythonSources
-          ./gradlew :androidApp:assembleDebug
+          cd apps
+          ./gradlew :android:syncPythonSources
+          ./gradlew :android:assembleDebug
 
           # Copy APK with version name
           VERSION="${{ steps.version.outputs.version }}"
-          cp androidApp/build/outputs/apk/debug/androidApp-debug.apk \
-             androidApp/build/outputs/apk/debug/CIRIS-$VERSION-debug.apk
+          cp android/build/outputs/apk/debug/android-debug.apk \
+             android/build/outputs/apk/debug/CIRIS-$VERSION-debug.apk
 
-          ls -lh androidApp/build/outputs/apk/debug/
+          ls -lh android/build/outputs/apk/debug/
 
       - name: Download Windows installer artifact
         uses: actions/download-artifact@v7
@@ -1848,7 +1821,7 @@ jobs:
           prerelease: false
           generate_release_notes: true
           files: |
-            client/androidApp/build/outputs/apk/debug/CIRIS-${{ steps.version.outputs.version }}-debug.apk
+            apps/android/build/outputs/apk/debug/CIRIS-${{ steps.version.outputs.version }}-debug.apk
             dist-windows/CIRIS-Setup-*.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -111,7 +111,7 @@ Source: "..\..\dist\runtime\*"; DestDir: "{app}\runtime"; \
 ; ciris_engine/desktop_launcher.py searches first under the package's
 ; desktop_app directory. PyInstaller bundles ciris_engine into
 ; <app>\_internal\ciris_engine\, so the JAR needs to land there.
-Source: "..\..\client\desktopApp\build\compose\jars\CIRIS-windows-*.jar"; \
+Source: "..\..\ciris_engine\desktop_app\CIRIS-*.jar"; \
     DestDir: "{app}\_internal\ciris_engine\desktop_app"; \
     Flags: ignoreversion
 

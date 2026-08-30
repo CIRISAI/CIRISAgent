@@ -50,11 +50,9 @@ from check_localization_sync import PRIMARY_BUNDLE, manifest_languages  # noqa: 
 SOURCE_BUNDLE = "ciris_engine/data/localized"
 
 MIRRORS: Tuple[str, ...] = (
-    "client/iosApp/iosApp/localization",
-    "client/iosApp/Resources/app/localization",
-    "client/androidApp/src/main/assets/localization",
-    "client/desktopApp/src/main/resources/localization",
-    "client/shared/src/desktopMain/resources/localization",
+    "apps/ios/iosApp/localization",
+    "apps/ios/Resources/app/localization",
+    "apps/android/src/main/assets/localization",
 )
 
 _PLACEHOLDER = re.compile(r"\{([^{}]*)\}")

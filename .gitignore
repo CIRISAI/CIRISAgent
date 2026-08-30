@@ -19,7 +19,7 @@ logs/
 *.egg
 *.whl
 !android/app/wheels/*.whl
-!client/androidApp/wheels/*.whl
+!apps/android/wheels/*.whl
 *.jsonl
 memory_graph.pkl
 audit_logs.jsonl
@@ -151,7 +151,7 @@ web_ui_qa_reports/
 benchmark_results/
 
 # iOS Resources.zip (rebuilt locally, too large for git)
-client/iosApp/Resources.zip
+apps/ios/Resources.zip
 
 # Gradle cache directories (build config files like build.gradle are OK)
 .gradle/
@@ -182,7 +182,7 @@ ios/ios_gui_static/
 *.ips
 
 # Client temp files
-client/iosApp/zi*
+apps/ios/zi*
 
 # Platform-specific FFI binaries (installed via pip, not tracked in repo)
 ciris_adapters/ciris_verify/ffi_bindings/libciris_verify_ffi.so
@@ -195,7 +195,7 @@ ciris_adapters/ciris_verify/ffi_bindings/libciris_verify_ffi.dll
 
 # Build-time generated secrets (API keys obfuscated at build, NOT committed)
 ciris_adapters/wallet/providers/_build_secrets.py
-client/iosApp/Resources/app/ciris_adapters/wallet/providers/_build_secrets.py
+apps/ios/Resources/app/ciris_adapters/wallet/providers/_build_secrets.py
 
 # Local scratch / working files (not shared source)
 .claude/
@@ -210,7 +210,7 @@ nohup.out
 startup_python_hashes.json
 # Repo-root `mobile/` only — legacy BeeWare scratch dir.
 # IMPORTANT: anchor with leading slash so this does NOT match
-# `client/shared/src/commonMain/kotlin/ai/ciris/mobile/` (the unified
+# `the published ciris-client/src/commonMain/kotlin/ai/ciris/mobile/` (the unified
 # KMP shared module's Java package path). Without the anchor, every
 # new file under that package required `git add -f` to bypass the
 # accidental ignore.
@@ -257,6 +257,35 @@ claim_pin
 #
 # Run the updater to populate it:
 #   python -m tools.update_substrate_libs --platform ios --lib server <version>
-client/iosApp/app_packages_native/ciris_server/
+apps/ios/app_packages_native/ciris_server/
 # Simulator slice of the same substrate (Debug/simulator builds only)
-client/iosApp/app_packages_native_sim/
+apps/ios/app_packages_native_sim/
+
+# CIRISClient release artifacts, fetched by tools/fetch_client_artifacts.py.
+# Pre-built binaries of another repo's source: 15 MB (.aar) + 108 MB
+# (.xcframework) per bump would blow the repo-size audit within a few releases.
+apps/android/libs/*.aar
+apps/ios/Frameworks/*.xcframework/
+apps/ios/Frameworks/*.zip
+
+# Machine-specific Android SDK location. Was COMMITTED as client/local.properties
+# with a hardcoded sdk.dir into one developer's home directory, which is wrong
+# for every other clone and for CI.
+local.properties
+
+# Node/agent runtime state written when a CHECKOUT is used as CIRIS_HOME.
+#
+# The QA harness does exactly that: server_manager does
+# `env.setdefault("CIRIS_HOME", project_root)`, so a run without CIRIS_HOME
+# exported writes the node's whole home into the repo — database, identity,
+# keys, the one-time claim PIN, and secrets.
+#
+# `data/*` and most of the rest were already covered; `secrets/` was NOT. It is
+# empty right now only because that run put its secrets in ~/ciris. A run that
+# lands key material there would leave it untracked-and-committable, which is
+# the one outcome worth making impossible.
+secrets/
+identity/
+keys/
+ceg/
+claim_pin

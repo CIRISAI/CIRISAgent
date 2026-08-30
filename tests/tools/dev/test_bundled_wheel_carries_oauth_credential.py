@@ -44,7 +44,7 @@ import pytest
 # without encoding which one, so rotating the credential does not touch this file.
 CLIENT_ID_SHAPE = re.compile(rb"[0-9]{8,}-[a-z0-9]{10,}\.apps\.googleusercontent\.com")
 
-ANDROID_WHEELS = sorted(Path("client/androidApp/wheels").glob("ciris_server-*.whl"))
+ANDROID_WHEELS = sorted(Path("apps/android/wheels").glob("ciris_server-*.whl"))
 
 
 def _native_so_bytes(wheel: Path) -> bytes:

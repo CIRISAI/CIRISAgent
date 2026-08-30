@@ -136,8 +136,6 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
                 "wants a node-only key on that door; upgrade the substrate to split them."
             )
         else:
-            from ciris_engine.logic.utils.path_resolution import get_federation_alias
-
             # actor_key_id is deliberately omitted — see CIRISAgent#1119. Passing it
             # buys a startup check that our actor key is registered AND is an actor,
             # which is what catches the "attesting_key_id does not exist in
@@ -160,7 +158,7 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
             # later server fold never opens — a key that exists, is registered,
             # and signs nothing, which is the half-measure shape this whole cut
             # is about. The identity directory is always <home>/identity.
-            from ciris_engine.logic.utils.path_resolution import get_identity_dir
+            from ciris_engine.logic.utils.path_resolution import get_federation_alias, get_identity_dir
 
             federation_identity_dir = get_identity_dir()  # <home>/identity
             node_key_id = _provision(get_federation_alias(), str(federation_identity_dir))
@@ -191,7 +189,12 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
     # canonical_bootstrap_hints() — zero caller glue, exactly like
     # compose::serve — so the agent edge dials + roots ciris-canonical-1 at
     # boot. Opt out with CIRIS_FEDERATION_DELIVERY=false.
-    _delivery_on = os.environ.get("CIRIS_FEDERATION_DELIVERY", "true").strip().lower() not in ("0", "false", "no", "off")
+    _delivery_on = os.environ.get("CIRIS_FEDERATION_DELIVERY", "true").strip().lower() not in (
+        "0",
+        "false",
+        "no",
+        "off",
+    )
 
     # Rust-side tracing (CIRISAgent#919/#920, ciris-server >=0.5.114): without
     # this a Python-embedded agent has ZERO rust logs — every delivery/rooting
@@ -343,6 +346,48 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
 
     global _actor_key_id, _node_key_id
     _node_key_id = node_key_id
+
+    # ── THE IDENTITY MODEL, STATED ONCE, IN ONE LINE ──────────────────────────
+    #
+    # Three kinds of id and they are not interchangeable:
+    #   NODE   carriage  — transport, replication, consent, de-admission
+    #   AGENT  authorship — traces and attestations ("who said this")
+    #   OWNER  the human, bound at setup completion
+    #
+    # A bare, unclaimed node should have ONLY a node id. If the substrate cannot
+    # mint one, the edge silently falls back to carrying the ACTOR key's
+    # transport identity — the pre-split behaviour — and every id the product
+    # reports is then the agent key wearing the node's job. That state is
+    # indistinguishable from a correct one unless someone says so out loud.
+    #
+    # It cost real time: a local run on a stale substrate (0.5.188, no
+    # `provision_node_identity`) reported `key_id=ciris-agent-bootstrap-…` as the
+    # node identity, and the only way to tell was to import ciris_server by hand
+    # and check for the symbol. The version is in the line now.
+    try:
+        import ciris_server as _cs_ver  # type: ignore[import-not-found, import-untyped, unused-ignore]
+
+        _sub_ver = getattr(_cs_ver, "__version__", "unknown")
+        _can_provision = hasattr(_cs_ver, "provision_node_identity")
+    except Exception:  # noqa: BLE001 - reporting only
+        _sub_ver, _can_provision = "unavailable", False
+
+    if node_key_id is None:
+        logger.warning(
+            "[IDENTITY] NO NODE KEY — this edge carries the AGENT key as its transport "
+            "identity (pre-split behaviour). substrate=%s provision_node_identity=%s. "
+            "CC 3.4.7.3 Clause A wants node and agent on separate keys; every id this "
+            "install reports is the agent's until that is fixed.",
+            _sub_ver,
+            "present" if _can_provision else "ABSENT",
+        )
+    else:
+        logger.info(
+            "[IDENTITY] node=%s (carriage) substrate=%s — agent id is separate and is "
+            "reported once the engine has derived it.",
+            node_key_id,
+            _sub_ver,
+        )
 
     try:
         # AUTHORSHIP id, from the engine — NOT edge.signer_key_id(), which is the
@@ -529,7 +574,10 @@ def _spawn_delivery_rooting_probe(engine: Any, edge: Any) -> None:
 
             ds = getattr(ciris_server, "delivery_status", None)
             if ds is None:
-                logger.info("[DELIVERY-STATUS] phase=%s unavailable (ciris_server <0.5.125 — no delivery_status accessor)", phase)
+                logger.info(
+                    "[DELIVERY-STATUS] phase=%s unavailable (ciris_server <0.5.125 — no delivery_status accessor)",
+                    phase,
+                )
                 return
             logger.info("[DELIVERY-STATUS] phase=%s %s", phase, ds())
         except Exception as exc:  # noqa: BLE001
@@ -579,9 +627,7 @@ def _spawn_delivery_rooting_probe(engine: Any, edge: Any) -> None:
 
         One reader of the opt-in signal, shared with every other consent path.
         """
-        from ciris_engine.logic.services.governance.consent.trace_sharing import (
-            owner_opted_into_trace_sharing,
-        )
+        from ciris_engine.logic.services.governance.consent.trace_sharing import owner_opted_into_trace_sharing
 
         return owner_opted_into_trace_sharing()
 
@@ -597,9 +643,7 @@ def _spawn_delivery_rooting_probe(engine: Any, edge: Any) -> None:
         split that left `capture=True, replication=False` nodes sealing traces
         that never moved.
         """
-        from ciris_engine.logic.services.governance.consent.trace_sharing import (
-            grant_trace_sharing,
-        )
+        from ciris_engine.logic.services.governance.consent.trace_sharing import grant_trace_sharing
         from ciris_engine.schemas.consent.trace_sharing import TraceConsentSource
 
         # require_opt_in=False: the caller already checked _user_opted_into_traces()

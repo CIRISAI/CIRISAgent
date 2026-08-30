@@ -62,7 +62,7 @@ repos:
       # Intentionally tracked larger files (allowlisted because there is no
       # better distribution channel today):
       #   - ciris_engine/data/geo/cities.db (~6 MB) — geo typeahead, shipped in pip wheel
-      #   - client/androidApp/wheels/*.whl (~2 MB each) — Android-specific pydantic_core
+      #   - apps/android/wheels/*.whl (~2 MB each) — Android-specific pydantic_core
       #     builds, not available from PyPI
       # If you genuinely need to commit a file larger than 250 KB, justify it
       # in the PR description first; do NOT bypass this hook with --no-verify.
@@ -80,7 +80,7 @@ repos:
         exclude: |
           (?x)^(
               ciris_engine/data/geo/cities\.db
-            | client/androidApp/wheels/.*\.whl
+            | apps/android/wheels/.*\.whl
           )$
 
   # Quality checks - Run but don't block (Grace will report)
@@ -135,11 +135,15 @@ repos:
       # and en.json mirror drift. Fires when any bundle JSON or commonMain Kotlin
       # (the localizedString/getString call sites) changes.
       - id: localization-sync
-        name: Localization Guard (reference coverage + mirror parity)
+        name: Localization Guard (mirror parity + locale lag)
         entry: python tools/dev/check_localization_sync.py
         language: python
         pass_filenames: false
-        files: '^(ciris_engine/data/localized/.*\.json|client/.*/localization/.*\.json|client/shared/src/commonMain/.*\.kt)$'
+        # The Kotlin half moved upstream with the shared client. What remains
+        # here is the engine's own localized data and the UI strings the Android
+        # shell ships as assets; `client/shared/**/*.kt` no longer exists, and a
+        # pattern that can never match reads as coverage it does not provide.
+        files: '^(ciris_engine/data/localized/.*\.json|apps/android/src/main/assets/localization/.*\.json)$'
         always_run: false
         stages: [pre-commit]
         verbose: true

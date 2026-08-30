@@ -22,7 +22,7 @@ import logging
 import os
 import threading
 import time
-from typing import Optional
+from typing import Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +78,41 @@ def _this_process_owns_port(port: int) -> Optional[bool]:
 
 _node_thread: Optional[threading.Thread] = None
 _node_error: Optional[str] = None
+
+#: The node on :4243 is serving for THIS agent — either we started it, or we
+#: adopted an already-verified one. Two different code paths reach the same
+#: state, and `_node_thread` only records the first: the REUSE path (mobile
+#: in-process restart, or a node that outlived a prior runtime) returns without
+#: ever creating a thread. Anything asking "is the node up" must consult this,
+#: not thread liveness, or it reports a live node as absent.
+_node_ready: bool = False
+
+
+def fold_status() -> Optional[Dict[str, bool]]:
+    """Is the node folded in and serving, answered from THIS process.
+
+    Returns ``{"folded": bool, "reachable": bool}``, or ``None`` when the fold is
+    disabled — "not asked for" is not the same fact as "asked for and failed".
+
+    IN-PROCESS ON PURPOSE. The obvious implementation is an HTTP GET to the
+    node's own health on :4243, and that is what this replaced: it put a
+    3-second-timeout request on EVERY /v1/system/health, an endpoint the desktop
+    client polls. Measured cost was 6-11s per health call. The state is right
+    here in module scope; there was never a reason to ask over a socket.
+
+    `reachable` is the node's ability to reach the brain at :8080. Answering
+    inside a brain request handler, with the fold thread alive, that is true by
+    construction — we ARE the thing it would be reaching.
+    """
+    if os.environ.get("CIRIS_NODE_FOLD", "true").strip().lower() in ("0", "false", "no", "off"):
+        return None
+    if _node_error is not None:
+        return {"folded": False, "reachable": False}
+    # `_node_ready` OR a live thread: the reuse path sets the first and never
+    # creates the second, and reporting a reused node as absent would tell the
+    # client it is talking to a bare node — costing the user the LLM screen.
+    up = _node_ready or (_node_thread is not None and _node_thread.is_alive())
+    return {"folded": up, "reachable": up}
 
 
 def _resolve_home() -> str:
@@ -234,7 +269,7 @@ def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Opti
     Raises RuntimeError if the node fails to start (node-fails ⇒ agent-fails).
     Idempotent: a second call is a no-op.
     """
-    global _node_thread, _node_error
+    global _node_thread, _node_error, _node_ready
 
     if os.environ.get("CIRIS_NODE_FOLD", "true").strip().lower() in ("0", "false", "no", "off"):
         logger.info("Node fold disabled (CIRIS_NODE_FOLD=false) — federation/self/accord routes NOT served on 4243")
@@ -359,6 +394,7 @@ def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Opti
         _surface_first_run_claim_pin()
         _reprime_federation_delivery("reuse")
         _author_federation_consent("reuse")
+        _node_ready = True
         return
 
     try:
@@ -514,6 +550,7 @@ def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Opti
             f"(node-fails ⇒ agent-fails); compose phase at expiry: {_wedged or 'unknown (no compose_status — wheel <0.5.120?)'}"
         )
     logger.info("Node fold: node runtime started — substrate read-API LISTENING on 4243 [OK]")
+    _node_ready = True
 
     # Hand the node the deployment's OAuth providers now that it is serving.
     #

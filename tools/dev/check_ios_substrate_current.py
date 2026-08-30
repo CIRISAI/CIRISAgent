@@ -5,7 +5,7 @@ WHY THIS EXISTS. You should be able to check out main, open Xcode, build and
 sign, and get an app whose bundled substrate matches everything else we ship.
 Until now nothing could tell you whether that was true.
 
-`client/iosApp/Resources.zip` records no version of its own: the vendored
+`apps/ios/Resources.zip` records no version of its own: the vendored
 `app_packages/ciris_server/` declares no `__version__`, and the `.so` embeds no
 version literal — `update_substrate_libs.py` says so itself when it probes and
 finds nothing. So the only way to know which substrate iOS carried was to have
@@ -32,7 +32,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-LOCK = ROOT / "client" / "iosApp" / "substrate.lock.json"
+LOCK = ROOT / "apps" / "ios" / "substrate.lock.json"
 REQUIREMENTS = ROOT / "requirements.txt"
 
 #: pin name in requirements.txt -> lib name the updater records

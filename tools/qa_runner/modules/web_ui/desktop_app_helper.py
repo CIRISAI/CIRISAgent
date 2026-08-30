@@ -247,7 +247,17 @@ class DesktopAppHelper:
             timeout: Timeout in milliseconds (default: config.timeout_ms)
 
         Returns:
-            True if element found, False if timeout
+            True if the element appeared.
+
+        Raises:
+            RuntimeError: if it did not. THIS NEVER RETURNS FALSE — the
+                annotation says ``bool`` because it is always ``True``.
+
+        Every ``if not await wait_for_element(...)`` in this package is therefore
+        a DEAD BRANCH, and one of them mattered: the setup wizard's AI step used
+        it to detect "this is a node-client build with no AI screen, carry on",
+        and instead the run failed on the client that has no such screen. Use
+        :meth:`wait_for_optional_element` when absence is a legitimate answer.
         """
         if not self._client:
             raise RuntimeError("Not connected. Call start() first.")
@@ -267,6 +277,19 @@ class DesktopAppHelper:
             error = data.get("error", "unknown error")
             raise RuntimeError(f"Wait for element '{test_tag}' timed out after {timeout_ms}ms: {error}")
         return True
+
+    async def wait_for_optional_element(self, test_tag: str, timeout: Optional[int] = None) -> bool:
+        """Wait for an element that MAY legitimately not exist.
+
+        Returns True if it appeared, False if it did not. The distinction that
+        :meth:`wait_for_element` cannot express: there, absence is a failure; here
+        it is data. Use this only where the caller genuinely handles both — an
+        optional wait on a required element hides a real break.
+        """
+        try:
+            return await self.wait_for_element(test_tag, timeout=timeout)
+        except RuntimeError:
+            return False
 
     async def act(
         self,
@@ -467,7 +490,7 @@ class DesktopAppHelper:
         # Input credentials. On iOS/Android, KMP TextField uses a StateFlow
         # for the bound value — text entered via /input doesn't reach the
         # view model synchronously, and back-to-back inputs race the
-        # StateFlow commit (documented in client/iosApp/CLAUDE.md as
+        # StateFlow commit (documented in apps/ios/CLAUDE.md as
         # "Text input needs 2-second delay between fields"). Insert that
         # delay only on mobile; desktop's Compose state updates are
         # synchronous and don't need it.

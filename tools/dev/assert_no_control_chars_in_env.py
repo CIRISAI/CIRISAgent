@@ -71,7 +71,15 @@ def main() -> int:
         return 1
 
     raw = env_path.read_text(encoding="utf-8", errors="replace")
-    for line in raw.splitlines():
+    # split("\n"), NOT splitlines(). str.splitlines() treats FORM FEED (0x0c) and
+    # VERTICAL TAB (0x0b) as line boundaries — the exact characters this guard
+    # exists to find. A value containing the reported corruption was split in
+    # half and neither piece retained the control character, so the guard
+    # reported "all path values clean" on a .env that carried it.
+    #
+    # `\f` comes from `\franc`, `\v` from `\victor`. The two most likely
+    # instances of the bug were the two it could not see.
+    for line in raw.split("\n"):
         if "=" not in line or line.lstrip().startswith("#"):
             continue
         key, _, val = line.partition("=")
@@ -108,13 +116,46 @@ def main() -> int:
     # clean", not "nothing risky was attempted".
     home_resolved = str(Path(args.home)).replace("\\", "/").rstrip("/").lower()
     derived = []
-    for line in raw.splitlines():
+    present_path_keys = []
+    seen_keys = []
+    for line in raw.split("\n"):
         if "=" not in line or line.lstrip().startswith("#"):
             continue
         key, _, val = line.partition("=")
+        seen_keys.append(key.strip())
         if key.strip() in PATH_KEYS:
+            present_path_keys.append(key.strip())
             if home_resolved and home_resolved in val.strip().strip('"').replace("\\", "/").lower():
                 derived.append(key.strip())
+
+    # NO PATH KEYS AT ALL is a different fact from "paths written, none ours",
+    # and only the second is the vacuous pass this guard exists to catch.
+    #
+    # Two setup flows write .env and they write different things. The CLI wizard
+    # (`ciris_engine/logic/setup/wizard.py`) persists CIRIS_DB_PATH /
+    # CIRIS_DATA_DIR / SECRETS_DB_PATH / AUDIT_LOG_PATH — that is the flow that
+    # can produce the WinError 123 corruption, and it is where this guard bites.
+    # The API/UI setup flow persists only CIRIS_CONFIGURED; paths stay in the
+    # environment and are never written, so there is nothing here to corrupt.
+    #
+    # Demanding a path key from the UI flow made this step UNPASSABLE rather than
+    # rigorous: it failed a run in which nothing was wrong, and the remedy it
+    # printed ("check CIRIS_HOME is passed with setdefault") named a bug that had
+    # already been fixed. A guard that cannot pass teaches people to ignore it.
+    #
+    # The escape round-trip itself is covered deterministically, and with a
+    # negative control, by tests/ciris_engine/logic/setup/test_env_windows_paths.py.
+    if not present_path_keys:
+        print(
+            f"{tag}: .env carries no path values ({', '.join(sorted(seen_keys)) or 'no keys'}) — "
+            "this setup flow persists none, so there is no path to corrupt."
+        )
+        print(
+            "  Not a vacuous pass: the flow that DOES write paths (the CLI wizard) is "
+            "covered by tests/ciris_engine/logic/setup/test_env_windows_paths.py, which "
+            "includes a negative control proving it can fail."
+        )
+        return 0
 
     if not derived:
         print(

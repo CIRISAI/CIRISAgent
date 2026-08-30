@@ -61,7 +61,7 @@ import subprocess
 import sys
 import time
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -312,6 +312,9 @@ class DesktopAppTestRunner:
 
         await self.run_test("enter_message", enter_message)
 
+        # Baseline BEFORE sending, so "did anything come back" is answerable.
+        baseline_elements = len(await self.helper.get_elements())
+
         # Click send button
         async def click_send():
             self._log("Clicking send button...")
@@ -320,10 +323,40 @@ class DesktopAppTestRunner:
 
         await self.run_test("click_send_button", click_send)
 
-        # Wait a bit for response (we don't have a way to detect response yet)
         async def wait_for_response():
-            self._log("Waiting for response (5s)...")
-            await asyncio.sleep(5)
+            """The agent must actually answer.
+
+            This used to be `await asyncio.sleep(5)` with the comment "we don't
+            have a way to detect response yet" — so the step passed whether the
+            agent replied, errored, or was never wired to an LLM at all. A chat
+            test that cannot fail on silence is not testing the chat; it is the
+            same class of hole as the Amharic install that sent two messages,
+            showed "Disconnected", and produced no reply and no error.
+
+            We are the AI: a message in must produce a message out. With the mock
+            LLM that is deterministic, so silence here is a real defect.
+
+            Asserted through the UI rather than the API because this is the UI
+            suite, and because the API answering while the screen stays empty is
+            precisely the failure worth catching. The signal is the composed tree
+            growing: a rendered reply is new elements.
+            """
+            deadline = datetime.now() + timedelta(seconds=45)
+            while datetime.now() < deadline:
+                await asyncio.sleep(1.0)
+                grown = len(await self.helper.get_elements()) - baseline_elements
+                if grown > 0:
+                    elapsed = 45 - (deadline - datetime.now()).total_seconds()
+                    self._log(f"Response rendered (+{grown} elements) after {elapsed:.1f}s")
+                    return
+            raise RuntimeError(
+                "No response rendered within 45s: the message was sent and the UI "
+                "never changed.\n"
+                "        The agent either did not answer or answered somewhere the "
+                "screen does not show.\n"
+                "        Check the LLM is configured (the wizard's AI screen) and the "
+                "app log for send/receive errors."
+            )
 
         await self.run_test("wait_for_response", wait_for_response)
 
@@ -397,8 +430,7 @@ class DesktopAppTestRunner:
         for attempt in range(1, 6):
             if not await self.helper.click("btn_test_connection"):
                 raise RuntimeError(
-                    "Failed to click btn_test_connection — is the app built with the "
-                    "testableClickable fix? (#1062)"
+                    "Failed to click btn_test_connection — is the app built with the " "testableClickable fix? (#1062)"
                 )
             self._log(f"AI (BYOK): Test Connection attempt {attempt}/5")
             await asyncio.sleep(3)  # let one checkLlmConfig produce its verdict rows
@@ -685,15 +717,36 @@ class DesktopAppTestRunner:
             # wizard's first screen. At 6s a loaded agent build looks exactly
             # like a node-client build that has no AI screen at all, and the run
             # walks past the whole LLM step reporting nothing wrong.
-            if not await self.helper.wait_for_element("input_llm_provider", timeout=20000):
-                self._log("No AI screen (node-client build) — the wizard is finishing")
-                return
+            # REQUIRED, not probed. This repo builds the AGENT: it is the brain,
+            # it needs an LLM, and a wizard that never offers to configure one has
+            # not set the product up. Tolerating absence here is what let the
+            # whole LLM step vanish silently while the run still reported 4/5.
+            #
+            # If it is missing, the cause is almost never the screen. It is
+            # clientMode: the client resolves NODE when it cannot read the node's
+            # `folded`/`reachable`, and a node has no brain to configure. So say
+            # that, rather than making the operator rediscover it.
+            if not await self.helper.wait_for_optional_element("input_llm_provider", timeout=20000):
+                raise RuntimeError(
+                    "No AI screen. This build is the AGENT and MUST offer LLM "
+                    "configuration.\n"
+                    "        The app's own verdict:\n"
+                    + _gate_verdict()
+                    + "        AGENT requires folded && reachable && !veto. folded and "
+                    "reachable come from the NODE\n"
+                    "        (CIRIS_NODE_URL, :4243 `agent` block); role and services "
+                    "come from the BRAIN (CIRIS_API_URL).\n"
+                    "        A node has no brain to configure, so clientMode=NODE means "
+                    "no AI screen."
+                )
             if llm_api_key:
                 # BYOK path (#1062): real provider + key + Test Connection +
                 # live-model dropdown. This exercises the accommodation that
                 # made btn_test_connection reachable by automation.
                 await self._drive_llm_step_byok(
-                    llm_provider or "openrouter", llm_api_key, llm_model,
+                    llm_provider or "openrouter",
+                    llm_api_key,
+                    llm_model,
                     expect_key_rejected=llm_key_expect_rejected,
                     require_live_models=llm_require_live_models,
                 )
@@ -736,10 +789,54 @@ class DesktopAppTestRunner:
                     self._log("On COMPLETE step (btn_next gone)")
                     return
                 await asyncio.sleep(0.5)
-            # Non-fatal: record where we ended up.
-            self._log("Did not clearly reach COMPLETE within 20s")
+            # NOT "non-fatal: record where we ended up". Reaching COMPLETE is the
+            # entire point of the step, and logging that it did not happen while
+            # returning success is how a run reports 5/5 on a wizard that never
+            # finished.
+            raise RuntimeError(
+                "Setup did not reach COMPLETE within 20s: still on the Setup screen "
+                "with btn_next present.\n"
+                "        The wizard was driven to the end and did not finish."
+            )
 
         await self.run_test("setup_complete", wait_for_complete)
+
+        async def claim_settled():
+            """The node must actually be CLAIMED, not merely left behind.
+
+            The app self-claims local node ownership on the final step and logs
+            the outcome. When it cannot read the one-time PIN it logs
+            `claim_settled claimed=false` and completes setup anyway, leaving an
+            UNCLAIMED node — and every UI-level check still passes, because the
+            wizard did reach COMPLETE.
+
+            That is exactly what happened: the node wrote its PIN into the
+            backend's CIRIS_HOME while the app waited on a different directory.
+            Both halves looked healthy; the ownership was simply never taken.
+            """
+            log = temp_path("ciris_desktop_setup.log")
+            try:
+                with open(log, "r", encoding="utf-8", errors="replace") as fh:
+                    lines = [ln for ln in fh if "claim_settled" in ln]
+            except OSError:
+                self._log("claim outcome not observable (no desktop app log) — skipping")
+                return
+            if not lines:
+                self._log("no claim_settled line — app build may predate it; skipping")
+                return
+            verdict = lines[-1].strip()
+            if "claimed=true" not in verdict:
+                raise RuntimeError(
+                    "Setup completed with the node UNCLAIMED.\n"
+                    f"        {verdict}\n"
+                    "        The claim PIN is written by the node into ITS CIRIS_HOME; the app "
+                    "reads it from the home IT was given.\n"
+                    "        If those differ, the PIN is unreadable and ownership is silently "
+                    "never taken."
+                )
+            self._log("node ownership claimed")
+
+        await self.run_test("claim_settled", claim_settled)
 
         return all(r.success for r in self.results)
 
@@ -811,8 +908,7 @@ class DesktopAppTestRunner:
             nav_candidates = [
                 e.test_tag
                 for e in elements
-                if "node" in e.test_tag.lower()
-                and ("nav" in e.test_tag.lower() or "manage" in e.test_tag.lower())
+                if "node" in e.test_tag.lower() and ("nav" in e.test_tag.lower() or "manage" in e.test_tag.lower())
             ]
             for tag in nav_candidates:
                 self._log(f"trying nav candidate: {tag}")
@@ -1436,15 +1532,84 @@ def _wipe_dev_data() -> None:
     env_path.write_text('CIRIS_CONFIGURED="true"\n', encoding="utf-8")
 
 
+def _desktop_home(server: "object") -> str:
+    """The CIRIS_HOME the desktop app must use: the one the BACKEND is using.
+
+    They have to be the same directory and they were not. `server_manager` does
+    `env.setdefault("CIRIS_HOME", project_root)`, so a run that does not export
+    CIRIS_HOME puts the backend's home in the REPO CHECKOUT. The desktop app
+    inherits no such default and falls back to the product's `~/ciris`.
+
+    Both halves then run, both look healthy, and every file one writes the other
+    cannot see. That is what broke the ownership claim: the node minted its
+    one-time PIN and wrote `<repo>/claim_pin`, while the app waited on
+    `~/ciris/claim_pin`, gave up after 10s, and completed setup with the node
+    LEFT UNCLAIMED — reporting success the whole way, because nothing in the
+    flow compares the two homes.
+
+    Read from the server object so it cannot drift from what the backend was
+    actually given.
+    """
+    home = getattr(getattr(server, "config", None), "project_root", None)
+    return str(os.environ.get("CIRIS_HOME") or home or "")
+
+
+def _desktop_urls(brain_base_url: str) -> "tuple[str, str]":
+    """(CIRIS_API_URL, CIRIS_NODE_URL) for the desktop app — BOTH the brain.
+
+    The client splits its calls across two configured addresses: role/services
+    from CIRIS_API_URL, and the setup flow plus folded/reachable from
+    CIRIS_NODE_URL. Pointed at the real node, `listModels` 404s, because
+    /v1/setup is split and the node owns only half of it.
+
+    The agent now serves BOTH halves — its own routes plus anything unmatched
+    forwarded to the node (routes/node_proxy.py) — and reports the node's
+    folded/reachable in its own health. So the node address IS the brain address:
+    one surface, no split, nothing for the client to get wrong.
+
+    Set CIRIS_DESKTOP_NODE_URL to drive a bare node deliberately.
+    """
+    api = os.environ.get("CIRIS_DESKTOP_API_URL", "").strip() or brain_base_url
+    node = os.environ.get("CIRIS_DESKTOP_NODE_URL", "").strip() or api
+    return api, node
+
+
 def _find_desktop_jar() -> Optional[Path]:
-    """Locate the built desktop uber jar."""
+    """Locate the desktop uber jar.
+
+    The jar is no longer BUILT here — :desktopApp lives in CIRISAI/CIRISClient
+    and ships inside the pinned `ciris-client` wheel. Three places it can be,
+    newest first, because this runs against three different trees:
+
+      1. ciris_engine/desktop_app/  — where CI vendors it and where the wheel
+         packages it (`setup.py` derives the wheel's platform tag from it).
+      2. the INSTALLED ciris_client package — what a user who pip-installed has,
+         and the only copy present when the repo checkout carries no artifacts.
+      3. the legacy gradle output — a stale local build from before the client
+         adoption. Last, so it can never shadow a current jar.
+    """
     repo_root = Path(__file__).resolve().parents[4]
-    candidates = sorted(
-        glob.glob(str(repo_root / "client" / "desktopApp" / "build" / "compose" / "jars" / "CIRIS-*.jar")),
-        key=os.path.getmtime,
-        reverse=True,
-    )
-    return Path(candidates[0]) if candidates else None
+
+    search: list[str] = [
+        str(repo_root / "ciris_engine" / "desktop_app" / "CIRIS-*.jar"),
+    ]
+
+    try:
+        import ciris_client
+
+        search.append(str(Path(ciris_client.__file__).parent / "_artifacts" / "CIRIS-*.jar"))
+    except ImportError:
+        # The jar-free universal wheel is a supported configuration, and so is
+        # a checkout with nothing installed. Not an error; just one fewer place.
+        pass
+
+    search.append(str(repo_root / "client" / "desktopApp" / "build" / "compose" / "jars" / "CIRIS-*.jar"))
+
+    for pattern in search:
+        candidates = sorted(glob.glob(pattern), key=os.path.getmtime, reverse=True)
+        if candidates:
+            return Path(candidates[0])
+    return None
 
 
 def _complete_setup(base_url: str, mock_llm: bool) -> bool:
@@ -1600,16 +1765,16 @@ def _ensure_emulator(args: argparse.Namespace) -> Optional[str]:
 
 def _find_debug_apk() -> Optional[Path]:
     repo_root = Path(__file__).resolve().parents[4]
-    candidate = repo_root / "client" / "androidApp" / "build" / "outputs" / "apk" / "debug" / "androidApp-debug.apk"
+    candidate = repo_root / "apps" / "android" / "build" / "outputs" / "apk" / "debug" / "androidApp-debug.apk"
     return candidate if candidate.exists() else None
 
 
 def _build_debug_apk() -> bool:
     repo_root = Path(__file__).resolve().parents[4]
     client_dir = repo_root / "client"
-    print("  building debug APK (./gradlew :androidApp:assembleDebug)…")
+    print("  building debug APK (./gradlew :android:assembleDebug)…")
     r = subprocess.run(
-        ["./gradlew", ":androidApp:assembleDebug"],
+        ["./gradlew", ":android:assembleDebug"],
         cwd=str(client_dir),
         capture_output=True,
         text=True,
@@ -1801,6 +1966,7 @@ async def run_desktop_up(args: argparse.Namespace) -> int:
     _kill_port(args.port)
     _kill_port(args.desktop_port)
     from tools.qa_runner.platform_procs import desktop_process_pattern, kill_processes_matching
+
     kill_processes_matching(desktop_process_pattern())
     # CIRIS-linux handled by desktop_process_pattern() above; pkill is POSIX-only.
     time.sleep(1)
@@ -1857,13 +2023,20 @@ async def run_desktop_up(args: argparse.Namespace) -> int:
         print("[4/5] Launching desktop app (CIRIS_TEST_MODE=true)...")
         jar = _find_desktop_jar()
         if not jar:
-            print(" [FAIL] No desktop jar found — run: cd client && ./gradlew :desktopApp:packageUberJarForCurrentOS")
+            print(
+                " [FAIL] No desktop jar found. It ships in the ciris-client wheel now, not gradle.\n"
+                "        Install the pinned client, or vendor it with\n"
+                "        tools/dev/vendor_desktop_jar.py <wheel-dir> ciris_engine/desktop_app"
+            )
             server.stop()
             return 1
         env = os.environ.copy()
         env["CIRIS_TEST_MODE"] = "true"
         env["CIRIS_TEST_PORT"] = str(args.desktop_port)
-        env["CIRIS_API_URL"] = server.base_url
+        env["CIRIS_API_URL"], env["CIRIS_NODE_URL"] = _desktop_urls(server.base_url)
+        # SAME HOME AS THE BACKEND, or the app cannot see the files the node writes.
+        if _home := _desktop_home(server):
+            env["CIRIS_HOME"] = _home
         log_path = temp_path("ciris_desktop_up.log")
         with open(log_path, "w") as log:
             subprocess.Popen(
@@ -1916,8 +2089,11 @@ async def run_desktop_up(args: argparse.Namespace) -> int:
     print(f"[OK] Ready. Backend: {server.base_url} Desktop test server: http://localhost:{args.desktop_port}")
     # Username only — see the note at the admin-created line above.
     print(f"   Admin: {TEST_ADMIN_USERNAME} (password: see TEST_ADMIN_PASSWORD)")
-    _hint = ("taskkill /F /IM CIRIS-windows.exe" if sys.platform == "win32"
-             else "pkill -9 -f 'CIRIS-(macos|linux)|main.py --adapter api'")
+    _hint = (
+        "taskkill /F /IM CIRIS-windows.exe"
+        if sys.platform == "win32"
+        else "pkill -9 -f 'CIRIS-(macos|linux)|main.py --adapter api'"
+    )
     print(f"   Processes left running — kill with: {_hint}")
     return 0
 
@@ -1940,6 +2116,7 @@ async def run_desktop_first_run_up(args: argparse.Namespace) -> int:
     _kill_port(args.port)
     _kill_port(args.desktop_port)
     from tools.qa_runner.platform_procs import desktop_process_pattern, kill_processes_matching
+
     kill_processes_matching(desktop_process_pattern())
     # CIRIS-linux handled by desktop_process_pattern() above; pkill is POSIX-only.
     time.sleep(1)
@@ -1973,13 +2150,21 @@ async def run_desktop_first_run_up(args: argparse.Namespace) -> int:
     print("[3/3] Launching desktop app (CIRIS_TEST_MODE=true)...")
     jar = _find_desktop_jar()
     if not jar:
-        print(" [FAIL] No desktop jar found — run: cd client && ./gradlew :desktopApp:packageUberJarForCurrentOS")
+        print(
+            " [FAIL] No desktop jar found. It ships in the ciris-client wheel now, not gradle.\n"
+            "        Install the pinned client, or vendor it with\n"
+            "        tools/dev/vendor_desktop_jar.py <wheel-dir> ciris_engine/desktop_app"
+        )
         server.stop()
         return 1
     env = os.environ.copy()
     env["CIRIS_TEST_MODE"] = "true"
     env["CIRIS_TEST_PORT"] = str(args.desktop_port)
-    env["CIRIS_API_URL"] = server.base_url
+    env["CIRIS_API_URL"], env["CIRIS_NODE_URL"] = _desktop_urls(server.base_url)
+    # SAME HOME AS THE BACKEND, or the app cannot see the files the node writes
+    # (the claim PIN in particular).
+    if _home := _desktop_home(server):
+        env["CIRIS_HOME"] = _home
     log_path = temp_path("ciris_desktop_setup.log")
     with open(log_path, "w") as log:
         subprocess.Popen(

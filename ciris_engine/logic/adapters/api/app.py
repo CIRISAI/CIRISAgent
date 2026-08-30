@@ -27,6 +27,8 @@ from .routes import (
     emergency,
     memory,
     my_data,
+    node_identity,
+    node_proxy,
     partnership,
     scheduler,
     setup,
@@ -368,6 +370,7 @@ def create_app(runtime: Any = None, adapter_config: Any = None) -> FastAPI:
         dsar.router,
         dsar_multi_source.router,
         my_data.router,
+        node_identity.router,
         connectors.router,
         tickets.router,
         scheduler.router,
@@ -379,6 +382,14 @@ def create_app(runtime: Any = None, adapter_config: Any = None) -> FastAPI:
 
     for router in v1_routers:
         app.include_router(router, prefix="/v1")
+
+    # LAST, deliberately. FastAPI matches in registration order, so every brain
+    # route above still wins; this only catches /v1 paths the brain does not
+    # serve and forwards them to the folded node. It makes the agent ONE surface:
+    # /v1/setup is split across brain and node (list-models here, claim-remote
+    # there) and no single address answered both, which is what broke desktop
+    # BYOK. See routes/node_proxy.py.
+    app.include_router(node_proxy.router, prefix="/v1")
 
     # Mount emergency routes at root level (no /v1 prefix)
     app.include_router(emergency.router)

@@ -60,7 +60,7 @@ class CIRISAppConfig:
 
     PACKAGE = os.environ.get("CIRIS_MOBILE_PACKAGE", "ai.ciris.mobile.debug")
     MAIN_ACTIVITY = f"{PACKAGE.replace('.debug', '')}.MainActivity"
-    APK_PATH = "client/androidApp/build/outputs/apk/debug/androidApp-debug.apk"
+    APK_PATH = "apps/android/build/outputs/apk/debug/androidApp-debug.apk"
 
     # UI Texts (for finding elements)
     TEXT_CIRIS = "CIRIS"

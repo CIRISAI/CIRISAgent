@@ -14,7 +14,7 @@ Handles: ciris-verify, ciris-persist, ciris-edge, ciris-lens-core
 
 Each library follows the same pattern:
   1. Download Android tarball from GitHub Release
-  2. Copy per-ABI .so files into client/androidApp/src/main/jniLibs/{abi}/
+  2. Copy per-ABI .so files into apps/android/src/main/jniLibs/{abi}/
   3. Update agent-side Python bindings from PyPI wheel (when has_adapter)
   4. Update __version__ in the agent's adapter ffi_bindings/__init__.py
 

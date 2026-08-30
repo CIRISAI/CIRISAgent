@@ -65,7 +65,16 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 REPO_ROOT = Path(__file__).parent.parent
-CLIENT_ROOT = REPO_ROOT / "client"
+# The app shells. `client/` was deleted when the shared client moved to
+# CIRISAI/CIRISClient; the two shells that remain live under apps/.
+#
+# This constant said `client` and the Android dir said `android`, which is a
+# path that has NEVER existed: the migration's bulk rewrite turned the module
+# name `androidApp` into `android` inside a path built from parts, and the
+# `client` half was not rewritten at all. The updater then wrote wheels into
+# client/android/wheels/ and reported "gradle pin not updated" — a warning, not
+# a failure, so a substrate bump silently did nothing to Android.
+CLIENT_ROOT = REPO_ROOT / "apps"
 
 # Android paths
 ANDROID_APP_DIR = CLIENT_ROOT / "android"
@@ -74,7 +83,7 @@ WHEELS_DIR = ANDROID_APP_DIR / "wheels"
 ANDROID_BUILD_GRADLE = ANDROID_APP_DIR / "build.gradle"
 
 # iOS paths
-IOS_APP_DIR = CLIENT_ROOT / "iosApp"
+IOS_APP_DIR = CLIENT_ROOT / "ios"
 IOS_FRAMEWORKS_DIR = IOS_APP_DIR / "Frameworks"
 IOS_RESOURCES_DIR = IOS_APP_DIR / "Resources"
 
@@ -1135,7 +1144,6 @@ def update_python_bindings_ios(lib: SubstrateLib, version: str) -> bool:
 _ZIP_SHRINK_FLOOR = 0.75
 
 
-
 #: Records which substrate versions the iOS bundle was actually built from.
 #:
 #: `Resources.zip` carries no version information — `app_packages/ciris_server/`
@@ -1366,7 +1374,9 @@ def materialize_resources_tree() -> None:
     # archive supplies only what git does not have.
     tracked = subprocess.run(
         ["git", "ls-files", str(IOS_RESOURCES_DIR.relative_to(REPO_ROOT))],
-        capture_output=True, text=True, cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        cwd=REPO_ROOT,
     ).stdout.split()
     if tracked:
         subprocess.run(["git", "checkout", "--", *tracked], cwd=REPO_ROOT, check=False)

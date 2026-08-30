@@ -36,8 +36,11 @@ never rewrites, and adds no authentication of its own — the node applies its o
 
 from __future__ import annotations
 
+import json
 import logging
-from typing import Any
+import re
+from typing import Any, Optional
+from urllib.parse import quote
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request, Response
@@ -95,10 +98,42 @@ NODE_OWNED_PREFIXES = (
 )
 
 
+#: A forwardable path segment. Deliberately strict: the set a REST route needs
+#: and nothing else.
+_SAFE_PATH = re.compile(r"^[A-Za-z0-9._~/-]*$")
+
+
 def _is_node_owned(path: str) -> bool:
     """Does the node own `/v1/<path>`?"""
     full = f"/v1/{path}"
     return any(full == p or full.startswith(p + "/") for p in NODE_OWNED_PREFIXES)
+
+
+def _safe_forward_path(path: str) -> Optional[str]:
+    """The path to forward, or None when it must not be forwarded at all.
+
+    The prefix check alone is not enough to make this safe. `/v1/setup/../../x`
+    starts with `/v1/setup/` and so passes it, and the traversal then resolves on
+    the way out — the request reaches a node route the prefix was supposed to
+    fence off. Sonar flagged the same shape as "do not construct the URL's path
+    from user-controlled data", and it is right: this builds an outbound URL from
+    the inbound one.
+
+    Two defences, because either alone is thin:
+      * REJECT any `..` segment, absolute path, or character outside a
+        conservative REST set — no encoded separators, no CR/LF (request
+        splitting), no scheme-ish content.
+      * PERCENT-ENCODE what survives, so nothing that does get through is
+        re-interpreted as structure by the node's router.
+
+    The host is a hardcoded loopback literal and never derived from input; this
+    guards the PATH, which is the half that is.
+    """
+    if not _SAFE_PATH.match(path):
+        return None
+    if path.startswith("/") or ".." in path.split("/"):
+        return None
+    return quote(path, safe="/")
 
 
 @router.api_route(
@@ -114,7 +149,14 @@ async def forward_to_node(path: str, request: Request) -> Response:
         # infrastructure problem.
         raise HTTPException(status_code=404, detail="Not Found")
 
-    url = f"http://127.0.0.1:{NODE_FOLD_PORT}/v1/{path}"
+    safe_path = _safe_forward_path(path)
+    if safe_path is None:
+        # Traversal, an absolute path, or a character with no business in a REST
+        # path. Not forwarded, and not echoed back either.
+        logger.warning("Node proxy: refusing a malformed path (%d chars)", len(path))
+        raise HTTPException(status_code=400, detail="Malformed path")
+
+    url = f"http://127.0.0.1:{NODE_FOLD_PORT}/v1/{safe_path}"
     headers = {k: v for k, v in request.headers.items() if k.lower() not in _DROP}
     body = await request.body()
 
@@ -131,9 +173,12 @@ async def forward_to_node(path: str, request: Request) -> Response:
         # The node being unreachable is a DIFFERENT fact from the route not
         # existing, and a client that cannot tell them apart retries the wrong
         # thing. 502 says "the thing behind me did not answer".
-        logger.warning("Node proxy: %s %s failed: %s: %s", request.method, url, type(e).__name__, e)
+        # Log the VALIDATED path, not the raw one: this line lands in a shared
+        # log and the input is attacker-shaped by definition (Sonar: "do not log
+        # user-controlled data"). safe_path is charset-checked and encoded.
+        logger.warning("Node proxy: %s /v1/%s failed: %s: %s", request.method, safe_path, type(e).__name__, e)
         return Response(
-            content=f'{{"detail":"The folded node did not answer {request.method} /v1/{path}."}}',
+            content=json.dumps({"detail": f"The folded node did not answer {request.method} /v1/{safe_path}."}),
             status_code=502,
             media_type="application/json",
         )

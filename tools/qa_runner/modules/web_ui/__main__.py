@@ -789,10 +789,54 @@ class DesktopAppTestRunner:
                     self._log("On COMPLETE step (btn_next gone)")
                     return
                 await asyncio.sleep(0.5)
-            # Non-fatal: record where we ended up.
-            self._log("Did not clearly reach COMPLETE within 20s")
+            # NOT "non-fatal: record where we ended up". Reaching COMPLETE is the
+            # entire point of the step, and logging that it did not happen while
+            # returning success is how a run reports 5/5 on a wizard that never
+            # finished.
+            raise RuntimeError(
+                "Setup did not reach COMPLETE within 20s: still on the Setup screen "
+                "with btn_next present.\n"
+                "        The wizard was driven to the end and did not finish."
+            )
 
         await self.run_test("setup_complete", wait_for_complete)
+
+        async def claim_settled():
+            """The node must actually be CLAIMED, not merely left behind.
+
+            The app self-claims local node ownership on the final step and logs
+            the outcome. When it cannot read the one-time PIN it logs
+            `claim_settled claimed=false` and completes setup anyway, leaving an
+            UNCLAIMED node — and every UI-level check still passes, because the
+            wizard did reach COMPLETE.
+
+            That is exactly what happened: the node wrote its PIN into the
+            backend's CIRIS_HOME while the app waited on a different directory.
+            Both halves looked healthy; the ownership was simply never taken.
+            """
+            log = temp_path("ciris_desktop_setup.log")
+            try:
+                with open(log, "r", encoding="utf-8", errors="replace") as fh:
+                    lines = [ln for ln in fh if "claim_settled" in ln]
+            except OSError:
+                self._log("claim outcome not observable (no desktop app log) — skipping")
+                return
+            if not lines:
+                self._log("no claim_settled line — app build may predate it; skipping")
+                return
+            verdict = lines[-1].strip()
+            if "claimed=true" not in verdict:
+                raise RuntimeError(
+                    "Setup completed with the node UNCLAIMED.\n"
+                    f"        {verdict}\n"
+                    "        The claim PIN is written by the node into ITS CIRIS_HOME; the app "
+                    "reads it from the home IT was given.\n"
+                    "        If those differ, the PIN is unreadable and ownership is silently "
+                    "never taken."
+                )
+            self._log("node ownership claimed")
+
+        await self.run_test("claim_settled", claim_settled)
 
         return all(r.success for r in self.results)
 
@@ -1488,6 +1532,28 @@ def _wipe_dev_data() -> None:
     env_path.write_text('CIRIS_CONFIGURED="true"\n', encoding="utf-8")
 
 
+def _desktop_home(server: "object") -> str:
+    """The CIRIS_HOME the desktop app must use: the one the BACKEND is using.
+
+    They have to be the same directory and they were not. `server_manager` does
+    `env.setdefault("CIRIS_HOME", project_root)`, so a run that does not export
+    CIRIS_HOME puts the backend's home in the REPO CHECKOUT. The desktop app
+    inherits no such default and falls back to the product's `~/ciris`.
+
+    Both halves then run, both look healthy, and every file one writes the other
+    cannot see. That is what broke the ownership claim: the node minted its
+    one-time PIN and wrote `<repo>/claim_pin`, while the app waited on
+    `~/ciris/claim_pin`, gave up after 10s, and completed setup with the node
+    LEFT UNCLAIMED — reporting success the whole way, because nothing in the
+    flow compares the two homes.
+
+    Read from the server object so it cannot drift from what the backend was
+    actually given.
+    """
+    home = getattr(getattr(server, "config", None), "project_root", None)
+    return str(os.environ.get("CIRIS_HOME") or home or "")
+
+
 def _desktop_urls(brain_base_url: str) -> "tuple[str, str]":
     """(CIRIS_API_URL, CIRIS_NODE_URL) for the desktop app — BOTH the brain.
 
@@ -1968,6 +2034,9 @@ async def run_desktop_up(args: argparse.Namespace) -> int:
         env["CIRIS_TEST_MODE"] = "true"
         env["CIRIS_TEST_PORT"] = str(args.desktop_port)
         env["CIRIS_API_URL"], env["CIRIS_NODE_URL"] = _desktop_urls(server.base_url)
+        # SAME HOME AS THE BACKEND, or the app cannot see the files the node writes.
+        if _home := _desktop_home(server):
+            env["CIRIS_HOME"] = _home
         log_path = temp_path("ciris_desktop_up.log")
         with open(log_path, "w") as log:
             subprocess.Popen(
@@ -2092,6 +2161,10 @@ async def run_desktop_first_run_up(args: argparse.Namespace) -> int:
     env["CIRIS_TEST_MODE"] = "true"
     env["CIRIS_TEST_PORT"] = str(args.desktop_port)
     env["CIRIS_API_URL"], env["CIRIS_NODE_URL"] = _desktop_urls(server.base_url)
+    # SAME HOME AS THE BACKEND, or the app cannot see the files the node writes
+    # (the claim PIN in particular).
+    if _home := _desktop_home(server):
+        env["CIRIS_HOME"] = _home
     log_path = temp_path("ciris_desktop_setup.log")
     with open(log_path, "w") as log:
         subprocess.Popen(

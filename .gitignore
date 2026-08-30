@@ -272,3 +272,20 @@ apps/ios/Frameworks/*.zip
 # with a hardcoded sdk.dir into one developer's home directory, which is wrong
 # for every other clone and for CI.
 local.properties
+
+# Node/agent runtime state written when a CHECKOUT is used as CIRIS_HOME.
+#
+# The QA harness does exactly that: server_manager does
+# `env.setdefault("CIRIS_HOME", project_root)`, so a run without CIRIS_HOME
+# exported writes the node's whole home into the repo — database, identity,
+# keys, the one-time claim PIN, and secrets.
+#
+# `data/*` and most of the rest were already covered; `secrets/` was NOT. It is
+# empty right now only because that run put its secrets in ~/ciris. A run that
+# lands key material there would leave it untracked-and-committable, which is
+# the one outcome worth making impossible.
+secrets/
+identity/
+keys/
+ceg/
+claim_pin

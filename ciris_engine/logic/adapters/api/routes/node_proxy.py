@@ -40,7 +40,7 @@ import logging
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, HTTPException, Request, Response
 
 logger = logging.getLogger(__name__)
 
@@ -57,13 +57,52 @@ _TIMEOUT_SECONDS = 30.0
 _DROP = {"connection", "keep-alive", "transfer-encoding", "upgrade", "content-length", "host"}
 
 
+#: The ONLY paths forwarded. Everything else keeps answering 404.
+#:
+#: This started as a catch-all over `/v1/{path:path}` and that was wrong. Every
+#: unknown path then answered 502 instead of 404, which broke two tests and, more
+#: importantly, one of them for a real reason:
+#:
+#:     tests/adapters/api/test_partnership_endpoint.py
+#:         TestNoBypassEndpoints::test_no_manual_defer_endpoint
+#:
+#: That test asserts a manual-defer endpoint DOES NOT EXIST. With a catch-all,
+#: "this endpoint is absent" and "this endpoint exists but the node is down"
+#: produce the same answer — so a check whose whole job is proving a bypass route
+#: is missing could no longer prove anything. A safety assertion that cannot
+#: distinguish absent from unreachable is not a safety assertion.
+#:
+#: So: an allow-list of the substrate's own surface, mirroring
+#: `brain_adapter._SUBSTRATE_PREFIXES` (which is the node's side of the same
+#: split). `/v1/system/health` is deliberately NOT here — the brain serves that
+#: itself and must keep serving it, because it is where `role: agent` comes from.
+NODE_OWNED_PREFIXES = (
+    "/v1/federation",
+    "/v1/self",
+    "/v1/accord",
+    "/v1/setup/claim-remote",
+)
+
+
+def _is_node_owned(path: str) -> bool:
+    """Does the node own `/v1/<path>`?"""
+    full = f"/v1/{path}"
+    return any(full == p or full.startswith(p + "/") for p in NODE_OWNED_PREFIXES)
+
+
 @router.api_route(
     "/{path:path}",
     methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     include_in_schema=False,
 )
 async def forward_to_node(path: str, request: Request) -> Response:
-    """Forward one unmatched `/v1` request to the node, verbatim both ways."""
+    """Forward one node-owned `/v1` request to the node, verbatim both ways."""
+    if not _is_node_owned(path):
+        # Not ours and not the node's: the honest answer is that it does not
+        # exist. Returning anything else makes every absent route look like an
+        # infrastructure problem.
+        raise HTTPException(status_code=404, detail="Not Found")
+
     url = f"http://127.0.0.1:{NODE_FOLD_PORT}/v1/{path}"
     headers = {k: v for k, v in request.headers.items() if k.lower() not in _DROP}
     body = await request.body()

@@ -666,24 +666,41 @@ async def _create_setup_users(
         # We must not author a second claim on an identity the fabric has already
         # bound. Ownership is the fabric's to produce and ours to surface.
         fabric_holder_id: Optional[str] = None
+        fabric_provider: str = ""
+        fabric_provider_subject: str = ""
         if existing_wa is None and setup.oauth_provider and setup.oauth_external_id:
+            fabric_provider = str(setup.oauth_provider)
+            fabric_provider_subject = str(setup.oauth_external_id)
             fabric_holder_id = authentication_store.fabric_oauth_holder_id(
-                setup.oauth_provider, setup.oauth_external_id
+                fabric_provider, fabric_provider_subject
             )
 
         if fabric_holder_id:
+            # LOG THE FACT, NOT THE SUBJECT.
+            #
+            # `oauth_external_id` is the provider's subject identifier — PII, and
+            # the substrate redacts it to a tail (`subject=…1383`) for exactly that
+            # reason. Reading attributes off `setup` also taints the statement for
+            # CodeQL, because SetupCompleteRequest carries system_admin_password:
+            # three HIGH "clear-text logging of sensitive information" alerts, all
+            # on this one call.
+            #
+            # The diagnostic value here is "the identity was already bound, and to
+            # whom" — the provider and a tail are enough to correlate with the
+            # substrate's own line, and the holder id is not sensitive.
+            subject_tail = (fabric_provider_subject or "")[-4:]
             logger.info(
-                "CIRIS_USER_CREATE: provider identity %s:%s is ALREADY bound by the substrate to %s "
+                "CIRIS_USER_CREATE: provider identity %s:…%s is ALREADY bound by the substrate to %s "
                 "(claim-remote owner-binding) — NOT minting a second ROOT. Minting here is what "
                 "produced 'AMBIGUOUS provider identity / holders=2' and locked first-run OAuth users out.",
-                setup.oauth_provider,
-                setup.oauth_external_id,
+                fabric_provider,
+                subject_tail,
                 fabric_holder_id,
             )
             # Annotated because this is now the FIRST binding in the function, so
             # an unannotated str here makes mypy reject the later `= None` on the
             # normal path.
-            oauth_user_id: Optional[str] = f"{setup.oauth_provider}:{setup.oauth_external_id}"
+            oauth_user_id: Optional[str] = f"{fabric_provider}:{fabric_provider_subject}"
             # The agent-tier work still applies, keyed on the FABRIC's cert.
             _create_founding_partnership(fabric_holder_id, oauth_user_id)
             _store_user_preferences(fabric_holder_id, setup)

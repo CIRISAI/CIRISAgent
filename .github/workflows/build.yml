@@ -1793,6 +1793,31 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Version: $VERSION"
 
+      - name: Fetch the published CIRISClient AAR
+        # WITHOUT THIS THE APK CANNOT BUILD, and it has not since the client
+        # migration. `apps/android/libs/*.aar` is gitignored on purpose — it is a
+        # 15 MB pre-built binary of another repo's source, exactly what the
+        # repo-size rule excludes ("distribute via GitHub Releases and fetch on
+        # install"). So a clean CI checkout has no AAR at all, and Gradle fails
+        # to resolve it:
+        #
+        #     Execution failed for task ':android:checkDebugAarMetadata'.
+        #     > Could not find :ciris-client-0.5.194:.
+        #       Searched in: apps/android/libs/ciris-client-0.5.194.aar
+        #
+        # That is why v2.9.42 published no Android APK. The failure is in the
+        # release job only, so nothing on a PR catches it — the artifact simply
+        # never appears, which looks the same as a release that had none.
+        #
+        # The version comes from requirements.txt's `ciris-client==` pin, so this
+        # cannot drift from the wheel's client.
+        run: python3 tools/fetch_client_artifacts.py --platform android
+        env:
+          # The fetcher resolves the asset URL with `gh release view`, which
+          # needs a token on a runner even for a public repo. Without this it
+          # fails auth and the APK build fails one step later anyway.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build debug APK
         run: |
           cd apps

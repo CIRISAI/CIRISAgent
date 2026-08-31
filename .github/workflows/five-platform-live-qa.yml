@@ -278,17 +278,44 @@ jobs:
               --platform "$target" --launch $extra \
               --username qaadmin --password "qa_test_password_12345" \
               $llm_args \
-              --json-report "artifacts/setup-$plat.json" -v || { overall=1; echo "::error::$plat setup failed"; echo "::endgroup::"; continue; }
+              -v || { overall=1; echo "::error::$plat setup failed"; echo "::endgroup::"; continue; }
 
-            # 2. THE GATE: reach Interact, send a message, require a rendered
+            # 2. LOG IN. `desktop-setup` completes the wizard and leaves the app
+            #    on the Login screen ("Desktop existing user - showing local login
+            #    form", isFirstRun=false) — it does NOT land on Interact. The
+            #    first run of this workflow failed exactly here: desktop-chat
+            #    opens with "wait for Interact screen" and never authenticates, so
+            #    every element lookup after it failed in cascade. The Windows job
+            #    has always done setup -> login; this now matches it.
+            python -m tools.qa_runner.modules.web_ui desktop-login \
+              --platform "$target" $extra \
+              --username qaadmin --password "qa_test_password_12345" \
+              -v \
+              || { overall=1; echo "::error::$plat login failed"; echo "::endgroup::"; continue; }
+
+            # 3. THE GATE: reach Interact, send a message, require a rendered
             #    reply, and photograph what shipped.
+            chat_rc=0
             python -m tools.qa_runner.modules.web_ui desktop-chat \
               --platform "$target" $extra \
               --screenshot-on-success "artifacts/shots/$plat.png" \
-              --json-report "artifacts/chat-$plat.json" -v || { overall=1; echo "::error::$plat interact failed"; }
+              -v || { chat_rc=1; overall=1; echo "::error::$plat interact failed"; }
 
-            # 3. Traces must have actually reached canonical. FATAL, unlike the
+            # RECORD THE RESULT OURSELVES. `--json-report` is FEDERATION-ONLY:
+            # the global parser accepts it and only the `federation` command
+            # ever writes it, so passing it to setup/login/chat was a silent
+            # no-op. That is why the first run produced no chat-*.json, and the
+            # gallery would have shown five "did not run" tiles for three jobs
+            # that actually ran. The exit code is the fact that matters.
+            printf '{"platform":"%s","success":%s}\n' \
+              "$plat" "$([ $chat_rc -eq 0 ] && echo true || echo false)" \
+              > "artifacts/chat-$plat.json"
+
+            # 4. Traces must have actually reached canonical. FATAL, unlike the
             #    QA runner's own best-effort probe.
+            #    NOTE this is downstream of step 3: with no message sent, the node
+            #    admits no traces at all (trace_plane standing=never_admitted,
+            #    rows=0) and this fails for a reason that is not about delivery.
             python tools/dev/assert_traces_reached_canonical.py \
               "$CIRIS_HOME/logs" artifacts/cmdlogs --require replication \
               || { overall=1; echo "::error::$plat traces never reached canonical"; }

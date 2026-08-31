@@ -164,7 +164,21 @@ class AndroidPlatform:
         return self._ports
 
     def _adb(self, *args: str) -> list[str]:
-        cmd = [shutil.which("adb") or "adb"]
+        """Resolve adb the way the rest of this module already does.
+
+        NOT `shutil.which("adb")`. On a GitHub runner adb lives at
+        `$ANDROID_SDK_ROOT/platform-tools/adb` and is NOT on PATH, so `which`
+        finds nothing and every capture silently produced no screenshot — which
+        is exactly what happened on the first green run: the flow passed on
+        Android and the gallery had no tile for it.
+        """
+        from . import __main__ as web_ui_main
+
+        try:
+            adb = str(web_ui_main._android_sdk_paths()["adb"])
+        except Exception:  # noqa: BLE001
+            adb = shutil.which("adb") or "adb"
+        cmd = [adb]
         if self._serial:
             cmd += ["-s", self._serial]
         return cmd + list(args)
@@ -184,12 +198,21 @@ class AndroidPlatform:
             dest.parent.mkdir(parents=True, exist_ok=True)
             # exec-out streams the PNG straight to stdout: no /sdcard round-trip,
             # so nothing is left behind on the device and there is no pull to fail.
-            out = _run(self._adb("exec-out", "screencap", "-p"))
+            cmd = self._adb("exec-out", "screencap", "-p")
+            out = _run(cmd)
             if out.returncode != 0 or not out.stdout:
+                # SAY WHY. "endpoint or tool unavailable" sent the reader looking
+                # at the app when the real cause was adb resolution.
+                why = (out.stderr or b"").decode(errors="replace")[:160] if isinstance(out.stderr, bytes) else (out.stderr or "")[:160]
+                print(f"    android capture failed: {cmd[0]} rc={out.returncode} {why}".rstrip())
                 return None
             dest.write_bytes(out.stdout)
             return dest
-        except Exception:
+        except FileNotFoundError:
+            print(f"    android capture failed: adb not found at {self._adb()[0]}")
+            return None
+        except Exception as exc:  # noqa: BLE001
+            print(f"    android capture failed: {type(exc).__name__}: {exc}")
             return None
 
 

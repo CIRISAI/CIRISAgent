@@ -55,9 +55,11 @@ except Exception:  # pragma: no cover - never let the shim stop the runner
 import argparse
 import asyncio
 import glob
+import json
 import os
 import shutil
 import subprocess
+import tempfile
 import sys
 import time
 from dataclasses import dataclass
@@ -1289,6 +1291,14 @@ Examples:
         help="For --platform ios: simulator UDID, or 'booted' for the running one (default).",
     )
     parser.add_argument(
+        "--ios-app-path",
+        default=None,
+        help=(
+            "For --platform ios: path to the built *.app for the SIMULATOR "
+            "(-sdk iphonesimulator). Discovered from DerivedData when unset."
+        ),
+    )
+    parser.add_argument(
         "--ios-physical",
         action="store_true",
         help=(
@@ -2293,6 +2303,324 @@ def _kill_iproxy_children() -> None:
                 p.kill()
         except Exception:
             pass
+
+
+def qa_log_dir() -> Path:
+    """Where bring-up writes everything it learns, so CI can upload it.
+
+    A FAILURE YOU CANNOT DIAGNOSE FROM THE ARTIFACT COSTS MORE THAN THE FAILURE.
+    Every truncated `stderr[:200]` in a CI log is a round trip: someone re-runs
+    the job with more logging to find out what the first run already knew. So the
+    full stdout/stderr of every command lands in a file here, and the console
+    keeps the short form for readability.
+
+    Overridable with CIRIS_QA_LOG_DIR so the workflow can point it somewhere it
+    already uploads.
+    """
+    d = Path(os.environ.get("CIRIS_QA_LOG_DIR") or (Path(tempfile.gettempdir()) / "ciris-qa-logs"))
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _record(name: str, proc: subprocess.CompletedProcess, cmd: Optional[List[str]] = None) -> Path:
+    """Persist a command's full result and return the file written."""
+    path = qa_log_dir() / f"{name}.log"
+    try:
+        with path.open("a", encoding="utf-8") as fh:
+            fh.write(f"$ {' '.join(cmd or getattr(proc, 'args', []) or [name])}\n")
+            fh.write(f"# returncode={proc.returncode}\n")
+            if proc.stdout:
+                fh.write("--- stdout ---\n" + str(proc.stdout) + "\n")
+            if proc.stderr:
+                fh.write("--- stderr ---\n" + str(proc.stderr) + "\n")
+            fh.write("\n")
+    except OSError:
+        pass
+    return path
+
+
+def _fail(step: str, proc: Optional[subprocess.CompletedProcess] = None, hint: str = "") -> None:
+    """One shape for every failure: what broke, the real error, where the rest is.
+
+    Prints a TAIL of stderr rather than a fixed-width slice — the useful part of
+    a toolchain error is almost always at the end, and `[:200]` reliably cuts it
+    off mid-sentence.
+    """
+    print(f" [FAIL] {step}")
+    if proc is not None:
+        err = (proc.stderr or proc.stdout or "").strip()
+        if err:
+            tail = err.splitlines()[-6:]
+            for line in tail:
+                print(f"        {line[:220]}")
+        print(f"        rc={proc.returncode}")
+    if hint:
+        for line in hint.splitlines():
+            print(f"        {line}")
+    print(f"        full output: {qa_log_dir()}")
+
+
+def _ios_diagnostics(udid: str, bundle_id: str) -> None:
+    """Dump everything that explains an iOS bring-up failure, to files.
+
+    Collected on the FAILURE PATH ONLY, because `log show` is slow and large. The
+    set is chosen from what actually gets asked when a simulator run misbehaves:
+    is the device really booted, did the app install, did it launch, and what did
+    it say on the way down.
+    """
+    print("  collecting iOS diagnostics…")
+    probes = [
+        ("ios-devices", ["xcrun", "simctl", "list", "devices"]),
+        ("ios-listapps", ["xcrun", "simctl", "listapps", udid]),
+        ("ios-container", ["xcrun", "simctl", "get_app_container", udid, bundle_id, "data"]),
+        # The app's own os_log output — the only place a Swift/Kotlin crash or a
+        # "test server refused to bind" message appears.
+        (
+            "ios-oslog",
+            [
+                "xcrun", "simctl", "spawn", udid, "log", "show",
+                "--last", "3m", "--style", "syslog",
+                "--predicate", f'process CONTAINS "{bundle_id.split(".")[-1]}" OR subsystem CONTAINS "{bundle_id}"',
+            ],
+        ),
+    ]
+    for name, cmd in probes:
+        try:
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+            _record(name, proc, cmd)
+            print(f"    {name}: rc={proc.returncode} -> {qa_log_dir() / (name + '.log')}")
+        except Exception as exc:  # noqa: BLE001
+            print(f"    {name}: could not collect ({type(exc).__name__})")
+
+
+def _simctl(args: List[str], timeout: int = 120) -> subprocess.CompletedProcess:
+    """Run `xcrun simctl ...`. Mirrors `_adb` so both bring-ups read alike."""
+    cmd = ["xcrun", "simctl", *args]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    except FileNotFoundError:
+        # No Xcode on this host. A TRACEBACK here is the worst possible outcome:
+        # in CI it buries the actual condition ("this runner has no Xcode") under
+        # a stack that points at subprocess.py, and the reader goes looking for a
+        # bug in the automation. Fail as a normal non-zero result so the caller's
+        # own diagnostics run and say something true.
+        proc = subprocess.CompletedProcess(
+            cmd, 127, "", "xcrun not found — this host has no Xcode command line tools."
+        )
+    except subprocess.TimeoutExpired:
+        proc = subprocess.CompletedProcess(
+            cmd, 124, "", f"timed out after {timeout}s"
+        )
+    # Recorded unconditionally, not just on failure: the command BEFORE the one
+    # that broke is usually what explains it, and by then it is too late to
+    # re-run it in the same state.
+    _record("simctl", proc, cmd)
+    return proc
+
+
+def _ios_pick_simulator(requested: Optional[str] = None) -> Optional[str]:
+    """Resolve the simulator UDID to drive.
+
+    `booted` is accepted verbatim — simctl understands it and it is what a
+    developer with a simulator already open will pass. Otherwise prefer an
+    already-booted device (nothing to wait for), then any available iPhone.
+
+    Returns None when no usable simulator exists, which is a REAL failure rather
+    than something to paper over: a run that silently targets the wrong device is
+    worse than one that stops.
+    """
+    if requested and requested != "booted":
+        return requested
+
+    listing = _simctl(["list", "devices", "available", "-j"], timeout=60)
+    if listing.returncode != 0:
+        return None
+    try:
+        devices = json.loads(listing.stdout).get("devices", {})
+    except (json.JSONDecodeError, AttributeError):
+        return None
+
+    flat = [d for runtime in devices.values() for d in runtime]
+    for dev in flat:
+        if dev.get("state") == "Booted":
+            return dev.get("udid")
+    for dev in flat:
+        if "iPhone" in (dev.get("name") or ""):
+            return dev.get("udid")
+    return flat[0].get("udid") if flat else None
+
+
+def _ios_find_app(explicit: Optional[str] = None) -> Optional[Path]:
+    """Locate the built .app bundle for the simulator.
+
+    A SIMULATOR BUILD, not a device build: the two have different architectures
+    and a device .app cannot be installed into a simulator. DerivedData is
+    searched because that is where xcodebuild puts it and pinning one path would
+    break the moment the scheme or configuration changes.
+    """
+    if explicit:
+        app = Path(explicit)
+        return app if app.exists() else None
+
+    repo_root = Path(__file__).resolve().parents[4]
+    roots = [
+        repo_root / "apps" / "ios" / "build",
+        Path.home() / "Library" / "Developer" / "Xcode" / "DerivedData",
+    ]
+    candidates: List[Path] = []
+    for root in roots:
+        if not root.exists():
+            continue
+        # iphonesimulator, never iphoneos — see the docstring.
+        candidates.extend(root.glob("**/Build/Products/*-iphonesimulator/*.app"))
+        candidates.extend(root.glob("**/*-iphonesimulator/*.app"))
+    if not candidates:
+        return None
+    # Newest wins: a stale bundle from a previous scheme is the classic way to
+    # test something other than what you just built.
+    return max(candidates, key=lambda p: p.stat().st_mtime)
+
+
+async def run_ios_simulator_up(args: argparse.Namespace) -> int:
+    """Bring up the CIRIS client on an iOS SIMULATOR and wait for its test server.
+
+    WHY A SEPARATE FUNCTION FROM `run_ios_up`. That one is physical-device only:
+    `devicectl process launch` plus `iproxy` USB tunnelling, and it resolves two
+    different UDIDs because devicectl and libimobiledevice disagree about what a
+    device's identifier is. None of that applies here, and bolting a mode switch
+    onto it would leave one function serving two transports with almost nothing
+    in common.
+
+    NO PORT FORWARDING. A simulator shares the host's network stack, so the app's
+    TestAutomationServer on 9091 is reachable at localhost:9091 directly — same
+    as desktop. The 18091/18080 iproxy convention applies ONLY to physical
+    devices; using it here points the driver at a dead port and reports "the app
+    is not running in test mode", which names the wrong cause.
+
+    Phases mirror `run_android_up` so the two read alike:
+      1. Resolve + boot the simulator
+      2. Locate the simulator .app (built separately; this does not build it)
+      3. Install
+      4. Launch with CIRIS_TEST_MODE=true
+      5. Poll /health until the test server answers
+    """
+    print(" CIRIS ios-simulator-up")
+
+    # 1. Resolve + boot.
+    print("[1/5] Resolving iOS simulator…")
+    udid = _ios_pick_simulator(getattr(args, "ios_udid", None))
+    if not udid:
+        # DISTINGUISH THE TWO CAUSES. "No simulator available" and "this host has
+        # no Xcode" lead to completely different fixes, and reporting the former
+        # for the latter sends the reader to `simctl list` on a machine where
+        # simctl does not exist.
+        if shutil.which("xcrun") is None:
+            _fail(
+                "no Xcode toolchain on this host",
+                hint="`xcrun` is not on PATH, so no simulator can exist here.\n"
+                     "iOS bring-up requires a macOS runner with Xcode; on Linux/Windows\n"
+                     "this platform should be SKIPPED, not attempted.",
+            )
+        else:
+            _fail(
+                "no available iOS simulator",
+                hint="`xcrun simctl list devices available` shows what this host has.\n"
+                     "A GitHub macos runner ships at least one iPhone runtime; if the list\n"
+                     "is empty the Xcode selection is probably wrong (check xcode-select -p).",
+            )
+        return 1
+    print(f"  simulator: {udid}")
+
+    boot = _simctl(["boot", udid], timeout=180)
+    # "Unable to boot device in current state: Booted" is success for our
+    # purposes — treating it as failure would make the function non-idempotent
+    # and break every second local run.
+    already = "current state: Booted" in (boot.stderr or "")
+    if boot.returncode != 0 and not already:
+        _fail(f"simctl boot {udid}", boot)
+        return 1
+    status = _simctl(["bootstatus", udid, "-b"], timeout=300)
+    if status.returncode != 0:
+        _fail("simulator never finished booting", status)
+        _ios_diagnostics(udid, getattr(args, "ios_bundle_id", None) or "ai.ciris.mobile")
+        return 1
+    print("  booted")
+
+    # 2. Locate the app.
+    print("[2/5] Locating the simulator .app…")
+    app = _ios_find_app(getattr(args, "ios_app_path", None))
+    if not app:
+        print(
+            " [FAIL] no *-iphonesimulator/*.app found.\n"
+            "        Build it first (xcodebuild -sdk iphonesimulator) or pass --ios-app-path.\n"
+            "        Note the client xcframeworks are gitignored — run\n"
+            "        `python3 tools/fetch_client_artifacts.py --platform ios` before building."
+        )
+        return 1
+    print(f"  app: {app}")
+
+    # 3. Install.
+    print("[3/5] Installing…")
+    install = _simctl(["install", udid, str(app)], timeout=300)
+    if install.returncode != 0:
+        _fail(f"simctl install {app.name}", install,
+              hint="A device (iphoneos) build cannot install into a simulator — the\n"
+                   "architectures differ. Confirm this bundle came from an\n"
+                   "-sdk iphonesimulator build.")
+        _ios_diagnostics(udid, getattr(args, "ios_bundle_id", None) or "ai.ciris.mobile")
+        return 1
+
+    # 4. Launch in test mode. simctl passes environment through to the app only
+    # via the SIMCTL_CHILD_ prefix; setting CIRIS_TEST_MODE directly would set it
+    # on simctl itself and the app would never see it.
+    print("[4/5] Launching with CIRIS_TEST_MODE=true…")
+    bundle_id = getattr(args, "ios_bundle_id", None) or "ai.ciris.mobile"
+    _simctl(["terminate", udid, bundle_id], timeout=60)  # idempotent; ignore rc
+    env = dict(os.environ)
+    env["SIMCTL_CHILD_CIRIS_TEST_MODE"] = "true"
+    env["SIMCTL_CHILD_CIRIS_TESTING_MODE"] = "true"
+    launch = subprocess.run(
+        ["xcrun", "simctl", "launch", udid, bundle_id],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=120,
+    )
+    _record("simctl-launch", launch, ["xcrun", "simctl", "launch", udid, bundle_id])
+    if launch.returncode != 0:
+        _fail(f"simctl launch {bundle_id}", launch,
+              hint="If this says the bundle is unknown, the install silently targeted a\n"
+                   "different simulator — check the UDID above against `simctl listapps`.")
+        _ios_diagnostics(udid, bundle_id)
+        return 1
+
+    # 5. Poll /health — the same signal android-up waits on.
+    port = getattr(args, "desktop_port", None) or 9091
+    server_url = f"http://localhost:{port}"
+    print(f"[5/5] Waiting for the test server at {server_url}…")
+    deadline = time.time() + 120
+    while time.time() < deadline:
+        try:
+            r = requests.get(f"{server_url}/health", timeout=2)
+            if r.status_code == 200:
+                print(" [OK] iOS simulator ready")
+                return 0
+        except Exception:  # noqa: BLE001
+            pass
+        time.sleep(2)
+
+    _fail(
+        f"no /health from {server_url} within 120s",
+        hint="The app launched but its TestAutomationServer never answered.\n"
+             "Most likely causes, in order:\n"
+             "  1. CIRIS_TEST_MODE did not reach the app — simctl only forwards env\n"
+             "     vars with the SIMCTL_CHILD_ prefix.\n"
+             "  2. This build does not embed the test server.\n"
+             "  3. The app crashed on launch — see the os_log dump below.\n"
+             "A simulator needs NO port forward: 9091 is reached directly on the host.",
+    )
+    _ios_diagnostics(udid, bundle_id)
+    return 1
 
 
 async def run_ios_up(args: argparse.Namespace) -> int:

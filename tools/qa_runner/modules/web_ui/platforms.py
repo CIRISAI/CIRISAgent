@@ -235,8 +235,16 @@ class IOSPlatform:
         return self._ports
 
     async def bring_up(self, args) -> int:
+        """Simulator by default; devicectl+iproxy only for a physical device.
+
+        The two paths share almost nothing — a simulator needs no USB tunnel and
+        no second UDID namespace — so they are separate functions rather than one
+        with a mode flag.
+        """
         from . import __main__ as web_ui_main
 
+        if self._simulator:
+            return await web_ui_main.run_ios_simulator_up(args)
         return await web_ui_main.run_ios_up(args)
 
     def capture(self, kind: str, dest: Path) -> Optional[Path]:

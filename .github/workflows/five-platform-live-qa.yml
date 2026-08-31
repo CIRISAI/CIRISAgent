@@ -24,9 +24,11 @@
 #
 # WHAT MAKES IT A GATE RATHER THAN A REPORT:
 #   * the response assertion fails on silence (web_ui `wait_for_response`)
-#   * the trace assertion requires SHIP CONFIRMED with a nonzero envelope count
-#     (tools/dev/assert_traces_reached_canonical.py) — rooting and KEX are
-#     preconditions, not delivery
+#   * the trace assertion requires replication_envelopes_served_total > 0
+#     (tools/dev/assert_traces_reached_canonical.py). Rooting and KEX are
+#     preconditions, not delivery — and NOT envelopes_sent_total, which counts
+#     the application/durable plane and is structurally blind to trace
+#     replication (CIRISEdge#434).
 #   * a platform that cannot run must SKIP loudly; it must never quietly pass
 
 name: Five-Platform Live QA
@@ -83,6 +85,11 @@ jobs:
       CIRIS_TEST_MODE: "true"
       CIRIS_TESTING_MODE: "true"
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      # Every bring-up command's FULL stdout/stderr lands here, and the collect
+      # step uploads it unconditionally. A CI failure nobody can diagnose from
+      # the artifact costs a re-run with more logging to discover what the first
+      # run already knew.
+      CIRIS_QA_LOG_DIR: ${{ github.workspace }}/artifacts/cmdlogs
 
     steps:
       - uses: actions/checkout@v4
@@ -138,20 +145,51 @@ jobs:
             | sudo tee /etc/udev/rules.d/99-kvm4all.rules >/dev/null
           sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
 
-      - name: Boot an iOS simulator (macOS only)
+      # DIAGNOSTIC ONLY — the bring-up boots its own simulator.
+      # An earlier version resolved and booted the UDID here with an inline
+      # python one-liner, which (a) duplicated logic that now lives in
+      # `_ios_pick_simulator` and (b) broke the YAML: its backslash continuation
+      # started at column 1, outside the block scalar. Listing what the runner
+      # has is still worth doing — when iOS fails, "which runtimes existed" is
+      # the first question, and it must be in the log before anything can fail.
+      - name: Show available iOS simulators
         if: contains(matrix.platforms, 'ios')
+        continue-on-error: true
         run: |
-          set -euo pipefail
-          # A concrete device rather than "latest available": a runner image
-          # bump silently changing the device under test is the kind of drift
-          # that makes a failure impossible to attribute.
-          UDID=$(xcrun simctl list devices available -j \
-                 | python3 -c "import json,sys;d=json.load(sys.stdin)['devices'];\
-print(next(dev['udid'] for rt in d for dev in d[rt] if 'iPhone' in dev['name']))")
-          xcrun simctl boot "$UDID" || true
-          xcrun simctl bootstatus "$UDID" -b
-          echo "IOS_UDID=$UDID" >> "$GITHUB_ENV"
-          xcrun simctl list devices booted
+          mkdir -p artifacts/cmdlogs
+          xcode-select -p | tee artifacts/cmdlogs/xcode-select.txt
+          xcrun simctl list devices available | tee artifacts/cmdlogs/simulators.txt
+
+      # The client xcframeworks are gitignored (~108 MB of another repo's build
+      # output), so a clean checkout cannot compile iOS. Same gap as the Android
+      # AAR that left v2.9.42 with no APK — CIRISClient#24 tracks it upstream.
+      - name: Fetch the client xcframeworks (iOS only)
+        if: contains(matrix.platforms, 'ios')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 tools/fetch_client_artifacts.py --platform ios
+
+      - name: Build the iOS app for the simulator
+        if: contains(matrix.platforms, 'ios')
+        id: iosbuild
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          mkdir -p artifacts/cmdlogs
+          # -sdk iphonesimulator, NOT iphoneos: a device build cannot install into
+          # a simulator (different architectures), and the install failure names
+          # the wrong cause.
+          xcodebuild \
+            -project apps/ios/iosApp.xcodeproj \
+            -scheme iosApp \
+            -sdk iphonesimulator \
+            -configuration Debug \
+            -derivedDataPath "${RUNNER_TEMP}/DerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            build 2>&1 | tee artifacts/cmdlogs/xcodebuild.log | tail -40
+          APP=$(find "${RUNNER_TEMP}/DerivedData" -path '*-iphonesimulator/*.app' -maxdepth 6 | head -1)
+          echo "app=$APP" >> "$GITHUB_OUTPUT"
+          echo "built: ${APP:-<none>}"
 
       - name: Run the shared flow on each platform this runner owns
         id: qa
@@ -163,6 +201,7 @@ print(next(dev['udid'] for rt in d for dev in d[rt] if 'iPhone' in dev['name']))
           # have.
           USE_LIVE_KEY: ${{ inputs.use_live_key == false && '0' || '1' }}
           REQUESTED: ${{ inputs.platforms || 'all' }}
+          IOS_APP: ${{ steps.iosbuild.outputs.app }}
         run: |
           set -uo pipefail
           mkdir -p artifacts/shots artifacts/logs
@@ -194,9 +233,26 @@ print(next(dev['udid'] for rt in d for dev in d[rt] if 'iPhone' in dev['name']))
             export CIRIS_HOME="${RUNNER_TEMP}/ciris-$plat"
             mkdir -p "$CIRIS_HOME"
 
+            # --headless is a DESKTOP concept (it controls the app window /
+            # browser). An emulator or simulator has its own display and the flag
+            # means nothing there, so it is only passed for desktop.
+            extra=""
+            [ "$target" = "desktop" ] && extra="--headless"
+            if [ "$target" = "ios" ]; then
+              if [ -z "${IOS_APP:-}" ]; then
+                # SKIP LOUDLY, never quietly pass. An absent artifact that reads
+                # as success is how v2.9.42 shipped with no APK.
+                echo "::error::ios: no simulator .app was built — skipping, and FAILING the job"
+                overall=1
+                echo "::endgroup::"
+                continue
+              fi
+              extra="$extra --ios-app-path $IOS_APP"
+            fi
+
             # 1. Setup wizard through the real UI, with a real key.
             python -m tools.qa_runner.modules.web_ui desktop-setup \
-              --platform "$target" --launch --headless \
+              --platform "$target" --launch $extra \
               --username qaadmin --password "qa_test_password_12345" \
               $llm_args \
               --json-report "artifacts/setup-$plat.json" -v || { overall=1; echo "::error::$plat setup failed"; echo "::endgroup::"; continue; }
@@ -204,14 +260,15 @@ print(next(dev['udid'] for rt in d for dev in d[rt] if 'iPhone' in dev['name']))
             # 2. THE GATE: reach Interact, send a message, require a rendered
             #    reply, and photograph what shipped.
             python -m tools.qa_runner.modules.web_ui desktop-chat \
-              --platform "$target" \
+              --platform "$target" $extra \
               --screenshot-on-success "artifacts/shots/$plat.png" \
               --json-report "artifacts/chat-$plat.json" -v || { overall=1; echo "::error::$plat interact failed"; }
 
             # 3. Traces must have actually reached canonical. FATAL, unlike the
             #    QA runner's own best-effort probe.
             python tools/dev/assert_traces_reached_canonical.py \
-              "$CIRIS_HOME/logs" --require ship || { overall=1; echo "::error::$plat traces never reached canonical"; }
+              "$CIRIS_HOME/logs" artifacts/cmdlogs --require replication \
+              || { overall=1; echo "::error::$plat traces never reached canonical"; }
 
             cp -r "$CIRIS_HOME/logs" "artifacts/logs/$plat" 2>/dev/null || true
             echo "::endgroup::"
@@ -222,12 +279,28 @@ print(next(dev['udid'] for rt in d for dev in d[rt] if 'iPhone' in dev['name']))
         if: always()
         shell: bash
         run: |
-          # .env carries secrets — ship the SHAPE, never the values, so a failed
-          # run stays diagnosable without leaking a key into a public artifact.
+          set +e
+          mkdir -p artifacts/logs artifacts/cmdlogs
+          # Agent + node logs per platform home.
           for d in "${RUNNER_TEMP}"/ciris-*; do
-            [ -f "$d/.env" ] || continue
-            sed 's/=".*"/=<redacted>/' "$d/.env" > "artifacts/$(basename "$d").env.shape.txt" || true
+            [ -d "$d" ] || continue
+            name=$(basename "$d")
+            [ -d "$d/logs" ] && cp -r "$d/logs" "artifacts/logs/$name" 2>/dev/null
+            # .env carries secrets — ship the SHAPE, never the values, so a failed
+            # run stays diagnosable without leaking a key into a public artifact.
+            [ -f "$d/.env" ] && sed 's/=".*"/=<redacted>/' "$d/.env" > "artifacts/$name.env.shape.txt"
           done
+          # The desktop app's own log: a UI failure is undiagnosable without it —
+          # agent and node both look healthy while the app renders the wrong
+          # surface, and the "[gate] clientMode=..." line exists only here.
+          cp "${TMPDIR:-/tmp}"/ciris_desktop*.log artifacts/ 2>/dev/null
+          cp "${RUNNER_TEMP}"/ciris_desktop*.log artifacts/ 2>/dev/null
+          # Android: the device's own logcat, which is where a Chaquopy or
+          # TestAutomationServer failure actually appears.
+          if command -v adb >/dev/null 2>&1; then
+            adb logcat -d > artifacts/logs/android-logcat.txt 2>/dev/null
+          fi
+          echo "collected:"; find artifacts -type f | head -40; true
 
       - uses: actions/upload-artifact@v4
         if: always()

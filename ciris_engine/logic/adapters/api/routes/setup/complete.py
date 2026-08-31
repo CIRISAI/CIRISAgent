@@ -701,6 +701,24 @@ async def _create_setup_users(
             # that setup declined to mint a second ROOT, and which cert it deferred
             # to. `fabric_holder_id` comes from the store, not from `setup`, and is
             # not sensitive.
+            # FALSE POSITIVE (py/clear-text-logging-sensitive-data). `fabric_holder_id`
+            # is a WA certificate id — `wa-root-<user>` — read back OUT of the
+            # certificate store. It is the same class of identifier as the `node_id`
+            # suppressed above, appears throughout the audit trail by design, and is
+            # not a credential.
+            #
+            # CodeQL taints it transitively: the store lookup takes the provider and
+            # subject as arguments, those derive from the setup request, and the
+            # request object also carries a password field the lookup never reads.
+            # Two earlier attempts to satisfy the analyser rather than suppress it —
+            # binding the values to locals, then logging only a redacted subject
+            # tail — did not clear it, because taint propagates through `str()` and
+            # through the call's return value. Laundering it further would hide the
+            # finding rather than answer it.
+            #
+            # The PII half of the original finding WAS real and is fixed: the
+            # provider subject is no longer logged here at all.
+            # codeql[py/clear-text-logging-sensitive-data]
             logger.info(
                 "CIRIS_USER_CREATE: this provider identity is ALREADY bound by the substrate to %s "
                 "(claim-remote owner-binding) — NOT minting a second ROOT. Minting here is what "

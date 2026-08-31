@@ -1409,6 +1409,20 @@ def _rewrite_record_entry(target: Path) -> None:
     record.write_text("".join(out), encoding="utf-8")
 
 
+def ios_legs_that_failed(results: List[Tuple[str, str, "UpdateStatus"]]) -> List[str]:
+    """The iOS libraries whose update FAILED.
+
+    Split out of `main()` so the finalisation rule is testable on its own. The
+    rule it feeds is subtle enough to deserve that: `Resources.zip` is ONE tree
+    that every library writes into, so a per-library SUCCESS is not permission to
+    rebuild it. A leg that failed has already copied its new native module into
+    that shared tree, and zipping it because a DIFFERENT library succeeded
+    commits a mixed bundle — new module, stale wrapper — over a committed
+    artifact. The nonzero exit afterwards does not undo that.
+    """
+    return [name for name, plat, status in results if plat == "ios" and status is UpdateStatus.FAILED]
+
+
 def materialize_resources_tree() -> None:
     """Unpack Resources.zip into Resources/ so the refresh has something to edit.
 
@@ -1466,14 +1480,34 @@ def materialize_resources_tree() -> None:
         # materialisation exists for (`app_packages/`, `python/`). Tracked paths
         # are never written, so there is nothing to restore and no dirty-tree case
         # to refuse: committed and uncommitted content both survive untouched.
+        # FAIL CLOSED. The whole protection above rests on knowing which paths git
+        # tracks, and an unchecked `subprocess.run` answers "none" for every way
+        # the query can fail — dubious-ownership rejection, a missing git, a
+        # detached or corrupt index. Empty means "nothing is tracked", which
+        # means every tracked file becomes extractable again and the data loss
+        # returns through the back door, in exactly the environment (an unusual
+        # checkout) where the caller is least likely to expect it.
+        #
+        # An empty result is only trustworthy when git said so successfully.
+        ls = subprocess.run(
+            ["git", "ls-files", "-z", str(IOS_RESOURCES_DIR.relative_to(REPO_ROOT))],
+            capture_output=True,
+            text=True,
+            cwd=REPO_ROOT,
+        )
+        if ls.returncode != 0:
+            raise RuntimeError(
+                "Cannot list git-tracked files under "
+                f"{IOS_RESOURCES_DIR.relative_to(REPO_ROOT)} (git exited {ls.returncode}: "
+                f"{ls.stderr.strip() or 'no stderr'}).\n"
+                "Refusing to unpack Resources.zip: without that list this would extract the "
+                "archive's stale copies over tracked files, discarding uncommitted work. "
+                "Fix the git query (e.g. `git config --global --add safe.directory <repo>`) "
+                "and re-run."
+            )
         tracked = {
             pathlib.PurePosixPath(f).relative_to(IOS_RESOURCES_DIR.relative_to(REPO_ROOT).as_posix()).as_posix()
-            for f in subprocess.run(
-                ["git", "ls-files", "-z", str(IOS_RESOURCES_DIR.relative_to(REPO_ROOT))],
-                capture_output=True,
-                text=True,
-                cwd=REPO_ROOT,
-            ).stdout.split("\0")
+            for f in ls.stdout.split("\0")
             if f
         }
         members = [m for m in z.namelist() if m.rstrip("/") not in tracked]
@@ -1765,7 +1799,26 @@ def main(argv: Optional[List[str]] = None) -> None:
             if not verify_so_version(LIBS[name], versions[name]):
                 verify_ok = False
 
-    if ios_ok:
+    # ANY failed iOS leg poisons the SHARED bundle, so success on another leg is
+    # not permission to finalise.
+    #
+    # `rebuild_resources_zip()` re-zips one tree that every library writes into.
+    # A leg that failed its binding refresh has ALREADY copied its new native
+    # module in, so the tree holds that module beside its stale wrapper. Zipping
+    # it because a different library succeeded replaces the committed bundle with
+    # a mixed release — and then writes substrate.lock.json saying the successful
+    # library is current in it. The run exits nonzero afterwards, but the damage
+    # is to a committed artifact and the nonzero exit does not undo it.
+    ios_failed = ios_legs_that_failed(results)
+    if ios_ok and ios_failed:
+        print(
+            f"\n  SKIPPING iOS finalisation: {len(ios_ok)} library(ies) succeeded but "
+            f"{ios_failed} failed.\n"
+            f"         Resources.zip is ONE tree shared by every library, so rebuilding it now "
+            f"would\n         commit a mixed bundle. Left untouched — re-run once the failure "
+            f"above is resolved."
+        )
+    elif ios_ok:
         rebuild_resources_zip()
         # Record what went in, BEFORE the inconclusive binary probes below. The
         # bundle carries no version of its own, so without this the only way to

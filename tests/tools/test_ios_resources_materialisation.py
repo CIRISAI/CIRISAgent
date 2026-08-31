@@ -109,3 +109,32 @@ def test_a_deleted_tracked_file_is_reported_not_silently_replaced(
     out = capsys.readouterr().out
     assert "missing from the working tree" in out
     assert not (ios_repo / "apps" / "ios" / "Resources" / "en.json").exists()
+
+
+def test_a_failed_git_query_aborts_rather_than_extracting_everything(
+    ios_repo: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """FAIL CLOSED. The protection rests entirely on knowing what git tracks.
+
+    An unchecked `subprocess.run` answers "nothing is tracked" for every way the
+    query can fail — dubious-ownership rejection, a missing git, a corrupt index.
+    Empty then means every tracked file is extractable again and the data loss
+    returns, in exactly the unusual checkout where nobody expects it.
+    """
+    live = ios_repo / "apps" / "ios" / "Resources" / "en.json"
+    live.write_text('{"hello": "MY UNCOMMITTED WORK"}', encoding="utf-8")
+
+    real = subprocess.run
+
+    def failing(cmd, *a, **k):
+        if cmd[:2] == ["git", "ls-files"]:
+            return subprocess.CompletedProcess(cmd, 128, "", "fatal: detected dubious ownership")
+        return real(cmd, *a, **k)
+
+    monkeypatch.setattr(usl.subprocess, "run", failing)
+
+    with pytest.raises(RuntimeError, match="Refusing to unpack"):
+        usl.materialize_resources_tree()
+
+    assert live.read_text(encoding="utf-8") == '{"hello": "MY UNCOMMITTED WORK"}'
+    assert "dubious ownership" not in live.read_text(encoding="utf-8")

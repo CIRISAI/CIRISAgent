@@ -311,7 +311,22 @@ jobs:
               "$plat" "$([ $chat_rc -eq 0 ] && echo true || echo false)" \
               > "artifacts/chat-$plat.json"
 
-            # 4. Traces must have actually reached canonical. FATAL, unlike the
+            # 4. ONE IDENTITY, ONE LIVE HOLDER.
+            #    A first-run Google sign-in + setup minted TWO ROOT certs for the
+            #    same identity, and the node then fail-closed every later sign-in
+            #    (auth.oauth.store_unavailable). An OAuth user has no password, so
+            #    that is a permanent lockout on a fresh install.
+            #
+            #    This gate authenticates with a local password, so it does not walk
+            #    the OAuth path and did not see it. But the bug is a broken
+            #    INVARIANT, not a consent-screen problem — and an invariant can be
+            #    asserted against the store with no provider involved. Cheap, and it
+            #    fails the moment any run leaves two holders behind.
+            python tools/dev/assert_one_holder_per_identity.py \
+              "$CIRIS_HOME/data/ciris_engine.db" \
+              || { overall=1; echo "::error::$plat provider identity has >1 live holder"; }
+
+            # 5. Traces must have actually reached canonical. FATAL, unlike the
             #    QA runner's own best-effort probe.
             #    NOTE this is downstream of step 3: with no message sent, the node
             #    admits no traces at all (trace_plane standing=never_admitted,

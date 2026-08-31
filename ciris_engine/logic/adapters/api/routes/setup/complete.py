@@ -648,6 +648,48 @@ async def _create_setup_users(
         # Check if OAuth user already exists and update to ROOT if found
         existing_wa, _ = await _check_existing_oauth_wa(auth_service, setup)
 
+        # DOES THE FABRIC ALREADY HOLD THIS IDENTITY?
+        #
+        # claim-remote (substrate) binds the provider identity to the owner it
+        # mints — `wa-root-<user>` — BEFORE completeSetup runs. That cert cannot
+        # be materialized as a WACertificate (its wa_id does not match our minting
+        # pattern), so `existing_wa` comes back None for an identity that is very
+        # much taken, and the branch below used to mint a SECOND ROOT and link the
+        # same provider identity to it.
+        #
+        # The substrate then correctly refused every later sign-in:
+        #   AMBIGUOUS provider identity — multiple live certs claim this account
+        #   holders=2 wa_ids=["wa-2026-…", "wa-root-mooreericnyc-…"]
+        # Google failed on the ambiguity and local failed because an OAuth user has
+        # no password: a closed door on both sides, on a fresh install.
+        #
+        # We must not author a second claim on an identity the fabric has already
+        # bound. Ownership is the fabric's to produce and ours to surface.
+        fabric_holder_id: Optional[str] = None
+        if existing_wa is None and setup.oauth_provider and setup.oauth_external_id:
+            fabric_holder_id = authentication_store.fabric_oauth_holder_id(
+                setup.oauth_provider, setup.oauth_external_id
+            )
+
+        if fabric_holder_id:
+            logger.info(
+                "CIRIS_USER_CREATE: provider identity %s:%s is ALREADY bound by the substrate to %s "
+                "(claim-remote owner-binding) — NOT minting a second ROOT. Minting here is what "
+                "produced 'AMBIGUOUS provider identity / holders=2' and locked first-run OAuth users out.",
+                setup.oauth_provider,
+                setup.oauth_external_id,
+                fabric_holder_id,
+            )
+            oauth_user_id = f"{setup.oauth_provider}:{setup.oauth_external_id}"
+            # The agent-tier work still applies, keyed on the FABRIC's cert.
+            _create_founding_partnership(fabric_holder_id, oauth_user_id)
+            _store_user_preferences(fabric_holder_id, setup)
+            await _ensure_system_wa(auth_service)
+            # The provisional placeholder is the substrate's to retire, and it
+            # already did (claim-remote logs "retired a duplicate cert"). Nothing
+            # of ours to clean up.
+            return
+
         # Create new WA if we didn't find an existing OAuth user
         if existing_wa is None:
             wa_cert = await _create_new_wa(auth_service, setup)

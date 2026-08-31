@@ -723,6 +723,11 @@ async def _create_setup_users(
                 "CIRIS_USER_CREATE: this provider identity is ALREADY bound by the substrate to %s "
                 "(claim-remote owner-binding) — NOT minting a second ROOT. Minting here is what "
                 "produced 'AMBIGUOUS provider identity / holders=2' and locked first-run OAuth users out.",
+                # The suppression must sit on the flagged line itself. CodeQL
+                # reports this ARGUMENT, not the `logger.info(` call above it, so a
+                # comment before the call — where the precedent's single-line
+                # `print(...)` puts it — does not apply here.
+                # codeql[py/clear-text-logging-sensitive-data]
                 fabric_holder_id,
             )
             # Annotated because this is now the FIRST binding in the function, so

@@ -366,16 +366,36 @@ class DesktopAppTestRunner:
             would reinstate the same hole one layer down.
             """
             sent = message.strip()
-            # UI chrome that legitimately changes on send and says nothing about a
-            # reply. Matched loosely; a false EXCLUSION only costs us a retry,
-            # while a false inclusion is a green tick over silence.
-            chrome = re.compile(r"^(showing last \d+ messages?|\d{1,2}:\d{2}\s*(am|pm)?|sending|\.\.\.|·+)$", re.I)
+
+            # WHAT COUNTS AS "NOT A REPLY" IS DATA, NOT A GUESS.
+            #
+            # A hand-written regex here was wrong: it excluded "sending" and "…"
+            # but would have ACCEPTED the product's own
+            #   agent.still_processing  "Still processing. Check back later.
+            #                            Agent response is not guaranteed."
+            #   agent.error_generic     "I encountered an issue processing your
+            #                            request. Please try again."
+            # Both are strings the UI renders INSTEAD of an answer, so a run where
+            # the agent errored or stalled would have gone green. A blocklist of
+            # chrome leaks by construction, because chrome is open-ended.
+            #
+            # Every string the product can render is in the localization bundle,
+            # so the bundle IS the blocklist. Anything the app can say on its own
+            # is excluded; what remains is text that came from the model.
+            product_strings = _product_strings()
+            # Still keep a small structural filter for values the bundle cannot
+            # contain: timestamps and the message counter are formatted at runtime.
+            chrome = re.compile(r"^(showing last \d+ messages?|\d{1,2}:\d{2}\s*(am|pm)?|\.\.\.|·+)$", re.I)
 
             deadline = datetime.now() + timedelta(seconds=45)
             while datetime.now() < deadline:
                 await asyncio.sleep(1.0)
                 fresh = _texts(await self.helper.get_elements()) - baseline_texts
-                replies = [t for t in fresh if t != sent and not chrome.match(t) and len(t) > 1]
+                replies = [
+                    t
+                    for t in fresh
+                    if t != sent and not chrome.match(t) and t not in product_strings and len(t) > 1
+                ]
                 if replies:
                     elapsed = 45 - (deadline - datetime.now()).total_seconds()
                     preview = max(replies, key=len)[:80]
@@ -2333,6 +2353,45 @@ def _kill_iproxy_children() -> None:
                 p.kill()
         except Exception:
             pass
+
+
+def _product_strings() -> set:
+    """Every string the CLIENT can render on its own, from the localization bundle.
+
+    Used as the exclusion set for "did the agent reply": if the app could have
+    produced the text by itself, it is not evidence of an answer. This is the
+    blocklist as DATA — the alternative is enumerating chrome by hand, which
+    already missed `agent.still_processing` and `agent.error_generic`, the two
+    strings the UI shows precisely when there is no answer.
+
+    Best-effort: an empty set degrades to the structural filter alone, which is
+    the pre-existing behaviour rather than a new failure mode.
+    """
+    repo = Path(__file__).resolve().parents[4]
+    candidates = [
+        repo / "localization" / "en.json",
+        repo / "apps" / "android" / "src" / "main" / "assets" / "localization" / "en.json",
+    ]
+    out: set = set()
+    for path in candidates:
+        if not path.exists():
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+
+        def walk(node: object) -> None:
+            if isinstance(node, dict):
+                for value in node.values():
+                    walk(value)
+            elif isinstance(node, str):
+                text = node.strip()
+                if text:
+                    out.add(text)
+
+        walk(data)
+    return out
 
 
 def qa_log_dir() -> Path:

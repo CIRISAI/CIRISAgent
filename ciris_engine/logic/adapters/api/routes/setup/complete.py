@@ -685,6 +685,15 @@ async def _create_setup_users(
             _create_founding_partnership(fabric_holder_id, oauth_user_id)
             _store_user_preferences(fabric_holder_id, setup)
             await _ensure_system_wa(auth_service)
+            # THE ADOPTION PATH STILL OWES THE CALLER EVERYTHING ELSE IT PROMISED.
+            # An earlier version of this branch returned here, which skipped
+            # _update_system_admin_password() below — so a request carrying
+            # system_admin_password got a response saying both credentials were
+            # configured while the default admin password was silently unchanged.
+            # Declining to mint a duplicate ROOT is not a licence to drop the rest
+            # of the contract.
+            await _update_system_admin_password(auth_service, setup, fabric_holder_id)
+
             # The provisional placeholder is the substrate's to retire, and it
             # already did (claim-remote logs "retired a duplicate cert"). Nothing
             # of ours to clean up.

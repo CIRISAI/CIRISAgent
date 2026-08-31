@@ -88,6 +88,15 @@ def main() -> int:
             "the run under test never happened."
         ),
     )
+    ap.add_argument(
+        "--require-identity",
+        action="store_true",
+        help=(
+            "FAIL when the store holds no provider identity at all. For suites that "
+            "genuinely complete an OAuth callback: without it, a local-auth run "
+            "reports NOT COVERED and exits 0, which is honest but is not coverage."
+        ),
+    )
     args = ap.parse_args()
 
     if not args.db.exists():
@@ -130,8 +139,28 @@ def main() -> int:
         mark = "AMBIGUOUS" if len(ids) > 1 else "ok"
         print(f"  {mark:9s} {provider}:{external[:12]}…  holders={len(ids)}  {ids}")
 
+    if not holders:
+        # NOT A PASS. The workflow that runs this authenticates as a local user,
+        # so a run with zero provider identities has not exercised the OAuth path
+        # at all — and reporting PASS would make this gate read as coverage of a
+        # lockout it never went near. That is the exact vacuous-pass shape this
+        # whole line of work exists to stop, reproduced inside the check written
+        # to prevent it.
+        #
+        # Exit 0 because an absent identity is not a FAILURE either — but say so
+        # loudly enough that nobody mistakes silence for proof.
+        print("\nNOT COVERED: no provider identity in this store.")
+        print("             This run authenticated locally, so the OAuth path was")
+        print("             never walked and this gate proved nothing about it.")
+        print("             Real coverage needs a run that completes an OAuth")
+        print("             callback (or a seeded fixture) — see --require-identity.")
+        if args.require_identity:
+            print("             --require-identity was set: treating absence as FAILURE.")
+            return 1
+        return 0
+
     if not ambiguous:
-        print("\nPASS: every provider identity has exactly one live holder.")
+        print(f"\nPASS: {len(holders)} provider identity(ies), each with exactly one live holder.")
         return 0
 
     print(f"\nFAIL: {len(ambiguous)} provider identity(ies) claimed by more than one live cert.")

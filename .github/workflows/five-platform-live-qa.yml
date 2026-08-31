@@ -46,20 +46,6 @@ on:
         required: false
         default: true
         type: boolean
-  # TEMPORARY, for bringing this workflow up. workflow_dispatch only works from
-  # the DEFAULT branch, so there is no way to exercise a new workflow before
-  # merging it except to trigger it from a PR. Path-scoped so it fires only on
-  # changes to this machinery, never on unrelated PRs.
-  #
-  # REMOVE THIS TRIGGER once the job is proven — it boots emulators and spends
-  # real LLM tokens, which is far too expensive per-push.
-  pull_request:
-    paths:
-      - ".github/workflows/five-platform-live-qa.yml"
-      - "tools/qa_runner/modules/web_ui/**"
-      - "tools/dev/assert_traces_reached_canonical.py"
-      - "tools/dev/build_qa_gallery.py"
-
   # Nightly rather than per-PR: it boots emulators and spends real LLM tokens, so
   # it is too slow and too costly to gate every push. The release path is what
   # needs it, and a nightly failure lands before the next tag.

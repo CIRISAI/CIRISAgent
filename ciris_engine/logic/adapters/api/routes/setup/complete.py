@@ -688,13 +688,23 @@ async def _create_setup_users(
             # The diagnostic value here is "the identity was already bound, and to
             # whom" — the provider and a tail are enough to correlate with the
             # substrate's own line, and the holder id is not sensitive.
-            subject_tail = (fabric_provider_subject or "")[-4:]
+            # LOG ONLY THE HOLDER. Binding the provider and subject to locals did
+            # NOT clear the CodeQL taint — it propagates through `str()`, so any
+            # value derived from `setup` keeps carrying it. Laundering the taint
+            # through more locals would only hide the finding rather than answer
+            # it.
+            #
+            # And nothing is actually lost. The substrate already logs the pair,
+            # redacted, at the moment it binds them:
+            #     oauth sign-in CREATED a local identity provider=google subject=…1383
+            # The fact THIS line has to carry is the one the substrate cannot know:
+            # that setup declined to mint a second ROOT, and which cert it deferred
+            # to. `fabric_holder_id` comes from the store, not from `setup`, and is
+            # not sensitive.
             logger.info(
-                "CIRIS_USER_CREATE: provider identity %s:…%s is ALREADY bound by the substrate to %s "
+                "CIRIS_USER_CREATE: this provider identity is ALREADY bound by the substrate to %s "
                 "(claim-remote owner-binding) — NOT minting a second ROOT. Minting here is what "
                 "produced 'AMBIGUOUS provider identity / holders=2' and locked first-run OAuth users out.",
-                fabric_provider,
-                subject_tail,
                 fabric_holder_id,
             )
             # Annotated because this is now the FIRST binding in the function, so

@@ -23,25 +23,53 @@ So the ordering is asserted here, where a PR does run it.
 from __future__ import annotations
 
 import pathlib
+from typing import Any, Dict, List, Mapping, TypedDict, cast
 
 import pytest
 
 yaml = pytest.importorskip("yaml")
 
+
+class WorkflowStep(TypedDict, total=False):
+    """One step of a GitHub Actions job — only the keys this guard reads.
+
+    `total=False` because every key here is genuinely optional in the Actions
+    schema: a step may be a `uses:` with no `run:`, and most steps carry no
+    `env:`. Typing the boundary is the repo rule (no untyped dicts), and it earns
+    its keep here — `yaml.safe_load` hands back `Any`, so without these a typo
+    like `step["evn"]` is invisible to mypy in a file whose whole job is
+    catching a mistake nobody else catches.
+    """
+
+    name: str
+    run: str
+    env: Dict[str, str]
+    uses: str
+
+
+class WorkflowJob(TypedDict, total=False):
+    name: str
+    steps: List[WorkflowStep]
+
+
+class Workflow(TypedDict):
+    jobs: Dict[str, WorkflowJob]
+
 WORKFLOW = pathlib.Path(__file__).resolve().parents[2] / ".github" / "workflows" / "build.yml"
 
 
-def _apk_job() -> dict:
-    spec = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+def _apk_job() -> WorkflowJob:
+    raw: Any = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    spec = cast(Workflow, raw)
     for job in spec["jobs"].values():
-        for step in job.get("steps", []) or []:
+        for step in job.get("steps") or []:
             if "assembleDebug" in str(step.get("run", "")):
                 return job
     pytest.fail("no job in build.yml builds the Android APK — did the job move?")
 
 
-def _step_index(job: dict, needle: str) -> int:
-    for i, step in enumerate(job.get("steps", []) or []):
+def _step_index(job: WorkflowJob, needle: str) -> int:
+    for i, step in enumerate(job.get("steps") or []):
         if needle in str(step.get("run", "")):
             return i
     return -1
@@ -72,8 +100,9 @@ def test_the_fetch_step_can_authenticate() -> None:
     # unrelated step's env and passed. Caught by running it against the
     # pre-fix workflow, where it went green for entirely the wrong reason.
     assert idx != -1, "no AAR fetch step to check for a token (see the ordering test)"
-    step = (job.get("steps") or [])[idx]
-    env = {k.upper() for k in (step.get("env") or {})}
+    step: WorkflowStep = (job.get("steps") or [])[idx]
+    env_map: Mapping[str, str] = step.get("env") or {}
+    env = {k.upper() for k in env_map}
 
     assert env & {"GH_TOKEN", "GITHUB_TOKEN"}, (
         "the AAR fetch step passes no token; `gh release view` will fail to authenticate"

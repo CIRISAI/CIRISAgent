@@ -110,3 +110,22 @@ def test_the_trace_gate_is_invoked_and_is_fatal(raw: str) -> None:
 def test_headless_is_not_passed_to_mobile_targets(raw: str) -> None:
     """--headless controls a desktop window; an emulator has its own display."""
     assert '[ "$target" = "desktop" ] && extra="--headless"' in raw
+
+
+def test_log_collection_cannot_outlive_the_job(raw: str) -> None:
+    """A collect step must never hang.
+
+    `command -v adb` succeeds on GitHub's macOS runners — they ship the Android
+    SDK — and with no device attached adb blocks starting its server. That hung
+    the macos-ios collect step for over an hour, burned the job timeout, and
+    blocked upload-artifact behind it, so the failure it was collecting for could
+    not be diagnosed at all.
+
+    Two independent guards, because either alone is thin: only run it on the
+    runner that actually owns Android, and cap it regardless.
+    """
+    assert "MATRIX_PLATFORMS" in raw, "logcat is not gated on the runner owning android"
+    logcat = [ln for ln in raw.splitlines() if "adb logcat" in ln]
+    assert logcat, "no logcat collection at all"
+    for line in logcat:
+        assert "timeout " in line, f"adb logcat is not time-capped: {line.strip()}"

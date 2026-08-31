@@ -328,6 +328,8 @@ jobs:
       - name: Collect artifacts
         if: always()
         shell: bash
+        env:
+          MATRIX_PLATFORMS: ${{ matrix.platforms }}
         run: |
           set +e
           mkdir -p artifacts/logs artifacts/cmdlogs
@@ -347,8 +349,18 @@ jobs:
           cp "${RUNNER_TEMP}"/ciris_desktop*.log artifacts/ 2>/dev/null
           # Android: the device's own logcat, which is where a Chaquopy or
           # TestAutomationServer failure actually appears.
-          if command -v adb >/dev/null 2>&1; then
-            adb logcat -d > artifacts/logs/android-logcat.txt 2>/dev/null
+          #
+          # GATED ON THIS RUNNER ACTUALLY HAVING ANDROID, and wrapped in a
+          # timeout. GitHub's macOS runners ship the Android SDK, so
+          # `command -v adb` succeeds there — and with no device attached, adb
+          # blocks starting its server. That hung this step for over an hour on
+          # macos-ios, burned the job timeout, and (worse) blocked the
+          # upload-artifact step behind it, so the macOS failure could not be
+          # diagnosed at all. A collect step must never be able to outlive the
+          # thing it is collecting for.
+          if [ "${MATRIX_PLATFORMS#*android}" != "$MATRIX_PLATFORMS" ] && command -v adb >/dev/null 2>&1; then
+            timeout 60 adb logcat -d > artifacts/logs/android-logcat.txt 2>/dev/null || \
+              echo "logcat unavailable (no device or adb timed out)" > artifacts/logs/android-logcat.txt
           fi
           echo "collected:"; find artifacts -type f | head -40; true
 

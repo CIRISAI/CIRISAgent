@@ -55,6 +55,16 @@ def _edge_disabled() -> bool:
     return os.environ.get("CIRIS_EDGE_DISABLED", "").lower() in ("true", "1", "yes")
 
 
+def get_federation_alias_for_log() -> str:
+    """The keystore alias, for diagnostics only — never raises."""
+    try:
+        from ciris_engine.logic.utils.path_resolution import get_federation_alias
+
+        return get_federation_alias()
+    except Exception:  # noqa: BLE001 - a log line must not break boot
+        return "<unresolved>"
+
+
 def initialize_edge_runtime(identity_dir: Path) -> None:
     """Bootstrap the Edge runtime singleton.
 
@@ -306,6 +316,41 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
             # `open_existing` and refuses when absent, so this must be the
             # federation identity dir, never the Reticulum one.
             _edge_kwargs["node_identity_dir"] = str(federation_identity_dir)
+
+            # THE NAME, NOT JUST THE DIRECTORY (ciris-server 0.5.196+).
+            #
+            # provision_node_identity and edge derive the node key's name
+            # independently, and they do not agree: provisioning writes
+            # `ciris-node-bootstrap` (agent -> node) while edge, given only a
+            # directory, opens `<engine alias>-node` = `ciris-agent-bootstrap-node`.
+            # Neither exists for the other, so a first boot died on
+            # "could not open the sealed Ed25519 node identity ... Key not found".
+            #
+            # 0.5.196 added `node_keystore_alias` so the caller can settle it, and
+            # the alias is what provisioning just told us: its returned key_id is
+            # `<node alias>-<fingerprint>`. Passing it removes the guess from both
+            # ends — we no longer rely on either side's derivation matching.
+            #
+            # Feature-detected rather than version-gated: an unknown kwarg is a
+            # TypeError on <=0.5.195, and those builds fail this way anyway.
+            import inspect as _inspect
+
+            _sig = getattr(init_edge_runtime, "__text_signature__", "") or ""
+            if "node_keystore_alias" in _sig:
+                node_alias = node_key_id.rsplit("-", 1)[0]
+                _edge_kwargs["node_keystore_alias"] = node_alias
+                logger.info(
+                    "[NODE-KEY] passing node_keystore_alias=%r (from provisioned key_id %r) — "
+                    "edge opens the name provisioning minted instead of deriving its own",
+                    node_alias,
+                    node_key_id,
+                )
+            else:
+                logger.warning(
+                    "[NODE-KEY] substrate has no node_keystore_alias parameter (<0.5.196): edge "
+                    "will derive the node key name itself and may not find what provisioning "
+                    "minted. Upgrade the substrate if edge refuses to open the node identity."
+                )
             logger.info(
                 "[NODE-KEY] edge will carry node identity %s from %s (actor authorship unaffected)",
                 node_key_id,
@@ -337,6 +382,30 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
             f"Set CIRIS_EDGE_DISABLED=true to skip."
         ) from e
     except Exception as e:
+        # NAME THE TWO HALVES WHEN THE NODE IDENTITY IS THE PROBLEM.
+        #
+        # provision_node_identity and edge derive the node key's name
+        # INDEPENDENTLY, and on ciris-server 0.5.195 they disagreed:
+        #
+        #     alias we passed   ciris-agent-bootstrap
+        #     provision minted  ciris-node-bootstrap-<fp>   (agent -> node)
+        #     edge opened       ciris-agent-bootstrap-node  (append -node)
+        #
+        # Edge's own message says which name it wanted, and our [NODE-KEY] line
+        # says which one was minted — but they are hundreds of lines apart in a
+        # boot log, so nobody reads them as a pair. init_edge_runtime takes no
+        # parameter for the node alias or key_id, so this cannot be reconciled
+        # from here; the point of this line is to make the mismatch visible in
+        # ONE place instead of inferred from two.
+        if node_key_id is not None and "node identity" in str(e):
+            logger.error(
+                "[NODE-KEY] identity name mismatch: we provisioned %r under alias %r in %s, "
+                "and edge asked for a different name (see its message below). These are "
+                "derived independently and there is no parameter to reconcile them.",
+                node_key_id,
+                get_federation_alias_for_log(),
+                federation_identity_dir,
+            )
         raise RuntimeError(
             f"Edge runtime initialization failed (REQUIRED foundation dep): {e}. "
             f"Set CIRIS_EDGE_DISABLED=true to skip in constrained environments."

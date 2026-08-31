@@ -101,17 +101,6 @@ def _referenced_keys() -> dict[str, list[str]]:
     """key -> the source files that ask for it."""
     found: dict[str, list[str]] = {}
     roots = [r for r in (REPO / "apps" / "android" / "src", REPO / "apps" / "ios") if r.exists()]
-    if not roots:
-        # NOT an empty dict. `_referenced_keys()` used to scan client/shared/src,
-        # which the CIRISClient migration deleted; rglob on a missing directory
-        # yields nothing, so "no key is missing" and "every locale has every
-        # referenced key" both became trivially true. Two guards passed on an
-        # empty set for as long as the path was wrong.
-        pytest.skip(
-            "no client sources in this checkout — the Kotlin that references these "
-            "keys is built by CIRISAI/CIRISClient now, so this guard belongs there. "
-            "Skipping is honest; returning {} would have looked like a pass."
-        )
     for kt in [f for r in roots for f in r.rglob("*.kt")]:
         try:
             text = kt.read_text(encoding="utf-8")
@@ -121,6 +110,27 @@ def _referenced_keys() -> dict[str, list[str]]:
             key = next((g for g in groups if g), None) if isinstance(groups, tuple) else groups
             if key:
                 found.setdefault(key, []).append(str(kt.relative_to(REPO)))
+
+    # SKIP ON THE RESULT, NOT ON THE PATH.
+    #
+    # The first version of this guard checked `if not roots`. That looked like the
+    # same protection and was not: `apps/android/src` and `apps/ios` both still
+    # exist — they hold the platform shells — so the skip never fired, while the
+    # eight Kotlin files under them contain ZERO matching call sites. The scan
+    # returned {} and both guards went green again, which is precisely the vacuous
+    # pass this skip was added to prevent, moved up one level.
+    #
+    # Measured on this checkout at the time of the fix: 8 .kt files, 0 call sites.
+    #
+    # What actually matters is whether any reference was FOUND, so that is what is
+    # checked. A directory existing proves nothing about what is in it.
+    if not found:
+        pytest.skip(
+            f"no localization call sites in this checkout ({sum(1 for r in roots for _ in r.rglob('*.kt'))} "
+            "Kotlin file(s) scanned, none referencing a string key) — the UI that asks for "
+            "these keys is built by CIRISAI/CIRISClient now, so this guard belongs there. "
+            "Skipping is honest; an empty result would have looked like a pass."
+        )
     return found
 
 

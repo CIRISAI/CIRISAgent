@@ -53,6 +53,7 @@ import argparse
 import hashlib
 import json
 import os
+import pathlib
 import re
 import shutil
 import subprocess
@@ -521,23 +522,61 @@ def _install_android_wheels_from_pypi(lib: SubstrateLib, version: str) -> bool:
 
     WHEELS_DIR.mkdir(parents=True, exist_ok=True)
     wheel_prefix = lib.pypi_package.replace("-", "_") + "-"
-    for stale in WHEELS_DIR.glob(f"{wheel_prefix}*.whl"):
-        if version not in stale.name:
-            stale.unlink()
-            print(f"  pruned stale wheel: {stale.name}")
 
-    for u in android:
-        dest = WHEELS_DIR / u["filename"]
-        if dest.exists() and dest.stat().st_size == u.get("size", -1):
-            print(f"  {dest.relative_to(REPO_ROOT)} (cached)")
-            continue
-        try:
-            with _url.urlopen(u["url"], timeout=600) as r, open(dest, "wb") as f:
-                shutil.copyfileobj(r, f)
-        except Exception as e:  # noqa: BLE001
-            print(f"  ERROR downloading {u['filename']}: {e}")
-            return False
-        print(f"  {dest.relative_to(REPO_ROOT)} ({dest.stat().st_size / 1024 / 1024:.1f}MB)")
+    # STAGE EVERY ABI BEFORE TOUCHING THE LIVE SET.
+    #
+    # This used to prune the old wheels first and then download the new ones one
+    # at a time, returning False on the first failure. `WHEELS_DIR` is
+    # `apps/android/wheels` — a SHIPPED directory in the checkout, not a cache —
+    # so a network blip on the second of three ABIs left the tree with the old
+    # wheels deleted and the new set incomplete. There is no recovery path from
+    # inside the tool: the pruned wheels came from PyPI and the run has already
+    # failed. Worse, the caller turned that False into a warning and still
+    # reported SUCCESS, so a half-populated wheels directory was a green run.
+    #
+    # Downloading into a temp dir first makes the failure harmless: if any ABI
+    # does not land, the live directory has not been touched at all and the
+    # existing (older, consistent) set still builds.
+    staged: dict[str, pathlib.Path] = {}
+    with tempfile.TemporaryDirectory(prefix="ciris-android-wheels-") as tmp:
+        tmpdir = pathlib.Path(tmp)
+        for u in android:
+            live = WHEELS_DIR / u["filename"]
+            if live.exists() and live.stat().st_size == u.get("size", -1):
+                print(f"  {live.relative_to(REPO_ROOT)} (cached)")
+                continue
+            dest = tmpdir / u["filename"]
+            try:
+                with _url.urlopen(u["url"], timeout=600) as r, open(dest, "wb") as f:
+                    shutil.copyfileobj(r, f)
+            except Exception as e:  # noqa: BLE001
+                print(
+                    f"  ERROR downloading {u['filename']}: {e}\n"
+                    f"         The live wheels in {WHEELS_DIR.relative_to(REPO_ROOT)} were NOT modified."
+                )
+                return False
+
+            # A truncated download is a valid file of the wrong length, and
+            # Chaquopy would fail on it at APK build time rather than here.
+            expected = u.get("size")
+            if expected is not None and dest.stat().st_size != expected:
+                print(
+                    f"  ERROR: {u['filename']} is {dest.stat().st_size} bytes, expected {expected}.\n"
+                    f"         The live wheels in {WHEELS_DIR.relative_to(REPO_ROOT)} were NOT modified."
+                )
+                return False
+            staged[u["filename"]] = dest
+            print(f"  staged {u['filename']} ({dest.stat().st_size / 1024 / 1024:.1f}MB)")
+
+        # Every ABI is present and the right size. Only now is the live set
+        # allowed to change.
+        for stale in WHEELS_DIR.glob(f"{wheel_prefix}*.whl"):
+            if version not in stale.name:
+                stale.unlink()
+                print(f"  pruned stale wheel: {stale.name}")
+        for name, src in staged.items():
+            shutil.move(str(src), str(WHEELS_DIR / name))
+            print(f"  {(WHEELS_DIR / name).relative_to(REPO_ROOT)}")
 
     print(f"  {len(android)} Android wheel(s) from PyPI for {lib.pypi_package}=={version}")
     return True
@@ -838,10 +877,19 @@ def update_lib_android(
         if install_android_wheels(lib, version, skip_checksums=skip_checksums):
             update_gradle_pin(lib, version)
         else:
+            # NOT a warning-and-carry-on. This was non-fatal on the theory that a
+            # transient blip should not trash the run, but the run has nothing
+            # left to accomplish: the gradle pin is deliberately not bumped, so
+            # the tool would exit SUCCESS having moved requirements.txt while
+            # apps/android stayed on the old version — the exact four-site skew
+            # `tools/dev/check_version_alignment.py` exists to fail on. Reporting
+            # success for a state a later gate rejects just moves the discovery.
             print(
-                f"  WARNING: android wheels NOT installed for {lib.name}; "
-                f"Chaquopy import path will be broken until this lands"
+                f"  ERROR: android wheels NOT installed for {lib.name}; the Chaquopy "
+                f"import path would be broken, so the gradle pin was left at its old "
+                f"version and this update is being reported as FAILED. Re-run to retry."
             )
+            return UpdateStatus.FAILED
 
     if not skip_bindings:
         update_python_bindings_android(lib, version)
@@ -1362,25 +1410,55 @@ def materialize_resources_tree() -> None:
             return
         print(f"  Materialising Resources/ from Resources.zip ({archived} entries; tree had {present})...")
         IOS_RESOURCES_DIR.mkdir(parents=True, exist_ok=True)
-        z.extractall(IOS_RESOURCES_DIR)
 
-    # TRACKED FILES WIN. The archive also contains copies of files that ARE in
-    # git — localization bundles, ffi_bindings — and those copies are as old as
-    # the last iOS refresh. Extracting over them silently reverts committed work:
-    # this reverted an en.json string added earlier the same day, which would
-    # then have been re-zipped and shipped as the current bundle.
-    #
-    # So restore anything git tracks under Resources/ after unpacking. The
-    # archive supplies only what git does not have.
-    tracked = subprocess.run(
-        ["git", "ls-files", str(IOS_RESOURCES_DIR.relative_to(REPO_ROOT))],
-        capture_output=True,
-        text=True,
-        cwd=REPO_ROOT,
-    ).stdout.split()
-    if tracked:
-        subprocess.run(["git", "checkout", "--", *tracked], cwd=REPO_ROOT, check=False)
-        print(f"  -> restored {len(tracked)} tracked file(s) over the unpacked copies")
+        # THE WORKING TREE WINS — and it is never written to get there.
+        #
+        # The archive also carries copies of files that ARE in git — localization
+        # bundles, ffi_bindings — as old as the last iOS refresh. Unpacking over
+        # them silently reverts real work: it once reverted an en.json string
+        # added earlier the same day, which would then have been re-zipped and
+        # shipped as the current bundle.
+        #
+        # The first fix for that extracted everything and then ran
+        # `git checkout -- <tracked>` to put the committed copies back. That
+        # traded a revert for something worse: `git checkout --` discards
+        # UNCOMMITTED edits too, so running this updater in a normal checkout
+        # with local edits under Resources/ destroyed them irrecoverably — 2,512
+        # tracked files, no confirmation, no backup, no undo. A tool that can eat
+        # a morning of unpushed localization work is not one anybody should run.
+        #
+        # So nothing tracked is extracted in the first place. The archive supplies
+        # ONLY what git does not track, which is exactly the build output the
+        # materialisation exists for (`app_packages/`, `python/`). Tracked paths
+        # are never written, so there is nothing to restore and no dirty-tree case
+        # to refuse: committed and uncommitted content both survive untouched.
+        tracked = {
+            pathlib.PurePosixPath(f).relative_to(IOS_RESOURCES_DIR.relative_to(REPO_ROOT).as_posix()).as_posix()
+            for f in subprocess.run(
+                ["git", "ls-files", "-z", str(IOS_RESOURCES_DIR.relative_to(REPO_ROOT))],
+                capture_output=True,
+                text=True,
+                cwd=REPO_ROOT,
+            ).stdout.split("\0")
+            if f
+        }
+        members = [m for m in z.namelist() if m.rstrip("/") not in tracked]
+        z.extractall(IOS_RESOURCES_DIR, members=members)
+        skipped = len(z.namelist()) - len(members)
+        if skipped:
+            print(f"  -> left {skipped} git-tracked file(s) as they are on disk; the archive supplied the rest")
+
+    # A tracked file that git knows about but that is not on disk is the caller's
+    # working-tree state, not ours to overwrite — restoring it would undo a
+    # deliberate deletion just as surely as the checkout did. Say so instead.
+    absent = [f for f in tracked if not (IOS_RESOURCES_DIR / f).exists()]
+    if absent:
+        print(
+            f"  NOTE: {len(absent)} git-tracked resource(s) are missing from the working tree "
+            f"(e.g. {absent[0]}).\n"
+            f"        They were NOT restored from the archive — its copies are stale, and the\n"
+            f"        deletion may be intentional. `git checkout -- apps/ios/Resources` if not."
+        )
     print("  -> Resources/ ready")
 
 
@@ -1662,9 +1740,9 @@ def main(argv: Optional[List[str]] = None) -> None:
 
     if android_ok:
         print("\nAndroid next steps:")
-        print("  1. cd client && ./gradlew :android:assembleDebug")
+        print("  1. cd apps && ./gradlew :android:assembleDebug")
         print("  2. adb shell am force-stop ai.ciris.mobile.debug")
-        print("  3. adb install -r androidApp/build/outputs/apk/debug/androidApp-debug.apk")
+        print("  3. adb install -r apps/android/build/outputs/apk/debug/android-debug.apk")
 
     # Exit policy: hard failures (and verification misses) always fail the
     # run. PENDING (upstream hasn't published artifacts yet — lens) fails the

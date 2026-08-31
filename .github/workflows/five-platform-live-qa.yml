@@ -169,25 +169,34 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python3 tools/fetch_client_artifacts.py --platform ios
 
-      - name: Build the iOS app for the simulator
+      # USE THE REAL BUILD SCRIPT. A hand-rolled `xcodebuild -scheme iosApp`
+      # produces a broken app: the .xcodeproj is GENERATED from project.yml by
+      # xcodegen, Resources.zip has to be rebuilt from the overlaid
+      # ciris_engine/ciris_verify sources, and prepare_python_bundle.sh lays down
+      # an ARCH-SPECIFIC Python bundle (simulator != device). This is the script
+      # that has been shipping to the App Store; CI must not maintain a second,
+      # subtly-different copy of it.
+      #
+      # It also installs and launches on the simulator. The bring-up below then
+      # re-launches with CIRIS_TEST_MODE (simctl only forwards env with the
+      # SIMCTL_CHILD_ prefix, which this script does not set), which is idempotent.
+      - name: Build + deploy the iOS app to the simulator
         if: contains(matrix.platforms, 'ios')
         id: iosbuild
         continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -o pipefail
           mkdir -p artifacts/cmdlogs
-          # -sdk iphonesimulator, NOT iphoneos: a device build cannot install into
-          # a simulator (different architectures), and the install failure names
-          # the wrong cause.
-          xcodebuild \
-            -project apps/ios/iosApp.xcodeproj \
-            -scheme iosApp \
-            -sdk iphonesimulator \
-            -configuration Debug \
-            -derivedDataPath "${RUNNER_TEMP}/DerivedData" \
-            CODE_SIGNING_ALLOWED=NO \
-            build 2>&1 | tee artifacts/cmdlogs/xcodebuild.log | tail -40
-          APP=$(find "${RUNNER_TEMP}/DerivedData" -path '*-iphonesimulator/*.app' -maxdepth 6 | head -1)
+          brew install xcodegen 2>&1 | tail -2 || true
+          bash apps/ios/scripts/rebuild_and_deploy.sh 2>&1 \
+            | tee artifacts/cmdlogs/ios-rebuild-and-deploy.log | tail -30
+          # Same locator the script uses — note -not -path Index.noindex, which a
+          # naive find picks up and then installs a stub that launches to nothing.
+          APP=$(find ~/Library/Developer/Xcode/DerivedData/iosApp-* \
+                -name "iosApp.app" -path "*Debug-iphonesimulator*" \
+                -not -path "*/Index.noindex/*" -type d 2>/dev/null | head -1)
           echo "app=$APP" >> "$GITHUB_OUTPUT"
           echo "built: ${APP:-<none>}"
 

@@ -2548,21 +2548,33 @@ async def run_ios_simulator_up(args: argparse.Namespace) -> int:
 
     # 2. Locate the app.
     print("[2/5] Locating the simulator .app…")
+    bundle_id = getattr(args, "ios_bundle_id", None) or "ai.ciris.mobile"
     app = _ios_find_app(getattr(args, "ios_app_path", None))
     if not app:
-        print(
-            " [FAIL] no *-iphonesimulator/*.app found.\n"
-            "        Build it first (xcodebuild -sdk iphonesimulator) or pass --ios-app-path.\n"
-            "        Note the client xcframeworks are gitignored — run\n"
-            "        `python3 tools/fetch_client_artifacts.py --platform ios` before building."
-        )
-        return 1
-    print(f"  app: {app}")
+        # `apps/ios/scripts/rebuild_and_deploy.sh` — the script that ships to the
+        # App Store — BUILDS AND INSTALLS. So the bundle can legitimately already
+        # be on the simulator with no .app left for us to point at. Re-installing
+        # is not required; relaunching it in test mode is.
+        already = _simctl(["get_app_container", udid, bundle_id, "app"], timeout=60)
+        if already.returncode == 0:
+            print(f"  no .app located, but {bundle_id} is already installed — install skipped")
+        else:
+            _fail(
+                "no *Debug-iphonesimulator*/*.app found and the bundle is not installed",
+                hint="Build it with `bash apps/ios/scripts/rebuild_and_deploy.sh`, which\n"
+                     "runs xcodegen, rebuilds Resources.zip and lays down the SIMULATOR\n"
+                     "Python bundle — a bare `xcodebuild -scheme iosApp` skips all three\n"
+                     "and produces an app that launches to nothing.\n"
+                     "Or pass --ios-app-path explicitly.",
+            )
+            return 1
+    else:
+        print(f"  app: {app}")
 
-    # 3. Install.
-    print("[3/5] Installing…")
-    install = _simctl(["install", udid, str(app)], timeout=300)
-    if install.returncode != 0:
+    # 3. Install (skipped when the build script already did it).
+    print("[3/5] Installing…" if app else "[3/5] Install skipped — already present")
+    install = _simctl(["install", udid, str(app)], timeout=300) if app else None
+    if install is not None and install.returncode != 0:
         _fail(f"simctl install {app.name}", install,
               hint="A device (iphoneos) build cannot install into a simulator — the\n"
                    "architectures differ. Confirm this bundle came from an\n"
@@ -2574,7 +2586,6 @@ async def run_ios_simulator_up(args: argparse.Namespace) -> int:
     # via the SIMCTL_CHILD_ prefix; setting CIRIS_TEST_MODE directly would set it
     # on simctl itself and the app would never see it.
     print("[4/5] Launching with CIRIS_TEST_MODE=true…")
-    bundle_id = getattr(args, "ios_bundle_id", None) or "ai.ciris.mobile"
     _simctl(["terminate", udid, bundle_id], timeout=60)  # idempotent; ignore rc
     env = dict(os.environ)
     env["SIMCTL_CHILD_CIRIS_TEST_MODE"] = "true"

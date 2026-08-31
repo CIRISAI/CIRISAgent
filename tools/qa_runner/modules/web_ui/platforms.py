@@ -99,8 +99,25 @@ class Platform(Protocol):
         ...
 
 
-def _run(cmd: list[str], **kw) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, capture_output=True, **kw)
+#: Capture is REVIEW MATERIAL, never an assertion, so it must never be able to
+#: outlive the run. adb can stall when it loses the emulator and simctl when the
+#: simulator wedges — and both happen AFTER the scenario has already passed, so an
+#: unbounded call turns a green run into a 75-minute timeout. Short, because a
+#: screenshot that takes longer than this is not coming.
+_CAPTURE_TIMEOUT_SECONDS = 60
+
+
+def _run(cmd: list[str], timeout: float = _CAPTURE_TIMEOUT_SECONDS, **kw) -> subprocess.CompletedProcess:
+    """Run a capture command, never blocking longer than `timeout`.
+
+    A TimeoutExpired is returned as an ordinary non-zero result rather than
+    raised, so the caller's existing "capture failed, say why, carry on" path
+    handles it like any other failure.
+    """
+    try:
+        return subprocess.run(cmd, capture_output=True, timeout=timeout, **kw)
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(cmd, 124, b"", f"timed out after {timeout}s".encode())
 
 
 class DesktopPlatform:

@@ -74,6 +74,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+import time
 from pathlib import Path
 from typing import List, Optional, Tuple
 
@@ -154,8 +155,29 @@ def main() -> int:
         default=None,
         help="Only consider probe lines for this canonical key (default: any).",
     )
+    ap.add_argument(
+        "--wait-secs",
+        type=int,
+        default=0,
+        help=(
+            "Re-read the logs until the required rung appears, up to this many "
+            "seconds. Delivery is ASYNCHRONOUS — the probe can spend minutes rooting "
+            "and reports at a 60s cadence — so a one-shot scan straight after a fast "
+            "chat can fail a run that delivers moments later. 0 keeps the one-shot "
+            "behaviour for offline log analysis."
+        ),
+    )
     args = ap.parse_args()
 
+    deadline = time.monotonic() + max(0, args.wait_secs)
+    while True:
+        rc = _evaluate(args)
+        if rc == 0 or time.monotonic() >= deadline:
+            return rc
+        time.sleep(10)
+
+
+def _evaluate(args) -> int:
     text, found = _read(args.logs)
 
     if not found:
@@ -185,8 +207,16 @@ def main() -> int:
     # Replication is searched across the WHOLE text, not just [DELIVERY-PROBE]
     # lines: the counter may arrive from a metrics dump or a node_state blob that
     # carries no probe prefix.
-    served_m = REPLICATION_SERVED.search(text)
-    served = int(served_m.group(1)) if served_m else None
+    # ANY POSITIVE SAMPLE COUNTS, NOT THE FIRST ONE.
+    #
+    # `_log_trace_ship()` emits this counter REPEATEDLY — at every status cadence
+    # while delivery is still in flight. A healthy run therefore logs
+    # `…served_total=0` early and a positive value later, and `search()` (first
+    # match) would read the zero and fail a run that delivered fine. Asynchronous
+    # delivery is the normal case, so the first sample is the least informative
+    # one available.
+    samples = [int(m) for m in REPLICATION_SERVED.findall(text)]
+    served = max(samples) if samples else None
 
     print(f"Scanned {len(found)} log file(s), {len(probes)} [DELIVERY-PROBE] line(s).")
     print(f"  1. ROOTED       {'yes — ' + rooted.group(1) if rooted else 'NO'}")

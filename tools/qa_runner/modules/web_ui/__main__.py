@@ -3225,9 +3225,27 @@ async def main() -> int:
     # Node-client first-run setup wizard: --launch brings up backend in
     # FIRST-RUN mode + desktop app sitting on the Setup wizard, then drives it.
     if args.command == "desktop-setup" and args.launch:
-        rc = await run_desktop_first_run_up(args)
+        # BRING UP THE PLATFORM THAT WAS ASKED FOR.
+        #
+        # This called run_desktop_first_run_up() unconditionally, so
+        # `--platform android` booted no emulator and installed no APK — it
+        # started the DESKTOP app, on the Android port, and the whole run was then
+        # reported as an Android result. A gate that claims five platforms while
+        # exercising three is worse than one that admits to three.
+        #
+        # `--platform` is the single source of truth (platforms.py); bring-up is
+        # the one place it legitimately changes behaviour.
+        platform = getattr(args, "platform", None) or "desktop"
+        if platform == "android":
+            print("desktop-setup: --platform android — emulator + adb-forward bring-up")
+            rc = await run_android_up(args)
+        elif platform == "ios":
+            print("desktop-setup: --platform ios — simulator bring-up")
+            rc = await run_ios_simulator_up(args)
+        else:
+            rc = await run_desktop_first_run_up(args)
         if rc != 0:
-            print(f"desktop-setup: first-run bring-up failed (rc={rc})")
+            print(f"desktop-setup: {platform} bring-up failed (rc={rc})")
             return rc
 
     # Catch-up Add-Federation-ID flow: --launch brings up the full configured

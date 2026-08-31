@@ -208,7 +208,12 @@ jobs:
           # falls back to the mock LLM: that still proves the UI flow end to end,
           # and the step SAYS so rather than implying live coverage it did not
           # have.
-          USE_LIVE_KEY: ${{ inputs.use_live_key == false && '0' || '1' }}
+          # ONLY a manual dispatch can turn the live key OFF. On `schedule` there is
+          # no input, so `inputs.use_live_key` is EMPTY — and Actions' loose equality
+          # treats empty as equal to false, which selected '0' and made every nightly
+          # take the mock branch. The automatic release signal was therefore never
+          # exercising the real model wire, while reporting "no secret available".
+          USE_LIVE_KEY: ${{ (github.event_name == 'workflow_dispatch' && inputs.use_live_key == false) && '0' || '1' }}
           REQUESTED: ${{ inputs.platforms || 'all' }}
           IOS_APP: ${{ steps.iosbuild.outputs.app }}
         run: |
@@ -281,7 +286,7 @@ jobs:
 
             # 3. THE GATE: reach Interact, send a message, require a rendered
             #    reply, and photograph what shipped.
-            chat_rc=0
+            chat_rc=0; trace_rc=0
             python -m tools.qa_runner.modules.web_ui desktop-chat \
               --platform "$target" $extra \
               --screenshot-on-success "artifacts/shots/$plat.png" \
@@ -293,9 +298,7 @@ jobs:
             # no-op. That is why the first run produced no chat-*.json, and the
             # gallery would have shown five "did not run" tiles for three jobs
             # that actually ran. The exit code is the fact that matters.
-            printf '{"platform":"%s","success":%s}\n' \
-              "$plat" "$([ $chat_rc -eq 0 ] && echo true || echo false)" \
-              > "artifacts/chat-$plat.json"
+            # The verdict is written AFTER both assertions, below.
 
             # 4. ONE IDENTITY, ONE LIVE HOLDER.
             #    A first-run Google sign-in + setup minted TWO ROOT certs for the
@@ -318,8 +321,18 @@ jobs:
             #    admits no traces at all (trace_plane standing=never_admitted,
             #    rows=0) and this fails for a reason that is not about delivery.
             python tools/dev/assert_traces_reached_canonical.py \
-              "$CIRIS_HOME/logs" artifacts/cmdlogs --require replication \
-              || { overall=1; echo "::error::$plat traces never reached canonical"; }
+              "$CIRIS_HOME/logs" artifacts/cmdlogs --require replication --wait-secs 240 \
+              || { trace_rc=1; overall=1; echo "::error::$plat traces never reached canonical"; }
+
+              # BOTH HALVES decide the platform's verdict: an answer on screen AND the
+              # trace leaving for canonical. Writing it after only the chat step put a
+              # green tile on a red job and hid which platform lost the second half.
+              printf '{"platform":"%s","success":%s,"interact":%s,"traces":%s}\n' \
+                "$plat" \
+                "$([ $chat_rc -eq 0 ] && [ $trace_rc -eq 0 ] && echo true || echo false)" \
+                "$([ $chat_rc -eq 0 ] && echo true || echo false)" \
+                "$([ $trace_rc -eq 0 ] && echo true || echo false)" \
+                > "artifacts/chat-$plat.json"
 
             cp -r "$CIRIS_HOME/logs" "artifacts/logs/$plat" 2>/dev/null || true
             echo "::endgroup::"

@@ -680,7 +680,10 @@ async def _create_setup_users(
                 setup.oauth_external_id,
                 fabric_holder_id,
             )
-            oauth_user_id = f"{setup.oauth_provider}:{setup.oauth_external_id}"
+            # Annotated because this is now the FIRST binding in the function, so
+            # an unannotated str here makes mypy reject the later `= None` on the
+            # normal path.
+            oauth_user_id: Optional[str] = f"{setup.oauth_provider}:{setup.oauth_external_id}"
             # The agent-tier work still applies, keyed on the FABRIC's cert.
             _create_founding_partnership(fabric_holder_id, oauth_user_id)
             _store_user_preferences(fabric_holder_id, setup)

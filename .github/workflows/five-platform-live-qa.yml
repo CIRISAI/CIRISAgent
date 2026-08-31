@@ -357,11 +357,22 @@ jobs:
             # run stays diagnosable without leaking a key into a public artifact.
             [ -f "$d/.env" ] && sed 's/=".*"/=<redacted>/' "$d/.env" > "artifacts/$name.env.shape.txt"
           done
-          # The desktop app's own log: a UI failure is undiagnosable without it —
+          # THE CLIENT'S OWN LOG. A UI failure is undiagnosable without it: the
           # agent and node both look healthy while the app renders the wrong
-          # surface, and the "[gate] clientMode=..." line exists only here.
-          cp "${TMPDIR:-/tmp}"/ciris_desktop*.log artifacts/ 2>/dev/null
-          cp "${RUNNER_TEMP}"/ciris_desktop*.log artifacts/ 2>/dev/null
+          # surface, and "[gate] clientMode=…" exists only here.
+          #
+          # Run 3 collected ONLY ciris_desktop_setup.log — the setup phase's file —
+          # so when the interact gate found that the agent SPEAKs and the UI never
+          # renders the reply (CIRISAgent#1127), the client half of that story was
+          # missing from the artifact. Searching every plausible home and every
+          # phase, because the one log that matters is the one for the phase that
+          # failed.
+          for d in "${TMPDIR:-/tmp}" "${RUNNER_TEMP}" "$HOME" "${LOCALAPPDATA:-/nonexistent}" .; do
+            [ -d "$d" ] || continue
+            find "$d" -maxdepth 2 -name 'ciris_desktop*.log' -newermt '-2 hours' \
+              -exec cp {} artifacts/ \; 2>/dev/null
+          done
+          ls artifacts/ciris_desktop*.log 2>/dev/null || echo "NOTE: no desktop client log found — a UI failure will not be diagnosable"
           # Android: the device's own logcat, which is where a Chaquopy or
           # TestAutomationServer failure actually appears.
           #
@@ -377,7 +388,40 @@ jobs:
             timeout 60 adb logcat -d > artifacts/logs/android-logcat.txt 2>/dev/null || \
               echo "logcat unavailable (no device or adb timed out)" > artifacts/logs/android-logcat.txt
           fi
-          echo "collected:"; find artifacts -type f | head -40; true
+          # iOS: the SIMULATOR's own os_log for our bundle. Until now this was
+          # gathered only by _ios_diagnostics on the FAILURE path, so a run that
+          # failed its assertion while the app was technically alive produced no
+          # app-side output at all — which is the half you need when the question
+          # is "the agent replied, why did the screen not change".
+          if [ "${MATRIX_PLATFORMS#*ios}" != "$MATRIX_PLATFORMS" ] && command -v xcrun >/dev/null 2>&1; then
+            timeout 180 xcrun simctl spawn booted log show --last 15m --style syslog \
+              --predicate 'subsystem CONTAINS "ai.ciris" OR process CONTAINS "iosApp"' \
+              > artifacts/logs/ios-oslog.txt 2>/dev/null \
+              || echo "ios os_log unavailable (no booted simulator or log show timed out)" \
+                 > artifacts/logs/ios-oslog.txt
+          fi
+
+          # A MANIFEST, so a MISSING log is as visible as a present one. Every
+          # diagnosis this gate has needed so far turned on noticing that
+          # something was absent — the desktop client log, the chat JSON, the
+          # screenshot. An index makes absence legible without unpacking.
+          {
+            echo "# Five-Platform Live QA — collected artifacts"
+            echo "# runner=${MATRIX_PLATFORMS}  run=${GITHUB_RUN_ID:-local}"
+            echo
+            echo "## present"
+            find artifacts -type f -printf '%10s  %p\n' 2>/dev/null | sort -k2 \
+              || find artifacts -type f -exec ls -l {} \; 2>/dev/null | awk '{print $5"  "$9}'
+            echo
+            echo "## expected-but-absent"
+            for plat in ${MATRIX_PLATFORMS}; do
+              [ -f "artifacts/shots/$plat.png" ]   || echo "  shots/$plat.png (no screenshot — did the interact gate pass?)"
+              [ -f "artifacts/chat-$plat.json" ]   || echo "  chat-$plat.json (no result — did the flow reach the chat step?)"
+              [ -d "artifacts/logs/ciris-$plat" ]  || echo "  logs/ciris-$plat/ (no agent logs — did the platform boot?)"
+            done
+            ls artifacts/ciris_desktop*.log >/dev/null 2>&1 || echo "  ciris_desktop*.log (no CLIENT log — a UI failure cannot be diagnosed)"
+          } > artifacts/MANIFEST.txt 2>&1
+          cat artifacts/MANIFEST.txt
 
       - uses: actions/upload-artifact@v4
         if: always()

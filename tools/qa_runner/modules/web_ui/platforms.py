@@ -203,10 +203,32 @@ class IOSPlatform:
 
     name = "ios"
 
-    def __init__(self, udid: str = "booted", simulator: bool = True, test_port: int = 18091, api_port: int = 18080):
+    def __init__(
+        self,
+        udid: str = "booted",
+        simulator: bool = True,
+        test_port: Optional[int] = None,
+        api_port: Optional[int] = None,
+    ):
         self._udid = udid
         self._simulator = simulator
-        self._ports = PlatformPorts(test_server=test_port, api=api_port)
+        # A SIMULATOR NEEDS NO FORWARD. It shares the host's network stack, so a
+        # server bound on 9091 inside the app is reachable at localhost:9091 —
+        # exactly like desktop. The 18091/18080 convention exists only for
+        # PHYSICAL devices, where iproxy tunnels over USB and the offset avoids
+        # colliding with a backend running on the host.
+        #
+        # An earlier version of this class applied the iproxy offset to both,
+        # which would have pointed every simulator run at a port nothing listens
+        # on and reported it as "the app is not running in test mode" — a failure
+        # naming the wrong cause, which is the same trap `_apply_platform_defaults`
+        # documents for desktop's 8091-vs-9091.
+        default_test = CLIENT_TEST_SERVER_PORT if simulator else 18091
+        default_api = 8080 if simulator else 18080
+        self._ports = PlatformPorts(
+            test_server=test_port or default_test,
+            api=api_port or default_api,
+        )
 
     @property
     def ports(self) -> PlatformPorts:
@@ -249,11 +271,14 @@ def build_platform(args) -> Platform:
             api_port=api_port or 8080,
         )
     if requested == "ios":
+        # Pass the ports through UNRESOLVED. IOSPlatform picks the default from
+        # simulator-vs-physical, and defaulting them here would override that
+        # decision with the physical convention before it is ever made.
         return IOSPlatform(
             udid=getattr(args, "ios_udid", None) or "booted",
             simulator=not getattr(args, "ios_physical", False),
-            test_port=test_port or 18091,
-            api_port=api_port or 18080,
+            test_port=test_port,
+            api_port=api_port,
         )
     port = test_port or CLIENT_TEST_SERVER_PORT
     return DesktopPlatform(

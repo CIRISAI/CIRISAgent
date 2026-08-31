@@ -1271,6 +1271,43 @@ Examples:
         help="For federation: write the FederationWalkReport JSON to this path",
     )
     parser.add_argument(
+        "--platform",
+        choices=["desktop", "android", "ios"],
+        default=None,
+        help=(
+            "Which of the five targets to drive. THE SAME FLOW RUNS ON ALL OF THEM: "
+            "one CIRISClient Compose app, one TestAutomationServer on 9091, so a "
+            "command differs only in transport (desktop binds 9091 directly; android "
+            "forwards adb 8091->9091; ios forwards 18091->9091). Applies to EVERY "
+            "command, not just `federation`. Defaults to desktop. The older "
+            "--android/--ios switches remain as aliases."
+        ),
+    )
+    parser.add_argument(
+        "--ios-udid",
+        default="booted",
+        help="For --platform ios: simulator UDID, or 'booted' for the running one (default).",
+    )
+    parser.add_argument(
+        "--ios-physical",
+        action="store_true",
+        help=(
+            "For --platform ios: target a physical device (devicectl/pymobiledevice3) "
+            "instead of a simulator. CI uses the simulator — it needs no signing "
+            "identity, provisioning profile or registered UDID."
+        ),
+    )
+    parser.add_argument(
+        "--screenshot-on-success",
+        metavar="PATH",
+        default=None,
+        help=(
+            "Capture the final screen to PATH when the run PASSES. Review material "
+            "for the 5-platform gallery: a green tick says a reply rendered, a "
+            "picture shows WHAT rendered. Never fails the run on its own."
+        ),
+    )
+    parser.add_argument(
         "--android",
         action="store_true",
         help="For federation --launch: target an Android emulator instead of the desktop app. "
@@ -1315,8 +1352,45 @@ Examples:
     )
 
     args = parser.parse_args()
+    _reconcile_platform(args)
     _apply_platform_defaults(args)
+    # Remembered so the capture wrapper can read --platform/--screenshot-on-success
+    # without parsing argv a second time (which would diverge the moment a
+    # command mutates its own args).
+    global _LAST_ARGS
+    _LAST_ARGS = args
     return args
+
+
+#: The parsed args, kept so the success-capture wrapper can see them.
+_LAST_ARGS: Optional[argparse.Namespace] = None
+
+
+def _reconcile_platform(args: argparse.Namespace) -> None:
+    """Make `--platform` and the legacy `--android`/`--ios` switches one fact.
+
+    Both spellings exist because `--android`/`--ios` predate this and are wired
+    into existing invocations; `--platform` is the one that applies to every
+    command. Rather than have two sources of truth drift, they are collapsed here
+    into BOTH representations, so downstream code can read whichever it already
+    reads and get the same answer.
+    """
+    explicit = getattr(args, "platform", None)
+    legacy_android = bool(getattr(args, "android", False))
+    legacy_ios = bool(getattr(args, "ios", False))
+
+    if explicit is None:
+        args.platform = "android" if legacy_android else "ios" if legacy_ios else "desktop"
+    elif (legacy_android and explicit != "android") or (legacy_ios and explicit != "ios"):
+        # Contradicting yourself is a mistake worth surfacing, not silently
+        # resolving in favour of whichever the code happens to read first.
+        raise SystemExit(
+            f"--platform {explicit} contradicts the legacy "
+            f"--{'android' if legacy_android else 'ios'} switch; pass only one."
+        )
+
+    args.android = args.platform == "android"
+    args.ios = args.platform == "ios"
 
 
 def _apply_platform_defaults(args: argparse.Namespace) -> None:
@@ -1329,13 +1403,18 @@ def _apply_platform_defaults(args: argparse.Namespace) -> None:
     Honors any explicit user override (--desktop-port / --api-port).
     """
     if getattr(args, "ios", False):
-        # iOS uses the iproxy 18xxx convention to avoid collision with any
-        # locally-running host backend. Bump defaults only if the user hasn't
-        # explicitly overridden them.
+        # The 18xxx convention is for PHYSICAL devices only, where iproxy tunnels
+        # over USB and the offset avoids colliding with a host backend. A
+        # SIMULATOR shares the host network stack: the app's 9091 is reachable at
+        # localhost:9091 with no forward at all, exactly like desktop. Applying
+        # the offset to a simulator points the driver at a dead port and reports
+        # "the app is not running in test mode" — the wrong cause, which is the
+        # same trap documented below for desktop's 8091-vs-9091.
+        physical = getattr(args, "ios_physical", False)
         if args.desktop_port == 8091:
-            args.desktop_port = 18091
+            args.desktop_port = 18091 if physical else 9091
         if args.api_port is None:
-            args.api_port = 18080
+            args.api_port = 18080 if physical else 8080
     elif not getattr(args, "android", False):
         # DESKTOP binds 9091 DIRECTLY — TestAutomationServer.kt:39
         # (`private val port: Int = 9091`). Android and iOS reach it through a
@@ -2794,10 +2873,52 @@ async def main() -> int:
     return 0 if suite.success else 1
 
 
+async def _main_with_capture() -> int:
+    """Run the command, and on SUCCESS capture the final screen.
+
+    Wrapped here rather than inside each command so every flow — today's
+    `interact`, tomorrow's p2p chat or video — gets the same review artifact
+    without opting in.
+
+    ONLY ON SUCCESS, deliberately. A failure screenshot is a different artifact
+    with a different audience (debugging, not review), and the commands already
+    dump diagnostics on the failure path. Mixing them would make the gallery a
+    mix of "here is what shipped" and "here is what broke".
+
+    The capture NEVER changes the exit code. It is evidence for a human, not an
+    assertion: a run that answered correctly but could not be photographed still
+    passed, and failing it would make the gallery a source of false red.
+    """
+    rc = await main()
+    if rc != 0:
+        return rc
+
+    dest = getattr(_LAST_ARGS, "screenshot_on_success", None) if _LAST_ARGS else None
+    if not dest:
+        return rc
+
+    try:
+        from pathlib import Path as _Path
+
+        from .platforms import CaptureKind, build_platform
+
+        platform = build_platform(_LAST_ARGS)
+        written = platform.capture(CaptureKind.SCREENSHOT, _Path(dest))
+        if written:
+            print(f" [OK] screenshot ({platform.name}) -> {written}")
+        else:
+            # Say so rather than leaving a silently absent file: an empty slot in
+            # the gallery should be explained, not mysterious.
+            print(f" [WARN] {platform.name}: no screenshot captured (endpoint or tool unavailable)")
+    except Exception as exc:  # noqa: BLE001
+        print(f" [WARN] screenshot capture failed (non-fatal): {type(exc).__name__}: {exc}")
+    return rc
+
+
 def run() -> None:
     """Entry point for console script."""
     try:
-        sys.exit(asyncio.run(main()))
+        sys.exit(asyncio.run(_main_with_capture()))
     except KeyboardInterrupt:
         print("\n[WARN] Test interrupted by user")
         sys.exit(130)

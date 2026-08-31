@@ -511,6 +511,32 @@ def _install_android_wheels_from_pypi(lib: SubstrateLib, version: str) -> bool:
         return False
 
     android = [u for u in meta.get("urls", []) if "android_" in u["filename"]]
+
+    # A NONEMPTY SET IS NOT A COMPLETE SET.
+    #
+    # Staging the downloads made a transient network failure harmless, but it did
+    # not cover the other way to end up with a partial shipped set: an upstream
+    # release that publishes SOME of the ABIs. `if not android` passes on one
+    # wheel out of three, and the run would then prune the complete old set,
+    # install the published subset, bump the gradle pin and report success —
+    # shipping an APK that has no native module for the missing ABIs and fails at
+    # import time on those devices, not at build time here.
+    #
+    # The wheel tag spells ABIs with underscores (`android_24_arm64_v8a`) where
+    # `lib.abis` uses hyphens (`arm64-v8a`), so compare on a normalised form.
+    published = {a for a in lib.abis if any(a.replace("-", "_") in u["filename"] for u in android)}
+    missing = [a for a in lib.abis if a not in published]
+    if android and missing:
+        print(
+            f"  ERROR: {lib.pypi_package}=={version} publishes Android wheels for "
+            f"{sorted(published)} but NOT for {missing}.\n"
+            f"         The app enables all of {lib.abis}, so installing this subset would\n"
+            f"         ship an APK that fails at import on the missing ABI(s). The live\n"
+            f"         wheels were NOT modified — this is an upstream release gap, so open\n"
+            f"         an issue against {lib.github_repo} rather than shipping partial."
+        )
+        return False
+
     if not android:
         print(
             f"  ERROR: {lib.pypi_package}=={version} publishes NO android_* wheels on PyPI.\n"
@@ -892,7 +918,15 @@ def update_lib_android(
             return UpdateStatus.FAILED
 
     if not skip_bindings:
-        update_python_bindings_android(lib, version)
+        # Same reasoning as the iOS side: the .so is already in place, so a
+        # wrapper that failed to refresh is a mixed install, not a warning.
+        if not update_python_bindings_android(lib, version):
+            print(
+                f"  ERROR: Android python bindings NOT updated for {lib.name}; the .so is "
+                f"new but the wrapper is not. Reporting FAILED rather than verifying a "
+                f"mixed install — re-run to retry."
+            )
+            return UpdateStatus.FAILED
         update_version_string(lib, version, include_ios_copy=False)
 
     return UpdateStatus.SUCCESS
@@ -1593,7 +1627,24 @@ def update_lib_ios(lib: SubstrateLib, version: str, skip_checksums: bool = False
             if not build_xcframework(lib, extract_dir, version):
                 return UpdateStatus.FAILED
 
-    update_python_bindings_ios(lib, version)
+    # NOT fire-and-forget. `IOS_APP_DIR` is the shipped `apps/ios` tree, and the
+    # native module has already been copied in by this point. If the Python
+    # wrapper cannot be refreshed (a `pip download` blip is enough), discarding
+    # this False lets the run continue to `rebuild_resources_zip()` and
+    # `write_ios_substrate_lock()` — which stamps the bundle as CURRENT for the
+    # new version while it actually contains an old wrapper against a new native
+    # API. The lock is what answers "which substrate is iOS shipping?", so a
+    # wrong one is worse than none.
+    #
+    # Returning FAILED keeps this lib out of `ios_ok`, which is what gates both
+    # the rebuild and the lock write.
+    if not update_python_bindings_ios(lib, version):
+        print(
+            f"  ERROR: iOS python bindings NOT updated for {lib.name}; the native module "
+            f"is new but the wrapper is not. Refusing to rebuild Resources.zip or record "
+            f"{version} in substrate.lock.json — re-run to retry."
+        )
+        return UpdateStatus.FAILED
 
     if lib.has_adapter and lib.adapter_name:
         update_version_string(lib, version, include_ios_copy=True)
@@ -1740,7 +1791,12 @@ def main(argv: Optional[List[str]] = None) -> None:
 
     if android_ok:
         print("\nAndroid next steps:")
-        print("  1. cd apps && ./gradlew :android:assembleDebug")
+        # Each line must work on its own from the repo root. The first version
+        # of this printed `cd apps && ./gradlew ...` followed by a repo-root
+        # APK path — but the `cd` persists in the user's shell, so step 3
+        # resolved as `apps/apps/android/...` and found nothing. A subshell
+        # keeps step 1 from moving the caller, so all three paste independently.
+        print("  1. (cd apps && ./gradlew :android:assembleDebug)")
         print("  2. adb shell am force-stop ai.ciris.mobile.debug")
         print("  3. adb install -r apps/android/build/outputs/apk/debug/android-debug.apk")
 

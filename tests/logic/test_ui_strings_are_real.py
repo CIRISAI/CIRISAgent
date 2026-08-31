@@ -100,7 +100,8 @@ def _manifest_languages() -> list[str]:
 def _referenced_keys() -> dict[str, list[str]]:
     """key -> the source files that ask for it."""
     found: dict[str, list[str]] = {}
-    for kt in (REPO / "client" / "shared" / "src").rglob("*.kt"):
+    roots = [r for r in (REPO / "apps" / "android" / "src", REPO / "apps" / "ios") if r.exists()]
+    for kt in [f for r in roots for f in r.rglob("*.kt")]:
         try:
             text = kt.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
@@ -109,6 +110,27 @@ def _referenced_keys() -> dict[str, list[str]]:
             key = next((g for g in groups if g), None) if isinstance(groups, tuple) else groups
             if key:
                 found.setdefault(key, []).append(str(kt.relative_to(REPO)))
+
+    # SKIP ON THE RESULT, NOT ON THE PATH.
+    #
+    # The first version of this guard checked `if not roots`. That looked like the
+    # same protection and was not: `apps/android/src` and `apps/ios` both still
+    # exist — they hold the platform shells — so the skip never fired, while the
+    # eight Kotlin files under them contain ZERO matching call sites. The scan
+    # returned {} and both guards went green again, which is precisely the vacuous
+    # pass this skip was added to prevent, moved up one level.
+    #
+    # Measured on this checkout at the time of the fix: 8 .kt files, 0 call sites.
+    #
+    # What actually matters is whether any reference was FOUND, so that is what is
+    # checked. A directory existing proves nothing about what is in it.
+    if not found:
+        pytest.skip(
+            f"no localization call sites in this checkout ({sum(1 for r in roots for _ in r.rglob('*.kt'))} "
+            "Kotlin file(s) scanned, none referencing a string key) — the UI that asks for "
+            "these keys is built by CIRISAI/CIRISClient now, so this guard belongs there. "
+            "Skipping is honest; an empty result would have looked like a pass."
+        )
     return found
 
 
@@ -162,7 +184,6 @@ def test_a_new_english_key_reached_every_locale() -> None:
         "across shards, which reads as a suite-wide collapse.\n  "
         + "\n  ".join(f"{k}: missing in {', '.join(v)}" for k, v in sorted(gaps.items()))
     )
-
 
 
 # REMOVED WITH THE CLIENT MIGRATION

@@ -67,6 +67,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional
 
+import re
 import requests
 
 from tools.qa_runner.platform_procs import temp_path
@@ -314,8 +315,21 @@ class DesktopAppTestRunner:
 
         await self.run_test("enter_message", enter_message)
 
-        # Baseline BEFORE sending, so "did anything come back" is answerable.
-        baseline_elements = len(await self.helper.get_elements())
+        # Baseline BEFORE sending: the TEXTS already on screen, not a count.
+        #
+        # A COUNT CANNOT ANSWER THE QUESTION. Sending adds the user's OWN message
+        # bubble to the composed tree, so "the tree grew" becomes true the instant
+        # the echo renders — before the agent has done anything. That is exactly
+        # what shipped: a CI run passed `wait_for_response` in 1005ms against a
+        # screen showing one message, the user's, still displaying its pending
+        # indicator. The screenshot is the only reason anyone noticed.
+        #
+        # Texts, not elements, because the reply is CONTENT: something must appear
+        # that we did not put there.
+        def _texts(els) -> set:
+            return {e.text.strip() for e in els if getattr(e, "text", None) and e.text.strip()}
+
+        baseline_texts = _texts(await self.helper.get_elements())
 
         # Click send button
         async def click_send():
@@ -340,24 +354,40 @@ class DesktopAppTestRunner:
 
             Asserted through the UI rather than the API because this is the UI
             suite, and because the API answering while the screen stays empty is
-            precisely the failure worth catching. The signal is the composed tree
-            growing: a rendered reply is new elements.
+            precisely the failure worth catching.
+
+            THE SIGNAL IS NEW TEXT THAT WE DID NOT SEND. Not element count — see
+            the baseline above for why that could not fail. A reply is text on
+            screen that was not there before and is not the echo of our own
+            message.
+
+            Chrome is excluded explicitly: the message counter ("Showing last N
+            messages") changes when the echo renders, so accepting any new text
+            would reinstate the same hole one layer down.
             """
+            sent = message.strip()
+            # UI chrome that legitimately changes on send and says nothing about a
+            # reply. Matched loosely; a false EXCLUSION only costs us a retry,
+            # while a false inclusion is a green tick over silence.
+            chrome = re.compile(r"^(showing last \d+ messages?|\d{1,2}:\d{2}\s*(am|pm)?|sending|\.\.\.|·+)$", re.I)
+
             deadline = datetime.now() + timedelta(seconds=45)
             while datetime.now() < deadline:
                 await asyncio.sleep(1.0)
-                grown = len(await self.helper.get_elements()) - baseline_elements
-                if grown > 0:
+                fresh = _texts(await self.helper.get_elements()) - baseline_texts
+                replies = [t for t in fresh if t != sent and not chrome.match(t) and len(t) > 1]
+                if replies:
                     elapsed = 45 - (deadline - datetime.now()).total_seconds()
-                    self._log(f"Response rendered (+{grown} elements) after {elapsed:.1f}s")
+                    preview = max(replies, key=len)[:80]
+                    self._log(f'Reply rendered after {elapsed:.1f}s: "{preview}"')
                     return
             raise RuntimeError(
-                "No response rendered within 45s: the message was sent and the UI "
-                "never changed.\n"
-                "        The agent either did not answer or answered somewhere the "
-                "screen does not show.\n"
-                "        Check the LLM is configured (the wizard's AI screen) and the "
-                "app log for send/receive errors."
+                "No reply rendered within 45s.\n"
+                "        The message was sent and the only new text on screen was our own\n"
+                "        echo and UI chrome — the agent did not answer, or answered\n"
+                "        somewhere the screen does not show.\n"
+                "        Check the LLM is configured (the wizard's AI screen) and the\n"
+                "        app log for send/receive errors."
             )
 
         await self.run_test("wait_for_response", wait_for_response)

@@ -101,6 +101,13 @@ def _tiles(root: Path) -> List[Tile]:
                 detail += " · traces not confirmed (not enforced)"
             elif traces is True:
                 detail += " · traces reached canonical"
+            else:
+                # null — the substrate exposes no replication counter at all
+                # (CIRISServer#518). Distinct from False on purpose: "we looked
+                # and it had not delivered" and "we cannot see" are different
+                # facts, and printing the first for the second is how this
+                # claimed a delivery it never observed.
+                detail += " · traces not observable on this substrate"
         else:
             detail = "FAILED"
         tiles.append(Tile(platform, image, passed, detail))

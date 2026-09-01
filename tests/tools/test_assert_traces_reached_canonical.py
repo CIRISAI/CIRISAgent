@@ -188,7 +188,10 @@ def test_a_missing_instrument_is_not_a_failed_delivery(tmp_path: Path) -> None:
     happened to be present. The agent's own probe says ABSENT in as many words,
     so the two states are distinguishable and must be distinguished.
 
-    Exit 0 because nothing failed; NOT COVERED because nothing was proven either.
+    Exit 3, NOT 0. Zero would run the caller's SUCCESS branch, and the workflow
+    would record `"traces": true` for a run whose own output says NOT COVERED —
+    the check asserting the opposite of what it printed. Three states need three
+    codes: 0 delivered, 1 did not, 3 could not be observed.
     """
     r = _run(
         tmp_path,
@@ -200,7 +203,7 @@ def test_a_missing_instrument_is_not_a_failed_delivery(tmp_path: Path) -> None:
             ]
         ),
     )
-    assert r.returncode == 0, r.stdout + r.stderr
+    assert r.returncode == 3, "unobservable must be its own code, not success\n" + r.stdout
     assert "NOT COVERED" in r.stdout
     assert "CIRISServer#518" in r.stdout
     assert "PASS" not in r.stdout, "an unobservable rung must never read as a pass"

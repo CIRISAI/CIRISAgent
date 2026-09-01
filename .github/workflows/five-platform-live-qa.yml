@@ -206,6 +206,61 @@ jobs:
           IMAGE: "system-images;android-34;google_apis;x86_64"
       
 
+      # MATERIALIZE THE iOS PYTHON BUNDLE IN THE RUNNER.
+      #
+      # The full build path calls prepare_python_bundle.sh, which copies the
+      # bundle out of a BeeWare app built by `briefcase build iOS`. That can
+      # never run here: `ios/` is untracked (git ls-files ios/ -> 0 files), so
+      # the briefcase project exists only on a machine someone has run
+      # `briefcase create` on. Every iOS run so far died on its absence.
+      #
+      # It does not have to. BOTH halves of what prepare would have produced are
+      # obtainable in-runner:
+      #
+      #   1. the stdlib and app packages ship INSIDE the tracked 28M
+      #      apps/ios/Resources.zip. `apps/ios/Resources/python` looks missing on
+      #      a clean checkout only because the EXTRACTED form is gitignored —
+      #      build.yml already extracts it exactly this way.
+      #
+      #   2. Python.xcframework is not in that zip; briefcase downloads it from
+      #      beeware/Python-Apple-support into its Support/ dir. Fetching the same
+      #      release asset directly gets the identical artifact with no briefcase
+      #      project involved.
+      #
+      # Both are asserted after the fact, because a missing bundle does not fail
+      # the build — it produces an app that installs and launches to nothing,
+      # which is the failure mode this whole gate exists to stop.
+      - name: Materialize the iOS Python bundle
+        if: contains(matrix.platforms, 'ios')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Pinned: the stdlib in Resources.zip is python3.10, and a support
+          # package from another line would mismatch it at load time.
+          PY_TAG: "3.10-b14"
+          PY_ASSET: "Python-3.10-iOS-support.b14.tar.gz"
+        run: |
+          set -euo pipefail
+          mkdir -p apps/ios/Resources/app apps/ios/Frameworks
+          (cd apps/ios/Resources && unzip -qo ../Resources.zip)
+          test -d apps/ios/Resources/python \
+            || { echo "::error::Resources.zip carried no python/ — the bundle is not what this expects"; exit 1; }
+
+          if [ ! -d apps/ios/Frameworks/Python.xcframework ]; then
+            gh release download "$PY_TAG" --repo beeware/Python-Apple-support \
+              -p "$PY_ASSET" -O /tmp/pysupport.tar.gz
+            mkdir -p /tmp/pysupport
+            tar -xzf /tmp/pysupport.tar.gz -C /tmp/pysupport
+            XCF=$(find /tmp/pysupport -maxdepth 3 -name "Python.xcframework" -type d | head -1)
+            [ -n "$XCF" ] || { echo "::error::$PY_ASSET carried no Python.xcframework"; exit 1; }
+            cp -R "$XCF" apps/ios/Frameworks/
+          fi
+
+          # project.yml references this exact slice for the simulator build.
+          test -d "apps/ios/Frameworks/Python.xcframework/ios-arm64_x86_64-simulator" \
+            || { echo "::error::Python.xcframework has no simulator slice"; exit 1; }
+          echo "stdlib:  $(du -sh apps/ios/Resources/python | cut -f1)"
+          echo "support: $(du -sh apps/ios/Frameworks/Python.xcframework | cut -f1)"
+
       - name: Build + deploy the iOS app to the simulator
         if: contains(matrix.platforms, 'ios')
         id: iosbuild
@@ -291,6 +346,24 @@ jobs:
             else
               echo "LLM: mock (no secret available) — flow is covered, the wire is NOT"
             fi
+
+            # TEAR DOWN THE PREVIOUS PLATFORM FIRST.
+            #
+            # The macos-ios runner walks macOS then iOS on ONE host, and the loop left
+            # macOS's backend on :8080 and its TestAutomationServer on :9091 running.
+            # The iOS simulator shares the host network, so its servers could not bind
+            # and every health check, /tree read and authenticated history request would
+            # have landed on the STILL-RUNNING macOS stack — scoring a second desktop
+            # interaction as the iOS result. A false green on the platform least able to
+            # be checked by eye, which is worse than iOS simply failing.
+            #
+            # Killing by port rather than by name because the desktop app, the embedded
+            # backend and the simulator host process are different binaries that only
+            # agree on where they listen.
+            for port in 8080 9091 8091; do
+              pids=$(lsof -ti "tcp:$port" 2>/dev/null || true)
+              [ -n "$pids" ] && { echo "  teardown: killing $port ($pids)"; kill -9 $pids 2>/dev/null || true; }
+            done
 
             export CIRIS_HOME="${RUNNER_TEMP}/ciris-$plat"
             mkdir -p "$CIRIS_HOME"
@@ -388,9 +461,24 @@ jobs:
             #    NOTE this is downstream of step 3: with no message sent, the node
             #    admits no traces at all (trace_plane standing=never_admitted,
             #    rows=0) and this fails for a reason that is not about delivery.
+            #    THREE OUTCOMES, THREE CODES. 0 delivered, 1 did not, 3 could not
+            #    be observed (CIRISServer#518 — the wheel exposes no replication
+            #    counter). Collapsing 3 into either of the others is a lie in one
+            #    direction or the other: as 0 the gallery claimed "traces reached
+            #    canonical" for a run that proved nothing, which is how this was
+            #    wrong before.
+            set +e
             python tools/dev/assert_traces_reached_canonical.py \
-              "$CIRIS_HOME/logs" artifacts/cmdlogs --require replication --wait-secs 240 \
-              || { trace_rc=1; echo "::warning::$plat traces did not reach canonical (NOT enforced — upstream KEX/replication revamp in flight)"; }
+              "$CIRIS_HOME/logs" artifacts/cmdlogs --require replication --wait-secs 240
+            trace_status=$?
+            set -e
+            case "$trace_status" in
+              0) trace_rc=0; traces_json=true ;;
+              3) trace_rc=0; traces_json=null
+                 echo "::notice::$plat trace delivery NOT OBSERVABLE on this substrate (CIRISServer#518)" ;;
+              *) trace_rc=1; traces_json=false
+                 echo "::warning::$plat traces did not reach canonical (NOT enforced — upstream KEX/replication revamp in flight)" ;;
+            esac
 
               # THE TILE REFLECTS WHAT IS ENFORCED. It used to require both halves,
               # which was right while both were fatal — writing it after only the
@@ -408,7 +496,7 @@ jobs:
                 "$plat" \
                 "$([ $chat_rc -eq 0 ] && echo true || echo false)" \
                 "$([ $chat_rc -eq 0 ] && echo true || echo false)" \
-                "$([ $trace_rc -eq 0 ] && echo true || echo false)" \
+                "$traces_json" \
                 > "artifacts/chat-$plat.json"
 
             cp -r "$CIRIS_HOME/logs" "artifacts/logs/$plat" 2>/dev/null || true

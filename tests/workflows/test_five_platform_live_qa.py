@@ -169,3 +169,30 @@ def test_log_collection_cannot_outlive_the_job(raw: str) -> None:
     assert logcat, "no logcat collection at all"
     for line in logcat:
         assert "timeout " in line, f"adb logcat is not time-capped: {line.strip()}"
+
+
+def test_each_platform_starts_from_a_clean_host(raw: str) -> None:
+    """One runner walks two platforms; the second must not inherit the first.
+
+    macos-ios runs macOS then iOS on one host. With macOS's backend still on
+    :8080 and its test server on :9091, the iOS app cannot bind and every probe
+    lands on the still-running macOS stack — scoring a second desktop
+    interaction as the iOS result. A false green on the platform least likely to
+    be checked by eye.
+    """
+    assert "teardown: killing" in raw, "no per-platform teardown"
+    teardown = raw.split("TEAR DOWN THE PREVIOUS PLATFORM FIRST")[1][:700]
+    for port in ("8080", "9091"):
+        assert port in teardown, f"teardown does not clear :{port}"
+
+
+def test_the_trace_rung_has_three_outcomes(raw: str) -> None:
+    """Unknown must not be recorded as delivered.
+
+    Exit 3 (CIRISServer#518: no replication counter on this substrate) once ran
+    the success branch, so chat-*.json said "traces": true and the gallery
+    claimed delivery for a run whose own output said NOT COVERED.
+    """
+    assert "trace_status" in raw
+    assert "traces_json=null" in raw, "the unobservable case is not recorded distinctly"
+    assert "traces_json=true" in raw and "traces_json=false" in raw

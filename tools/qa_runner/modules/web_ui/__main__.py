@@ -331,6 +331,40 @@ class DesktopAppTestRunner:
 
         baseline_texts = _texts(await self.helper.get_elements())
 
+        # PRE-SEND HISTORY BASELINE. Without one, "an agent row exists" is
+        # satisfied by a row left over from an earlier interaction, so the
+        # assertion could pass on a conversation this run never had. Captured
+        # before the click, for the same reason the text baseline is.
+        import httpx
+
+        _args = _LAST_ARGS
+        api_port = getattr(_args, "api_port", None) or 8080
+        username = getattr(_args, "username", None) or "admin"
+        password = getattr(_args, "password", None) or "qa_test_password_12345"
+        api_base = f"http://127.0.0.1:{api_port}"
+        if not getattr(_args, "username", None):
+            self._log(f"WARNING: no --username given; falling back to '{username}'")
+        self._log(f"Asserting reply via {api_base}/v1/agent/history as '{username}'")
+
+        async def _history(client, headers):
+            r = await client.get(f"{api_base}/v1/agent/history?limit=50", headers=headers)
+            r.raise_for_status()
+            return r.json()["data"]["messages"]
+
+        _http = httpx.AsyncClient(timeout=30.0)
+        _r = await _http.post(
+            f"{api_base}/v1/auth/login", json={"username": username, "password": password}
+        )
+        _r.raise_for_status()
+        _headers = {"Authorization": f"Bearer {_r.json()['access_token']}"}
+        try:
+            baseline_ids = {m.get("id") for m in await _history(_http, _headers)}
+        except (httpx.HTTPError, KeyError, ValueError) as exc:
+            self._log(f"pre-send history unavailable ({type(exc).__name__}); baseline empty")
+            baseline_ids = set()
+        self._log(f"History baseline: {len(baseline_ids)} existing message(s)")
+
+
         # Click send button
         async def click_send():
             self._log("Clicking send button...")
@@ -374,76 +408,63 @@ class DesktopAppTestRunner:
             The screenshot remains the human-facing evidence that it RENDERED;
             this is the machine-checkable evidence that it EXISTS.
             """
-            import httpx
-
-            args = _LAST_ARGS
-            api_port = getattr(args, "api_port", None) or 8080
-            username = getattr(args, "username", None) or "admin"
-            password = getattr(args, "password", None) or "qa_test_password_12345"
-            base = f"http://127.0.0.1:{api_port}"
             sent = message.strip()
 
-            # SAY WHICH CREDENTIALS ARE IN PLAY. The previous run failed every
-            # platform on `401 Unauthorized` because this fell back to the
-            # built-in default `admin` when the caller passed no --username, and
-            # nothing in the log said so — the 401 read as an auth bug in the
-            # product. A silent default that only shows up as someone else's
-            # error is worth one line.
-            if not getattr(args, "username", None):
-                self._log(f"WARNING: no --username given; falling back to '{username}'")
-            self._log(f"Asserting reply via {base}/v1/agent/history as '{username}'")
-
-            async with httpx.AsyncClient(timeout=30.0) as http:
-                r = await http.post(
-                    f"{base}/v1/auth/login",
-                    json={"username": username, "password": password},
-                )
-                r.raise_for_status()
-                token = r.json()["access_token"]
-                auth = {"Authorization": f"Bearer {token}"}
-
+            try:
                 deadline = datetime.now() + timedelta(seconds=RESPONSE_DEADLINE_SECONDS)
                 last_seen: list = []
                 while datetime.now() < deadline:
                     await asyncio.sleep(2.0)
                     try:
-                        h = await http.get(f"{base}/v1/agent/history?limit=50", headers=auth)
-                        h.raise_for_status()
-                        msgs = h.json()["data"]["messages"]
+                        msgs = await _history(_http, _headers)
                     except (httpx.HTTPError, KeyError, ValueError) as exc:
                         self._log(f"history poll failed (retrying): {type(exc).__name__}: {exc}")
                         continue
 
                     last_seen = msgs
-                    replies = [
-                        m
-                        for m in msgs
-                        if m.get("is_agent")
-                        and (m.get("content") or "").strip()
-                        and (m.get("content") or "").strip() != sent
-                    ]
+                    # STRICT, AND EVERY CLAUSE EARNED ITS PLACE:
+                    #
+                    #  * NEW — absent from the pre-send baseline. An agent row from an
+                    #    earlier interaction is not an answer to THIS message.
+                    #  * message_type == "agent", NOT `is_agent`. The API sets
+                    #    is_agent=True for message_type "system" AND "error" on purpose,
+                    #    so the agent does not re-observe its own notifications
+                    #    (routes/agent.py: `if message_type in ("system", "error")`).
+                    #    Keying on is_agent therefore accepts the error text emitted when
+                    #    processing FAILED as proof that it succeeded — green exactly
+                    #    when the product broke.
+                    #  * non-empty, and not our own echo.
+                    replies = [m for m in msgs if _is_new_agent_reply(m, baseline_ids, sent)]
                     if replies:
                         elapsed = RESPONSE_DEADLINE_SECONDS - (deadline - datetime.now()).total_seconds()
                         reply = replies[-1]["content"].strip()
                         self._log(f'Agent replied after {elapsed:.1f}s: "{reply[:100]}"')
                         return
 
-            # Say what the conversation DID contain — one line of evidence beats a
-            # re-run, and distinguishes "agent silent" from "agent errored".
-            self._log(f"Conversation at failure ({len(last_seen)} message(s)):")
-            for m in last_seen[-8:]:
-                who = "agent" if m.get("is_agent") else "user"
-                self._log(f"    | [{who}/{m.get('message_type', '?')}] {(m.get('content') or '')[:110]}")
-            if not last_seen:
-                self._log("    | <history empty — the message never reached the agent>")
-            raise RuntimeError(
-                f"Agent produced no reply within {RESPONSE_DEADLINE_SECONDS}s.\n"
-                "        The UI sent the message and /v1/agent/history shows no\n"
-                "        agent-authored response, so this is the agent falling silent\n"
-                "        rather than the client failing to render.\n"
-                "        Check the LLM is configured (the wizard's AI screen) and the\n"
-                "        agent log for LLM/DMA errors."
-            )
+                fresh = [m for m in last_seen if m.get("id") not in baseline_ids]
+                self._log(f"Conversation at failure: {len(last_seen)} message(s), {len(fresh)} new:")
+                for m in fresh[-8:]:
+                    self._log(f"    | [{m.get('message_type', '?')}] {(m.get('content') or '')[:110]}")
+                if not fresh:
+                    self._log("    | <nothing new — the message never reached the agent>")
+                errored = [m for m in fresh if m.get("message_type") in ("error", "system")]
+                extra = (
+                    f"\n        {len(errored)} error/system row(s) arrived INSTEAD of an answer —"
+                    "\n        the agent was reached and failed, rather than staying silent."
+                    if errored
+                    else ""
+                )
+                raise RuntimeError(
+                    f"No new agent reply within {RESPONSE_DEADLINE_SECONDS}s.{extra}\n"
+                    "        The UI sent the message and /v1/agent/history shows no NEW\n"
+                    "        message_type=='agent' row, so the agent did not answer.\n"
+                    "        NOTE: this does NOT prove the reply rendered on screen — the\n"
+                    "        transcript is absent from /tree (CIRISClient#27); the\n"
+                    "        screenshot is the only client-side evidence.\n"
+                    "        Check the LLM is configured and the agent log for DMA errors."
+                )
+            finally:
+                await _http.aclose()
 
         await self.run_test("wait_for_response", wait_for_response)
 
@@ -2428,6 +2449,30 @@ def _kill_iproxy_children() -> None:
 #: the client has nothing to render and a shorter deadline measures our patience
 #: rather than the product. Set from CIRIS_QA_RESPONSE_DEADLINE for a slow host.
 RESPONSE_DEADLINE_SECONDS = int(os.environ.get("CIRIS_QA_RESPONSE_DEADLINE", "150"))
+
+
+def _is_new_agent_reply(msg: dict, baseline_ids: set, sent: str) -> bool:
+    """Is this history row a NEW answer from the agent to the message we sent?
+
+    Every clause closes a way this went green while the product was silent or
+    broken:
+
+      * NEW — absent from the pre-send baseline. Any agent row from an earlier
+        interaction would otherwise satisfy "an agent replied".
+      * message_type == "agent", NOT `is_agent`. routes/agent.py sets
+        `is_agent = True` for message_type "system" AND "error" deliberately,
+        so the agent does not re-observe its own notifications. Keying on
+        is_agent accepts the error text emitted when processing FAILED as
+        proof that it succeeded — green exactly when the product broke.
+      * non-empty, and not the echo of what we sent.
+    """
+    if msg.get("id") in baseline_ids:
+        return False
+    if msg.get("message_type") != "agent":
+        return False
+    content = (msg.get("content") or "").strip()
+    return bool(content) and content != sent
+
 
 
 def qa_log_dir() -> Path:

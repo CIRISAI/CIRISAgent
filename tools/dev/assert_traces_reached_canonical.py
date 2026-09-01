@@ -278,7 +278,18 @@ def _evaluate(args) -> int:
         print("             Tracked as CIRISServer#518. Until it lands, this rung is")
         print("             unobservable rather than red; it does NOT fall back to")
         print("             envelopes_sent_total, which measures a different plane.")
-        return 0
+        # EXIT 3, NOT 0 — UNKNOWN IS ITS OWN ANSWER.
+        #
+        # Returning 0 made the caller's success branch run, so the workflow set
+        # trace_rc=0 and chat-*.json recorded "traces": true. The gallery then
+        # rendered "traces reached canonical" for a run whose own output says
+        # NOT COVERED — this check asserting the opposite of what it printed,
+        # which is the precise failure it was written to prevent.
+        #
+        # Three states need three codes: 0 delivered, 1 did not, 3 could not be
+        # observed. Callers that only branch on zero/non-zero still treat 3 as
+        # "not proven", which is the safe reading.
+        return 3
 
     if args.require == "replication" and served is None:
         print("      no replication_envelopes_served_total appears anywhere in these logs.")

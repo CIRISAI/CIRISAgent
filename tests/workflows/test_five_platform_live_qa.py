@@ -196,3 +196,25 @@ def test_the_trace_rung_has_three_outcomes(raw: str) -> None:
     assert "trace_status" in raw
     assert "traces_json=null" in raw, "the unobservable case is not recorded distinctly"
     assert "traces_json=true" in raw and "traces_json=false" in raw
+
+
+def test_android_provisioning_asserts_the_avd_exists(raw: str) -> None:
+    """Installing the emulator is not the same as having an AVD.
+
+    The first version checked `test -x emulator`, then ran `-list-avds` without
+    reading the result — so an empty list passed as success and reappeared two
+    steps later as "no AVDs configured", a message about bring-up for a fault in
+    provisioning. A check whose output nobody reads is not a check.
+    """
+    step = raw.split("Install the Android emulator")[1][:2000]
+    assert 'grep -qx "ciris_qa"' in step, "the AVD list is not actually asserted"
+    assert "ANDROID_AVD_HOME" in step, "the AVD home is left to inference"
+
+
+def test_both_steps_agree_on_the_avd_home(raw: str) -> None:
+    """avdmanager and the emulator resolve the AVD list independently.
+
+    They agreed only by luck before, and stopped agreeing on the runner: the AVD
+    was created somewhere the emulator did not look.
+    """
+    assert raw.count('export ANDROID_AVD_HOME="$HOME/.android/avd"') == 2

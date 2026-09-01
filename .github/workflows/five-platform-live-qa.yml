@@ -195,13 +195,35 @@ jobs:
           SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
           SDKMAN="$SDK/cmdline-tools/latest/bin/sdkmanager"
           AVDMAN="$SDK/cmdline-tools/latest/bin/avdmanager"
+          # PIN THE AVD HOME. avdmanager writes to $ANDROID_AVD_HOME, else
+          # $ANDROID_SDK_HOME/.android/avd, else $HOME/.android/avd — and the
+          # emulator resolves that list independently. Leaving both to inference let
+          # them disagree: creation reported success and `-list-avds` came back
+          # empty, so bring-up failed with "no AVDs configured" for an AVD that had
+          # just been created somewhere else.
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
           yes | "$SDKMAN" --licenses > /dev/null 2>&1 || true
-          "$SDKMAN" "platform-tools" "emulator" "$IMAGE" 2>&1 | tail -3
-          echo no | "$AVDMAN" create avd -n ciris_qa -k "$IMAGE" --force
-          # PROVE IT before the flow depends on it, so a provisioning failure is
-          # reported here rather than as a puzzling bring-up error later.
+          # ~1500 lines of progress bar otherwise; keep the outcome, drop the bar.
+          "$SDKMAN" "platform-tools" "emulator" "$IMAGE" 2>&1 | grep -v "^\[" | tail -5
+          echo no | "$AVDMAN" create avd -n ciris_qa -k "$IMAGE" --force 2>&1 | grep -v "^\[" | tail -5
+
+          # PROVE THE AVD, NOT JUST THE BINARY.
+          #
+          # The previous version asserted `test -x emulator`, then ran `-list-avds`
+          # without looking at the result — so an empty list sailed through as
+          # success and surfaced two steps later as a bring-up error that said
+          # nothing about provisioning. A check whose output nobody reads is not a
+          # check.
           test -x "$SDK/emulator/emulator" || { echo "::error::emulator still missing after install"; exit 1; }
-          "$SDK/emulator/emulator" -list-avds
+          AVDS=$("$SDK/emulator/emulator" -list-avds 2>/dev/null || true)
+          echo "AVD_HOME=$ANDROID_AVD_HOME"
+          echo "avds: ${AVDS:-<none>}"
+          echo "$AVDS" | grep -qx "ciris_qa" || {
+            echo "::error::ciris_qa was created but the emulator cannot see it"
+            ls -la "$ANDROID_AVD_HOME" 2>/dev/null || true
+            exit 1
+          }
         env:
           IMAGE: "system-images;android-34;google_apis;x86_64"
       
@@ -307,6 +329,9 @@ jobs:
           IOS_APP: ${{ steps.iosbuild.outputs.app }}
         run: |
           set -uo pipefail
+          # Same AVD home the provisioning step used. The emulator re-derives
+          # this independently, and a mismatch reads as 'no AVDs configured'.
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
           mkdir -p artifacts/shots artifacts/logs
           overall=0
 

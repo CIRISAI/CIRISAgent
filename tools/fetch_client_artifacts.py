@@ -37,6 +37,7 @@ import re
 import subprocess
 import sys
 import urllib.request
+import shutil
 import zipfile
 from pathlib import Path
 
@@ -133,16 +134,40 @@ def fetch_android(version: str) -> None:
 
 
 def fetch_ios(version: str) -> None:
+    """Unpack the published client xcframework.
+
+    THE ARCHIVE UNPACKS TO `shared.xcframework`, NOT `ciris-client-<v>.xcframework`.
+    That name is not ours to choose — it is what CIRISClient publishes, and it
+    matches the `shared.framework` the Xcode link step looks for.
+
+    Assuming the versioned name broke two things silently:
+
+      * `target.exists()` was never true, so every run re-extracted 108MB over
+        itself. Wasteful, invisible.
+      * `prune_stale(..., "ciris-client-*.xcframework")` matched NOTHING, so the
+        pruning that exists precisely to stop a build shipping code nobody thinks
+        is in it did not run on iOS at all. An older `shared.xcframework` simply
+        survived, and since the extract merges into an existing directory rather
+        than replacing it, files removed upstream persisted indefinitely.
+
+    So: remove the previous copy outright, then extract. A version marker records
+    what is actually on disk, since the directory name no longer carries it.
+    """
     name = f"ciris-client-{version}.xcframework.zip"
     # Download before pruning, for the reason in fetch_android().
     zip_path = download(asset_url(version, name), IOS_FRAMEWORKS / name)
-    target = IOS_FRAMEWORKS / f"ciris-client-{version}.xcframework"
-    if not target.exists():
-        print(f"  unpacking {name} ...")
-        with zipfile.ZipFile(zip_path) as z:
-            z.extractall(IOS_FRAMEWORKS)
+    target = IOS_FRAMEWORKS / "shared.xcframework"
+    if target.exists():
+        print(f"  removing previous {target.name} ...")
+        shutil.rmtree(target)
+    print(f"  unpacking {name} ...")
+    with zipfile.ZipFile(zip_path) as z:
+        z.extractall(IOS_FRAMEWORKS)
     zip_path.unlink(missing_ok=True)
-    prune_stale(IOS_FRAMEWORKS, version, "ciris-client-*.xcframework")
+    if not target.exists():
+        raise SystemExit(f"{name} did not contain {target.name} — layout changed upstream")
+    (IOS_FRAMEWORKS / "shared.xcframework.version").write_text(version + "\n", encoding="utf-8")
+    print(f"  {target.name} <- ciris-client {version}")
 
 
 def main() -> int:

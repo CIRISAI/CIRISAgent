@@ -269,9 +269,13 @@ if [ -d "$CIRIS_ROOT/client" ]; then
     cd "$IOS_APP_DIR"
 else
     step "No client/ checkout — using the released xcframework..."
-    FETCHED=$(find "$CIRIS_ROOT/apps/ios/Frameworks" -maxdepth 1 -name "ciris-client-*.xcframework" -type d 2>/dev/null | head -1)
+    # `shared.xcframework`, NOT `ciris-client-<v>.xcframework`. The archive is
+    # named for the version; the DIRECTORY it unpacks to is not, and looking for
+    # the versioned name found nothing on a runner where the fetch had plainly
+    # succeeded — this guard firing on a framework that was sitting right there.
+    FETCHED=$(find "$CIRIS_ROOT/apps/ios/Frameworks" -maxdepth 1 -name "shared.xcframework" -type d 2>/dev/null | head -1)
     if [ -z "$FETCHED" ]; then
-        fail "No client/ checkout AND no ciris-client-*.xcframework in apps/ios/Frameworks.
+        fail "No client/ checkout AND no shared.xcframework in apps/ios/Frameworks.
        One of the two must supply the KMP framework:
          - a sibling CIRISClient checkout at $CIRIS_ROOT/client, or
          - tools/fetch_client_artifacts.py --platform ios

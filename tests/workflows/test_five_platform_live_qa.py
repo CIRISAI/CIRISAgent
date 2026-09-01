@@ -45,7 +45,9 @@ def _steps(job: Dict[str, Any]) -> List[Dict[str, Any]]:
 def test_three_runner_images_cover_five_platforms(spec: Dict[str, Any]) -> None:
     """macOS pairs with iOS, Linux with Android, Windows alone."""
     include = spec["jobs"]["live-qa"]["strategy"]["matrix"]["include"]
-    assert {e["os"] for e in include} == {"ubuntu-latest", "macos-14", "windows-latest"}
+    # macos-15 carries Xcode 16, which the pbxproj format Homebrew's xcodegen
+    # emits requires; macos-14 (Xcode 15.4) could not open the generated project.
+    assert {e["os"] for e in include} == {"ubuntu-latest", "macos-15", "windows-latest"}
     covered = " ".join(e["platforms"] for e in include).split()
     assert sorted(covered) == ["android", "ios", "linux", "macos", "windows"]
 
@@ -206,7 +208,8 @@ def test_android_provisioning_asserts_the_avd_exists(raw: str) -> None:
     steps later as "no AVDs configured", a message about bring-up for a fault in
     provisioning. A check whose output nobody reads is not a check.
     """
-    step = raw.split("Install the Android emulator")[1][:2000]
+    step = raw.split("Install the Android emulator")[1]
+    step = step[: step.find("- name:")] if "- name:" in step else step
     assert 'grep -qx "ciris_qa"' in step, "the AVD list is not actually asserted"
     assert "ANDROID_AVD_HOME" in step, "the AVD home is left to inference"
 

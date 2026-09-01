@@ -74,3 +74,37 @@ def test_the_predicate_does_not_key_on_is_agent() -> None:
     error_row = _msg(message_type="error", content="I encountered an issue processing your request.")
     error_row["is_agent"] = True
     assert not _is_new_agent_reply(error_row, set(), SENT)
+
+
+def test_the_history_check_follows_the_configured_backend_port() -> None:
+    """`--port 9000` must not leave the assertion talking to 8080.
+
+    Everything else honours --port: the adb forward, the health probe, the app's
+    own backend. A hardcoded 8080 here meant the UI could send successfully to
+    the configured port while the reply assertion logged into a closed one — or
+    worse, an unrelated server that answers, so the check would report on a
+    conversation that was never had.
+    """
+    import argparse
+
+    from tools.qa_runner.modules.web_ui.__main__ import _apply_platform_defaults
+
+    args = argparse.Namespace(
+        command="desktop-chat", platform="desktop", port=9000, api_port=None,
+        desktop_port=8091, android=False, ios=False, ios_physical=False,
+    )
+    _apply_platform_defaults(args)
+    assert args.api_port == 9000, "the reply assertion would query the wrong backend"
+
+
+def test_the_port_default_is_unchanged_when_not_given() -> None:
+    import argparse
+
+    from tools.qa_runner.modules.web_ui.__main__ import _apply_platform_defaults
+
+    args = argparse.Namespace(
+        command="desktop-chat", platform="desktop", port=8080, api_port=None,
+        desktop_port=8091, android=False, ios=False, ios_physical=False,
+    )
+    _apply_platform_defaults(args)
+    assert args.api_port == 8080

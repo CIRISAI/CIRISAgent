@@ -1568,7 +1568,15 @@ def _apply_platform_defaults(args: argparse.Namespace) -> None:
         if args.desktop_port == 8091:
             args.desktop_port = 9091
     if args.api_port is None:
-        args.api_port = 8080
+        # DEFAULT TO THE BACKEND PORT THE RUN IS ACTUALLY USING.
+        #
+        # `--port` is what everything else honours — the adb forward, the health
+        # probe, the app's own backend. Hardcoding 8080 here meant that with
+        # `--port 9000` the UI would send successfully to 9000 while the reply
+        # assertion logged into 8080: a closed port, or worse, an UNRELATED
+        # server that answers. The check would then report on a conversation
+        # that was never had.
+        args.api_port = getattr(args, "port", None) or 8080
 
 
 def list_tests() -> None:
@@ -1933,6 +1941,14 @@ def _start_emulator(avd: str) -> Optional[subprocess.Popen]:
         "-no-audio",
         "-no-boot-anim",
     ]
+    # HEADLESS ON CI. A hosted runner has no GPU and, on the Linux image, only
+    # the Xvfb display this workflow starts for the desktop app. Left to
+    # autodetect, the emulator negotiates host GPU rendering and spends the whole
+    # boot window failing to — it never reaches adb, and the error you get is a
+    # timeout that says nothing about graphics. swiftshader_indirect is the
+    # software renderer Google documents for exactly this.
+    if os.environ.get("CI"):
+        cmd += ["-no-window", "-gpu", "swiftshader_indirect"]
     log_path = temp_path("ciris_android_emulator.log")
     log_file = open(log_path, "w")
     print(f"  emulator: starting {avd} (log: {log_path})")
@@ -1972,8 +1988,15 @@ def _ensure_emulator(args: argparse.Namespace) -> Optional[str]:
     if _start_emulator(avd) is None:
         return None
 
-    # Wait for the device to appear in adb.
-    deadline = time.time() + 90
+    # COLD BOOT TAKES MINUTES, NOT 90 SECONDS.
+    #
+    # 90s was the deadline and the emulator never made it: "emulator did not
+    # appear in adb within 90s" on a run where provisioning had worked and the
+    # AVD had genuinely started. A cold x86_64 system image on a hosted runner
+    # routinely needs 2-4 minutes before adb sees it — so the gate was reporting
+    # a bring-up failure for an emulator that was simply still booting, the same
+    # too-short-deadline mistake as the 45s reply assertion.
+    deadline = time.time() + int(os.environ.get("CIRIS_QA_EMULATOR_BOOT_SECONDS", "300"))
     while time.time() < deadline:
         serial = _pick_emulator_serial(args.android_device)
         if serial:

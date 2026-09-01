@@ -77,7 +77,14 @@ jobs:
             os: ubuntu-latest
             platforms: "linux android"
           - label: macos-ios
-            os: macos-14
+            # macos-15, NOT macos-14. The macos-14 image carries only Xcode 15.4,
+            # while Homebrew's xcodegen (2.45.4) emits pbxproj format 77:
+            #   xcodebuild: error: The project 'iosApp' cannot be opened because
+            #   it is in a future Xcode project file format (77)
+            # Pinning an older xcodegen would silence that, but it would also mean
+            # CI validated a toolchain nobody ships from. macos-15 carries Xcode 16
+            # and matches the generator, so the build here is the build that ships.
+            os: macos-15
             platforms: "macos ios"
           - label: windows
             os: windows-latest
@@ -158,6 +165,11 @@ jobs:
         if: contains(matrix.platforms, 'ios')
         continue-on-error: true
         run: |
+          # The generator and the reader must agree on pbxproj format; when they
+          # do not, xcodebuild reports a version NUMBER and nothing about why.
+          echo "xcode:    $(xcodebuild -version | head -1)"
+          echo "selected: $(xcode-select -p)"
+          echo "xcodegen: $(xcodegen --version 2>/dev/null || echo "<not installed yet>")"
           mkdir -p artifacts/cmdlogs
           xcode-select -p | tee artifacts/cmdlogs/xcode-select.txt
           xcrun simctl list devices available | tee artifacts/cmdlogs/simulators.txt
@@ -166,7 +178,17 @@ jobs:
       # output), so a clean checkout cannot compile iOS. Same gap as the Android
       # AAR that left v2.9.42 with no APK — CIRISClient#24 tracks it upstream.
       - name: Fetch the client xcframeworks (iOS only)
-        if: contains(matrix.platforms, 'ios')
+        # BOTH questions, because they are different: matrix.platforms says
+        # this RUNNER owns ios; inputs.platforms says whether the operator
+        # ASKED for it. Checking only the first meant a `platforms: linux`
+        # dispatch still ran this step — minutes of download, and a step that
+        # can fail the whole workflow — for a platform explicitly excluded.
+        # The subset check existed already, but only INSIDE the flow loop,
+        # long after this had run. Empty = schedule (no inputs) = full run.
+        if: >-
+          contains(matrix.platforms, 'ios')
+          && (inputs.platforms == '' || inputs.platforms == 'all'
+              || contains(inputs.platforms, 'ios'))
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python3 tools/fetch_client_artifacts.py --platform ios
@@ -189,7 +211,17 @@ jobs:
       # and android has never once run in this gate — its tile has read
       # "did not run" since the workflow was written.
       - name: Install the Android emulator + system image
-        if: contains(matrix.platforms, 'android')
+        # BOTH questions, because they are different: matrix.platforms says
+        # this RUNNER owns android; inputs.platforms says whether the operator
+        # ASKED for it. Checking only the first meant a `platforms: linux`
+        # dispatch still ran this step — minutes of download, and a step that
+        # can fail the whole workflow — for a platform explicitly excluded.
+        # The subset check existed already, but only INSIDE the flow loop,
+        # long after this had run. Empty = schedule (no inputs) = full run.
+        if: >-
+          contains(matrix.platforms, 'android')
+          && (inputs.platforms == '' || inputs.platforms == 'all'
+              || contains(inputs.platforms, 'android'))
         run: |
           set -euo pipefail
           SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
@@ -253,7 +285,17 @@ jobs:
       # the build — it produces an app that installs and launches to nothing,
       # which is the failure mode this whole gate exists to stop.
       - name: Materialize the iOS Python bundle
-        if: contains(matrix.platforms, 'ios')
+        # BOTH questions, because they are different: matrix.platforms says
+        # this RUNNER owns ios; inputs.platforms says whether the operator
+        # ASKED for it. Checking only the first meant a `platforms: linux`
+        # dispatch still ran this step — minutes of download, and a step that
+        # can fail the whole workflow — for a platform explicitly excluded.
+        # The subset check existed already, but only INSIDE the flow loop,
+        # long after this had run. Empty = schedule (no inputs) = full run.
+        if: >-
+          contains(matrix.platforms, 'ios')
+          && (inputs.platforms == '' || inputs.platforms == 'all'
+              || contains(inputs.platforms, 'ios'))
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Pinned: the stdlib in Resources.zip is python3.10, and a support
@@ -284,7 +326,17 @@ jobs:
           echo "support: $(du -sh apps/ios/Frameworks/Python.xcframework | cut -f1)"
 
       - name: Build + deploy the iOS app to the simulator
-        if: contains(matrix.platforms, 'ios')
+        # BOTH questions, because they are different: matrix.platforms says
+        # this RUNNER owns ios; inputs.platforms says whether the operator
+        # ASKED for it. Checking only the first meant a `platforms: linux`
+        # dispatch still ran this step — minutes of download, and a step that
+        # can fail the whole workflow — for a platform explicitly excluded.
+        # The subset check existed already, but only INSIDE the flow loop,
+        # long after this had run. Empty = schedule (no inputs) = full run.
+        if: >-
+          contains(matrix.platforms, 'ios')
+          && (inputs.platforms == '' || inputs.platforms == 'all'
+              || contains(inputs.platforms, 'ios'))
         id: iosbuild
         continue-on-error: true
         env:
@@ -525,6 +577,10 @@ jobs:
                 > "artifacts/chat-$plat.json"
 
             cp -r "$CIRIS_HOME/logs" "artifacts/logs/$plat" 2>/dev/null || true
+            # The emulator's own log is where a boot failure explains itself —
+            # graphics negotiation, KVM, a corrupt AVD. Without it, "did not
+            # appear in adb" is the whole story we get.
+            cp /tmp/ciris_android_emulator.log "artifacts/cmdlogs/emulator-$plat.log" 2>/dev/null || true
             echo "::endgroup::"
           done
           exit $overall

@@ -177,7 +177,17 @@ def main() -> int:
     deadline = time.monotonic() + max(0, args.wait_secs)
     while True:
         rc = _evaluate(args)
-        if rc == 0 or time.monotonic() >= deadline:
+        # 3 IS TERMINAL, LIKE 0. Waiting exists because delivery is
+        # ASYNCHRONOUS — a rung that has not appeared yet may appear. But 3 says
+        # the substrate exposes no replication counter AT ALL (CIRISServer#518),
+        # which is a property of the running wheel, not a race: it cannot become
+        # observable without replacing the process. Re-reading for the workflow's
+        # full 240s reprinted the identical verdict for four minutes per
+        # platform, eight per two-platform runner, to reach the conclusion the
+        # first read had already established.
+        #
+        # 1 and 2 keep retrying: those CAN change while we wait.
+        if rc in (0, 3) or time.monotonic() >= deadline:
             return rc
         time.sleep(10)
 

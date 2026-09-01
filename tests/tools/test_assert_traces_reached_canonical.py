@@ -221,3 +221,46 @@ def test_a_present_counter_at_zero_is_still_fatal(tmp_path: Path) -> None:
     )
     assert r.returncode == 1, r.stdout + r.stderr
     assert "NOT COVERED" not in r.stdout
+
+
+def test_an_unobservable_rung_does_not_burn_the_wait_window(tmp_path) -> None:
+    """3 is terminal, like 0 — waiting cannot make it observable.
+
+    `--wait-secs` exists because delivery is ASYNCHRONOUS: a rung that has not
+    appeared yet may appear. But NOT COVERED says the running substrate exposes
+    no replication counter at all, which no amount of re-reading changes. The
+    workflow passes --wait-secs 240, so this spent four minutes per platform —
+    eight per two-platform runner — reprinting the verdict the first read had.
+    """
+    import time
+
+    started = time.monotonic()
+    r = _run(
+        tmp_path,
+        "\n".join([ROOTED, KEX, "[TRACE-SHIP] replication_envelopes_served_total ABSENT from delivery_status"]),
+        "--wait-secs",
+        "60",
+    )
+    elapsed = time.monotonic() - started
+    assert r.returncode == 3
+    assert elapsed < 20, f"exit 3 waited {elapsed:.0f}s; it must be terminal"
+
+
+def test_a_real_failure_still_retries(tmp_path) -> None:
+    """The escape hatch must not turn into 'never wait'.
+
+    A zero counter CAN become non-zero while we wait — that is the whole reason
+    the wait exists, and it must keep working.
+    """
+    import time
+
+    started = time.monotonic()
+    r = _run(
+        tmp_path,
+        "\n".join([ROOTED, KEX, "[TRACE-SHIP] replication_envelopes_served_total=0"]),
+        "--wait-secs",
+        "12",
+    )
+    elapsed = time.monotonic() - started
+    assert r.returncode == 1
+    assert elapsed >= 10, f"a retryable failure returned after {elapsed:.0f}s without waiting"

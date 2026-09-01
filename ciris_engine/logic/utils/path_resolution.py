@@ -444,6 +444,45 @@ def get_identity_dir() -> Path:
     return get_ciris_home() / "identity"
 
 
+_NODE_ALIAS: Optional[str] = None
+
+
+def set_node_alias(alias: Optional[str]) -> None:
+    """Record the node alias that `provision_node_identity()` actually minted.
+
+    THE NODE IS NOT THE AGENT. CC 3.4.7.3 Clause A: `node` is non-cohabitable
+    with `agent`/`user`. The substrate enforces it — handed an actor key as the
+    node identity it mints its own and says so:
+
+        the configured key is an ACTOR, so it is not this node's identity.
+        Minted and registered a separate node key … The node's owner-binding
+        must be re-issued onto the node key — see `plan_owner_binding_move`.
+
+    CIRISAgent#1119 gave EDGE a provisioned node key. `node_fold` was not
+    updated and kept passing `get_federation_alias()`, so the two halves of the
+    same boot disagreed:
+
+        [NODE-KEY] passing node_keystore_alias='ciris-node-bootstrap'  ← edge
+        Node fold: identity resolution — alias=ciris-agent-bootstrap    ← node
+
+    The first boot survives. Setup then writes a consent row naming the node key,
+    and every boot afterwards must re-author it — which is impossible, because
+    the row names the node and this engine signs as the actor, and a consent
+    grant is self-attested (CEG §5.6.8.15). The install is bricked from its
+    second start onward.
+
+    Recorded rather than re-derived: `provision_node_identity` owns the name, and
+    a second derivation is a second source of truth — which is the bug.
+    """
+    global _NODE_ALIAS
+    _NODE_ALIAS = alias
+
+
+def get_node_alias() -> Optional[str]:
+    """The provisioned node alias, or None if provisioning has not run yet."""
+    return _NODE_ALIAS
+
+
 def get_federation_alias() -> str:
     """The keystore alias under which this node's ONE federation identity lives.
 

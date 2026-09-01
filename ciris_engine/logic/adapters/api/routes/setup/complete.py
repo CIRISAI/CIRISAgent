@@ -526,6 +526,56 @@ async def _log_wa_list(auth_service: Any, phase: str) -> None:
         logger.info(f"CIRIS_USER_CREATE:   - {wa.wa_id}: name={wa.name}, role={wa.role}")
 
 
+def _enforce_single_holder(setup: SetupCompleteRequest, wa_cert: Any) -> None:
+    """Setup must not FINISH with two live certs on one provider identity.
+
+    The mint guard above should make this unreachable. It is here anyway because
+    the cost of being wrong is a user who cannot sign in with Google (the node
+    refuses an ambiguous identity, correctly) and cannot sign in locally either
+    (an OAuth user has no password). A closed door on both sides, discovered one
+    sign-in too late — the failure this whole change exists to end.
+
+    Checking the POST-condition rather than trusting the pre-condition also means
+    any future path that mints — a new flow, a retry, a migration — is covered
+    without knowing about it.
+
+    The repair is surgical: retire the cert WE just minted, leaving the fabric's
+    owner-binding as the single holder. Ownership is the fabric's to produce; if
+    both exist, ours is the one that should not.
+    """
+    if not (setup.oauth_provider and setup.oauth_external_id):
+        return
+
+    from ciris_engine.logic.persistence.stores import authentication_store
+
+    try:
+        holders = authentication_store.live_oauth_holders(
+            str(setup.oauth_provider), str(setup.oauth_external_id)
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception("CIRIS_USER_CREATE: could not verify the single-holder invariant")
+        return
+
+    if len(holders) <= 1:
+        return
+
+    ours = getattr(wa_cert, "wa_id", None)
+    logger.error(
+        "CIRIS_USER_CREATE: setup left %d live holders on one provider identity %s. "
+        "The node refuses an ambiguous identity, and an OAuth user has no password to "
+        "fall back to — this is the lockout. Retiring our own cert so the fabric's "
+        "owner-binding stands alone.",
+        len(holders),
+        holders,
+    )
+    if ours in holders and len(holders) > 1:
+        authentication_store.update_wa_certificate(str(ours), {"active": False})
+        remaining = authentication_store.live_oauth_holders(
+            str(setup.oauth_provider), str(setup.oauth_external_id)
+        )
+        logger.error("CIRIS_USER_CREATE: retired %s; holders now %s", ours, remaining)
+
+
 async def _create_setup_users(
     setup: SetupCompleteRequest,
     main_db_path: str,
@@ -837,6 +887,7 @@ async def _create_setup_users(
         # never materialized into a WACertificate.
         if provisional_oauth_wa_id and provisional_oauth_wa_id != wa_cert.wa_id:
             authentication_store.update_wa_certificate(provisional_oauth_wa_id, {"active": False})
+            _enforce_single_holder(setup, wa_cert)
             logger.info(
                 "CIRIS_USER_CREATE: retired provisional OAuth cert %s (kept minted %s)",
                 provisional_oauth_wa_id,

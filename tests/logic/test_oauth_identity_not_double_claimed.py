@@ -95,13 +95,36 @@ def test_the_fabric_owner_cannot_be_materialised_which_is_the_whole_point() -> N
 
 
 class _FakeEngine:
-    """Minimal stand-in for the persist engine's OAuth lookup."""
+    """Stand-in for the persist engine.
+
+    Now implements `wa_cert_list_by_role` as well as the point lookup, because
+    `fabric_oauth_holder_id` ENUMERATES since 2.9.47. It used to ask
+    `wa_cert_get_by_oauth` alone — a single-row accessor — which returns one row
+    for an identity that can have several, and that is what let setup mint a
+    second claim on an identity the fabric already owned. A fake that offers only
+    the point lookup can no longer model the store the code has to survive.
+    """
 
     def __init__(self, wa_id, active: bool = True):
         self._wa_id = wa_id
         self._active = active
 
+    def _row(self):
+        return {
+            "wa_id": self._wa_id,
+            "active": self._active,
+            "role": "root",
+            "oauth_provider": PROVIDER,
+            "oauth_external_id": SUBJECT,
+        }
+
     def wa_cert_get_by_oauth(self, provider, external_id):
         if self._wa_id is None:
             return None
-        return {"wa_id": self._wa_id, "active": self._active}
+        return self._row()
+
+    def wa_cert_list_by_role(self, role, limit=1000):
+        # Persist's list_by_role already filters to active rows.
+        if self._wa_id is None or not self._active or role != "root":
+            return []
+        return [self._row()]

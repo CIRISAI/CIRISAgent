@@ -28,7 +28,7 @@ import logging
 import re
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, List, Optional, Set, cast
 
 from ciris_engine.schemas.services.authority_core import OAuthIdentityLink, TokenType, WACertificate
 
@@ -537,6 +537,67 @@ def _row_to_wa_or_none(row: Dict[str, Any]) -> Optional[WACertificate]:
 _OAUTH_PLACEHOLDER_WA_ID = re.compile(r"^oauth-[A-Za-z0-9]+-.+$")
 
 
+_OAUTH_HOLDER_ROLES = ("root", "authority", "observer")
+
+
+def live_oauth_holders(provider: str, external_id: str) -> List[str]:
+    """Every LIVE cert claiming this provider identity — ours and the fabric's.
+
+    THE QUESTION THAT HAD NO ANSWER. The substrate asks exactly this before it
+    refuses a sign-in:
+
+        AMBIGUOUS provider identity — multiple live certs claim this account.
+        provider=google holders=2
+        wa_ids=["wa-2026-09-01-3F4F60", "wa-root-francesco-…"]
+
+    The agent had no way to ask it, so setup could not know it was about to
+    create the second holder. Every existing path reduces the question to "can I
+    build a WACertificate for this?" — and `wa-root-<user>`, which the substrate
+    mints during claim-remote, cannot be one:
+
+      * get_wa_by_oauth        materializes; a non-classic row becomes None
+      * fabric_oauth_holder_id a POINT lookup, for an identity with two rows
+      * list_wa_certificates   silently active-only under persist (#763)
+
+    So this enumerates and deliberately does NOT filter with `_is_brain_wa_row`.
+    That filter exists so the brain does not choke building a certificate it
+    cannot represent, which is right for building certificates and wrong here:
+    ownership needs no certificate at all, just an id.
+
+    Ordering is stable (roles, then wa_id) so callers and logs agree run to run.
+    """
+    seen: Set[str] = set()
+    for role in _OAUTH_HOLDER_ROLES:
+        for row in _list_active_by_role(role):
+            if not isinstance(row, dict):
+                continue
+            if row.get("oauth_provider") == provider and row.get("oauth_external_id") == external_id:
+                wa_id = row.get("wa_id")
+                if isinstance(wa_id, str) and wa_id:
+                    seen.add(wa_id)
+                continue
+            # A cert can also carry the identity as a LINKED one; the substrate's
+            # own ambiguity check counts those too, so a holder set that ignored
+            # them would disagree with the authority we are trying to satisfy.
+            linked = row.get("oauth_links") or row.get("linked_identities")
+            if isinstance(linked, str) and linked.strip():
+                try:
+                    parsed = json.loads(linked)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(parsed, list):
+                    for item in parsed:
+                        if (
+                            isinstance(item, dict)
+                            and item.get("provider") == provider
+                            and item.get("external_id") == external_id
+                        ):
+                            wa_id = row.get("wa_id")
+                            if isinstance(wa_id, str) and wa_id:
+                                seen.add(wa_id)
+    return sorted(seen)
+
+
 def fabric_oauth_holder_id(provider: str, external_id: str) -> Optional[str]:
     """wa_id of an ACTIVE cert the SUBSTRATE already bound to this identity.
 
@@ -562,19 +623,17 @@ def fabric_oauth_holder_id(provider: str, external_id: str) -> Optional[str]:
     identity the fabric has already bound (CC 3.4.7.3; agent surfaces, fabric
     produces).
     """
-    engine = _get_engine()
-    raw = engine.wa_cert_get_by_oauth(provider, external_id)
-    row = _active_or_none(_parse_persist_payload(raw))
-    if not isinstance(row, dict):
-        return None
-    wa_id = row.get("wa_id")
-    if not isinstance(wa_id, str) or not wa_id:
-        return None
-    if _MINTED_WA_ID.match(wa_id):
-        return None  # ours — the normal path already handles it
-    if _OAUTH_PLACEHOLDER_WA_ID.match(wa_id):
-        return None  # provisional — retired after we mint+link
-    return wa_id
+    # ENUMERATE. A point lookup returns ONE row for an identity that may have
+    # several, so the same store yielded different answers — including None —
+    # depending on which row it happened to hand back. None is what let setup
+    # mint the second claim that locked a real user out.
+    for wa_id in live_oauth_holders(provider, external_id):
+        if _MINTED_WA_ID.match(wa_id):
+            continue  # ours — the normal path already handles it
+        if _OAUTH_PLACEHOLDER_WA_ID.match(wa_id):
+            continue  # provisional — retired after we mint+link
+        return wa_id
+    return None
 
 
 def get_wa_by_oauth(provider: str, external_id: str) -> Optional[WACertificate]:

@@ -95,10 +95,6 @@ class _FieldEngine:
         return json.dumps([r for r in self._rows.values() if r["role"] == role and r["active"]])
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="no API answers 'which live certs hold this identity'; every path materializes a WACertificate first",
-)
 def test_the_store_can_name_every_live_holder_of_an_identity(monkeypatch) -> None:
     """THE MISSING QUESTION.
 
@@ -117,10 +113,6 @@ def test_the_store_can_name_every_live_holder_of_an_identity(monkeypatch) -> Non
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="fabric_oauth_holder_id uses a point lookup and sees the retired provisional, not the owner",
-)
 def test_the_fabric_holder_is_found_even_when_a_retired_provisional_shadows_it(monkeypatch) -> None:
     """The exact field condition: provisional retired, owner live, point lookup ambiguous.
 
@@ -133,10 +125,6 @@ def test_the_fabric_holder_is_found_even_when_a_retired_provisional_shadows_it(m
     assert store.fabric_oauth_holder_id(PROVIDER, SUBJECT) == FABRIC_OWNER
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="same, for the case where the point lookup finds nothing at all",
-)
 def test_the_fabric_holder_is_found_when_the_point_lookup_is_empty(monkeypatch) -> None:
     from ciris_engine.logic.persistence.stores import authentication_store as store
 
@@ -144,21 +132,53 @@ def test_the_fabric_holder_is_found_when_the_point_lookup_is_empty(monkeypatch) 
     assert store.fabric_oauth_holder_id(PROVIDER, SUBJECT) == FABRIC_OWNER
 
 
-def test_the_point_lookup_alone_is_provably_insufficient(monkeypatch) -> None:
-    """NOT xfail — this passes today, and is the reason the others cannot.
+def test_the_answer_no_longer_depends_on_which_row_the_point_lookup_returns(monkeypatch) -> None:
+    """THE INVARIANT THAT WAS MISSING.
 
-    Pinning it makes the design constraint executable: a single-row accessor
-    cannot distinguish "one holder" from "two holders", so no amount of care at
-    the call site can make it safe. Any fix must enumerate.
+    Before the fix this same two-holder store gave three different answers
+    depending on which row `wa_cert_get_by_oauth` happened to hand back — and one
+    of them was None, which is what let setup mint the second claim. Ownership is
+    a property of the store, not of which row an accessor picks, so the answer
+    must be identical however the point lookup behaves.
     """
     from ciris_engine.logic.persistence.stores import authentication_store as store
 
-    seen = set()
+    answers = set()
     for returns in (FABRIC_OWNER, PROVISIONAL, None):
         monkeypatch.setattr(store, "_get_engine", lambda r=returns: _FieldEngine(point_lookup_returns=r))
-        seen.add(store.fabric_oauth_holder_id(PROVIDER, SUBJECT))
+        answers.add(store.fabric_oauth_holder_id(PROVIDER, SUBJECT))
 
-    assert seen == {FABRIC_OWNER, None}, (
-        "the same two-holder store yields different answers depending on which row "
-        "the point lookup returns — including None, which is what let setup mint"
-    )
+    assert answers == {FABRIC_OWNER}, f"still point-lookup dependent: {answers}"
+
+
+def test_a_retired_row_is_not_a_holder(monkeypatch) -> None:
+    """The provisional is retired on purpose; counting it would fail healthy installs.
+
+    The substrate retires it at claim-remote ("the provider identity now resolves
+    to the owner alone"), so a holder set that included dead rows would report
+    ambiguity on every correct first run.
+    """
+    from ciris_engine.logic.persistence.stores import authentication_store as store
+
+    monkeypatch.setattr(store, "_get_engine", lambda: _FieldEngine())
+    assert PROVISIONAL not in store.live_oauth_holders(PROVIDER, SUBJECT)
+
+
+def test_our_own_mint_is_a_holder_too(monkeypatch) -> None:
+    """The set is for counting, not for judging whose cert it is.
+
+    `fabric_oauth_holder_id` filters to the FABRIC's holder, but the underlying
+    enumeration must report every live claim — that is what makes it usable as
+    the one-holder invariant check.
+    """
+    import json
+
+    from ciris_engine.logic.persistence.stores import authentication_store as store
+
+    class _Both(_FieldEngine):
+        def wa_cert_list_by_role(self, role, limit=1000):
+            rows = [_row(FABRIC_OWNER), _row(OUR_MINT)]
+            return json.dumps([r for r in rows if r["role"] == role])
+
+    monkeypatch.setattr(store, "_get_engine", lambda: _Both())
+    assert store.live_oauth_holders(PROVIDER, SUBJECT) == sorted([FABRIC_OWNER, OUR_MINT])

@@ -39,7 +39,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Any, Optional
+from typing import Dict, Iterable, Optional, Tuple
 from urllib.parse import quote
 
 import httpx
@@ -103,7 +103,7 @@ NODE_OWNED_PREFIXES = (
 _SAFE_PATH = re.compile(r"^[A-Za-z0-9._~/-]*$")
 
 
-def _forwardable_headers(items: Any) -> dict:
+def _forwardable_headers(items: Iterable[Tuple[str, str]]) -> Dict[str, str]:
     """Headers safe to put back on the wire.
 
     WHY THIS IS NOT A DICT COMPREHENSION ANY MORE.
@@ -128,7 +128,7 @@ def _forwardable_headers(items: Any) -> dict:
         nothing, and `Authorization: Bearer` alone would be a malformed
         credential rather than an absent one
     """
-    out: dict = {}
+    out: Dict[str, str] = {}
     for key, value in items:
         if key.lower() in _DROP:
             continue
@@ -227,7 +227,7 @@ async def forward_to_node(path: str, request: Request) -> Response:
             media_type="application/json",
         )
 
-    passthrough: dict[str, Any] = _forwardable_headers(upstream.headers.items())
+    passthrough: Dict[str, str] = _forwardable_headers(upstream.headers.items())
     return Response(
         content=upstream.content,
         status_code=upstream.status_code,

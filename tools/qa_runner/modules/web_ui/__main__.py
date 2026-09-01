@@ -382,9 +382,24 @@ class DesktopAppTestRunner:
             # Every string the product can render is in the localization bundle,
             # so the bundle IS the blocklist. Anything the app can say on its own
             # is excluded; what remains is text that came from the model.
-            product_strings = _product_strings()
-            # Still keep a small structural filter for values the bundle cannot
-            # contain: timestamps and the message counter are formatted at runtime.
+            # A REPLY IS A SENTENCE THAT IS NOT OUR ECHO. That is the whole rule.
+            #
+            # This used to blocklist all ~3,300 localization strings, on the
+            # reasoning that "anything the app can say on its own is not an
+            # answer". That is true and it is also how this check ate a real
+            # reply: the agent said "Hello, I can hear you. How can I assist you
+            # today?" — delivered in 21s, confirmed in the agent log — and a
+            # blocklist that large cannot help overlapping ordinary sentences.
+            # The gate then watched an answered screen for 150 more seconds and
+            # called it silence.
+            #
+            # What the blocklist was actually defending against is two specific
+            # strings the UI renders INSTEAD of an answer. Naming those two costs
+            # nothing and cannot swallow a real one.
+            placeholders = {
+                "agent.still_processing": "Still processing",
+                "agent.error_generic": "I encountered an issue processing your request",
+            }
             chrome = re.compile(r"^(showing last \d+ messages?|\d{1,2}:\d{2}\s*(am|pm)?|\.\.\.|·+)$", re.I)
 
             # 45s WAS TOO TIGHT, AND IT MANUFACTURED A BUG.
@@ -406,13 +421,26 @@ class DesktopAppTestRunner:
                 replies = [
                     t
                     for t in fresh
-                    if t != sent and not chrome.match(t) and t not in product_strings and len(t) > 1
+                    if t != sent
+                    and not chrome.match(t)
+                    and not any(t.startswith(p) for p in placeholders.values())
+                    and len(t) > 1
                 ]
                 if replies:
-                    elapsed = 45 - (deadline - datetime.now()).total_seconds()
+                    elapsed = RESPONSE_DEADLINE_SECONDS - (deadline - datetime.now()).total_seconds()
                     preview = max(replies, key=len)[:80]
                     self._log(f'Reply rendered after {elapsed:.1f}s: "{preview}"')
                     return
+            on_screen = sorted(
+                (t for t in (_texts(await self.helper.get_elements()) - baseline_texts) if len(t) > 1),
+                key=len,
+                reverse=True,
+            )[:12]
+            self._log("Text on screen at failure (longest first):")
+            for t in on_screen:
+                self._log(f"    | {t[:120]}")
+            if not on_screen:
+                self._log("    | <nothing new at all — the echo did not render either>")
             raise RuntimeError(
                 f"No reply rendered within {RESPONSE_DEADLINE_SECONDS}s.\n"
                 "        The message was sent and the only new text on screen was our own\n"
@@ -2396,45 +2424,6 @@ def _kill_iproxy_children() -> None:
 RESPONSE_DEADLINE_SECONDS = int(os.environ.get("CIRIS_QA_RESPONSE_DEADLINE", "150"))
 
 
-def _product_strings() -> set:
-    """Every string the CLIENT can render on its own, from the localization bundle.
-
-    Used as the exclusion set for "did the agent reply": if the app could have
-    produced the text by itself, it is not evidence of an answer. This is the
-    blocklist as DATA — the alternative is enumerating chrome by hand, which
-    already missed `agent.still_processing` and `agent.error_generic`, the two
-    strings the UI shows precisely when there is no answer.
-
-    Best-effort: an empty set degrades to the structural filter alone, which is
-    the pre-existing behaviour rather than a new failure mode.
-    """
-    repo = Path(__file__).resolve().parents[4]
-    candidates = [
-        repo / "localization" / "en.json",
-        repo / "apps" / "android" / "src" / "main" / "assets" / "localization" / "en.json",
-    ]
-    out: set = set()
-    for path in candidates:
-        if not path.exists():
-            continue
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            continue
-
-        def walk(node: object) -> None:
-            if isinstance(node, dict):
-                for value in node.values():
-                    walk(value)
-            elif isinstance(node, str):
-                text = node.strip()
-                if text:
-                    out.add(text)
-
-        walk(data)
-    return out
-
-
 def qa_log_dir() -> Path:
     """Where bring-up writes everything it learns, so CI can upload it.
 
@@ -3367,18 +3356,19 @@ async def _main_with_capture() -> int:
     `interact`, tomorrow's p2p chat or video — gets the same review artifact
     without opting in.
 
-    ONLY ON SUCCESS, deliberately. A failure screenshot is a different artifact
-    with a different audience (debugging, not review), and the commands already
-    dump diagnostics on the failure path. Mixing them would make the gallery a
-    mix of "here is what shipped" and "here is what broke".
+    ON SUCCESS *AND* FAILURE. This was success-only on the theory that the
+    gallery should show "what shipped", not "what broke". That cost a whole
+    run: the reply assertion failed, there was no screenshot, and the one
+    question worth answering — was the answer on screen? — could not be settled
+    from the artifacts at all. The failing screen is the single most useful
+    frame in the run, and the gallery already labels each tile PASS/FAIL, so a
+    red tile with a photograph beats a red tile with a gap.
 
     The capture NEVER changes the exit code. It is evidence for a human, not an
     assertion: a run that answered correctly but could not be photographed still
     passed, and failing it would make the gallery a source of false red.
     """
     rc = await main()
-    if rc != 0:
-        return rc
 
     dest = getattr(_LAST_ARGS, "screenshot_on_success", None) if _LAST_ARGS else None
     if not dest:

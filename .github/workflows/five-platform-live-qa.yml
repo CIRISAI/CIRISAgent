@@ -450,7 +450,7 @@ jobs:
             echo
             echo "## expected-but-absent"
             for plat in ${MATRIX_PLATFORMS}; do
-              [ -f "artifacts/shots/$plat.png" ]   || echo "  shots/$plat.png (no screenshot — did the interact gate pass?)"
+              [ -f "artifacts/shots/$plat.png" ]   || echo "  shots/$plat.png (no screenshot — did the app start at all?)"
               [ -f "artifacts/chat-$plat.json" ]   || echo "  chat-$plat.json (no result — did the flow reach the chat step?)"
               [ -d "artifacts/logs/ciris-$plat" ]  || echo "  logs/ciris-$plat/ (no agent logs — did the platform boot?)"
             done

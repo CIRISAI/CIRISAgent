@@ -340,114 +340,99 @@ class DesktopAppTestRunner:
         await self.run_test("click_send_button", click_send)
 
         async def wait_for_response():
-            """The agent must actually answer.
+            """The agent must actually answer — asserted through /v1/agent/history.
 
-            This used to be `await asyncio.sleep(5)` with the comment "we don't
-            have a way to detect response yet" — so the step passed whether the
-            agent replied, errored, or was never wired to an LLM at all. A chat
-            test that cannot fail on silence is not testing the chat; it is the
-            same class of hole as the Amharic install that sent two messages,
-            showed "Disconnected", and produced no reply and no error.
+            WHY NOT THE SCREEN, AFTER THREE ATTEMPTS TO MAKE THE SCREEN WORK.
 
-            We are the AI: a message in must produce a message out. With the mock
-            LLM that is deterministic, so silence here is a real defect.
+            `/tree` is keyed on testTag: `desktop_app_helper.get_elements()` reads
+            `elem["testTag"]` for every entry, so the endpoint only reports TAGGED
+            composables. The chat transcript is not tagged, so no message bubble —
+            ours or the agent's — is visible to automation at all.
 
-            Asserted through the UI rather than the API because this is the UI
-            suite, and because the API answering while the screen stays empty is
-            precisely the failure worth catching.
+            That is not a theory. Run 33509242206 failed with
 
-            THE SIGNAL IS NEW TEXT THAT WE DID NOT SEND. Not element count — see
-            the baseline above for why that could not fail. A reply is text on
-            screen that was not there before and is not the echo of our own
-            message.
+                Text on screen at failure: <nothing new at all — the echo did not
+                render either>
 
-            Chrome is excluded explicitly: the message counter ("Showing last N
-            messages") changes when the echo renders, so accepting any new text
-            would reinstate the same hole one layer down.
+            while the screenshot from that same instant shows both bubbles:
+
+                You    Hello, can you hear me?                     12:45 PM
+                CIRIS  Hello! Yes, I can hear you. How can I …     12:46 PM
+
+            Every text-diffing version of this check was therefore measuring an
+            empty set, and the two earlier "fixes" (a longer deadline, a narrower
+            blocklist) were adjustments to a signal that was never there. The
+            transcript being untagged is a real gap in the client's test surface
+            and is filed upstream; it is not something this gate can wait out.
+
+            So assert where the content actually is. `/v1/agent/history` returns
+            ConversationMessage with `is_agent`, which is the fact under test —
+            "the agent produced an answer to what the UI sent" — and it cannot be
+            satisfied by chrome, by our own echo, or by a placeholder, because
+            those are not agent-authored rows.
+
+            The screenshot remains the human-facing evidence that it RENDERED;
+            this is the machine-checkable evidence that it EXISTS.
             """
+            import httpx
+
+            args = _LAST_ARGS
+            api_port = getattr(args, "api_port", None) or 8080
+            username = getattr(args, "username", None) or "admin"
+            password = getattr(args, "password", None) or "qa_test_password_12345"
+            base = f"http://127.0.0.1:{api_port}"
             sent = message.strip()
 
-            # WHAT COUNTS AS "NOT A REPLY" IS DATA, NOT A GUESS.
-            #
-            # A hand-written regex here was wrong: it excluded "sending" and "…"
-            # but would have ACCEPTED the product's own
-            #   agent.still_processing  "Still processing. Check back later.
-            #                            Agent response is not guaranteed."
-            #   agent.error_generic     "I encountered an issue processing your
-            #                            request. Please try again."
-            # Both are strings the UI renders INSTEAD of an answer, so a run where
-            # the agent errored or stalled would have gone green. A blocklist of
-            # chrome leaks by construction, because chrome is open-ended.
-            #
-            # Every string the product can render is in the localization bundle,
-            # so the bundle IS the blocklist. Anything the app can say on its own
-            # is excluded; what remains is text that came from the model.
-            # A REPLY IS A SENTENCE THAT IS NOT OUR ECHO. That is the whole rule.
-            #
-            # This used to blocklist all ~3,300 localization strings, on the
-            # reasoning that "anything the app can say on its own is not an
-            # answer". That is true and it is also how this check ate a real
-            # reply: the agent said "Hello, I can hear you. How can I assist you
-            # today?" — delivered in 21s, confirmed in the agent log — and a
-            # blocklist that large cannot help overlapping ordinary sentences.
-            # The gate then watched an answered screen for 150 more seconds and
-            # called it silence.
-            #
-            # What the blocklist was actually defending against is two specific
-            # strings the UI renders INSTEAD of an answer. Naming those two costs
-            # nothing and cannot swallow a real one.
-            placeholders = {
-                "agent.still_processing": "Still processing",
-                "agent.error_generic": "I encountered an issue processing your request",
-            }
-            chrome = re.compile(r"^(showing last \d+ messages?|\d{1,2}:\d{2}\s*(am|pm)?|\.\.\.|·+)$", re.I)
+            async with httpx.AsyncClient(timeout=30.0) as http:
+                r = await http.post(
+                    f"{base}/v1/auth/login",
+                    json={"username": username, "password": password},
+                )
+                r.raise_for_status()
+                token = r.json()["access_token"]
+                auth = {"Authorization": f"Bearer {token}"}
 
-            # 45s WAS TOO TIGHT, AND IT MANUFACTURED A BUG.
-            #
-            # A gate run reported "no reply rendered within 45s" and the screenshot
-            # showed a pending message — which read as the UI failing to render an
-            # answer the agent had produced. It was not. The agent stored the reply
-            # at +39s, the assertion gave up at +45s, and the client's own interact
-            # call has a 110s timeout, so it was still legitimately waiting.
-            #
-            # A gate must outlast the thing it is measuring. The agent's
-            # `interaction_timeout` is the contract (110s by default), so this waits
-            # past it: if interact itself gives up, THAT is a real failure and the
-            # error below is then true rather than premature.
-            deadline = datetime.now() + timedelta(seconds=RESPONSE_DEADLINE_SECONDS)
-            while datetime.now() < deadline:
-                await asyncio.sleep(1.0)
-                fresh = _texts(await self.helper.get_elements()) - baseline_texts
-                replies = [
-                    t
-                    for t in fresh
-                    if t != sent
-                    and not chrome.match(t)
-                    and not any(t.startswith(p) for p in placeholders.values())
-                    and len(t) > 1
-                ]
-                if replies:
-                    elapsed = RESPONSE_DEADLINE_SECONDS - (deadline - datetime.now()).total_seconds()
-                    preview = max(replies, key=len)[:80]
-                    self._log(f'Reply rendered after {elapsed:.1f}s: "{preview}"')
-                    return
-            on_screen = sorted(
-                (t for t in (_texts(await self.helper.get_elements()) - baseline_texts) if len(t) > 1),
-                key=len,
-                reverse=True,
-            )[:12]
-            self._log("Text on screen at failure (longest first):")
-            for t in on_screen:
-                self._log(f"    | {t[:120]}")
-            if not on_screen:
-                self._log("    | <nothing new at all — the echo did not render either>")
+                deadline = datetime.now() + timedelta(seconds=RESPONSE_DEADLINE_SECONDS)
+                last_seen: list = []
+                while datetime.now() < deadline:
+                    await asyncio.sleep(2.0)
+                    try:
+                        h = await http.get(f"{base}/v1/agent/history?limit=50", headers=auth)
+                        h.raise_for_status()
+                        msgs = h.json()["data"]["messages"]
+                    except (httpx.HTTPError, KeyError, ValueError) as exc:
+                        self._log(f"history poll failed (retrying): {type(exc).__name__}: {exc}")
+                        continue
+
+                    last_seen = msgs
+                    replies = [
+                        m
+                        for m in msgs
+                        if m.get("is_agent")
+                        and (m.get("content") or "").strip()
+                        and (m.get("content") or "").strip() != sent
+                    ]
+                    if replies:
+                        elapsed = RESPONSE_DEADLINE_SECONDS - (deadline - datetime.now()).total_seconds()
+                        reply = replies[-1]["content"].strip()
+                        self._log(f'Agent replied after {elapsed:.1f}s: "{reply[:100]}"')
+                        return
+
+            # Say what the conversation DID contain — one line of evidence beats a
+            # re-run, and distinguishes "agent silent" from "agent errored".
+            self._log(f"Conversation at failure ({len(last_seen)} message(s)):")
+            for m in last_seen[-8:]:
+                who = "agent" if m.get("is_agent") else "user"
+                self._log(f"    | [{who}/{m.get('message_type', '?')}] {(m.get('content') or '')[:110]}")
+            if not last_seen:
+                self._log("    | <history empty — the message never reached the agent>")
             raise RuntimeError(
-                f"No reply rendered within {RESPONSE_DEADLINE_SECONDS}s.\n"
-                "        The message was sent and the only new text on screen was our own\n"
-                "        echo and UI chrome — the agent did not answer, or answered\n"
-                "        somewhere the screen does not show.\n"
+                f"Agent produced no reply within {RESPONSE_DEADLINE_SECONDS}s.\n"
+                "        The UI sent the message and /v1/agent/history shows no\n"
+                "        agent-authored response, so this is the agent falling silent\n"
+                "        rather than the client failing to render.\n"
                 "        Check the LLM is configured (the wizard's AI screen) and the\n"
-                "        app log for send/receive errors."
+                "        agent log for LLM/DMA errors."
             )
 
         await self.run_test("wait_for_response", wait_for_response)

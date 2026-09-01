@@ -94,6 +94,11 @@ SHIP_CONFIRMED = re.compile(
     r"\[DELIVERY-PROBE\]\s+canonical\s+(\S+)\s+SHIP CONFIRMED\s+—\s+envelopes_sent_total=(\d+)"
 )
 
+#: The agent's probe says this OUT LOUD when the substrate has no such counter,
+#: which is a different fact from "nothing was delivered" and must not be graded
+#: the same way (CIRISServer#518).
+COUNTER_ABSENT = re.compile(r"replication_envelopes_served_total ABSENT from delivery_status")
+
 #: Explicit failure lines, so the report can quote the node's own words rather
 #: than inferring failure from the absence of success.
 NO_ROOT = re.compile(r"\[DELIVERY-PROBE\]\s+canonical\s+(\S+)\s+did not root within (\d+)s")
@@ -172,7 +177,17 @@ def main() -> int:
     deadline = time.monotonic() + max(0, args.wait_secs)
     while True:
         rc = _evaluate(args)
-        if rc == 0 or time.monotonic() >= deadline:
+        # 3 IS TERMINAL, LIKE 0. Waiting exists because delivery is
+        # ASYNCHRONOUS — a rung that has not appeared yet may appear. But 3 says
+        # the substrate exposes no replication counter AT ALL (CIRISServer#518),
+        # which is a property of the running wheel, not a race: it cannot become
+        # observable without replacing the process. Re-reading for the workflow's
+        # full 240s reprinted the identical verdict for four minutes per
+        # platform, eight per two-platform runner, to reach the conclusion the
+        # first read had already established.
+        #
+        # 1 and 2 keep retrying: those CAN change while we wait.
+        if rc in (0, 3) or time.monotonic() >= deadline:
             return rc
         time.sleep(10)
 
@@ -254,6 +269,38 @@ def _evaluate(args) -> int:
         m = rx.search(text)
         if m:
             print(f"      {why}")
+    if args.require == "replication" and served is None and COUNTER_ABSENT.search(text):
+        # THE INSTRUMENT IS MISSING, NOT THE DELIVERY.
+        #
+        # `replication_envelopes_served_total` is not in this wheel's
+        # delivery_status payload (CIRISServer#518), and the agent's own probe
+        # says so in as many words. Grading that as a delivery FAILURE would be
+        # reporting a fact we have no way to observe — the same error, inverted,
+        # as passing on `envelopes_sent_total` because it happened to be there.
+        #
+        # Exit 0, because this run did not demonstrate a failure. Say NOT COVERED
+        # loudly, because it did not demonstrate success either, and a gate that
+        # quietly returns 0 is indistinguishable from one that checked.
+        print("\nNOT COVERED: this substrate exposes no replication_envelopes_served_total.")
+        print("             The node's own probe reports it ABSENT from delivery_status,")
+        print("             so trace delivery cannot be observed from a log tail at all —")
+        print("             which is NOT evidence that delivery failed.")
+        print("             Tracked as CIRISServer#518. Until it lands, this rung is")
+        print("             unobservable rather than red; it does NOT fall back to")
+        print("             envelopes_sent_total, which measures a different plane.")
+        # EXIT 3, NOT 0 — UNKNOWN IS ITS OWN ANSWER.
+        #
+        # Returning 0 made the caller's success branch run, so the workflow set
+        # trace_rc=0 and chat-*.json recorded "traces": true. The gallery then
+        # rendered "traces reached canonical" for a run whose own output says
+        # NOT COVERED — this check asserting the opposite of what it printed,
+        # which is the precise failure it was written to prevent.
+        #
+        # Three states need three codes: 0 delivered, 1 did not, 3 could not be
+        # observed. Callers that only branch on zero/non-zero still treat 3 as
+        # "not proven", which is the safe reading.
+        return 3
+
     if args.require == "replication" and served is None:
         print("      no replication_envelopes_served_total appears anywhere in these logs.")
         print("      This gate does NOT fall back to envelopes_sent_total: that counter")

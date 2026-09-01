@@ -14,9 +14,38 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 IOS_APP_DIR="$(dirname "$SCRIPT_DIR")"
 CIRIS_ROOT="$(dirname "$(dirname "$IOS_APP_DIR")")"
 
-# Source directories from BeeWare build
-BEEWARE_APP="/Users/macmini/CIRISAgent/ios/CirisiOS/build/ciris_ios/ios/xcode/build/Debug-iphonesimulator/Ciris iOS.app"
-PYTHON_XCF="/Users/macmini/CIRISAgent/ios/CirisiOS/build/ciris_ios/ios/xcode/Support/Python.xcframework"
+# Source directories from the BeeWare build.
+#
+# THESE WERE ABSOLUTE PATHS INTO ONE DEVELOPER'S HOME (/Users/macmini/...), so the
+# script ran on exactly one machine and nowhere else. It is the script that ships
+# to the App Store, and it is also the script CI must run — the first CI attempt
+# failed here with:
+#
+#   Error: BeeWare app not found at /Users/macmini/CIRISAgent/ios/CirisiOS/...
+#
+# Derived from CIRIS_ROOT now, which the lines above already compute. The old
+# absolute location is still honoured when it exists, so a machine that has been
+# building this way keeps working byte-for-byte; CIRIS_BEEWARE_ROOT overrides both
+# for a layout that is neither.
+BEEWARE_ROOT="${CIRIS_BEEWARE_ROOT:-}"
+if [ -z "$BEEWARE_ROOT" ]; then
+    if [ -d "$CIRIS_ROOT/ios/CirisiOS/build/ciris_ios/ios/xcode" ]; then
+        BEEWARE_ROOT="$CIRIS_ROOT/ios/CirisiOS/build/ciris_ios/ios/xcode"
+    elif [ -d "/Users/macmini/CIRISAgent/ios/CirisiOS/build/ciris_ios/ios/xcode" ]; then
+        # Legacy absolute path — kept so the machine this was written on is
+        # unaffected by the change.
+        BEEWARE_ROOT="/Users/macmini/CIRISAgent/ios/CirisiOS/build/ciris_ios/ios/xcode"
+    else
+        BEEWARE_ROOT="$CIRIS_ROOT/ios/CirisiOS/build/ciris_ios/ios/xcode"
+    fi
+fi
+
+if [ "$BUILD_TYPE" = "device" ]; then
+    BEEWARE_APP="$BEEWARE_ROOT/build/Debug-iphoneos/Ciris iOS.app"
+else
+    BEEWARE_APP="$BEEWARE_ROOT/build/Debug-iphonesimulator/Ciris iOS.app"
+fi
+PYTHON_XCF="$BEEWARE_ROOT/Support/Python.xcframework"
 
 # Target directory in iosApp
 RESOURCES_DIR="$IOS_APP_DIR/Resources"
@@ -28,7 +57,9 @@ echo "Target: $RESOURCES_DIR"
 # Check if BeeWare build exists
 if [ ! -d "$BEEWARE_APP" ]; then
     echo "Error: BeeWare app not found at $BEEWARE_APP"
-    echo "Please run 'cd $CIRIS_ROOT/ios && briefcase build iOS' first"
+    echo "Searched under: $BEEWARE_ROOT"
+    echo "Please run 'cd $CIRIS_ROOT/ios && briefcase build iOS' first,"
+    echo "or set CIRIS_BEEWARE_ROOT to an existing briefcase xcode build root."
     exit 1
 fi
 

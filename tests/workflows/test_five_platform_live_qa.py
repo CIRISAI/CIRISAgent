@@ -45,7 +45,9 @@ def _steps(job: Dict[str, Any]) -> List[Dict[str, Any]]:
 def test_three_runner_images_cover_five_platforms(spec: Dict[str, Any]) -> None:
     """macOS pairs with iOS, Linux with Android, Windows alone."""
     include = spec["jobs"]["live-qa"]["strategy"]["matrix"]["include"]
-    assert {e["os"] for e in include} == {"ubuntu-latest", "macos-14", "windows-latest"}
+    # macos-15 carries Xcode 16, which the pbxproj format Homebrew's xcodegen
+    # emits requires; macos-14 (Xcode 15.4) could not open the generated project.
+    assert {e["os"] for e in include} == {"ubuntu-latest", "macos-15", "windows-latest"}
     covered = " ".join(e["platforms"] for e in include).split()
     assert sorted(covered) == ["android", "ios", "linux", "macos", "windows"]
 
@@ -98,13 +100,53 @@ def test_a_platform_that_cannot_run_fails_rather_than_vanishing(raw: str) -> Non
     assert "overall=1" in ios_skip, "iOS skips without failing the job"
 
 
-def test_the_trace_gate_is_invoked_and_is_fatal(raw: str) -> None:
-    """Reaching Interact is half the gate; traces leaving is the other half."""
+def test_the_trace_gate_still_runs_and_still_asks_for_replication(raw: str) -> None:
+    """Reaching Interact is half the gate; traces leaving is the other half.
+
+    Enforcement is currently OFF: the `replication` rung sits on the
+    KEX/replication path upstream is rebuilding, so it cannot pass for reasons
+    no change here can fix, and holding five platforms red on someone else's
+    in-flight work trains everyone to ignore the colour.
+
+    What must NOT drift while it is off:
+      * it still runs (a check nobody executes rots silently)
+      * it still asks for `replication`, never `ship` — 'ship' keys on
+        envelopes_sent_total, which is blind to the replication plane
+        (CIRISEdge#434); softening the RUNG rather than the ENFORCEMENT would
+        quietly redefine what "delivered" means
+      * the run still SAYS so — an unenforced check that is also invisible is a
+        vacuous pass with extra steps
+    """
     assert "assert_traces_reached_canonical.py" in raw
+    assert "--require replication" in raw
     assert "--require ship" not in raw, (
         "'ship' keys on envelopes_sent_total, which is blind to the replication "
         "plane (CIRISEdge#434) — the gate must require 'replication'"
     )
+    trace_branch = raw.split("python tools/dev/assert_traces_reached_canonical.py")[1][:600]
+    assert "::warning::" in trace_branch, "the non-enforced result is not surfaced at all"
+    assert "NOT enforced" in trace_branch, "the log does not say enforcement is off"
+
+
+def test_the_interact_gate_is_still_fatal(raw: str) -> None:
+    """Whatever happens to the trace rung, silence on screen must stay fatal.
+
+    This is the half of the gate that is entirely ours, so it has no excuse to
+    be downgraded alongside the half that is not.
+    """
+    chat = raw.split("web_ui desktop-chat")[1][:700]
+    assert "overall=1" in chat and "interact failed" in chat
+
+
+def test_chat_authenticates_for_the_history_assertion(raw: str) -> None:
+    """desktop-chat reads /v1/agent/history, so it needs credentials.
+
+    Without them the command defaults to `admin`, which this workflow never
+    creates, and every platform fails with 401 raised by the GATE rather than by
+    the product — a red run that says nothing about the app.
+    """
+    chat = raw.split("web_ui desktop-chat")[1][:700]
+    assert "--username" in chat and "--password" in chat
 
 
 def test_headless_is_not_passed_to_mobile_targets(raw: str) -> None:
@@ -129,3 +171,97 @@ def test_log_collection_cannot_outlive_the_job(raw: str) -> None:
     assert logcat, "no logcat collection at all"
     for line in logcat:
         assert "timeout " in line, f"adb logcat is not time-capped: {line.strip()}"
+
+
+def test_each_platform_starts_from_a_clean_host(raw: str) -> None:
+    """One runner walks two platforms; the second must not inherit the first.
+
+    macos-ios runs macOS then iOS on one host. With macOS's backend still on
+    :8080 and its test server on :9091, the iOS app cannot bind and every probe
+    lands on the still-running macOS stack — scoring a second desktop
+    interaction as the iOS result. A false green on the platform least likely to
+    be checked by eye.
+    """
+    assert "teardown: killing" in raw, "no per-platform teardown"
+    teardown = raw.split("TEAR DOWN THE PREVIOUS PLATFORM FIRST")[1][:700]
+    for port in ("8080", "9091"):
+        assert port in teardown, f"teardown does not clear :{port}"
+
+
+def test_the_trace_rung_has_three_outcomes(raw: str) -> None:
+    """Unknown must not be recorded as delivered.
+
+    Exit 3 (CIRISServer#518: no replication counter on this substrate) once ran
+    the success branch, so chat-*.json said "traces": true and the gallery
+    claimed delivery for a run whose own output said NOT COVERED.
+    """
+    assert "trace_status" in raw
+    assert "traces_json=null" in raw, "the unobservable case is not recorded distinctly"
+    assert "traces_json=true" in raw and "traces_json=false" in raw
+
+
+def test_android_provisioning_asserts_the_avd_exists(raw: str) -> None:
+    """Installing the emulator is not the same as having an AVD.
+
+    The first version checked `test -x emulator`, then ran `-list-avds` without
+    reading the result — so an empty list passed as success and reappeared two
+    steps later as "no AVDs configured", a message about bring-up for a fault in
+    provisioning. A check whose output nobody reads is not a check.
+    """
+    step = raw.split("Install the Android emulator")[1]
+    step = step[: step.find("- name:")] if "- name:" in step else step
+    assert 'grep -qx "ciris_qa"' in step, "the AVD list is not actually asserted"
+    assert "ANDROID_AVD_HOME" in step, "the AVD home is left to inference"
+
+
+def test_both_steps_agree_on_the_avd_home(raw: str) -> None:
+    """avdmanager and the emulator resolve the AVD list independently.
+
+    They agreed only by luck before, and stopped agreeing on the runner: the AVD
+    was created somewhere the emulator did not look.
+    """
+    assert raw.count('export ANDROID_AVD_HOME="$HOME/.android/avd"') == 2
+
+
+def test_android_gets_its_client_aar(raw: str) -> None:
+    """The APK links against the published client, same as iOS links the xcframework.
+
+    apps/settings.gradle.kts resolves it from a flatDir at android/libs, and only
+    fetch_client_artifacts puts it there. Only the iOS half was fetched, so the
+    android build had nothing to link against.
+    """
+    assert "fetch_client_artifacts.py --platform android" in raw
+
+
+def test_the_holder_assertion_queries_where_each_platform_writes(raw: str) -> None:
+    """$CIRIS_HOME/data is the DESKTOP store only.
+
+    Android and iOS embed their own backend and write inside the device or
+    simulator sandbox. Pointing this at the host path for every target made the
+    assertion return 2 (no database) on every mobile run and set overall=1 — so
+    android and iOS could not pass no matter how well the interaction went. A
+    check that cannot succeed is not a gate, it is a permanent red light.
+    """
+    block = raw.split("assert_one_holder_per_identity.py")[0]
+    tail = block[-2000:]
+    assert "simctl get_app_container" in tail, "iOS store is not resolved from the simulator sandbox"
+    assert "run-as" in tail, "android store is not pulled from the device"
+    assert "NOT COVERED" in raw.split("assert_one_holder_per_identity.py")[1][:600], (
+        "an unreachable store must report NOT COVERED, not a failure"
+    )
+
+
+def test_chaquopy_gets_its_python_without_hijacking_the_runner(raw: str) -> None:
+    """The APK build needs 3.10; the QA runner needs 3.12.
+
+    apps/android/build.gradle pins buildPython to /usr/bin/python3.10, which the
+    runner does not have — the APK build failed there after the emulator had
+    booted. build.yml's android-release job already provisions it this way.
+
+    `update-environment: false` is load-bearing: letting setup-python prepend
+    3.10 to PATH would swap the interpreter the wheel was installed for, fixing
+    the APK build by breaking everything after it.
+    """
+    assert "/usr/bin/python3.10" in raw
+    step = raw.split("Set up Python 3.10 for Chaquopy")[1][:600]
+    assert "update-environment: false" in step, "3.10 would replace the runner's 3.12"

@@ -173,10 +173,23 @@ elif [ "$MODE" = "--quick" ] || [ "$MODE" = "--source-only" ]; then
         "$CIRIS_ROOT/ciris_adapters/" "$RESOURCES_DIR/app/ciris_adapters/"
     ok "ciris_adapters overlaid"
 
-    # Overlay ciris_ios
-    rsync -a --exclude='__pycache__' \
-        "$CIRIS_ROOT/ios/CirisiOS/src/ciris_ios/" "$RESOURCES_DIR/app/ciris_ios/"
-    ok "ciris_ios overlaid"
+    # Overlay ciris_ios — ONLY IF THE BRIEFCASE TREE IS PRESENT.
+    #
+    # `ios/` is untracked (see .gitignore), so it exists only on a machine that
+    # has run `briefcase create iOS`. On CI it is absent, and rsync from a
+    # missing source is a hard error that stopped the iOS build before it began.
+    # The Resources bundle fetched by fetch_client_artifacts.py already carries a
+    # staged ciris_ios, so keeping it is correct there — but say which one is in
+    # play, because "overlaid" and "kept the pre-staged copy" are different
+    # builds and a silent skip would hide that.
+    if [ -d "$CIRIS_ROOT/ios/CirisiOS/src/ciris_ios" ]; then
+        rsync -a --exclude='__pycache__' \
+            "$CIRIS_ROOT/ios/CirisiOS/src/ciris_ios/" "$RESOURCES_DIR/app/ciris_ios/"
+        ok "ciris_ios overlaid"
+    else
+        warn "ciris_ios: no briefcase tree at $CIRIS_ROOT/ios/CirisiOS/src/ciris_ios"
+        warn "           keeping the pre-staged copy already in Resources"
+    fi
 
     # ciris_verify: managed by tools/update_ciris_verify.py — do NOT overlay
     # from local CIRISVerify repo (has stale dylib that overwrites version-matched one)
@@ -230,16 +243,47 @@ if [ "$MODE" = "--source-only" ]; then
     fi
 fi
 
-# Step 3.5: Build KMP shared framework
-step "Building KMP shared framework..."
-cd "$CIRIS_ROOT/client"
-if $IS_DEVICE; then
-    ./gradlew :shared:linkDebugFrameworkIosArm64 2>&1 | tail -3
+# Step 3.5: Build the KMP shared framework — OR use the released one.
+#
+# `client/` is the CIRISClient repo and is NOT part of this checkout. On a
+# developer machine it sits alongside and gradle builds shared.framework from
+# source; on CI it is absent, and `cd "$CIRIS_ROOT/client"` was a hard failure
+# that stopped the iOS build immediately after Resources.zip.
+#
+# CI does not need to build it: tools/fetch_client_artifacts.py --platform ios
+# downloads the RELEASED ciris-client-<version>.xcframework into
+# apps/ios/Frameworks/, which is the same artifact this gradle task produces.
+#
+# What must not happen is proceeding with NEITHER — that yields an app that
+# installs and launches to nothing, which is far worse than a red build. So the
+# absence of both is fatal and says which two places were checked.
+if [ -d "$CIRIS_ROOT/client" ]; then
+    step "Building KMP shared framework from source..."
+    cd "$CIRIS_ROOT/client"
+    if $IS_DEVICE; then
+        ./gradlew :shared:linkDebugFrameworkIosArm64 2>&1 | tail -3
+    else
+        ./gradlew :shared:linkDebugFrameworkIosSimulatorArm64 2>&1 | tail -3
+    fi
+    ok "KMP framework built"
+    cd "$IOS_APP_DIR"
 else
-    ./gradlew :shared:linkDebugFrameworkIosSimulatorArm64 2>&1 | tail -3
+    step "No client/ checkout — using the released xcframework..."
+    # `shared.xcframework`, NOT `ciris-client-<v>.xcframework`. The archive is
+    # named for the version; the DIRECTORY it unpacks to is not, and looking for
+    # the versioned name found nothing on a runner where the fetch had plainly
+    # succeeded — this guard firing on a framework that was sitting right there.
+    FETCHED=$(find "$CIRIS_ROOT/apps/ios/Frameworks" -maxdepth 1 -name "shared.xcframework" -type d 2>/dev/null | head -1)
+    if [ -z "$FETCHED" ]; then
+        fail "No client/ checkout AND no shared.xcframework in apps/ios/Frameworks.
+       One of the two must supply the KMP framework:
+         - a sibling CIRISClient checkout at $CIRIS_ROOT/client, or
+         - tools/fetch_client_artifacts.py --platform ios
+       Continuing would build an app that installs and launches to nothing."
+    fi
+    ok "Using $(basename "$FETCHED")"
+    cd "$IOS_APP_DIR"
 fi
-ok "KMP framework built"
-cd "$IOS_APP_DIR"
 
 # Step 4: Regenerate Xcode project
 step "Regenerating Xcode project (xcodegen)..."

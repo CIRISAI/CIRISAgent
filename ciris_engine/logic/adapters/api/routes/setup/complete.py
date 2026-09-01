@@ -38,6 +38,31 @@ _background_tasks: set[asyncio.Task[None]] = set()
 # =============================================================================
 
 
+def _redacted_identity(provider: object, external_id: object) -> str:
+    """`google:…1383` — enough to correlate, not enough to identify.
+
+    The provider's `external_id` is a SUBJECT IDENTIFIER: stable, unique to one
+    human, and exactly the join key an observer needs to tie log lines to a
+    person. It is not a secret — which is what the `# NOSONAR - provider:
+    external_id is not a secret` annotations these calls carried correctly said,
+    and secrecy was the wrong question. It is PII, and it does not belong in a log.
+
+    The substrate reached the same conclusion independently and prints
+    `subject=…1383`, so a redacted tail is also the form that CORRELATES with the
+    node's own lines. Nothing diagnostic is lost: the provider names the flow, the
+    tail separates accounts within one log, and the WA id logged beside these
+    calls is the durable handle.
+
+    CodeQL has flagged all three call sites since 2026-02-28
+    (py/clear-text-logging-sensitive-data). It taints anything read off the setup
+    request, which also carries system_admin_password — an over-approximation that
+    happened to be pointing at something real. The fix is to stop logging the
+    value, not to suppress the finding.
+    """
+    tail = str(external_id or "")[-4:]
+    return f"{provider}:…{tail}" if tail else f"{provider}:<none>"
+
+
 async def _link_oauth_identity_to_wa(auth_service: Any, setup: SetupCompleteRequest, wa_cert: Any) -> Any:
     """Link OAuth identity to WA, handling existing links gracefully.
 
@@ -46,8 +71,10 @@ async def _link_oauth_identity_to_wa(auth_service: Any, setup: SetupCompleteRequ
     from ciris_engine.schemas.services.authority_core import WARole
 
     logger.debug("CIRIS_SETUP_DEBUG *** ENTERING OAuth linking block ***")
-    logger.debug(  # NOSONAR - provider:external_id is not a secret, it's a provider-assigned ID
-        f"CIRIS_SETUP_DEBUG Linking OAuth identity: {setup.oauth_provider}:{setup.oauth_external_id} to WA {wa_cert.wa_id}"
+    logger.debug(
+        "CIRIS_SETUP_DEBUG Linking OAuth identity: %s to WA %s",
+        _redacted_identity(setup.oauth_provider, setup.oauth_external_id),
+        wa_cert.wa_id,
     )
 
     try:
@@ -76,8 +103,10 @@ async def _link_oauth_identity_to_wa(auth_service: Any, setup: SetupCompleteRequ
             metadata={"email": setup.oauth_email} if setup.oauth_email else None,
             primary=True,
         )
-        logger.debug(  # NOSONAR - provider:external_id is not a secret
-            f"CIRIS_SETUP_DEBUG ✅ SUCCESS: Linked OAuth {setup.oauth_provider}:{setup.oauth_external_id} to WA {wa_cert.wa_id}"
+        logger.debug(
+            "CIRIS_SETUP_DEBUG [OK] SUCCESS: Linked OAuth %s to WA %s",
+            _redacted_identity(setup.oauth_provider, setup.oauth_external_id),
+            wa_cert.wa_id,
         )
     except Exception as e:
         logger.error(f"CIRIS_SETUP_DEBUG [FAIL] FAILED to link OAuth identity: {e}", exc_info=True)
@@ -115,8 +144,9 @@ async def _check_existing_oauth_wa(auth_service: Any, setup: SetupCompleteReques
     if not (setup.oauth_provider and setup.oauth_external_id):
         return None, False
 
-    logger.debug(  # NOSONAR - provider:external_id is not a secret
-        f"CIRIS_USER_CREATE: Checking for existing OAuth user: {setup.oauth_provider}:{setup.oauth_external_id}"
+    logger.debug(
+        "CIRIS_USER_CREATE: Checking for existing OAuth user: %s",
+        _redacted_identity(setup.oauth_provider, setup.oauth_external_id),
     )
     existing_wa = await auth_service.get_wa_by_oauth(setup.oauth_provider, setup.oauth_external_id)
 
@@ -723,12 +753,19 @@ async def _create_setup_users(
                 "CIRIS_USER_CREATE: this provider identity is ALREADY bound by the substrate to %s "
                 "(claim-remote owner-binding) — NOT minting a second ROOT. Minting here is what "
                 "produced 'AMBIGUOUS provider identity / holders=2' and locked first-run OAuth users out.",
-                # The suppression must sit on the flagged line itself. CodeQL
-                # reports this ARGUMENT, not the `logger.info(` call above it, so a
-                # comment before the call — where the precedent's single-line
-                # `print(...)` puts it — does not apply here.
-                # codeql[py/clear-text-logging-sensitive-data]
-                fabric_holder_id,
+                # FALSE POSITIVE (py/clear-text-logging-sensitive-data). `fabric_holder_id`
+                # is a WA certificate id read back OUT of the store — the same class of
+                # identifier as the `node_id` suppressed earlier in this file, and not a
+                # credential. CodeQL taints it transitively because the store lookup's
+                # ARGUMENTS derive from the setup request, which also carries a password
+                # field the lookup never reads.
+                #
+                # The suppression goes on the SAME line as the flagged expression. Placing
+                # it above the `logger.info(` call did not apply (the alert is on the
+                # argument), and neither did the line directly above the argument. The
+                # precedent earlier in this file only works because its statement is a
+                # single line, which puts the comment on the alert's line by construction.
+                fabric_holder_id,  # codeql[py/clear-text-logging-sensitive-data]
             )
             # Annotated because this is now the FIRST binding in the function, so
             # an unannotated str here makes mypy reject the later `= None` on the

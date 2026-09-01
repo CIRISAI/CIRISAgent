@@ -178,3 +178,89 @@ def test_lower_rungs_are_available_for_diagnosis(tmp_path: Path, require: str) -
     """
     r = _run(tmp_path, "\n".join([ROOTED, KEX]), "--require", require)
     assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_a_missing_instrument_is_not_a_failed_delivery(tmp_path: Path) -> None:
+    """CIRISServer#518: the wheel exposes no replication counter.
+
+    Grading that as a delivery FAILURE reports a fact we have no way to observe —
+    the same error, inverted, as passing on `envelopes_sent_total` because it
+    happened to be present. The agent's own probe says ABSENT in as many words,
+    so the two states are distinguishable and must be distinguished.
+
+    Exit 3, NOT 0. Zero would run the caller's SUCCESS branch, and the workflow
+    would record `"traces": true` for a run whose own output says NOT COVERED —
+    the check asserting the opposite of what it printed. Three states need three
+    codes: 0 delivered, 1 did not, 3 could not be observed.
+    """
+    r = _run(
+        tmp_path,
+        "\n".join(
+            [
+                ROOTED,
+                KEX,
+                "[TRACE-SHIP] phase=x replication_envelopes_served_total ABSENT from delivery_status (top-level keys: [])",
+            ]
+        ),
+    )
+    assert r.returncode == 3, "unobservable must be its own code, not success\n" + r.stdout
+    assert "NOT COVERED" in r.stdout
+    assert "CIRISServer#518" in r.stdout
+    assert "PASS" not in r.stdout, "an unobservable rung must never read as a pass"
+
+
+def test_a_present_counter_at_zero_is_still_fatal(tmp_path: Path) -> None:
+    """The escape hatch must not widen into 'zero is fine'.
+
+    If the counter EXISTS and reads zero, the replication plane ran and served
+    nothing — observable, and a real failure.
+    """
+    r = _run(
+        tmp_path,
+        "\n".join([ROOTED, KEX, "[TRACE-SHIP] phase=ship-confirmed replication_envelopes_served_total=0"]),
+    )
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "NOT COVERED" not in r.stdout
+
+
+def test_an_unobservable_rung_does_not_burn_the_wait_window(tmp_path) -> None:
+    """3 is terminal, like 0 — waiting cannot make it observable.
+
+    `--wait-secs` exists because delivery is ASYNCHRONOUS: a rung that has not
+    appeared yet may appear. But NOT COVERED says the running substrate exposes
+    no replication counter at all, which no amount of re-reading changes. The
+    workflow passes --wait-secs 240, so this spent four minutes per platform —
+    eight per two-platform runner — reprinting the verdict the first read had.
+    """
+    import time
+
+    started = time.monotonic()
+    r = _run(
+        tmp_path,
+        "\n".join([ROOTED, KEX, "[TRACE-SHIP] replication_envelopes_served_total ABSENT from delivery_status"]),
+        "--wait-secs",
+        "60",
+    )
+    elapsed = time.monotonic() - started
+    assert r.returncode == 3
+    assert elapsed < 20, f"exit 3 waited {elapsed:.0f}s; it must be terminal"
+
+
+def test_a_real_failure_still_retries(tmp_path) -> None:
+    """The escape hatch must not turn into 'never wait'.
+
+    A zero counter CAN become non-zero while we wait — that is the whole reason
+    the wait exists, and it must keep working.
+    """
+    import time
+
+    started = time.monotonic()
+    r = _run(
+        tmp_path,
+        "\n".join([ROOTED, KEX, "[TRACE-SHIP] replication_envelopes_served_total=0"]),
+        "--wait-secs",
+        "12",
+    )
+    elapsed = time.monotonic() - started
+    assert r.returncode == 1
+    assert elapsed >= 10, f"a retryable failure returned after {elapsed:.0f}s without waiting"

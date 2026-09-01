@@ -331,6 +331,40 @@ class DesktopAppTestRunner:
 
         baseline_texts = _texts(await self.helper.get_elements())
 
+        # PRE-SEND HISTORY BASELINE. Without one, "an agent row exists" is
+        # satisfied by a row left over from an earlier interaction, so the
+        # assertion could pass on a conversation this run never had. Captured
+        # before the click, for the same reason the text baseline is.
+        import httpx
+
+        _args = _LAST_ARGS
+        api_port = getattr(_args, "api_port", None) or 8080
+        username = getattr(_args, "username", None) or "admin"
+        password = getattr(_args, "password", None) or "qa_test_password_12345"
+        api_base = f"http://127.0.0.1:{api_port}"
+        if not getattr(_args, "username", None):
+            self._log(f"WARNING: no --username given; falling back to '{username}'")
+        self._log(f"Asserting reply via {api_base}/v1/agent/history as '{username}'")
+
+        async def _history(client, headers):
+            r = await client.get(f"{api_base}/v1/agent/history?limit=50", headers=headers)
+            r.raise_for_status()
+            return r.json()["data"]["messages"]
+
+        _http = httpx.AsyncClient(timeout=30.0)
+        _r = await _http.post(
+            f"{api_base}/v1/auth/login", json={"username": username, "password": password}
+        )
+        _r.raise_for_status()
+        _headers = {"Authorization": f"Bearer {_r.json()['access_token']}"}
+        try:
+            baseline_ids = {m.get("id") for m in await _history(_http, _headers)}
+        except (httpx.HTTPError, KeyError, ValueError) as exc:
+            self._log(f"pre-send history unavailable ({type(exc).__name__}); baseline empty")
+            baseline_ids = set()
+        self._log(f"History baseline: {len(baseline_ids)} existing message(s)")
+
+
         # Click send button
         async def click_send():
             self._log("Clicking send button...")
@@ -340,75 +374,97 @@ class DesktopAppTestRunner:
         await self.run_test("click_send_button", click_send)
 
         async def wait_for_response():
-            """The agent must actually answer.
+            """The agent must actually answer — asserted through /v1/agent/history.
 
-            This used to be `await asyncio.sleep(5)` with the comment "we don't
-            have a way to detect response yet" — so the step passed whether the
-            agent replied, errored, or was never wired to an LLM at all. A chat
-            test that cannot fail on silence is not testing the chat; it is the
-            same class of hole as the Amharic install that sent two messages,
-            showed "Disconnected", and produced no reply and no error.
+            WHY NOT THE SCREEN, AFTER THREE ATTEMPTS TO MAKE THE SCREEN WORK.
 
-            We are the AI: a message in must produce a message out. With the mock
-            LLM that is deterministic, so silence here is a real defect.
+            `/tree` is keyed on testTag: `desktop_app_helper.get_elements()` reads
+            `elem["testTag"]` for every entry, so the endpoint only reports TAGGED
+            composables. The chat transcript is not tagged, so no message bubble —
+            ours or the agent's — is visible to automation at all.
 
-            Asserted through the UI rather than the API because this is the UI
-            suite, and because the API answering while the screen stays empty is
-            precisely the failure worth catching.
+            That is not a theory. Run 33509242206 failed with
 
-            THE SIGNAL IS NEW TEXT THAT WE DID NOT SEND. Not element count — see
-            the baseline above for why that could not fail. A reply is text on
-            screen that was not there before and is not the echo of our own
-            message.
+                Text on screen at failure: <nothing new at all — the echo did not
+                render either>
 
-            Chrome is excluded explicitly: the message counter ("Showing last N
-            messages") changes when the echo renders, so accepting any new text
-            would reinstate the same hole one layer down.
+            while the screenshot from that same instant shows both bubbles:
+
+                You    Hello, can you hear me?                     12:45 PM
+                CIRIS  Hello! Yes, I can hear you. How can I …     12:46 PM
+
+            Every text-diffing version of this check was therefore measuring an
+            empty set, and the two earlier "fixes" (a longer deadline, a narrower
+            blocklist) were adjustments to a signal that was never there. The
+            transcript being untagged is a real gap in the client's test surface
+            and is filed upstream; it is not something this gate can wait out.
+
+            So assert where the content actually is. `/v1/agent/history` returns
+            ConversationMessage with `is_agent`, which is the fact under test —
+            "the agent produced an answer to what the UI sent" — and it cannot be
+            satisfied by chrome, by our own echo, or by a placeholder, because
+            those are not agent-authored rows.
+
+            The screenshot remains the human-facing evidence that it RENDERED;
+            this is the machine-checkable evidence that it EXISTS.
             """
             sent = message.strip()
 
-            # WHAT COUNTS AS "NOT A REPLY" IS DATA, NOT A GUESS.
-            #
-            # A hand-written regex here was wrong: it excluded "sending" and "…"
-            # but would have ACCEPTED the product's own
-            #   agent.still_processing  "Still processing. Check back later.
-            #                            Agent response is not guaranteed."
-            #   agent.error_generic     "I encountered an issue processing your
-            #                            request. Please try again."
-            # Both are strings the UI renders INSTEAD of an answer, so a run where
-            # the agent errored or stalled would have gone green. A blocklist of
-            # chrome leaks by construction, because chrome is open-ended.
-            #
-            # Every string the product can render is in the localization bundle,
-            # so the bundle IS the blocklist. Anything the app can say on its own
-            # is excluded; what remains is text that came from the model.
-            product_strings = _product_strings()
-            # Still keep a small structural filter for values the bundle cannot
-            # contain: timestamps and the message counter are formatted at runtime.
-            chrome = re.compile(r"^(showing last \d+ messages?|\d{1,2}:\d{2}\s*(am|pm)?|\.\.\.|·+)$", re.I)
+            try:
+                deadline = datetime.now() + timedelta(seconds=RESPONSE_DEADLINE_SECONDS)
+                last_seen: list = []
+                while datetime.now() < deadline:
+                    await asyncio.sleep(2.0)
+                    try:
+                        msgs = await _history(_http, _headers)
+                    except (httpx.HTTPError, KeyError, ValueError) as exc:
+                        self._log(f"history poll failed (retrying): {type(exc).__name__}: {exc}")
+                        continue
 
-            deadline = datetime.now() + timedelta(seconds=45)
-            while datetime.now() < deadline:
-                await asyncio.sleep(1.0)
-                fresh = _texts(await self.helper.get_elements()) - baseline_texts
-                replies = [
-                    t
-                    for t in fresh
-                    if t != sent and not chrome.match(t) and t not in product_strings and len(t) > 1
-                ]
-                if replies:
-                    elapsed = 45 - (deadline - datetime.now()).total_seconds()
-                    preview = max(replies, key=len)[:80]
-                    self._log(f'Reply rendered after {elapsed:.1f}s: "{preview}"')
-                    return
-            raise RuntimeError(
-                "No reply rendered within 45s.\n"
-                "        The message was sent and the only new text on screen was our own\n"
-                "        echo and UI chrome — the agent did not answer, or answered\n"
-                "        somewhere the screen does not show.\n"
-                "        Check the LLM is configured (the wizard's AI screen) and the\n"
-                "        app log for send/receive errors."
-            )
+                    last_seen = msgs
+                    # STRICT, AND EVERY CLAUSE EARNED ITS PLACE:
+                    #
+                    #  * NEW — absent from the pre-send baseline. An agent row from an
+                    #    earlier interaction is not an answer to THIS message.
+                    #  * message_type == "agent", NOT `is_agent`. The API sets
+                    #    is_agent=True for message_type "system" AND "error" on purpose,
+                    #    so the agent does not re-observe its own notifications
+                    #    (routes/agent.py: `if message_type in ("system", "error")`).
+                    #    Keying on is_agent therefore accepts the error text emitted when
+                    #    processing FAILED as proof that it succeeded — green exactly
+                    #    when the product broke.
+                    #  * non-empty, and not our own echo.
+                    replies = [m for m in msgs if _is_new_agent_reply(m, baseline_ids, sent)]
+                    if replies:
+                        elapsed = RESPONSE_DEADLINE_SECONDS - (deadline - datetime.now()).total_seconds()
+                        reply = replies[-1]["content"].strip()
+                        self._log(f'Agent replied after {elapsed:.1f}s: "{reply[:100]}"')
+                        return
+
+                fresh = [m for m in last_seen if m.get("id") not in baseline_ids]
+                self._log(f"Conversation at failure: {len(last_seen)} message(s), {len(fresh)} new:")
+                for m in fresh[-8:]:
+                    self._log(f"    | [{m.get('message_type', '?')}] {(m.get('content') or '')[:110]}")
+                if not fresh:
+                    self._log("    | <nothing new — the message never reached the agent>")
+                errored = [m for m in fresh if m.get("message_type") in ("error", "system")]
+                extra = (
+                    f"\n        {len(errored)} error/system row(s) arrived INSTEAD of an answer —"
+                    "\n        the agent was reached and failed, rather than staying silent."
+                    if errored
+                    else ""
+                )
+                raise RuntimeError(
+                    f"No new agent reply within {RESPONSE_DEADLINE_SECONDS}s.{extra}\n"
+                    "        The UI sent the message and /v1/agent/history shows no NEW\n"
+                    "        message_type=='agent' row, so the agent did not answer.\n"
+                    "        NOTE: this does NOT prove the reply rendered on screen — the\n"
+                    "        transcript is absent from /tree (CIRISClient#27); the\n"
+                    "        screenshot is the only client-side evidence.\n"
+                    "        Check the LLM is configured and the agent log for DMA errors."
+                )
+            finally:
+                await _http.aclose()
 
         await self.run_test("wait_for_response", wait_for_response)
 
@@ -522,9 +578,31 @@ class DesktopAppTestRunner:
                     if model_tag and f"menu_model_{model_tag}" in menu:
                         await self.helper.click(f"menu_model_{model_tag}")
                         self._log(f"AI (BYOK): selected requested model {model!r} from live dropdown")
+                    elif model_tag:
+                        # ASKED FOR A MODEL AND IT IS NOT THERE. Silently taking
+                        # another one means the run reports on a model nobody chose.
+                        raise RuntimeError(
+                            f"requested model {model!r} is not in the live dropdown "
+                            f"({len(menu)} offered). Refusing to substitute: a gate that "
+                            f"quietly tests a different model than the one pinned is "
+                            f"reporting on something nobody selected."
+                        )
                     elif menu:
+                        # LAST RESORT, AND IT IS A REAL RISK. The list is sorted, so
+                        # this takes whatever is alphabetically first — on OpenRouter
+                        # that is `aion-labs/aion-2.0`, which MANDATES reasoning and
+                        # answers HTTP 400 to every call CIRIS makes. A whole gate run
+                        # failed that way, reporting "no reply rendered" for a model it
+                        # had picked for itself.
+                        #
+                        # Kept for suites with no pinned model, but it now says loudly
+                        # that the choice was arbitrary.
                         await self.helper.click(menu[0])
-                        self._log(f"AI (BYOK): selected {menu[0]} (first of {len(menu)} live models)")
+                        self._log(
+                            f"AI (BYOK): no --llm-model pinned; taking {menu[0]}, the FIRST of "
+                            f"{len(menu)} models in alphabetical order. This is arbitrary — if the "
+                            f"run fails with provider 4xx, pin a known-good model instead."
+                        )
                     else:
                         self._log("AI (BYOK): model dropdown present but empty; provider default stands")
                     return
@@ -1490,7 +1568,15 @@ def _apply_platform_defaults(args: argparse.Namespace) -> None:
         if args.desktop_port == 8091:
             args.desktop_port = 9091
     if args.api_port is None:
-        args.api_port = 8080
+        # DEFAULT TO THE BACKEND PORT THE RUN IS ACTUALLY USING.
+        #
+        # `--port` is what everything else honours — the adb forward, the health
+        # probe, the app's own backend. Hardcoding 8080 here meant that with
+        # `--port 9000` the UI would send successfully to 9000 while the reply
+        # assertion logged into 8080: a closed port, or worse, an UNRELATED
+        # server that answers. The check would then report on a conversation
+        # that was never had.
+        args.api_port = getattr(args, "port", None) or 8080
 
 
 def list_tests() -> None:
@@ -1855,6 +1941,14 @@ def _start_emulator(avd: str) -> Optional[subprocess.Popen]:
         "-no-audio",
         "-no-boot-anim",
     ]
+    # HEADLESS ON CI. A hosted runner has no GPU and, on the Linux image, only
+    # the Xvfb display this workflow starts for the desktop app. Left to
+    # autodetect, the emulator negotiates host GPU rendering and spends the whole
+    # boot window failing to — it never reaches adb, and the error you get is a
+    # timeout that says nothing about graphics. swiftshader_indirect is the
+    # software renderer Google documents for exactly this.
+    if os.environ.get("CI"):
+        cmd += ["-no-window", "-gpu", "swiftshader_indirect"]
     log_path = temp_path("ciris_android_emulator.log")
     log_file = open(log_path, "w")
     print(f"  emulator: starting {avd} (log: {log_path})")
@@ -1871,6 +1965,17 @@ def _ensure_emulator(args: argparse.Namespace) -> Optional[str]:
 
     # No emulator → boot the requested AVD.
     paths = _android_sdk_paths()
+    # A MISSING EMULATOR IS A SETUP PROBLEM, NOT A CRASH. GitHub's ubuntu
+    # runners ship the Android SDK but neither the emulator package nor any
+    # system image, so this raised a bare FileNotFoundError mid-traceback and
+    # the actual cause — one absent binary — had to be read out of a stack.
+    if not Path(paths["emulator"]).exists():
+        print(f" [FAIL] no emulator binary at {paths['emulator']}")
+        print("        The Android SDK is present but the emulator package is not.")
+        print("        Install it with:")
+        print('          sdkmanager "emulator" "system-images;android-34;google_apis;x86_64"')
+        print('          avdmanager create avd -n ciris_qa -k "system-images;android-34;google_apis;x86_64"')
+        return None
     list_out = subprocess.run([str(paths["emulator"]), "-list-avds"], capture_output=True, text=True, timeout=10).stdout
     avds = [a.strip() for a in list_out.splitlines() if a.strip()]
     if not avds:
@@ -1883,8 +1988,15 @@ def _ensure_emulator(args: argparse.Namespace) -> Optional[str]:
     if _start_emulator(avd) is None:
         return None
 
-    # Wait for the device to appear in adb.
-    deadline = time.time() + 90
+    # COLD BOOT TAKES MINUTES, NOT 90 SECONDS.
+    #
+    # 90s was the deadline and the emulator never made it: "emulator did not
+    # appear in adb within 90s" on a run where provisioning had worked and the
+    # AVD had genuinely started. A cold x86_64 system image on a hosted runner
+    # routinely needs 2-4 minutes before adb sees it — so the gate was reporting
+    # a bring-up failure for an emulator that was simply still booting, the same
+    # too-short-deadline mistake as the 45s reply assertion.
+    deadline = time.time() + int(os.environ.get("CIRIS_QA_EMULATOR_BOOT_SECONDS", "300"))
     while time.time() < deadline:
         serial = _pick_emulator_serial(args.android_device)
         if serial:
@@ -1903,24 +2015,60 @@ def _ensure_emulator(args: argparse.Namespace) -> Optional[str]:
 
 
 def _find_debug_apk() -> Optional[Path]:
-    repo_root = Path(__file__).resolve().parents[4]
-    candidate = repo_root / "apps" / "android" / "build" / "outputs" / "apk" / "debug" / "androidApp-debug.apk"
-    return candidate if candidate.exists() else None
+    """Locate the built debug APK.
+
+    GLOB, DO NOT HARDCODE. This named one exact file, carrying the module name
+    the shell had before it became `:android` (apps/settings.gradle.kts). Gradle
+    emits its artifact under the CURRENT module name, so the finder would have
+    missed a perfectly good APK sitting right beside the one it was looking for,
+    and reported the build as not-yet-done forever.
+
+    Globbing the debug output directory means the module can be renamed again
+    without silently breaking this.
+    """
+    out = _apps_root() / "android" / "build" / "outputs" / "apk" / "debug"
+    apks = sorted(out.glob("*-debug.apk"))
+    if not apks:
+        return None
+    if len(apks) > 1:
+        print(f"  note: {len(apks)} debug APKs in {out}; using {apks[0].name}")
+    return apks[0]
+
+
+def _apps_root() -> Path:
+    """The gradle root that owns the app shells.
+
+    NOT `client/`. apps/settings.gradle.kts is explicit that the shared client is
+    no longer built from source here — it arrives as a published .aar and this
+    tree holds only the shells, with `include(":android")`. The APK builder was
+    never migrated, so it ran `./gradlew` in a `client/` directory that this
+    repo does not contain:
+
+        FileNotFoundError: .../CIRISAgent/client
+
+    on a runner where the emulator had booted and everything else was ready. The
+    APK FINDER already pointed at apps/; only the builder was left behind, so the
+    two halves of the same file disagreed about where the app comes from.
+    """
+    return Path(__file__).resolve().parents[4] / "apps"
 
 
 def _build_debug_apk() -> bool:
-    repo_root = Path(__file__).resolve().parents[4]
-    client_dir = repo_root / "client"
-    print("  building debug APK (./gradlew :android:assembleDebug)…")
+    apps_dir = _apps_root()
+    gradlew = apps_dir / "gradlew"
+    if not gradlew.exists():
+        print(f" [FAIL] no gradle wrapper at {gradlew}")
+        return False
+    print(f"  building debug APK (./gradlew :android:assembleDebug in {apps_dir})…")
     r = subprocess.run(
         ["./gradlew", ":android:assembleDebug"],
-        cwd=str(client_dir),
+        cwd=str(apps_dir),
         capture_output=True,
         text=True,
-        timeout=600,
+        timeout=1800,
     )
     if r.returncode != 0:
-        print(f" [FAIL] gradle build failed:\n{r.stdout[-2000:]}\n{r.stderr[-2000:]}")
+        print(f" [FAIL] gradle build failed:\n{r.stdout[-3000:]}\n{r.stderr[-2000:]}")
         return False
     return True
 
@@ -2355,43 +2503,35 @@ def _kill_iproxy_children() -> None:
             pass
 
 
-def _product_strings() -> set:
-    """Every string the CLIENT can render on its own, from the localization bundle.
+#: How long to wait for a rendered reply. Must EXCEED the agent's own
+#: `interaction_timeout` (APIAdapterConfig, 110s), because until interact returns
+#: the client has nothing to render and a shorter deadline measures our patience
+#: rather than the product. Set from CIRIS_QA_RESPONSE_DEADLINE for a slow host.
+RESPONSE_DEADLINE_SECONDS = int(os.environ.get("CIRIS_QA_RESPONSE_DEADLINE", "150"))
 
-    Used as the exclusion set for "did the agent reply": if the app could have
-    produced the text by itself, it is not evidence of an answer. This is the
-    blocklist as DATA — the alternative is enumerating chrome by hand, which
-    already missed `agent.still_processing` and `agent.error_generic`, the two
-    strings the UI shows precisely when there is no answer.
 
-    Best-effort: an empty set degrades to the structural filter alone, which is
-    the pre-existing behaviour rather than a new failure mode.
+def _is_new_agent_reply(msg: dict, baseline_ids: set, sent: str) -> bool:
+    """Is this history row a NEW answer from the agent to the message we sent?
+
+    Every clause closes a way this went green while the product was silent or
+    broken:
+
+      * NEW — absent from the pre-send baseline. Any agent row from an earlier
+        interaction would otherwise satisfy "an agent replied".
+      * message_type == "agent", NOT `is_agent`. routes/agent.py sets
+        `is_agent = True` for message_type "system" AND "error" deliberately,
+        so the agent does not re-observe its own notifications. Keying on
+        is_agent accepts the error text emitted when processing FAILED as
+        proof that it succeeded — green exactly when the product broke.
+      * non-empty, and not the echo of what we sent.
     """
-    repo = Path(__file__).resolve().parents[4]
-    candidates = [
-        repo / "localization" / "en.json",
-        repo / "apps" / "android" / "src" / "main" / "assets" / "localization" / "en.json",
-    ]
-    out: set = set()
-    for path in candidates:
-        if not path.exists():
-            continue
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            continue
+    if msg.get("id") in baseline_ids:
+        return False
+    if msg.get("message_type") != "agent":
+        return False
+    content = (msg.get("content") or "").strip()
+    return bool(content) and content != sent
 
-        def walk(node: object) -> None:
-            if isinstance(node, dict):
-                for value in node.values():
-                    walk(value)
-            elif isinstance(node, str):
-                text = node.strip()
-                if text:
-                    out.add(text)
-
-        walk(data)
-    return out
 
 
 def qa_log_dir() -> Path:
@@ -2449,6 +2589,31 @@ def _fail(step: str, proc: Optional[subprocess.CompletedProcess] = None, hint: s
     print(f"        full output: {qa_log_dir()}")
 
 
+def _ios_startup_state(udid: str, bundle_id: str) -> str:
+    """One-line summary of how far the app has got, for the wait's progress lines.
+
+    The app writes into Documents/ciris inside its data container, so the
+    presence of a data dir, a database and log files is a coarse but honest
+    progress bar for a startup that otherwise reports nothing until its HTTP
+    server binds. "no container yet" and "logs but no db" are different failures
+    and used to look identical from outside.
+    """
+    box = _simctl(["get_app_container", udid, bundle_id, "data"], timeout=30)
+    root = (box.stdout or "").strip().splitlines()
+    if not root or not root[0].startswith("/"):
+        return "container=<none>"
+    base = Path(root[0]) / "Documents" / "ciris"
+    if not base.exists():
+        return "container=ok ciris=<not created>"
+    bits = []
+    for name, pattern in (("logs", "logs/*.log"), ("db", "data/*.db")):
+        hits = sorted(base.glob(pattern))
+        bits.append(f"{name}={len(hits)}")
+    newest = max((f.stat().st_mtime for f in base.rglob("*") if f.is_file()), default=0)
+    age = f"{time.time() - newest:.0f}s" if newest else "n/a"
+    return f"container=ok {' '.join(bits)} last-write={age}-ago"
+
+
 def _ios_diagnostics(udid: str, bundle_id: str) -> None:
     """Dump everything that explains an iOS bring-up failure, to files.
 
@@ -2480,6 +2645,38 @@ def _ios_diagnostics(udid: str, bundle_id: str) -> None:
             print(f"    {name}: rc={proc.returncode} -> {qa_log_dir() / (name + '.log')}")
         except Exception as exc:  # noqa: BLE001
             print(f"    {name}: could not collect ({type(exc).__name__})")
+
+    # THE APP'S OWN LOGS, which os_log does not carry. The Python runtime writes
+    # into Documents/ciris/logs inside the data container, and that is where a
+    # startup that stalls mid-initialisation says WHY — os_log only shows that
+    # the process is alive. Without these, a bring-up failure is diagnosable
+    # only down to "it did not answer".
+    try:
+        box = _simctl(["get_app_container", udid, bundle_id, "data"], timeout=60)
+        root = (box.stdout or "").strip().splitlines()
+        base = Path(root[0]) / "Documents" / "ciris" if root and root[0].startswith("/") else None
+        if base and base.exists():
+            dest = qa_log_dir() / "ios-app-logs"
+            dest.mkdir(parents=True, exist_ok=True)
+            copied = 0
+            for f in sorted(base.rglob("*.log")) + sorted(base.rglob("*.txt")):
+                if f.is_file():
+                    shutil.copy2(f, dest / f.name)
+                    copied += 1
+            print(f"    ios-app-logs: {copied} file(s) -> {dest}")
+            # Surface the newest incident inline: the artifact is for later, but
+            # the reason should be readable in the job log without a download.
+            incidents = sorted(base.rglob("incidents_latest.log"))
+            if incidents:
+                tail = incidents[0].read_text(encoding="utf-8", errors="replace").splitlines()[-25:]
+                print(f"    --- {incidents[0].name} (last {len(tail)} lines) ---")
+                for line in tail:
+                    print(f"      {line[:160]}")
+        else:
+            print("    ios-app-logs: no Documents/ciris in the container — the app "
+                  "had not started writing yet")
+    except Exception as exc:  # noqa: BLE001
+        print(f"    ios-app-logs: could not collect ({type(exc).__name__}: {exc})")
 
 
 def _simctl(args: List[str], timeout: int = 120) -> subprocess.CompletedProcess:
@@ -2697,20 +2894,55 @@ async def run_ios_simulator_up(args: argparse.Namespace) -> int:
     # 5. Poll /health — the same signal android-up waits on.
     port = getattr(args, "desktop_port", None) or 9091
     server_url = f"http://localhost:{port}"
-    print(f"[5/5] Waiting for the test server at {server_url}…")
-    deadline = time.time() + 120
+    # 120s IS THE BUDGET, NOT A GUESS. iOS comes up in ~15-20s when it is
+    # working, so if the test server has not bound in two minutes something is
+    # WRONG and waiting longer just delays the report. What was missing was not
+    # patience — it was any record of what the app was doing while we waited:
+    # the failure said "no /health in 120s" and nothing about the state of the
+    # thing that did not answer.
+    wait_secs = int(os.environ.get("CIRIS_QA_IOS_HEALTH_SECONDS", "120"))
+    print(f"[5/5] Waiting for the test server at {server_url} (up to {wait_secs}s)…")
+    deadline = time.time() + wait_secs
+    started = time.time()
+    last_note = 0.0
     while time.time() < deadline:
         try:
             r = requests.get(f"{server_url}/health", timeout=2)
             if r.status_code == 200:
-                print(" [OK] iOS simulator ready")
+                print(f" [OK] iOS simulator ready after {time.time() - started:.0f}s")
                 return 0
         except Exception:  # noqa: BLE001
             pass
+
+        # A DEAD APP IS NOT A SLOW APP. Without this the two are indistinguishable
+        # from the outside — both are "no answer on 9091" — and a crash burned the
+        # whole window before reporting a timeout that named the wrong cause.
+        # TIMESTAMPED PROGRESS, so the log shows WHERE it stopped rather than
+        # only that it did. Each line carries the wall clock (to correlate with
+        # os_log), the elapsed time, whether the process is still alive, and how
+        # far the app has got in writing its own state into the container.
+        elapsed = time.time() - started
+        if elapsed - last_note >= 15:
+            last_note = elapsed
+            alive = _simctl(["spawn", udid, "launchctl", "list"], timeout=30)
+            running = bundle_id in (alive.stdout or "")
+            stamp = datetime.now().strftime("%H:%M:%S")
+            print(f"  [{stamp}] +{elapsed:.0f}s  app={'running' if running else 'EXITED'}  {_ios_startup_state(udid, bundle_id)}")
+            # A DEAD APP IS NOT A SLOW APP. From outside both are "no answer on
+            # 9091"; only one is worth waiting for, so stop as soon as we know.
+            if not running:
+                _fail(
+                    f"the app EXITED while we waited for {server_url}/health after {elapsed:.0f}s",
+                    hint="It launched and then stopped, so this is a crash on startup\n"
+                         "rather than a slow one. The os_log dump below covers the\n"
+                         "launch window.",
+                )
+                _ios_diagnostics(udid, bundle_id)
+                return 1
         time.sleep(2)
 
     _fail(
-        f"no /health from {server_url} within 120s",
+        f"no /health from {server_url} within {wait_secs}s",
         hint="The app launched but its TestAutomationServer never answered.\n"
              "Most likely causes, in order:\n"
              "  1. CIRIS_TEST_MODE did not reach the app — simctl only forwards env\n"
@@ -3326,18 +3558,19 @@ async def _main_with_capture() -> int:
     `interact`, tomorrow's p2p chat or video — gets the same review artifact
     without opting in.
 
-    ONLY ON SUCCESS, deliberately. A failure screenshot is a different artifact
-    with a different audience (debugging, not review), and the commands already
-    dump diagnostics on the failure path. Mixing them would make the gallery a
-    mix of "here is what shipped" and "here is what broke".
+    ON SUCCESS *AND* FAILURE. This was success-only on the theory that the
+    gallery should show "what shipped", not "what broke". That cost a whole
+    run: the reply assertion failed, there was no screenshot, and the one
+    question worth answering — was the answer on screen? — could not be settled
+    from the artifacts at all. The failing screen is the single most useful
+    frame in the run, and the gallery already labels each tile PASS/FAIL, so a
+    red tile with a photograph beats a red tile with a gap.
 
     The capture NEVER changes the exit code. It is evidence for a human, not an
     assertion: a run that answered correctly but could not be photographed still
     passed, and failing it would make the gallery a source of false red.
     """
     rc = await main()
-    if rc != 0:
-        return rc
 
     dest = getattr(_LAST_ARGS, "screenshot_on_success", None) if _LAST_ARGS else None
     if not dest:

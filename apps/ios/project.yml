@@ -47,10 +47,18 @@ targets:
           FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]:
             - $(inherited)
             - $(PROJECT_DIR)/../shared/build/bin/iosArm64/debugFramework
+            # Published client (CIRISClient ships shared.xcframework; see
+            # apps/settings.gradle.kts — there is no :shared module here any more).
+            # Listed AFTER the gradle path so a source checkout still wins.
+            - $(PROJECT_DIR)/Frameworks/shared.xcframework/ios-arm64
             - $(PROJECT_DIR)/Frameworks
           FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*]:
             - $(inherited)
             - $(PROJECT_DIR)/../shared/build/bin/iosSimulatorArm64/debugFramework
+            # Published client (CIRISClient ships shared.xcframework; see
+            # apps/settings.gradle.kts — there is no :shared module here any more).
+            # Listed AFTER the gradle path so a source checkout still wins.
+            - $(PROJECT_DIR)/Frameworks/shared.xcframework/ios-arm64-simulator
             - $(PROJECT_DIR)/Frameworks
           HEADER_SEARCH_PATHS[sdk=iphoneos*]:
             - $(inherited)
@@ -64,10 +72,18 @@ targets:
           FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]:
             - $(inherited)
             - $(PROJECT_DIR)/../shared/build/bin/iosArm64/releaseFramework
+            # Published client (CIRISClient ships shared.xcframework; see
+            # apps/settings.gradle.kts — there is no :shared module here any more).
+            # Listed AFTER the gradle path so a source checkout still wins.
+            - $(PROJECT_DIR)/Frameworks/shared.xcframework/ios-arm64
             - $(PROJECT_DIR)/Frameworks
           FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*]:
             - $(inherited)
             - $(PROJECT_DIR)/../shared/build/bin/iosSimulatorArm64/releaseFramework
+            # Published client (CIRISClient ships shared.xcframework; see
+            # apps/settings.gradle.kts — there is no :shared module here any more).
+            # Listed AFTER the gradle path so a source checkout still wins.
+            - $(PROJECT_DIR)/Frameworks/shared.xcframework/ios-arm64-simulator
             - $(PROJECT_DIR)/Frameworks
           HEADER_SEARCH_PATHS[sdk=iphoneos*]:
             - $(inherited)
@@ -140,10 +156,31 @@ targets:
 
           FRAMEWORK_PATH="${SHARED_FRAMEWORK_DIR}/${ARCH}/${BUILD_TYPE}/shared.framework"
 
+          # FALL BACK TO THE PUBLISHED xcframework.
+          #
+          # apps/settings.gradle.kts says it plainly: "The shared Kotlin/Compose
+          # client is NOT built here any more... there is no :shared module" — it
+          # ships as ciris-client-<v>.xcframework.zip, which unpacks to
+          # Frameworks/shared.xcframework. This script and SHARED_FRAMEWORK_DIR
+          # were never updated for that move, so they still point at
+          # apps/shared/build/bin, a directory this repo does not contain. Any
+          # machine without a leftover source checkout fails here.
+          #
+          # Gradle output is still preferred, so a developer building from source
+          # is unaffected; the published slice is used only when it is absent.
           if [ ! -d "$FRAMEWORK_PATH" ]; then
-            echo "error: shared.framework not found at $FRAMEWORK_PATH"
-            echo "Run: cd mobile && ./gradlew :shared:linkReleaseFrameworkIosArm64"
-            exit 1
+            if [ "$ARCH" = "iosArm64" ]; then SLICE="ios-arm64"; else SLICE="ios-arm64-simulator"; fi
+            PUBLISHED="${PROJECT_DIR}/Frameworks/shared.xcframework/${SLICE}/shared.framework"
+            if [ -d "$PUBLISHED" ]; then
+              echo "Using published shared.framework ($SLICE) — no gradle build present"
+              FRAMEWORK_PATH="$PUBLISHED"
+            else
+              echo "error: shared.framework not found at $FRAMEWORK_PATH"
+              echo "       and no published slice at $PUBLISHED"
+              echo "Either build it (cd client && ./gradlew :shared:linkDebugFrameworkIosSimulatorArm64)"
+              echo "or fetch it (python3 tools/fetch_client_artifacts.py --platform ios)"
+              exit 1
+            fi
           fi
 
           # Check if static (.a) or dynamic (.dylib) framework

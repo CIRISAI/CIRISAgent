@@ -173,6 +173,11 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
             federation_identity_dir = get_identity_dir()  # <home>/identity
             node_key_id = _provision(get_federation_alias(), str(federation_identity_dir))
             logger.info("[NODE-KEY] node identity provisioned: %s", node_key_id)
+            # PUBLISH IT. node_fold boots the node and needs THIS name, not the
+            # agent's — see set_node_alias() for what happens when they differ.
+            from ciris_engine.logic.utils.path_resolution import set_node_alias
+
+            set_node_alias(node_key_id.rsplit("-", 1)[0])
     except Exception as _prov_exc:  # noqa: BLE001
         # Fail-closed is the substrate's job here, not ours: a provisioning failure
         # leaves the node unowned or unpeered, and CC 3.4.7.3 Clause D says that is

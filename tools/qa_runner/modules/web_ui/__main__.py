@@ -411,35 +411,69 @@ class DesktopAppTestRunner:
             sent = message.strip()
 
             try:
-                deadline = datetime.now() + timedelta(seconds=RESPONSE_DEADLINE_SECONDS)
                 last_seen: list = []
-                while datetime.now() < deadline:
-                    await asyncio.sleep(2.0)
-                    try:
-                        msgs = await _history(_http, _headers)
-                    except (httpx.HTTPError, KeyError, ValueError) as exc:
-                        self._log(f"history poll failed (retrying): {type(exc).__name__}: {exc}")
-                        continue
 
-                    last_seen = msgs
-                    # STRICT, AND EVERY CLAUSE EARNED ITS PLACE:
-                    #
-                    #  * NEW — absent from the pre-send baseline. An agent row from an
-                    #    earlier interaction is not an answer to THIS message.
-                    #  * message_type == "agent", NOT `is_agent`. The API sets
-                    #    is_agent=True for message_type "system" AND "error" on purpose,
-                    #    so the agent does not re-observe its own notifications
-                    #    (routes/agent.py: `if message_type in ("system", "error")`).
-                    #    Keying on is_agent therefore accepts the error text emitted when
-                    #    processing FAILED as proof that it succeeded — green exactly
-                    #    when the product broke.
-                    #  * non-empty, and not our own echo.
-                    replies = [m for m in msgs if _is_new_agent_reply(m, baseline_ids, sent)]
-                    if replies:
-                        elapsed = RESPONSE_DEADLINE_SECONDS - (deadline - datetime.now()).total_seconds()
-                        reply = replies[-1]["content"].strip()
-                        self._log(f'Agent replied after {elapsed:.1f}s: "{reply[:100]}"')
-                        return
+                async def _poll_for_reply() -> bool:
+                    """One deadline's worth of polling. True if the agent answered."""
+                    nonlocal last_seen
+                    deadline = datetime.now() + timedelta(seconds=RESPONSE_DEADLINE_SECONDS)
+                    while datetime.now() < deadline:
+                        await asyncio.sleep(2.0)
+                        try:
+                            msgs = await _history(_http, _headers)
+                        except (httpx.HTTPError, KeyError, ValueError) as exc:
+                            self._log(f"history poll failed (retrying): {type(exc).__name__}: {exc}")
+                            continue
+                        last_seen = msgs
+                        replies = [m for m in msgs if _is_new_agent_reply(m, baseline_ids, sent)]
+                        if replies:
+                            reply = replies[-1]["content"].strip()
+                            elapsed = RESPONSE_DEADLINE_SECONDS - (deadline - datetime.now()).total_seconds()
+                            self._log(f'Agent replied after {elapsed:.1f}s: "{reply[:100]}"')
+                            return True
+                    return False
+
+                # ONE RETRY, FOR PROVIDER RATE LIMITING ONLY.
+                #
+                # Three platforms drive one OpenRouter key concurrently, and a Windows run
+                # failed with exactly this and nothing else:
+                #     [error] Rate limited by openai_compatible_primary. Retrying in 6.7s...
+                #     [error] LLM call failed (InstructorRetryException)
+                # The agent behaved correctly — it reported the provider failure instead of
+                # inventing an answer — so failing the release gate there grades our
+                # shipping decision on someone else's quota.
+                #
+                # It cannot mask a real fault: a silent agent produces no new rows and a
+                # genuine DMA error carries no rate-limit text, so neither matches and both
+                # still fail on the first deadline.
+                if not await _poll_for_reply():
+                    fresh_now = [m for m in last_seen if m.get("id") not in baseline_ids]
+                    if any(
+                        m.get("message_type") in ("error", "system")
+                        and "rate limit" in (m.get("content") or "").lower()
+                        for m in fresh_now
+                    ):
+                        self._log(
+                            f"provider rate-limited within {RESPONSE_DEADLINE_SECONDS}s — "
+                            "resending once; this is quota, not the agent"
+                        )
+                        # `.update()`, NOT `|=`. An augmented assignment BINDS the name in
+                        # this scope, so `baseline_ids` — defined in the enclosing function
+                        # — became a local read before assignment:
+                        #     cannot access free variable 'baseline_ids' where it is not
+                        #     associated with a value in enclosing scope
+                        # which failed the Windows platform at runtime. `.update()` mutates
+                        # the same set without rebinding anything.
+                        baseline_ids.update(m.get("id") for m in last_seen if m.get("id"))
+                        resent = await self.helper.input_text("input_message", message) and await self.helper.click(
+                            "btn_send"
+                        )
+                        if resent and await _poll_for_reply():
+                            return
+                        if not resent:
+                            self._log("resend failed — reporting the original result")
+                else:
+                    return
 
                 fresh = [m for m in last_seen if m.get("id") not in baseline_ids]
                 self._log(f"Conversation at failure: {len(last_seen)} message(s), {len(fresh)} new:")
@@ -2174,21 +2208,38 @@ async def run_android_up(args: argparse.Namespace) -> int:
     server_url = f"http://localhost:{args.desktop_port}"
     deadline = time.time() + 90
     healthy = False
+    last_payload: dict = {}
     while time.time() < deadline:
         try:
             r = requests.get(f"{server_url}/health", timeout=2)
-            if r.status_code == 200 and r.json().get("status") == "ok":
+            payload = r.json() if r.status_code == 200 else {}
+            # ASSERT WHAT THE NEXT STEP REQUIRES, not something weaker.
+            # This accepted status=="ok" alone while run_desktop_tests demands
+            # testMode as well, so bring-up reported "[OK] reachable" and the
+            # very next line failed on the same URL. A precondition that is
+            # looser than its consumer's is not a check, it is a false green.
+            if payload.get("status") == "ok" and payload.get("testMode", False):
                 healthy = True
                 break
+            if payload.get("status") == "ok":
+                last_payload = payload
         except Exception:
             pass
         time.sleep(2)
     if not healthy:
-        print(
-            "  ⚠️  /health did not respond within 90s — the test server may not have started.\n"
-            "       Common causes: BuildConfig.TEST_MODE_ENABLED is false on this build, or the app\n"
-            "       crashed during init. Inspect with: adb logcat -d *:E"
-        )
+        if last_payload:
+            print(
+                f"  ⚠️  /health IS up but never reported testMode: {last_payload}\n"
+                "       The app is running WITHOUT test mode, so the automation cannot drive\n"
+                "       it. A debug build should set BuildConfig.TEST_MODE_ENABLED itself;\n"
+                "       confirm with: adb logcat -d | grep -i testmode"
+            )
+        else:
+            print(
+                "  ⚠️  /health did not respond within 90s — the test server may not have started.\n"
+                "       Common causes: BuildConfig.TEST_MODE_ENABLED is false on this build, or the app\n"
+                "       crashed during init. Inspect with: adb logcat -d *:E"
+            )
         return 1
     print(f" [OK] AndroidTestAutomationServer reachable at {server_url}")
 
@@ -3354,10 +3405,28 @@ async def run_desktop_tests(args: argparse.Namespace) -> int:
     server_url = f"http://localhost:{args.desktop_port}"
 
     if not await check_desktop_app_running(server_url):
-        print(f"\n[FAIL] CIRIS Desktop app is not running with test mode enabled.")
-        print(f"\nTo start the desktop app with test mode:")
-        print(f"  export CIRIS_TEST_MODE=true")
-        print(f"  cd client && ./gradlew :desktopApp:run")
+        # SAY WHAT ANSWERED. This printed one message for three different
+        # conditions and named only one of them, so on Android it announced that
+        # the DESKTOP app was not in test mode seconds after bring-up had
+        # reported the Android test server healthy on that very port.
+        from .desktop_app_helper import describe_test_server
+
+        print(f"\n[FAIL] the test server is not usable: {await describe_test_server(server_url)}")
+        platform = getattr(args, "platform", "desktop")
+        if platform == "android":
+            print("\nAndroid: the app is launched with `--es CIRIS_TEST_MODE true` and")
+            print("  `setprop debug.CIRIS_TEST_MODE true`, and a debug build should set")
+            print("  BuildConfig.TEST_MODE_ENABLED itself. If /health is up but testMode")
+            print("  is false, the build is not a test-mode build — check with:")
+            print("    adb shell am start -n <pkg>/<activity> --es CIRIS_TEST_MODE true")
+            print("    adb logcat -d | grep -i testmode")
+        elif platform == "ios":
+            print("\niOS: simctl forwards only SIMCTL_CHILD_-prefixed env vars;")
+            print("  CIRIS_TEST_MODE must be set as SIMCTL_CHILD_CIRIS_TEST_MODE.")
+        else:
+            print("\nTo start the desktop app with test mode:")
+            print("  export CIRIS_TEST_MODE=true")
+            print("  ciris-desktop        # or: CIRIS_TEST_MODE=true ciris-agent")
         return 1
 
     print("[OK] Desktop app running with test mode")

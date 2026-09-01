@@ -131,6 +131,43 @@ def _resolve_home() -> str:
     return str(get_ciris_home())
 
 
+
+def _repair_if_bricked_then_raise(node_error: object) -> None:
+    """Last stop for a boot that cannot succeed on this home.
+
+    A pre-2.9.47 install carries identity state that no code change can fix in
+    place: the node was registered under the AGENT's key, so the consent rows
+    setup wrote name a key this engine cannot sign as, and re-authoring them is
+    unsatisfiable by construction (CEG §5.6.8.15). The user cannot be told any of
+    this through the app, because the app is what will not start.
+
+    So the boot repairs itself once — archiving the damaged home, never deleting
+    it — and asks for a restart. The gate lives in `bricked_install` and is
+    narrow: a recognised signature, an install that predates the fix, and no
+    operator opt-out. Anything else re-raises untouched.
+    """
+    from pathlib import Path
+
+    from ciris_engine.constants import CIRIS_VERSION
+    from ciris_engine.logic.setup import bricked_install
+    from ciris_engine.logic.utils.path_resolution import get_ciris_home
+
+    err = RuntimeError(f"node fold failed to start (node-fails ⇒ agent-fails): {node_error}")
+    try:
+        archive = bricked_install.repair_if_bricked(Path(get_ciris_home()), err, CIRIS_VERSION)
+    except Exception as repair_exc:  # noqa: BLE001
+        # A failed repair must never replace the real diagnosis with its own.
+        logger.error("auto-repair raised (continuing to report the original failure): %s", repair_exc)
+        raise err from None
+    if archive is not None:
+        raise RuntimeError(
+            "This install was created by a version that registered the node under the "
+            "agent's key, which cannot be repaired in place (fixed in 2.9.47). Your old "
+            f"home has been moved to {archive} and a fresh one created. "
+            "START CIRIS AGAIN to complete setup."
+        ) from None
+    raise err
+
 def _resolve_key_id() -> Optional[str]:
     """Federation keystore alias for the node — the SAME alias the Engine uses.
 
@@ -145,9 +182,37 @@ def _resolve_key_id() -> Optional[str]:
     edge derives its id from the Engine's signer anyway, so unifying on the base
     alias aligns all three by construction.
     """
-    from ciris_engine.logic.utils.path_resolution import get_federation_alias
+    from ciris_engine.logic.utils.path_resolution import get_federation_alias, get_node_alias
 
-    return get_federation_alias()
+    # IT MUST MATCH THE ENGINE'S ALIAS. Not a preference — CIRISServer#380
+    # refuses to boot on a mismatch, and I proved it the hard way: returning the
+    # provisioned NODE alias here (while the Engine still opened the federation
+    # one) turned a working first boot into
+    #
+    #     RuntimeError: TWO FEDERATION IDENTITIES IN ONE NODE — refusing to start
+    #
+    # which is strictly worse than the bug it was meant to cure. The docstring
+    # above said exactly this; I changed the code anyway.
+    #
+    # THE ACTOR/NODE SPLIT IS NOT FIXED HERE. The substrate already handles it —
+    # handed an actor key it mints a node key of its own (CC 3.4.7.3 Clause A).
+    # What fails is the step AFTER: the owner-binding cannot follow onto that
+    # minted key because no owner signer is on disk yet, so `owner_of(node)`
+    # never resolves and the consent row setup writes can never be re-authored.
+    # The remedy the substrate names is `plan_owner_binding_move`, and it belongs
+    # where the owner actually exists — after setup — not in the alias we pass.
+    alias = get_federation_alias()
+    node_alias = get_node_alias()
+    if node_alias and node_alias != alias:
+        logger.info(
+            "[NODE-KEY] node identity is %r; passing the ENGINE alias %r to the node "
+            "fold because the sealed keystore keys off (identity_dir, alias) and a "
+            "mismatch is refused (CIRISServer#380). The split is the substrate's to "
+            "reconcile via the owner-binding, not ours to rename around.",
+            node_alias,
+            alias,
+        )
+    return alias
 
 
 def _surface_first_run_claim_pin() -> None:
@@ -486,7 +551,7 @@ def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Opti
     # 15-40s, so the window is 60s — an early _node_error still aborts fast.
     time.sleep(2.5)
     if _node_error is not None:
-        raise RuntimeError(f"node fold failed to start (node-fails ⇒ agent-fails): {_node_error}")
+        _repair_if_bricked_then_raise(_node_error)
     # Confirm the node's read-API actually bound 4243 (a router-assembly panic
     # shows up here as a closed port).
     import socket
@@ -529,7 +594,7 @@ def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Opti
     _last_phase: Optional[str] = None
     for _i in range(_attempts):
         if _node_error is not None:
-            raise RuntimeError(f"node fold failed to start (node-fails ⇒ agent-fails): {_node_error}")
+            _repair_if_bricked_then_raise(_node_error)
         try:
             with socket.create_connection(("127.0.0.1", 4243), timeout=1):
                 node_up = True
@@ -542,13 +607,27 @@ def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Opti
                 logger.info("[COMPOSE] phase: %s", _phase)
                 _last_phase = _phase
     if _node_error is not None:
-        raise RuntimeError(f"node fold failed to start (node-fails ⇒ agent-fails): {_node_error}")
+        _repair_if_bricked_then_raise(_node_error)
     if not node_up:
         _wedged = _compose_phase()
         raise RuntimeError(
             "node fold: read-API did not bind 127.0.0.1:4243 in the bind window "
             f"(node-fails ⇒ agent-fails); compose phase at expiry: {_wedged or 'unknown (no compose_status — wheel <0.5.120?)'}"
         )
+    # STAMP THE HOME. The node came up on a sound identity, so this build's
+    # version is what the repair gate should compare against next time. Stamped
+    # here rather than at process start: a home that is about to brick must not
+    # be marked as already fixed.
+    try:
+        from ciris_engine.constants import CIRIS_VERSION
+        from ciris_engine.logic.setup.bricked_install import record_install_version
+        from ciris_engine.logic.utils.path_resolution import get_ciris_home
+        from pathlib import Path as _P
+
+        record_install_version(_P(get_ciris_home()), CIRIS_VERSION)
+    except Exception:  # noqa: BLE001
+        logger.debug("could not stamp install marker", exc_info=True)
+
     logger.info("Node fold: node runtime started — substrate read-API LISTENING on 4243 [OK]")
     _node_ready = True
 

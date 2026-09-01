@@ -38,31 +38,6 @@ _background_tasks: set[asyncio.Task[None]] = set()
 # =============================================================================
 
 
-def _redacted_identity(provider: object, external_id: object) -> str:
-    """`google:…1383` — enough to correlate, not enough to identify.
-
-    The provider's `external_id` is a SUBJECT IDENTIFIER: stable, unique to one
-    human, and exactly the join key an observer needs to tie log lines to a
-    person. It is not a secret — which is what the `# NOSONAR - provider:
-    external_id is not a secret` annotations these calls carried correctly said,
-    and secrecy was the wrong question. It is PII, and it does not belong in a log.
-
-    The substrate reached the same conclusion independently and prints
-    `subject=…1383`, so a redacted tail is also the form that CORRELATES with the
-    node's own lines. Nothing diagnostic is lost: the provider names the flow, the
-    tail separates accounts within one log, and the WA id logged beside these
-    calls is the durable handle.
-
-    CodeQL has flagged all three call sites since 2026-02-28
-    (py/clear-text-logging-sensitive-data). It taints anything read off the setup
-    request, which also carries system_admin_password — an over-approximation that
-    happened to be pointing at something real. The fix is to stop logging the
-    value, not to suppress the finding.
-    """
-    tail = str(external_id or "")[-4:]
-    return f"{provider}:…{tail}" if tail else f"{provider}:<none>"
-
-
 async def _link_oauth_identity_to_wa(auth_service: Any, setup: SetupCompleteRequest, wa_cert: Any) -> Any:
     """Link OAuth identity to WA, handling existing links gracefully.
 
@@ -71,11 +46,12 @@ async def _link_oauth_identity_to_wa(auth_service: Any, setup: SetupCompleteRequ
     from ciris_engine.schemas.services.authority_core import WARole
 
     logger.debug("CIRIS_SETUP_DEBUG *** ENTERING OAuth linking block ***")
-    logger.debug(
-        "CIRIS_SETUP_DEBUG Linking OAuth identity: %s to WA %s",
-        _redacted_identity(setup.oauth_provider, setup.oauth_external_id),
-        wa_cert.wa_id,
-    )
+    # NOTHING DERIVED FROM `setup` REACHES THE LOGGER. SetupCompleteRequest
+    # carries system_admin_password, so CodeQL taints every value read off it —
+    # including one already redacted to `google:…1383`. Redacting harder does not
+    # clear it; only not logging it does. The substrate prints the pair, redacted,
+    # when it binds them, and the WA id below correlates our lines to that.
+    logger.debug("CIRIS_SETUP_DEBUG Linking OAuth identity to WA %s", wa_cert.wa_id)
 
     try:
         # First check if OAuth identity is already linked to another WA
@@ -103,11 +79,7 @@ async def _link_oauth_identity_to_wa(auth_service: Any, setup: SetupCompleteRequ
             metadata={"email": setup.oauth_email} if setup.oauth_email else None,
             primary=True,
         )
-        logger.debug(
-            "CIRIS_SETUP_DEBUG [OK] SUCCESS: Linked OAuth %s to WA %s",
-            _redacted_identity(setup.oauth_provider, setup.oauth_external_id),
-            wa_cert.wa_id,
-        )
+        logger.debug("CIRIS_SETUP_DEBUG [OK] SUCCESS: Linked OAuth identity to WA %s", wa_cert.wa_id)
     except Exception as e:
         logger.error(f"CIRIS_SETUP_DEBUG [FAIL] FAILED to link OAuth identity: {e}", exc_info=True)
         # Don't fail setup if OAuth linking fails - user can still use password
@@ -144,10 +116,7 @@ async def _check_existing_oauth_wa(auth_service: Any, setup: SetupCompleteReques
     if not (setup.oauth_provider and setup.oauth_external_id):
         return None, False
 
-    logger.debug(
-        "CIRIS_USER_CREATE: Checking for existing OAuth user: %s",
-        _redacted_identity(setup.oauth_provider, setup.oauth_external_id),
-    )
+    logger.debug("CIRIS_USER_CREATE: Checking for an existing WA on the setup OAuth identity")
     existing_wa = await auth_service.get_wa_by_oauth(setup.oauth_provider, setup.oauth_external_id)
 
     if not existing_wa:
@@ -512,10 +481,14 @@ def _store_user_preferences(user_id: str, setup: SetupCompleteRequest) -> None:
 
     time_service = TimeService()
     add_graph_node(node, time_service)
-    lang = attributes.get("preferred_language", "not set")
-    loc = attributes.get("location", "not set")
-    share_loc = attributes.get("share_location_in_traces", False)
-    logger.info(f"Stored user preferences for {user_id}: lang={lang}, location={loc}, share_location={share_loc}")
+    # SAME RULE AS THE OAUTH LINES ABOVE: nothing derived from `setup` reaches the
+    # logger. `attributes` is built from the setup request, which carries
+    # system_admin_password, so language/location/user_id are all tainted — and a
+    # user's LOCATION is genuinely worth not writing to a log file regardless of
+    # what CodeQL thinks of it. Which preferences exist is the diagnostic; their
+    # values are the user's business.
+    stored = sorted(k for k in ("preferred_language", "location", "share_location_in_traces") if k in attributes)
+    logger.info("Stored user preferences for the setup user: %d key(s) %s", len(stored), stored)
 
 
 async def _log_wa_list(auth_service: Any, phase: str) -> None:
@@ -524,6 +497,68 @@ async def _log_wa_list(auth_service: Any, phase: str) -> None:
     logger.info(f"CIRIS_USER_CREATE: WAs {phase}: {len(was)}")
     for wa in was:
         logger.info(f"CIRIS_USER_CREATE:   - {wa.wa_id}: name={wa.name}, role={wa.role}")
+
+
+def _enforce_single_holder(setup: SetupCompleteRequest, wa_cert: Any) -> None:
+    """Setup must not FINISH with two live certs on one provider identity.
+
+    The mint guard above should make this unreachable. It is here anyway because
+    the cost of being wrong is a user who cannot sign in with Google (the node
+    refuses an ambiguous identity, correctly) and cannot sign in locally either
+    (an OAuth user has no password). A closed door on both sides, discovered one
+    sign-in too late — the failure this whole change exists to end.
+
+    Checking the POST-condition rather than trusting the pre-condition also means
+    any future path that mints — a new flow, a retry, a migration — is covered
+    without knowing about it.
+
+    The repair is surgical: retire the cert WE just minted, leaving the fabric's
+    owner-binding as the single holder. Ownership is the fabric's to produce; if
+    both exist, ours is the one that should not.
+    """
+    if not (setup.oauth_provider and setup.oauth_external_id):
+        return
+
+    from ciris_engine.logic.persistence.stores import authentication_store
+
+    try:
+        holders = authentication_store.live_oauth_holders(
+            str(setup.oauth_provider), str(setup.oauth_external_id)
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception("CIRIS_USER_CREATE: could not verify the single-holder invariant")
+        return
+
+    if len(holders) <= 1:
+        return
+
+    # COUNTS, NOT IDS. `holders` is derived from `setup`, and SetupCompleteRequest
+    # carries system_admin_password — so CodeQL taints every value read off it and
+    # logging one is a HIGH clear-text-logging finding. That is an
+    # over-approximation (a wa_id is not a secret), but the diagnostic here does
+    # not need the ids: the substrate already prints them, redacted and
+    # authoritative, in the refusal this exists to prevent —
+    #     AMBIGUOUS provider identity … holders=2 wa_ids=[…]
+    # What only WE can say is that setup created the second one and retired it,
+    # and a count carries that.
+    ours = getattr(wa_cert, "wa_id", None)
+    logger.error(
+        "CIRIS_USER_CREATE: setup left %d live holders on one provider identity. "
+        "The node refuses an ambiguous identity, and an OAuth user has no password "
+        "to fall back to — this is the lockout. Retiring the cert WE minted so the "
+        "fabric's owner-binding stands alone. The substrate logs the wa_ids.",
+        len(holders),
+    )
+    if ours in holders and len(holders) > 1:
+        authentication_store.update_wa_certificate(str(ours), {"active": False})
+        remaining = authentication_store.live_oauth_holders(
+            str(setup.oauth_provider), str(setup.oauth_external_id)
+        )
+        logger.error(
+            "CIRIS_USER_CREATE: retired our own cert; %d live holder(s) remain "
+            "(1 is correct — the fabric's owner-binding).",
+            len(remaining),
+        )
 
 
 async def _create_setup_users(
@@ -749,23 +784,17 @@ async def _create_setup_users(
             # The PII half of the original finding WAS real and is fixed: the
             # provider subject is no longer logged here at all.
             # codeql[py/clear-text-logging-sensitive-data]
+            # LOG THE FACT, NOT THE VALUE. `fabric_holder_id` came back from a call
+            # that TOOK setup's provider and subject, so CodeQL taints it too — the
+            # same over-approximation that survived a redaction helper written
+            # specifically to satisfy it. Only removing the interpolation clears it,
+            # and nothing is lost: the substrate names the holding cert itself in the
+            # refusal this exists to prevent (AMBIGUOUS provider identity … wa_ids=[…]).
             logger.info(
-                "CIRIS_USER_CREATE: this provider identity is ALREADY bound by the substrate to %s "
-                "(claim-remote owner-binding) — NOT minting a second ROOT. Minting here is what "
-                "produced 'AMBIGUOUS provider identity / holders=2' and locked first-run OAuth users out.",
-                # FALSE POSITIVE (py/clear-text-logging-sensitive-data). `fabric_holder_id`
-                # is a WA certificate id read back OUT of the store — the same class of
-                # identifier as the `node_id` suppressed earlier in this file, and not a
-                # credential. CodeQL taints it transitively because the store lookup's
-                # ARGUMENTS derive from the setup request, which also carries a password
-                # field the lookup never reads.
-                #
-                # The suppression goes on the SAME line as the flagged expression. Placing
-                # it above the `logger.info(` call did not apply (the alert is on the
-                # argument), and neither did the line directly above the argument. The
-                # precedent earlier in this file only works because its statement is a
-                # single line, which puts the comment on the alert's line by construction.
-                fabric_holder_id,  # codeql[py/clear-text-logging-sensitive-data]
+                "CIRIS_USER_CREATE: this provider identity is ALREADY bound by the substrate "
+                "(claim-remote owner-binding) — NOT minting a second ROOT. Minting here is "
+                "what produced 'AMBIGUOUS provider identity / holders=2' and locked "
+                "first-run OAuth users out. The substrate logs which cert holds it."
             )
             # Annotated because this is now the FIRST binding in the function, so
             # an unannotated str here makes mypy reject the later `= None` on the
@@ -837,6 +866,7 @@ async def _create_setup_users(
         # never materialized into a WACertificate.
         if provisional_oauth_wa_id and provisional_oauth_wa_id != wa_cert.wa_id:
             authentication_store.update_wa_certificate(provisional_oauth_wa_id, {"active": False})
+            _enforce_single_holder(setup, wa_cert)
             logger.info(
                 "CIRIS_USER_CREATE: retired provisional OAuth cert %s (kept minted %s)",
                 provisional_oauth_wa_id,

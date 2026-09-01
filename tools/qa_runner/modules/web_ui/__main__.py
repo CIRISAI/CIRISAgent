@@ -2174,21 +2174,38 @@ async def run_android_up(args: argparse.Namespace) -> int:
     server_url = f"http://localhost:{args.desktop_port}"
     deadline = time.time() + 90
     healthy = False
+    last_payload: dict = {}
     while time.time() < deadline:
         try:
             r = requests.get(f"{server_url}/health", timeout=2)
-            if r.status_code == 200 and r.json().get("status") == "ok":
+            payload = r.json() if r.status_code == 200 else {}
+            # ASSERT WHAT THE NEXT STEP REQUIRES, not something weaker.
+            # This accepted status=="ok" alone while run_desktop_tests demands
+            # testMode as well, so bring-up reported "[OK] reachable" and the
+            # very next line failed on the same URL. A precondition that is
+            # looser than its consumer's is not a check, it is a false green.
+            if payload.get("status") == "ok" and payload.get("testMode", False):
                 healthy = True
                 break
+            if payload.get("status") == "ok":
+                last_payload = payload
         except Exception:
             pass
         time.sleep(2)
     if not healthy:
-        print(
-            "  ⚠️  /health did not respond within 90s — the test server may not have started.\n"
-            "       Common causes: BuildConfig.TEST_MODE_ENABLED is false on this build, or the app\n"
-            "       crashed during init. Inspect with: adb logcat -d *:E"
-        )
+        if last_payload:
+            print(
+                f"  ⚠️  /health IS up but never reported testMode: {last_payload}\n"
+                "       The app is running WITHOUT test mode, so the automation cannot drive\n"
+                "       it. A debug build should set BuildConfig.TEST_MODE_ENABLED itself;\n"
+                "       confirm with: adb logcat -d | grep -i testmode"
+            )
+        else:
+            print(
+                "  ⚠️  /health did not respond within 90s — the test server may not have started.\n"
+                "       Common causes: BuildConfig.TEST_MODE_ENABLED is false on this build, or the app\n"
+                "       crashed during init. Inspect with: adb logcat -d *:E"
+            )
         return 1
     print(f" [OK] AndroidTestAutomationServer reachable at {server_url}")
 
@@ -3354,10 +3371,28 @@ async def run_desktop_tests(args: argparse.Namespace) -> int:
     server_url = f"http://localhost:{args.desktop_port}"
 
     if not await check_desktop_app_running(server_url):
-        print(f"\n[FAIL] CIRIS Desktop app is not running with test mode enabled.")
-        print(f"\nTo start the desktop app with test mode:")
-        print(f"  export CIRIS_TEST_MODE=true")
-        print(f"  cd client && ./gradlew :desktopApp:run")
+        # SAY WHAT ANSWERED. This printed one message for three different
+        # conditions and named only one of them, so on Android it announced that
+        # the DESKTOP app was not in test mode seconds after bring-up had
+        # reported the Android test server healthy on that very port.
+        from .desktop_app_helper import describe_test_server
+
+        print(f"\n[FAIL] the test server is not usable: {await describe_test_server(server_url)}")
+        platform = getattr(args, "platform", "desktop")
+        if platform == "android":
+            print("\nAndroid: the app is launched with `--es CIRIS_TEST_MODE true` and")
+            print("  `setprop debug.CIRIS_TEST_MODE true`, and a debug build should set")
+            print("  BuildConfig.TEST_MODE_ENABLED itself. If /health is up but testMode")
+            print("  is false, the build is not a test-mode build — check with:")
+            print("    adb shell am start -n <pkg>/<activity> --es CIRIS_TEST_MODE true")
+            print("    adb logcat -d | grep -i testmode")
+        elif platform == "ios":
+            print("\niOS: simctl forwards only SIMCTL_CHILD_-prefixed env vars;")
+            print("  CIRIS_TEST_MODE must be set as SIMCTL_CHILD_CIRIS_TEST_MODE.")
+        else:
+            print("\nTo start the desktop app with test mode:")
+            print("  export CIRIS_TEST_MODE=true")
+            print("  ciris-desktop        # or: CIRIS_TEST_MODE=true ciris-agent")
         return 1
 
     print("[OK] Desktop app running with test mode")

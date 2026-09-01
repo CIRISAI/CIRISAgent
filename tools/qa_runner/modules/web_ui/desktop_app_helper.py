@@ -726,6 +726,36 @@ class DesktopAppHelper:
             await asyncio.sleep(poll_interval_ms / 1000.0)
 
 
+async def describe_test_server(server_url: str = "http://localhost:8091") -> str:
+    """Say WHAT the test server answered, for a failure message worth reading.
+
+    `check_desktop_app_running` collapses three very different situations into
+    one False — nothing listening, listening but not test mode, and listening but
+    answering something unexpected — and the caller then prints a single message
+    naming only the second. On Android that produced "the Desktop app is not
+    running with test mode enabled" moments after bring-up had reported the test
+    server reachable on the same port, which reads as a contradiction and sends
+    the reader after the wrong thing entirely.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get(f"{server_url}/health")
+    except Exception as exc:  # noqa: BLE001
+        return f"nothing answered at {server_url}/health ({type(exc).__name__})"
+    try:
+        data = response.json()
+    except ValueError:
+        return f"{server_url}/health returned {response.status_code}, not JSON: {response.text[:120]!r}"
+    if data.get("status") != "ok":
+        return f"{server_url}/health says status={data.get('status')!r} (payload: {data})"
+    if not data.get("testMode", False):
+        return (
+            f"{server_url}/health is UP but testMode is {data.get('testMode')!r} — the app is "
+            f"running WITHOUT test mode (payload: {data})"
+        )
+    return f"{server_url}/health ok, testMode enabled"
+
+
 async def check_desktop_app_running(server_url: str = "http://localhost:8091") -> bool:
     """Check if the CIRIS Desktop app is running with test mode enabled."""
     try:

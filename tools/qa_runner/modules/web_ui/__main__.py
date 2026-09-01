@@ -383,6 +383,16 @@ class DesktopAppTestRunner:
             base = f"http://127.0.0.1:{api_port}"
             sent = message.strip()
 
+            # SAY WHICH CREDENTIALS ARE IN PLAY. The previous run failed every
+            # platform on `401 Unauthorized` because this fell back to the
+            # built-in default `admin` when the caller passed no --username, and
+            # nothing in the log said so — the 401 read as an auth bug in the
+            # product. A silent default that only shows up as someone else's
+            # error is worth one line.
+            if not getattr(args, "username", None):
+                self._log(f"WARNING: no --username given; falling back to '{username}'")
+            self._log(f"Asserting reply via {base}/v1/agent/history as '{username}'")
+
             async with httpx.AsyncClient(timeout=30.0) as http:
                 r = await http.post(
                     f"{base}/v1/auth/login",

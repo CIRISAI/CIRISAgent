@@ -71,7 +71,12 @@ def _find_reports(root: Path) -> Dict[str, bool]:
         if passed is None and isinstance(data.get("results"), list):
             passed = all(r.get("success") for r in data["results"])
         if passed is not None:
-            results[platform] = bool(passed)
+            # Carry the trace rung too. It is currently REPORTED rather than
+            # enforced (upstream KEX/replication revamp), so it is deliberately
+            # not part of `success` — but a tile that says only "interact OK"
+            # implies a rung nobody checked, which is the exact vacuous-pass
+            # shape this gallery exists to make visible.
+            results[platform] = (bool(passed), data.get("traces"))
     return results
 
 
@@ -81,13 +86,21 @@ def _tiles(root: Path) -> List[Tile]:
     tiles: List[Tile] = []
     for platform in EXPECTED:
         image = shots.get(platform)
-        passed = reports.get(platform)
+        entry = reports.get(platform)
+        passed, traces = entry if entry is not None else (None, None)
         if passed is None and image is None:
             detail = "did not run"
         elif passed is None:
             detail = "ran, no report parsed"
         elif passed:
             detail = "interact OK" if image else "interact OK (no screenshot captured)"
+            # The trace rung is REPORTED, not enforced (upstream KEX/replication
+            # revamp). A tile reading only "interact OK" would imply a rung nobody
+            # checked — the vacuous-pass shape this gallery exists to expose.
+            if traces is False:
+                detail += " · traces not confirmed (not enforced)"
+            elif traces is True:
+                detail += " · traces reached canonical"
         else:
             detail = "FAILED"
         tiles.append(Tile(platform, image, passed, detail))

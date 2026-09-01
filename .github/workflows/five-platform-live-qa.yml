@@ -368,12 +368,21 @@ jobs:
               "$CIRIS_HOME/logs" artifacts/cmdlogs --require replication --wait-secs 240 \
               || { trace_rc=1; echo "::warning::$plat traces did not reach canonical (NOT enforced — upstream KEX/replication revamp in flight)"; }
 
-              # BOTH HALVES decide the platform's verdict: an answer on screen AND the
-              # trace leaving for canonical. Writing it after only the chat step put a
-              # green tile on a red job and hid which platform lost the second half.
+              # THE TILE REFLECTS WHAT IS ENFORCED. It used to require both halves,
+              # which was right while both were fatal — writing it after only the
+              # chat step had put a green tile on a red job and hidden which
+              # platform lost the second half.
+              #
+              # With the trace rung reporting rather than blocking (upstream
+              # KEX/replication revamp), keeping it in `success` would paint every
+              # tile red on a job that passed — the same misreporting, inverted,
+              # and it would bury the screenshots this gallery exists to show.
+              # So `success` tracks the enforced half, and `traces` keeps carrying
+              # the un-enforced rung as its own field so nothing is concealed.
+              # Restore the conjunction here when enforcement comes back.
               printf '{"platform":"%s","success":%s,"interact":%s,"traces":%s}\n' \
                 "$plat" \
-                "$([ $chat_rc -eq 0 ] && [ $trace_rc -eq 0 ] && echo true || echo false)" \
+                "$([ $chat_rc -eq 0 ] && echo true || echo false)" \
                 "$([ $chat_rc -eq 0 ] && echo true || echo false)" \
                 "$([ $trace_rc -eq 0 ] && echo true || echo false)" \
                 > "artifacts/chat-$plat.json"

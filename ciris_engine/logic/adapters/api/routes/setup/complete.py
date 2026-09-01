@@ -753,12 +753,19 @@ async def _create_setup_users(
                 "CIRIS_USER_CREATE: this provider identity is ALREADY bound by the substrate to %s "
                 "(claim-remote owner-binding) — NOT minting a second ROOT. Minting here is what "
                 "produced 'AMBIGUOUS provider identity / holders=2' and locked first-run OAuth users out.",
-                # The suppression must sit on the flagged line itself. CodeQL
-                # reports this ARGUMENT, not the `logger.info(` call above it, so a
-                # comment before the call — where the precedent's single-line
-                # `print(...)` puts it — does not apply here.
-                # codeql[py/clear-text-logging-sensitive-data]
-                fabric_holder_id,
+                # FALSE POSITIVE (py/clear-text-logging-sensitive-data). `fabric_holder_id`
+                # is a WA certificate id read back OUT of the store — the same class of
+                # identifier as the `node_id` suppressed earlier in this file, and not a
+                # credential. CodeQL taints it transitively because the store lookup's
+                # ARGUMENTS derive from the setup request, which also carries a password
+                # field the lookup never reads.
+                #
+                # The suppression goes on the SAME line as the flagged expression. Placing
+                # it above the `logger.info(` call did not apply (the alert is on the
+                # argument), and neither did the line directly above the argument. The
+                # precedent earlier in this file only works because its statement is a
+                # single line, which puts the comment on the alert's line by construction.
+                fabric_holder_id,  # codeql[py/clear-text-logging-sensitive-data]
             )
             # Annotated because this is now the FIRST binding in the function, so
             # an unannotated str here makes mypy reject the later `= None` on the

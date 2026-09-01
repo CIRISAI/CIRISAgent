@@ -94,6 +94,11 @@ SHIP_CONFIRMED = re.compile(
     r"\[DELIVERY-PROBE\]\s+canonical\s+(\S+)\s+SHIP CONFIRMED\s+—\s+envelopes_sent_total=(\d+)"
 )
 
+#: The agent's probe says this OUT LOUD when the substrate has no such counter,
+#: which is a different fact from "nothing was delivered" and must not be graded
+#: the same way (CIRISServer#518).
+COUNTER_ABSENT = re.compile(r"replication_envelopes_served_total ABSENT from delivery_status")
+
 #: Explicit failure lines, so the report can quote the node's own words rather
 #: than inferring failure from the absence of success.
 NO_ROOT = re.compile(r"\[DELIVERY-PROBE\]\s+canonical\s+(\S+)\s+did not root within (\d+)s")
@@ -254,6 +259,27 @@ def _evaluate(args) -> int:
         m = rx.search(text)
         if m:
             print(f"      {why}")
+    if args.require == "replication" and served is None and COUNTER_ABSENT.search(text):
+        # THE INSTRUMENT IS MISSING, NOT THE DELIVERY.
+        #
+        # `replication_envelopes_served_total` is not in this wheel's
+        # delivery_status payload (CIRISServer#518), and the agent's own probe
+        # says so in as many words. Grading that as a delivery FAILURE would be
+        # reporting a fact we have no way to observe — the same error, inverted,
+        # as passing on `envelopes_sent_total` because it happened to be there.
+        #
+        # Exit 0, because this run did not demonstrate a failure. Say NOT COVERED
+        # loudly, because it did not demonstrate success either, and a gate that
+        # quietly returns 0 is indistinguishable from one that checked.
+        print("\nNOT COVERED: this substrate exposes no replication_envelopes_served_total.")
+        print("             The node's own probe reports it ABSENT from delivery_status,")
+        print("             so trace delivery cannot be observed from a log tail at all —")
+        print("             which is NOT evidence that delivery failed.")
+        print("             Tracked as CIRISServer#518. Until it lands, this rung is")
+        print("             unobservable rather than red; it does NOT fall back to")
+        print("             envelopes_sent_total, which measures a different plane.")
+        return 0
+
     if args.require == "replication" and served is None:
         print("      no replication_envelopes_served_total appears anywhere in these logs.")
         print("      This gate does NOT fall back to envelopes_sent_total: that counter")

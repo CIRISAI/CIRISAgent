@@ -178,3 +178,43 @@ def test_lower_rungs_are_available_for_diagnosis(tmp_path: Path, require: str) -
     """
     r = _run(tmp_path, "\n".join([ROOTED, KEX]), "--require", require)
     assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_a_missing_instrument_is_not_a_failed_delivery(tmp_path: Path) -> None:
+    """CIRISServer#518: the wheel exposes no replication counter.
+
+    Grading that as a delivery FAILURE reports a fact we have no way to observe —
+    the same error, inverted, as passing on `envelopes_sent_total` because it
+    happened to be present. The agent's own probe says ABSENT in as many words,
+    so the two states are distinguishable and must be distinguished.
+
+    Exit 0 because nothing failed; NOT COVERED because nothing was proven either.
+    """
+    r = _run(
+        tmp_path,
+        "\n".join(
+            [
+                ROOTED,
+                KEX,
+                "[TRACE-SHIP] phase=x replication_envelopes_served_total ABSENT from delivery_status (top-level keys: [])",
+            ]
+        ),
+    )
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "NOT COVERED" in r.stdout
+    assert "CIRISServer#518" in r.stdout
+    assert "PASS" not in r.stdout, "an unobservable rung must never read as a pass"
+
+
+def test_a_present_counter_at_zero_is_still_fatal(tmp_path: Path) -> None:
+    """The escape hatch must not widen into 'zero is fine'.
+
+    If the counter EXISTS and reads zero, the replication plane ran and served
+    nothing — observable, and a real failure.
+    """
+    r = _run(
+        tmp_path,
+        "\n".join([ROOTED, KEX, "[TRACE-SHIP] phase=ship-confirmed replication_envelopes_served_total=0"]),
+    )
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "NOT COVERED" not in r.stdout

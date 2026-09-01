@@ -157,15 +157,32 @@ def fetch_ios(version: str) -> None:
     # Download before pruning, for the reason in fetch_android().
     zip_path = download(asset_url(version, name), IOS_FRAMEWORKS / name)
     target = IOS_FRAMEWORKS / "shared.xcframework"
-    if target.exists():
-        print(f"  removing previous {target.name} ...")
-        shutil.rmtree(target)
-    print(f"  unpacking {name} ...")
-    with zipfile.ZipFile(zip_path) as z:
-        z.extractall(IOS_FRAMEWORKS)
+
+    # EXTRACT FIRST, REPLACE SECOND. Removing the old copy up front meant a
+    # corrupt archive, a changed layout, or a disk that filled mid-extract left
+    # the checkout with NO framework at all — a failed update that destroys the
+    # working one, which is the opposite of the download-before-prune care taken
+    # in fetch_android(). Stage into a sibling directory, verify the expected
+    # layout is there, and only then swap.
+    staging = IOS_FRAMEWORKS / ".shared.xcframework.incoming"
+    if staging.exists():
+        shutil.rmtree(staging)
+    staging.mkdir(parents=True)
+    try:
+        print(f"  unpacking {name} ...")
+        with zipfile.ZipFile(zip_path) as z:
+            z.extractall(staging)
+        staged = staging / "shared.xcframework"
+        if not staged.is_dir():
+            raise SystemExit(f"{name} did not contain shared.xcframework — layout changed upstream")
+        if not any(staged.glob("ios-arm64*")):
+            raise SystemExit(f"{name} contains no ios-arm64* slice — layout changed upstream")
+        if target.exists():
+            shutil.rmtree(target)
+        staged.rename(target)
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
     zip_path.unlink(missing_ok=True)
-    if not target.exists():
-        raise SystemExit(f"{name} did not contain {target.name} — layout changed upstream")
     (IOS_FRAMEWORKS / "shared.xcframework.version").write_text(version + "\n", encoding="utf-8")
     print(f"  {target.name} <- ciris-client {version}")
 

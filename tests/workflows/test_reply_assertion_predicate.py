@@ -108,3 +108,30 @@ def test_the_port_default_is_unchanged_when_not_given() -> None:
     )
     _apply_platform_defaults(args)
     assert args.api_port == 8080
+
+
+def test_the_apk_is_built_and_found_in_the_same_tree() -> None:
+    """Builder and finder must agree on where the Android app comes from.
+
+    They did not: the finder pointed at apps/android/build/... while the builder
+    ran gradle in `client/`, a directory this repo does not contain — so on a
+    runner with a booted emulator the bring-up died with FileNotFoundError. And
+    the finder looked for `androidApp-debug.apk`, the pre-migration module name,
+    while gradle emits `android-debug.apk`.
+    """
+    from tools.qa_runner.modules.web_ui.__main__ import _apps_root
+
+    apps = _apps_root()
+    assert apps.name == "apps", "the app shells live in apps/, not client/"
+    assert (apps / "settings.gradle.kts").exists()
+    assert (apps / "gradlew").exists(), "no gradle wrapper in the build root"
+
+
+def test_the_apk_finder_globs_rather_than_hardcoding_a_name() -> None:
+    import inspect
+
+    from tools.qa_runner.modules.web_ui import __main__ as m
+
+    src = inspect.getsource(m._find_debug_apk)
+    assert "glob" in src
+    assert "androidApp-debug.apk" not in src, "that module name predates apps/settings.gradle.kts"

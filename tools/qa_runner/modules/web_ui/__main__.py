@@ -2015,24 +2015,60 @@ def _ensure_emulator(args: argparse.Namespace) -> Optional[str]:
 
 
 def _find_debug_apk() -> Optional[Path]:
-    repo_root = Path(__file__).resolve().parents[4]
-    candidate = repo_root / "apps" / "android" / "build" / "outputs" / "apk" / "debug" / "androidApp-debug.apk"
-    return candidate if candidate.exists() else None
+    """Locate the built debug APK.
+
+    GLOB, DO NOT HARDCODE. This named one exact file, carrying the module name
+    the shell had before it became `:android` (apps/settings.gradle.kts). Gradle
+    emits its artifact under the CURRENT module name, so the finder would have
+    missed a perfectly good APK sitting right beside the one it was looking for,
+    and reported the build as not-yet-done forever.
+
+    Globbing the debug output directory means the module can be renamed again
+    without silently breaking this.
+    """
+    out = _apps_root() / "android" / "build" / "outputs" / "apk" / "debug"
+    apks = sorted(out.glob("*-debug.apk"))
+    if not apks:
+        return None
+    if len(apks) > 1:
+        print(f"  note: {len(apks)} debug APKs in {out}; using {apks[0].name}")
+    return apks[0]
+
+
+def _apps_root() -> Path:
+    """The gradle root that owns the app shells.
+
+    NOT `client/`. apps/settings.gradle.kts is explicit that the shared client is
+    no longer built from source here — it arrives as a published .aar and this
+    tree holds only the shells, with `include(":android")`. The APK builder was
+    never migrated, so it ran `./gradlew` in a `client/` directory that this
+    repo does not contain:
+
+        FileNotFoundError: .../CIRISAgent/client
+
+    on a runner where the emulator had booted and everything else was ready. The
+    APK FINDER already pointed at apps/; only the builder was left behind, so the
+    two halves of the same file disagreed about where the app comes from.
+    """
+    return Path(__file__).resolve().parents[4] / "apps"
 
 
 def _build_debug_apk() -> bool:
-    repo_root = Path(__file__).resolve().parents[4]
-    client_dir = repo_root / "client"
-    print("  building debug APK (./gradlew :android:assembleDebug)…")
+    apps_dir = _apps_root()
+    gradlew = apps_dir / "gradlew"
+    if not gradlew.exists():
+        print(f" [FAIL] no gradle wrapper at {gradlew}")
+        return False
+    print(f"  building debug APK (./gradlew :android:assembleDebug in {apps_dir})…")
     r = subprocess.run(
         ["./gradlew", ":android:assembleDebug"],
-        cwd=str(client_dir),
+        cwd=str(apps_dir),
         capture_output=True,
         text=True,
-        timeout=600,
+        timeout=1800,
     )
     if r.returncode != 0:
-        print(f" [FAIL] gradle build failed:\n{r.stdout[-2000:]}\n{r.stderr[-2000:]}")
+        print(f" [FAIL] gradle build failed:\n{r.stdout[-3000:]}\n{r.stderr[-2000:]}")
         return False
     return True
 

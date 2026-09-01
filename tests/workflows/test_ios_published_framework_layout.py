@@ -81,3 +81,20 @@ def test_the_link_step_names_both_recovery_paths() -> None:
     script = src[src.index("Link KMP Shared Framework"):]
     assert "fetch_client_artifacts.py --platform ios" in script
     assert not re.search(r"cd mobile && \./gradlew", script), "stale instruction: there is no mobile/ tree"
+
+
+def test_the_fetch_does_not_destroy_a_working_framework_on_failure() -> None:
+    """A failed update must not leave the checkout with nothing.
+
+    Removing the old copy before the archive had been validated meant a corrupt
+    download, a changed layout, or a disk filling mid-extract took out the
+    working framework too — the opposite of the download-before-prune care taken
+    on the android side.
+    """
+    src = FETCH.read_text(encoding="utf-8")
+    body = src[src.index("def fetch_ios"):]
+    staged = body.index("staging")
+    swapped = body.index("staged.rename(target)")
+    removed = body.index("shutil.rmtree(target)")
+    assert staged < removed < swapped, "the old copy is removed before the new one is validated"
+    assert 'glob("ios-arm64*")' in body, "the staged layout is not verified before swapping"

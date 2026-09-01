@@ -221,3 +221,31 @@ def test_both_steps_agree_on_the_avd_home(raw: str) -> None:
     was created somewhere the emulator did not look.
     """
     assert raw.count('export ANDROID_AVD_HOME="$HOME/.android/avd"') == 2
+
+
+def test_android_gets_its_client_aar(raw: str) -> None:
+    """The APK links against the published client, same as iOS links the xcframework.
+
+    apps/settings.gradle.kts resolves it from a flatDir at android/libs, and only
+    fetch_client_artifacts puts it there. Only the iOS half was fetched, so the
+    android build had nothing to link against.
+    """
+    assert "fetch_client_artifacts.py --platform android" in raw
+
+
+def test_the_holder_assertion_queries_where_each_platform_writes(raw: str) -> None:
+    """$CIRIS_HOME/data is the DESKTOP store only.
+
+    Android and iOS embed their own backend and write inside the device or
+    simulator sandbox. Pointing this at the host path for every target made the
+    assertion return 2 (no database) on every mobile run and set overall=1 — so
+    android and iOS could not pass no matter how well the interaction went. A
+    check that cannot succeed is not a gate, it is a permanent red light.
+    """
+    block = raw.split("assert_one_holder_per_identity.py")[0]
+    tail = block[-2000:]
+    assert "simctl get_app_container" in tail, "iOS store is not resolved from the simulator sandbox"
+    assert "run-as" in tail, "android store is not pulled from the device"
+    assert "NOT COVERED" in raw.split("assert_one_holder_per_identity.py")[1][:600], (
+        "an unreachable store must report NOT COVERED, not a failure"
+    )

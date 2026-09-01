@@ -210,6 +210,19 @@ jobs:
       #   FileNotFoundError: /usr/local/lib/android/sdk/emulator/emulator
       # and android has never once run in this gate — its tile has read
       # "did not run" since the workflow was written.
+      # The APK links against the PUBLISHED client .aar — apps/settings.gradle.kts
+      # resolves it from a flatDir repository at android/libs, and nothing else
+      # puts it there. Only the iOS half was being fetched, so the android build
+      # had no client to link against at all.
+      - name: Fetch the client .aar (Android only)
+        if: >-
+          contains(matrix.platforms, 'android')
+          && (inputs.platforms == '' || inputs.platforms == 'all'
+              || contains(inputs.platforms, 'android'))
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 tools/fetch_client_artifacts.py --platform android
+
       - name: Install the Android emulator + system image
         # BOTH questions, because they are different: matrix.platforms says
         # this RUNNER owns android; inputs.platforms says whether the operator
@@ -515,9 +528,40 @@ jobs:
             #    INVARIANT, not a consent-screen problem — and an invariant can be
             #    asserted against the store with no provider involved. Cheap, and it
             #    fails the moment any run leaves two holders behind.
-            python tools/dev/assert_one_holder_per_identity.py \
-              "$CIRIS_HOME/data/ciris_engine.db" \
-              || { overall=1; echo "::error::$plat provider identity has >1 live holder"; }
+            # THE STORE IS NOT ON THE HOST FOR MOBILE. $CIRIS_HOME/data is where the
+            # DESKTOP backend writes; the Android and iOS apps embed their own backend
+            # and write inside the device/simulator sandbox. Pointing this at the host
+            # path for every target meant the assertion returned 2 (no database) on
+            # every mobile run and set overall=1 — so android and iOS could never pass,
+            # no matter how well the interaction itself went. A check that cannot
+            # succeed is not a gate, it is a permanent red light.
+            #
+            # Resolve where the platform ACTUALLY wrote, and when it cannot be reached,
+            # say NOT COVERED rather than inventing a failure.
+            db=""
+            case "$target" in
+              desktop) db="$CIRIS_HOME/data/ciris_engine.db" ;;
+              android)
+                pkg=ai.ciris.mobile.debug
+                remote=$(adb exec-out run-as "$pkg" sh -c 'find . -name ciris_engine.db 2>/dev/null | head -1' 2>/dev/null | tr -d '\r')
+                if [ -n "$remote" ]; then
+                  adb exec-out run-as "$pkg" cat "$remote" > "artifacts/db-$plat.db" 2>/dev/null \
+                    && db="artifacts/db-$plat.db"
+                fi ;;
+              ios)
+                data=$(xcrun simctl get_app_container booted ai.ciris.mobile data 2>/dev/null || true)
+                if [ -n "$data" ]; then
+                  f=$(find "$data" -name ciris_engine.db 2>/dev/null | head -1)
+                  [ -n "$f" ] && cp "$f" "artifacts/db-$plat.db" && db="artifacts/db-$plat.db"
+                fi ;;
+            esac
+
+            if [ -n "$db" ] && [ -f "$db" ]; then
+              python tools/dev/assert_one_holder_per_identity.py "$db" \
+                || { overall=1; echo "::error::$plat provider identity has >1 live holder"; }
+            else
+              echo "::notice::$plat OAuth-holder invariant NOT COVERED — no reachable database"
+            fi
 
             # 5. Traces reaching canonical — REPORTED, NOT ENFORCED, for now.
             #

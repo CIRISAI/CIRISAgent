@@ -135,3 +135,37 @@ def test_the_apk_finder_globs_rather_than_hardcoding_a_name() -> None:
     src = inspect.getsource(m._find_debug_apk)
     assert "glob" in src
     assert "androidApp-debug.apk" not in src, "that module name predates apps/settings.gradle.kts"
+
+
+def test_a_rate_limit_error_is_still_not_a_reply() -> None:
+    """The retry must not soften what counts as an answer.
+
+    A provider rate-limit row is an error row, and the gate now resends once when
+    it sees one. That resend is about WHOSE fault the failure is — it must not
+    make the error itself acceptable, or a permanently rate-limited key would
+    report green.
+    """
+    from tools.qa_runner.modules.web_ui.__main__ import _is_new_agent_reply
+
+    row = _msg(
+        message_type="error",
+        content="Rate limited by openai_compatible_primary. Retrying in 6.7s...",
+    )
+    assert not _is_new_agent_reply(row, set(), SENT)
+
+
+def test_the_retry_is_bounded_and_narrow() -> None:
+    """One resend, and only for rate limiting.
+
+    A silent agent (no new rows) and a real DMA error (no rate-limit text) must
+    still fail on the first deadline — otherwise the gate spends twice as long
+    to reach the same verdict, and a genuine regression gets a second chance to
+    look intermittent.
+    """
+    import inspect
+
+    from tools.qa_runner.modules.web_ui import __main__ as m
+
+    src = inspect.getsource(m.DesktopAppTestRunner.test_chat_flow)
+    assert '"rate limit" in (m.get("content") or "").lower()' in src, "the retry is not gated on rate limiting"
+    assert src.count("await _poll_for_reply()") == 2, "exactly two polls: the attempt and one resend"

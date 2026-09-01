@@ -411,35 +411,62 @@ class DesktopAppTestRunner:
             sent = message.strip()
 
             try:
-                deadline = datetime.now() + timedelta(seconds=RESPONSE_DEADLINE_SECONDS)
                 last_seen: list = []
-                while datetime.now() < deadline:
-                    await asyncio.sleep(2.0)
-                    try:
-                        msgs = await _history(_http, _headers)
-                    except (httpx.HTTPError, KeyError, ValueError) as exc:
-                        self._log(f"history poll failed (retrying): {type(exc).__name__}: {exc}")
-                        continue
 
-                    last_seen = msgs
-                    # STRICT, AND EVERY CLAUSE EARNED ITS PLACE:
-                    #
-                    #  * NEW — absent from the pre-send baseline. An agent row from an
-                    #    earlier interaction is not an answer to THIS message.
-                    #  * message_type == "agent", NOT `is_agent`. The API sets
-                    #    is_agent=True for message_type "system" AND "error" on purpose,
-                    #    so the agent does not re-observe its own notifications
-                    #    (routes/agent.py: `if message_type in ("system", "error")`).
-                    #    Keying on is_agent therefore accepts the error text emitted when
-                    #    processing FAILED as proof that it succeeded — green exactly
-                    #    when the product broke.
-                    #  * non-empty, and not our own echo.
-                    replies = [m for m in msgs if _is_new_agent_reply(m, baseline_ids, sent)]
-                    if replies:
-                        elapsed = RESPONSE_DEADLINE_SECONDS - (deadline - datetime.now()).total_seconds()
-                        reply = replies[-1]["content"].strip()
-                        self._log(f'Agent replied after {elapsed:.1f}s: "{reply[:100]}"')
-                        return
+                async def _poll_for_reply() -> bool:
+                    """One deadline's worth of polling. True if the agent answered."""
+                    nonlocal last_seen
+                    deadline = datetime.now() + timedelta(seconds=RESPONSE_DEADLINE_SECONDS)
+                    while datetime.now() < deadline:
+                        await asyncio.sleep(2.0)
+                        try:
+                            msgs = await _history(_http, _headers)
+                        except (httpx.HTTPError, KeyError, ValueError) as exc:
+                            self._log(f"history poll failed (retrying): {type(exc).__name__}: {exc}")
+                            continue
+                        last_seen = msgs
+                        replies = [m for m in msgs if _is_new_agent_reply(m, baseline_ids, sent)]
+                        if replies:
+                            reply = replies[-1]["content"].strip()
+                            elapsed = RESPONSE_DEADLINE_SECONDS - (deadline - datetime.now()).total_seconds()
+                            self._log(f'Agent replied after {elapsed:.1f}s: "{reply[:100]}"')
+                            return True
+                    return False
+
+                # ONE RETRY, FOR PROVIDER RATE LIMITING ONLY.
+                #
+                # Three platforms drive one OpenRouter key concurrently, and a Windows run
+                # failed with exactly this and nothing else:
+                #     [error] Rate limited by openai_compatible_primary. Retrying in 6.7s...
+                #     [error] LLM call failed (InstructorRetryException)
+                # The agent behaved correctly — it reported the provider failure instead of
+                # inventing an answer — so failing the release gate there grades our
+                # shipping decision on someone else's quota.
+                #
+                # It cannot mask a real fault: a silent agent produces no new rows and a
+                # genuine DMA error carries no rate-limit text, so neither matches and both
+                # still fail on the first deadline.
+                if not await _poll_for_reply():
+                    fresh_now = [m for m in last_seen if m.get("id") not in baseline_ids]
+                    if any(
+                        m.get("message_type") in ("error", "system")
+                        and "rate limit" in (m.get("content") or "").lower()
+                        for m in fresh_now
+                    ):
+                        self._log(
+                            f"provider rate-limited within {RESPONSE_DEADLINE_SECONDS}s — "
+                            "resending once; this is quota, not the agent"
+                        )
+                        baseline_ids |= {m.get("id") for m in last_seen if m.get("id")}
+                        resent = await self.helper.input_text("input_message", message) and await self.helper.click(
+                            "btn_send"
+                        )
+                        if resent and await _poll_for_reply():
+                            return
+                        if not resent:
+                            self._log("resend failed — reporting the original result")
+                else:
+                    return
 
                 fresh = [m for m in last_seen if m.get("id") not in baseline_ids]
                 self._log(f"Conversation at failure: {len(last_seen)} message(s), {len(fresh)} new:")

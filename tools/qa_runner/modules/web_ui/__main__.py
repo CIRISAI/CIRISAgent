@@ -2589,6 +2589,31 @@ def _fail(step: str, proc: Optional[subprocess.CompletedProcess] = None, hint: s
     print(f"        full output: {qa_log_dir()}")
 
 
+def _ios_startup_state(udid: str, bundle_id: str) -> str:
+    """One-line summary of how far the app has got, for the wait's progress lines.
+
+    The app writes into Documents/ciris inside its data container, so the
+    presence of a data dir, a database and log files is a coarse but honest
+    progress bar for a startup that otherwise reports nothing until its HTTP
+    server binds. "no container yet" and "logs but no db" are different failures
+    and used to look identical from outside.
+    """
+    box = _simctl(["get_app_container", udid, bundle_id, "data"], timeout=30)
+    root = (box.stdout or "").strip().splitlines()
+    if not root or not root[0].startswith("/"):
+        return "container=<none>"
+    base = Path(root[0]) / "Documents" / "ciris"
+    if not base.exists():
+        return "container=ok ciris=<not created>"
+    bits = []
+    for name, pattern in (("logs", "logs/*.log"), ("db", "data/*.db")):
+        hits = sorted(base.glob(pattern))
+        bits.append(f"{name}={len(hits)}")
+    newest = max((f.stat().st_mtime for f in base.rglob("*") if f.is_file()), default=0)
+    age = f"{time.time() - newest:.0f}s" if newest else "n/a"
+    return f"container=ok {' '.join(bits)} last-write={age}-ago"
+
+
 def _ios_diagnostics(udid: str, bundle_id: str) -> None:
     """Dump everything that explains an iOS bring-up failure, to files.
 
@@ -2620,6 +2645,38 @@ def _ios_diagnostics(udid: str, bundle_id: str) -> None:
             print(f"    {name}: rc={proc.returncode} -> {qa_log_dir() / (name + '.log')}")
         except Exception as exc:  # noqa: BLE001
             print(f"    {name}: could not collect ({type(exc).__name__})")
+
+    # THE APP'S OWN LOGS, which os_log does not carry. The Python runtime writes
+    # into Documents/ciris/logs inside the data container, and that is where a
+    # startup that stalls mid-initialisation says WHY — os_log only shows that
+    # the process is alive. Without these, a bring-up failure is diagnosable
+    # only down to "it did not answer".
+    try:
+        box = _simctl(["get_app_container", udid, bundle_id, "data"], timeout=60)
+        root = (box.stdout or "").strip().splitlines()
+        base = Path(root[0]) / "Documents" / "ciris" if root and root[0].startswith("/") else None
+        if base and base.exists():
+            dest = qa_log_dir() / "ios-app-logs"
+            dest.mkdir(parents=True, exist_ok=True)
+            copied = 0
+            for f in sorted(base.rglob("*.log")) + sorted(base.rglob("*.txt")):
+                if f.is_file():
+                    shutil.copy2(f, dest / f.name)
+                    copied += 1
+            print(f"    ios-app-logs: {copied} file(s) -> {dest}")
+            # Surface the newest incident inline: the artifact is for later, but
+            # the reason should be readable in the job log without a download.
+            incidents = sorted(base.rglob("incidents_latest.log"))
+            if incidents:
+                tail = incidents[0].read_text(encoding="utf-8", errors="replace").splitlines()[-25:]
+                print(f"    --- {incidents[0].name} (last {len(tail)} lines) ---")
+                for line in tail:
+                    print(f"      {line[:160]}")
+        else:
+            print("    ios-app-logs: no Documents/ciris in the container — the app "
+                  "had not started writing yet")
+    except Exception as exc:  # noqa: BLE001
+        print(f"    ios-app-logs: could not collect ({type(exc).__name__}: {exc})")
 
 
 def _simctl(args: List[str], timeout: int = 120) -> subprocess.CompletedProcess:
@@ -2837,20 +2894,55 @@ async def run_ios_simulator_up(args: argparse.Namespace) -> int:
     # 5. Poll /health — the same signal android-up waits on.
     port = getattr(args, "desktop_port", None) or 9091
     server_url = f"http://localhost:{port}"
-    print(f"[5/5] Waiting for the test server at {server_url}…")
-    deadline = time.time() + 120
+    # 120s IS THE BUDGET, NOT A GUESS. iOS comes up in ~15-20s when it is
+    # working, so if the test server has not bound in two minutes something is
+    # WRONG and waiting longer just delays the report. What was missing was not
+    # patience — it was any record of what the app was doing while we waited:
+    # the failure said "no /health in 120s" and nothing about the state of the
+    # thing that did not answer.
+    wait_secs = int(os.environ.get("CIRIS_QA_IOS_HEALTH_SECONDS", "120"))
+    print(f"[5/5] Waiting for the test server at {server_url} (up to {wait_secs}s)…")
+    deadline = time.time() + wait_secs
+    started = time.time()
+    last_note = 0.0
     while time.time() < deadline:
         try:
             r = requests.get(f"{server_url}/health", timeout=2)
             if r.status_code == 200:
-                print(" [OK] iOS simulator ready")
+                print(f" [OK] iOS simulator ready after {time.time() - started:.0f}s")
                 return 0
         except Exception:  # noqa: BLE001
             pass
+
+        # A DEAD APP IS NOT A SLOW APP. Without this the two are indistinguishable
+        # from the outside — both are "no answer on 9091" — and a crash burned the
+        # whole window before reporting a timeout that named the wrong cause.
+        # TIMESTAMPED PROGRESS, so the log shows WHERE it stopped rather than
+        # only that it did. Each line carries the wall clock (to correlate with
+        # os_log), the elapsed time, whether the process is still alive, and how
+        # far the app has got in writing its own state into the container.
+        elapsed = time.time() - started
+        if elapsed - last_note >= 15:
+            last_note = elapsed
+            alive = _simctl(["spawn", udid, "launchctl", "list"], timeout=30)
+            running = bundle_id in (alive.stdout or "")
+            stamp = datetime.now().strftime("%H:%M:%S")
+            print(f"  [{stamp}] +{elapsed:.0f}s  app={'running' if running else 'EXITED'}  {_ios_startup_state(udid, bundle_id)}")
+            # A DEAD APP IS NOT A SLOW APP. From outside both are "no answer on
+            # 9091"; only one is worth waiting for, so stop as soon as we know.
+            if not running:
+                _fail(
+                    f"the app EXITED while we waited for {server_url}/health after {elapsed:.0f}s",
+                    hint="It launched and then stopped, so this is a crash on startup\n"
+                         "rather than a slow one. The os_log dump below covers the\n"
+                         "launch window.",
+                )
+                _ios_diagnostics(udid, bundle_id)
+                return 1
         time.sleep(2)
 
     _fail(
-        f"no /health from {server_url} within 120s",
+        f"no /health from {server_url} within {wait_secs}s",
         hint="The app launched but its TestAutomationServer never answered.\n"
              "Most likely causes, in order:\n"
              "  1. CIRIS_TEST_MODE did not reach the app — simctl only forwards env\n"

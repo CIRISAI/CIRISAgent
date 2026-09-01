@@ -91,3 +91,54 @@ def test_only_the_substrate_surface_is_forwarded(path: str, owned: bool) -> None
     tell absent from unreachable.
     """
     assert _is_node_owned(path) is owned
+
+
+class TestHeaderForwarding:
+    """`Authorization: Bearer ` on first run made the proxy blame the node.
+
+    Client 0.5.196 routes `POST /v1/self/identity` through the brain instead of
+    posting straight to :4243 (CIRISClient#26), so this proxy saw its first
+    request carrying a bearer scheme with no token — there is no session yet on a
+    first run. h11 refuses to put that on the wire:
+
+        LocalProtocolError: Illegal header value b'Bearer '
+
+    which this proxy reported as "the folded node did not answer", against a node
+    that was listening and healthy. Setup then completed UNCLAIMED and the run
+    went red pointing at the wrong component.
+
+    The lesson worth pinning is not the strip: it is that a proxy must not blame
+    upstream for a request it never managed to send.
+    """
+
+    def test_the_exact_header_that_broke_it(self) -> None:
+        from ciris_engine.logic.adapters.api.routes.node_proxy import _forwardable_headers
+
+        out = _forwardable_headers([("Authorization", "Bearer "), ("Content-Type", "application/json")])
+        assert "Authorization" not in out, "a bearer scheme with no token must not be forwarded"
+        assert out["Content-Type"] == "application/json", "unrelated headers must survive"
+
+    def test_a_real_token_is_untouched(self) -> None:
+        from ciris_engine.logic.adapters.api.routes.node_proxy import _forwardable_headers
+
+        assert _forwardable_headers([("Authorization", "Bearer abc123")]) == {"Authorization": "Bearer abc123"}
+
+    def test_basic_auth_survives(self) -> None:
+        """The rule is 'scheme with no credential', not 'anything that isn't Bearer'."""
+        from ciris_engine.logic.adapters.api.routes.node_proxy import _forwardable_headers
+
+        creds = "Basic dXNlcjpwdw=="
+        assert _forwardable_headers([("Authorization", creds)]) == {"Authorization": creds}
+
+    def test_whitespace_only_and_empty_values_are_dropped(self) -> None:
+        """h11 rejects leading/trailing whitespace; an empty value carries nothing."""
+        from ciris_engine.logic.adapters.api.routes.node_proxy import _forwardable_headers
+
+        out = _forwardable_headers([("X-Empty", ""), ("X-Spaces", "   "), ("Accept", " */* ")])
+        assert out == {"Accept": "*/*"}
+
+    def test_hop_by_hop_headers_still_dropped(self) -> None:
+        from ciris_engine.logic.adapters.api.routes.node_proxy import _forwardable_headers
+
+        out = _forwardable_headers([("Host", "x"), ("Connection", "keep-alive"), ("Accept", "*/*")])
+        assert out == {"Accept": "*/*"}

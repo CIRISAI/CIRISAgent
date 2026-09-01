@@ -1,0 +1,46 @@
+
+### FATAL  (8 distinct, 14 occurrences)
+  x2   - Node fold: serve_with_python_adapter exited/failed: RuntimeError: re-author consent ciris-node-bootstrap-3nclwiulun -> ciris-canon
+  x2   -  [FAIL] Start Adapters failed: node fold failed to start (node-fails ⇒ agent-fails): RuntimeError: re-author consent ciris-node-bo
+  x2   - [FAIL] CIRIS Agent Initialization Failed (<dur>)
+  x2   - Error: node fold failed to start (node-fails ⇒ agent-fails): RuntimeError: re-author consent ciris-node-bootstrap-3nclwiulun -> ci
+  x2   - Runtime initialization failed: Initialization sequence failed - check logs for details
+  x2   - [EXIT] Fatal error in main (PID=<pid>): Initialization sequence failed - check logs for details
+  x1   ciris_server::auth::store: AMBIGUOUS provider identity — multiple live certs claim this account. Refusing to choose: picking one sil
+  x1   ciris_server::http_log: request FAILED (5xx) — full error body above method=GET uri=/v1/auth/oauth/google/callback?state=td7IywDRWsp
+
+### IDENTITY  (13 distinct, 28 occurrences)
+  x5   - list_wa_certificates(active_only=False) is unsupported under persist; returning active-only set (CIRISAgent#763).
+  x5   - ciris_engine.logic.persistence.stores.authentication_store - authentication_store.py:778 - list_wa_certificates(active_only=False)
+  x4   ciris_server::node_key: the configured key is an ACTOR, so it is not this node's identity. Minted and registered a separate node key
+  x3   ciris_persist::ffi::pyo3: federation error error=conflicts with existing row: key_id ciris-agent-bootstrap-jbdibklyfz already exists
+  x2   ciris_server::compose: the node key was minted but no owner signer is on disk, so its owner-binding could not follow. `owner_of(node
+  x2   ciris_server::compose: could not publish SIGNED self transport-destination — peers cannot PQ-attribute this node until it is asserte
+  x1   ciris_verify_ffi: get_ed25519_public_key: no key loaded
+  x1   - No root WA certificate found - cannot create system WA
+  x1   -    Agent identity not available - agent_id_hash will be 'unknown'
+  x1   - [WARN] Default admin WA not found
+  x1   - ciris_engine.logic.services.infrastructure.authentication.service - service.py:1896 - No root WA certificate found - cannot create
+  x1   - ciris_adapters.ciris_accord_metrics.adapter - adapter.py:200 -    Agent identity not available - agent_id_hash will be 'unknown'
+  x1   - ciris_engine.logic.adapters.api.routes.setup.complete - complete.py:103 - [WARN] Default admin WA not found
+
+### FEDERATION  (10 distinct, 21 occurrences)
+  x4   ciris_edge::replication::scheduler: round timed out waiting for peer reply
+  x3   ciris_server::scorer: capacity scorer pass emitted ZERO and the agents do not account for it — see `narrowing` for which plane stopp
+  x3   ciris_edge::transport::reticulum: inbound frame DROPPED — item 1 PASSED (Rooted∧owns_key) but item 2 FAILED: no hybrid-verified Sign
+  x2   ciris_server::trace_plane_watch: trace-plane watch: operator.trace_plane.never_admitted / operator.ingest.not_exercised — GET /v1/no
+  x2   ciris_edge::transport::reticulum: inbound frame NOT attributed — resolved binding fails Rooted∧owns_key; these are the ACTUAL operan
+  x2   anti_entropy_round{peer=ciris-canonical-1-d7bdeu223k kind=Community}: ciris_edge::replication::session: delivered envelope REFUSED —
+  x2   ciris_lens_core::ffi::pyo3: LensClient constructed with NullScrubber at non-generic trace level — pre-scrub on the agent side or awa
+  x1   anti_entropy_round{peer=ciris-canonical-1-d7bdeu223k kind=Community}: ciris_edge::replication::scheduler: round timed out waiting fo
+  x1   anti_entropy_round{peer=ciris-canonical-1-d7bdeu223k kind=CommunityMembershipRevocation}: ciris_edge::replication::session: delivere
+  x1   ciris_edge::replication::session: delivered envelope REFUSED — not applied (CIRISEdge#425 apply choke point) kind=Key reason=Key: ad
+
+### INTEGRITY  (2 distinct, 10 occurrences)
+  x5   ciris_verify_core::security::file_integrity: verify_manifest_integrity: HASH MISMATCH! This could mean:
+  x5   ciris_verify_core::security::file_integrity: check_full: manifest integrity verification FAILED
+
+### UPSTREAM  (3 distinct, 21 occurrences)
+  x7   ciris_verify_core::https: HTTPS: server answered but the response did not match the expected schema — this is a CONTRACT DRIFT, not 
+  x7   ciris_verify_core::validation: HTTPS query failed: Unparseable response from https://api.registry.ciris-services-1.ai/v1/steward-key
+  x7   ciris_verify_core::validation: No usable HTTPS answer — falling back to DNS-only consensus (degraded). Check the per-source error ab

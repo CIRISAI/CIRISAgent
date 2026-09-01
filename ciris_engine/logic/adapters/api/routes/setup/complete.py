@@ -559,21 +559,33 @@ def _enforce_single_holder(setup: SetupCompleteRequest, wa_cert: Any) -> None:
     if len(holders) <= 1:
         return
 
+    # COUNTS, NOT IDS. `holders` is derived from `setup`, and SetupCompleteRequest
+    # carries system_admin_password — so CodeQL taints every value read off it and
+    # logging one is a HIGH clear-text-logging finding. That is an
+    # over-approximation (a wa_id is not a secret), but the diagnostic here does
+    # not need the ids: the substrate already prints them, redacted and
+    # authoritative, in the refusal this exists to prevent —
+    #     AMBIGUOUS provider identity … holders=2 wa_ids=[…]
+    # What only WE can say is that setup created the second one and retired it,
+    # and a count carries that.
     ours = getattr(wa_cert, "wa_id", None)
     logger.error(
-        "CIRIS_USER_CREATE: setup left %d live holders on one provider identity %s. "
-        "The node refuses an ambiguous identity, and an OAuth user has no password to "
-        "fall back to — this is the lockout. Retiring our own cert so the fabric's "
-        "owner-binding stands alone.",
+        "CIRIS_USER_CREATE: setup left %d live holders on one provider identity. "
+        "The node refuses an ambiguous identity, and an OAuth user has no password "
+        "to fall back to — this is the lockout. Retiring the cert WE minted so the "
+        "fabric's owner-binding stands alone. The substrate logs the wa_ids.",
         len(holders),
-        holders,
     )
     if ours in holders and len(holders) > 1:
         authentication_store.update_wa_certificate(str(ours), {"active": False})
         remaining = authentication_store.live_oauth_holders(
             str(setup.oauth_provider), str(setup.oauth_external_id)
         )
-        logger.error("CIRIS_USER_CREATE: retired %s; holders now %s", ours, remaining)
+        logger.error(
+            "CIRIS_USER_CREATE: retired our own cert; %d live holder(s) remain "
+            "(1 is correct — the fabric's owner-binding).",
+            len(remaining),
+        )
 
 
 async def _create_setup_users(

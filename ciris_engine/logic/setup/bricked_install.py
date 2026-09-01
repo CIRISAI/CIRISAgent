@@ -131,6 +131,62 @@ def is_fatal_identity_failure(error: Union[BaseException, str]) -> bool:
     return any(sig in text for sig in FATAL_SIGNATURES)
 
 
+#: Things that are never in a CIRIS data home, and always in a source checkout.
+#: Their presence means the "home" we resolved is somebody's working copy.
+_SOURCE_TREE_MARKERS = (".git", "pyproject.toml", "ciris_engine", "setup.py", ".github")
+
+#: Things a real CIRIS home has. Requiring one means an empty or unrelated
+#: directory is never moved either.
+_HOME_MARKERS = ("identity", "data", "config", "secrets", INSTALL_MARKER, ".env")
+
+
+def refuse_reason(home: Path) -> Optional[str]:
+    """Why this path must NOT be moved, or None if it is safe to archive.
+
+    THIS EXISTS BECAUSE THE REPAIR ATE A CI CHECKOUT.
+
+    `get_ciris_home()` falls back to "current directory if in git repo
+    (development)". In CI, CIRIS_HOME is unset and the workspace IS a git repo,
+    so the home resolved to the checkout itself and the repair moved
+    `/home/runner/work/CIRISAgent/CIRISAgent` aside mid-run. The next step could
+    not find `.github/actions/…` because the entire tree had been renamed.
+
+    The same thing would happen to any developer running from a clone, and to a
+    user who launched the agent from inside a source directory. Moving a data
+    directory is recoverable; moving somebody's working copy out from under a
+    running process is not the kind of "repair" anyone asked for.
+
+    So: refuse anything that looks like source, and require it to look like a
+    home. Both conditions, because either alone is too weak — a data home has no
+    `.git`, and an empty directory has no markers at all.
+    """
+    try:
+        resolved = home.resolve()
+    except OSError as exc:
+        return f"cannot resolve {home}: {exc}"
+
+    if not resolved.exists():
+        return f"{resolved} does not exist"
+    if resolved.parent == resolved:
+        return f"{resolved} is a filesystem root"
+    if resolved == Path.cwd().resolve():
+        return f"{resolved} is the current working directory"
+
+    for marker in _SOURCE_TREE_MARKERS:
+        if (resolved / marker).exists():
+            return (
+                f"{resolved} contains {marker!r} — this is a source checkout or "
+                "working directory, not a CIRIS data home"
+            )
+
+    if not any((resolved / m).exists() for m in _HOME_MARKERS):
+        return (
+            f"{resolved} has none of {_HOME_MARKERS} — it does not look like a "
+            "CIRIS home, and moving an unrecognised directory is not a repair"
+        )
+    return None
+
+
 def repair(home: Path, reason: str, version: str) -> Optional[Path]:
     """Archive the damaged home so the next boot starts clean. Returns the archive.
 
@@ -138,6 +194,17 @@ def repair(home: Path, reason: str, version: str) -> Optional[Path]:
     only record of what happened, and a user who has just been told "your install
     was reset" deserves for that to be reversible by someone who knows how.
     """
+    refusal = refuse_reason(home)
+    if refusal is not None:
+        logger.error(
+            "BRICKED INSTALL DETECTED but REFUSING to touch this path — %s.\n"
+            "  reason for repair: %s\n"
+            "  Set CIRIS_HOME to the agent's data directory and restart.",
+            refusal,
+            reason,
+        )
+        return None
+
     if os.environ.get("CIRIS_NO_AUTO_REPAIR"):
         logger.error(
             "BRICKED INSTALL DETECTED but CIRIS_NO_AUTO_REPAIR is set — not repairing.\n"

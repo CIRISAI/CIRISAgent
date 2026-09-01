@@ -115,3 +115,115 @@ def test_the_operator_can_refuse(home, monkeypatch) -> None:
     monkeypatch.setenv("CIRIS_NO_AUTO_REPAIR", "1")
     assert br.repair_if_bricked(home, RuntimeError(FIELD_ERROR), VERSION) is None
     assert (home / "data" / "ciris_engine.db").exists()
+
+
+# ---------------------------------------------------------------------------
+# THE NEAR-MISS: the repair moved a CI checkout.
+#
+# get_ciris_home() falls back to "current directory if in git repo
+# (development)". In CI, CIRIS_HOME is unset and the workspace IS a git repo, so
+# `home` resolved to the checkout and the repair renamed
+# /home/runner/work/CIRISAgent/CIRISAgent out from under the running job. The
+# next step failed with "Can't find 'action.yml' … under .github/actions/…"
+# because the whole tree had moved.
+#
+# The tests above never caught it: every one of them passes an explicit tmp_path
+# that looks like a data home. None asked what happens when the resolved home is
+# something else entirely — which is the only situation where a destructive
+# repair can do real harm.
+# ---------------------------------------------------------------------------
+
+
+def test_a_source_checkout_is_never_moved(tmp_path) -> None:
+    """The exact CI shape: a git repo that is not a CIRIS home."""
+    repo = tmp_path / "CIRISAgent"
+    (repo / ".git").mkdir(parents=True)
+    (repo / "ciris_engine").mkdir()
+    (repo / ".github" / "actions").mkdir(parents=True)
+
+    assert br.repair_if_bricked(repo, RuntimeError(FIELD_ERROR), VERSION) is None
+    assert (repo / ".github" / "actions").exists(), "the checkout was moved"
+
+
+@pytest.mark.parametrize("marker", [".git", "pyproject.toml", "ciris_engine", "setup.py", ".github"])
+def test_any_source_marker_blocks_the_move(tmp_path, marker) -> None:
+    """One marker is enough. A data home has none of these."""
+    d = tmp_path / "looks-like-source"
+    (d / "identity").mkdir(parents=True)  # also looks like a home — source still wins
+    target = d / marker
+    target.mkdir() if "." not in marker or marker in (".git", ".github") else target.write_text("x")
+
+    assert br.refuse_reason(d) is not None
+
+
+def test_the_current_working_directory_is_never_moved(tmp_path, monkeypatch) -> None:
+    """Moving the CWD out from under a running process is not a repair."""
+    d = tmp_path / "home"
+    (d / "identity").mkdir(parents=True)
+    monkeypatch.chdir(d)
+
+    assert br.refuse_reason(d) is not None
+
+
+def test_an_unrecognisable_directory_is_never_moved(tmp_path) -> None:
+    """No home markers at all — we have no evidence this is ours to move."""
+    d = tmp_path / "somebody-elses-folder"
+    d.mkdir()
+    (d / "holiday-photos").mkdir()
+
+    assert br.refuse_reason(d) is not None
+
+
+def test_a_real_home_is_still_repairable(home) -> None:
+    """The gate must not be so tight that it never fires on the actual bug."""
+    assert br.refuse_reason(home) is None
+    assert br.repair_if_bricked(home, RuntimeError(FIELD_ERROR), VERSION) is not None
+
+
+def test_a_home_identified_only_by_its_marker_is_repairable(tmp_path) -> None:
+    """A home wiped down to its stamp is still a home."""
+    d = tmp_path / "ciris"
+    d.mkdir()
+    br.record_install_version(d, "2.9.44-stable")
+
+    assert br.refuse_reason(d) is None
+
+
+# THE NEAR-MISS: this repair moved a CI checkout.
+#
+# get_ciris_home() falls back to "current directory if in git repo
+# (development)". CIRIS_HOME is unset in CI and the workspace IS a git repo, so
+# `home` resolved to the checkout and the repair renamed it mid-run. The next
+# step died on "Can't find 'action.yml' … under .github/actions/…".
+#
+# Every test above passes an explicit tmp_path that already looks like a data
+# home, so none of them asked the only question that matters for a destructive
+# operation: what if the path we resolved is not ours to move?
+
+
+def test_a_source_checkout_is_never_moved(tmp_path) -> None:
+    repo = tmp_path / "CIRISAgent"
+    (repo / ".git").mkdir(parents=True)
+    (repo / ".github" / "actions").mkdir(parents=True)
+
+    assert br.repair_if_bricked(repo, RuntimeError(FIELD_ERROR), VERSION) is None
+    assert (repo / ".github" / "actions").exists(), "the checkout was moved"
+
+
+def test_the_current_working_directory_is_never_moved(tmp_path, monkeypatch) -> None:
+    d = tmp_path / "home"
+    (d / "identity").mkdir(parents=True)
+    monkeypatch.chdir(d)
+    assert br.refuse_reason(d) is not None
+
+
+def test_an_unrecognisable_directory_is_never_moved(tmp_path) -> None:
+    d = tmp_path / "somebody-elses-folder"
+    (d / "holiday-photos").mkdir(parents=True)
+    assert br.refuse_reason(d) is not None
+
+
+def test_a_real_home_is_still_repairable(home) -> None:
+    """The guard must not be so tight that it never fires on the actual bug."""
+    assert br.refuse_reason(home) is None
+    assert br.repair_if_bricked(home, RuntimeError(FIELD_ERROR), VERSION) is not None

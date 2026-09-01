@@ -39,7 +39,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Any, Optional
+from typing import Dict, Iterable, Optional, Tuple
 from urllib.parse import quote
 
 import httpx
@@ -103,6 +103,50 @@ NODE_OWNED_PREFIXES = (
 _SAFE_PATH = re.compile(r"^[A-Za-z0-9._~/-]*$")
 
 
+def _forwardable_headers(items: Iterable[Tuple[str, str]]) -> Dict[str, str]:
+    """Headers safe to put back on the wire.
+
+    WHY THIS IS NOT A DICT COMPREHENSION ANY MORE.
+
+    On a first run the client sends `Authorization: Bearer ` — the scheme with no
+    token, because no session exists yet. Forwarding that verbatim makes h11
+    refuse to build the request:
+
+        LocalProtocolError: Illegal header value b'Bearer '
+
+    which this proxy then reported as "the folded node did not answer", blaming a
+    node that was listening and healthy. The claim step failed, setup completed
+    UNCLAIMED, and the run went red pointing at the wrong component entirely.
+
+    It stayed hidden because client 0.5.195 posted /v1/self/identity DIRECTLY to
+    the node and never came through here; 0.5.196 routes it via the brain
+    (CIRISClient#26), so this path saw its first empty bearer.
+
+    Two rules, both required by RFC 9110 §5.5 and enforced by h11:
+      * a value carries no leading or trailing whitespace
+      * a value that is empty after stripping is not sent at all — it conveys
+        nothing, and `Authorization: Bearer` alone would be a malformed
+        credential rather than an absent one
+    """
+    out: Dict[str, str] = {}
+    for key, value in items:
+        if key.lower() in _DROP:
+            continue
+        cleaned = value.strip() if isinstance(value, str) else value
+        if not cleaned:
+            continue
+        # A CREDENTIAL SCHEME WITH NO CREDENTIAL IS NOT A CREDENTIAL. Stripping
+        # alone turns `Bearer ` into `Bearer`, which h11 accepts and the node then
+        # has to interpret — presenting a MALFORMED token where the honest wire
+        # says nothing at all. On first run there is genuinely no session yet, and
+        # `/v1/self/identity` is unauthenticated by design at that point, so the
+        # header must be absent rather than empty.
+        if key.lower() == "authorization" and len(cleaned.split()) < 2:
+            continue
+        out[key] = cleaned
+    return out
+
+
 def _is_node_owned(path: str) -> bool:
     """Does the node own `/v1/<path>`?"""
     full = f"/v1/{path}"
@@ -157,7 +201,7 @@ async def forward_to_node(path: str, request: Request) -> Response:
         raise HTTPException(status_code=400, detail="Malformed path")
 
     url = f"http://127.0.0.1:{NODE_FOLD_PORT}/v1/{safe_path}"
-    headers = {k: v for k, v in request.headers.items() if k.lower() not in _DROP}
+    headers = _forwardable_headers(request.headers.items())
     body = await request.body()
 
     try:
@@ -183,7 +227,7 @@ async def forward_to_node(path: str, request: Request) -> Response:
             media_type="application/json",
         )
 
-    passthrough: dict[str, Any] = {k: v for k, v in upstream.headers.items() if k.lower() not in _DROP}
+    passthrough: Dict[str, str] = _forwardable_headers(upstream.headers.items())
     return Response(
         content=upstream.content,
         status_code=upstream.status_code,

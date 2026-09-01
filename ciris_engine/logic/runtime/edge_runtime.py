@@ -757,6 +757,99 @@ def _spawn_delivery_rooting_probe(engine: Any, edge: Any) -> None:
         except Exception:  # noqa: BLE001 — diagnostics only
             return None
 
+    def _replication_served_total() -> Optional[int]:
+        """Read `replication_envelopes_served_total` — the counter that actually
+        measures trace delivery.
+
+        WHY NOT `envelopes_sent_total`, WHICH THIS FILE ALREADY READS ABOVE.
+        That counter is incremented only from edge's application/durable send
+        path (`inc_sent`/`inc_received`, src/edge.rs). The anti-entropy
+        REPLICATION plane — which is what carries `trace:*` rows to a canonical —
+        touches it not at all. So a run that lands trace_events on the canonical,
+        summarised and scored, reports `envelopes_sent_total: 0`. Measured
+        upstream: 15 trace_events delivered, counter zero.
+
+        CIRISEdge#434 closed on exactly this, with explicit guidance not to key
+        trace-pipeline health on the application counter. The plane-correct one is
+        CIRISEdge#433, live since edge v15.x; `operator_surface.rs:1468` is the
+        reference reader.
+
+        SEARCHED RECURSIVELY, not read from a fixed path. The counter's home in
+        the payload is upstream's to choose and has moved before; a hardcoded
+        `["round_diagnostics"]["..."]` that silently returns None the day it moves
+        would look exactly like "no delivery" — which is the failure mode this
+        whole line of work exists to stop.
+        """
+        try:
+            import json as _json
+
+            import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
+
+            ds = getattr(ciris_server, "delivery_status", None)
+            if ds is None:
+                return None
+            raw = ds()
+            data = _json.loads(raw) if isinstance(raw, str) else raw
+
+            def _find(node: object) -> Optional[int]:
+                if isinstance(node, dict):
+                    for k, v in node.items():
+                        if k == "replication_envelopes_served_total" and v is not None:
+                            try:
+                                return int(v)
+                            except (TypeError, ValueError):
+                                return None
+                        found = _find(v)
+                        if found is not None:
+                            return found
+                elif isinstance(node, list):
+                    for item in node:
+                        found = _find(item)
+                        if found is not None:
+                            return found
+                return None
+
+            return _find(data)
+        except Exception:  # noqa: BLE001 — diagnostics only
+            return None
+
+    def _log_trace_ship(phase: str) -> None:
+        """Emit the plane-correct delivery counter so a log tail can gate on it.
+
+        The QA runner boots this agent as a SUBPROCESS, so it can never call the
+        in-process accessors — same reason `_log_delivery_status` and
+        `_log_trace_plane` exist. `tools/dev/assert_traces_reached_canonical.py`
+        reads the line this writes.
+
+        WHEN THE COUNTER IS ABSENT this says so and names what the payload DID
+        carry, rather than staying quiet. A gate whose signal never appears must
+        be able to tell "delivery did not happen" from "the counter moved or the
+        wheel predates it", and silence cannot.
+        """
+        served = _replication_served_total()
+        if served is not None:
+            logger.info("[TRACE-SHIP] phase=%s replication_envelopes_served_total=%s", phase, served)
+            return
+        try:
+            import json as _json
+
+            import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
+
+            ds = getattr(ciris_server, "delivery_status", None)
+            raw = ds() if ds is not None else None
+            data = _json.loads(raw) if isinstance(raw, str) else raw
+            keys = sorted((data or {}).keys()) if isinstance(data, dict) else []
+            logger.info(
+                "[TRACE-SHIP] phase=%s replication_envelopes_served_total ABSENT from delivery_status "
+                "(top-level keys: %s). Trace delivery cannot be confirmed from this wheel; see "
+                "CIRISEdge#433 for the counter and CIRISEdge#434 for why envelopes_sent_total is not "
+                "a substitute.",
+                phase,
+                keys or "<none>",
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.info("[TRACE-SHIP] phase=%s counter unavailable (%s)", phase, type(exc).__name__)
+
     def _probe() -> None:
         import time as _t
 
@@ -950,12 +1043,14 @@ def _spawn_delivery_rooting_probe(engine: Any, edge: Any) -> None:
                     )
                     _log_delivery_status("ship-confirmed")
                     _log_trace_plane("ship-confirmed")
+                    _log_trace_ship("ship-confirmed")
                     return
                 if waited - last_status >= status_cadence:
                     last_status = waited
                     _phase = "kex-present-await-ship" if kex_seen_at is not None else "kex-none-repriming"
                     _log_delivery_status(_phase)
                     _log_trace_plane(_phase)
+                    _log_trace_ship(_phase)
             logger.info(
                 "[DELIVERY-PROBE] canonical %s window closed after %ss post-root with SHIP UNCONFIRMED "
                 "(kex=%s, envelopes_sent=0). Do not assume a peer fault: the CIRISEdge#336 dial-cache "

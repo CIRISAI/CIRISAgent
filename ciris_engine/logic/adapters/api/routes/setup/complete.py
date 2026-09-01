@@ -648,6 +648,110 @@ async def _create_setup_users(
         # Check if OAuth user already exists and update to ROOT if found
         existing_wa, _ = await _check_existing_oauth_wa(auth_service, setup)
 
+        # DOES THE FABRIC ALREADY HOLD THIS IDENTITY?
+        #
+        # claim-remote (substrate) binds the provider identity to the owner it
+        # mints — `wa-root-<user>` — BEFORE completeSetup runs. That cert cannot
+        # be materialized as a WACertificate (its wa_id does not match our minting
+        # pattern), so `existing_wa` comes back None for an identity that is very
+        # much taken, and the branch below used to mint a SECOND ROOT and link the
+        # same provider identity to it.
+        #
+        # The substrate then correctly refused every later sign-in:
+        #   AMBIGUOUS provider identity — multiple live certs claim this account
+        #   holders=2 wa_ids=["wa-2026-…", "wa-root-mooreericnyc-…"]
+        # Google failed on the ambiguity and local failed because an OAuth user has
+        # no password: a closed door on both sides, on a fresh install.
+        #
+        # We must not author a second claim on an identity the fabric has already
+        # bound. Ownership is the fabric's to produce and ours to surface.
+        fabric_holder_id: Optional[str] = None
+        fabric_provider: str = ""
+        fabric_provider_subject: str = ""
+        if existing_wa is None and setup.oauth_provider and setup.oauth_external_id:
+            fabric_provider = str(setup.oauth_provider)
+            fabric_provider_subject = str(setup.oauth_external_id)
+            fabric_holder_id = authentication_store.fabric_oauth_holder_id(
+                fabric_provider, fabric_provider_subject
+            )
+
+        if fabric_holder_id:
+            # LOG THE FACT, NOT THE SUBJECT.
+            #
+            # `oauth_external_id` is the provider's subject identifier — PII, and
+            # the substrate redacts it to a tail (`subject=…1383`) for exactly that
+            # reason. Reading attributes off `setup` also taints the statement for
+            # CodeQL, because SetupCompleteRequest carries system_admin_password:
+            # three HIGH "clear-text logging of sensitive information" alerts, all
+            # on this one call.
+            #
+            # The diagnostic value here is "the identity was already bound, and to
+            # whom" — the provider and a tail are enough to correlate with the
+            # substrate's own line, and the holder id is not sensitive.
+            # LOG ONLY THE HOLDER. Binding the provider and subject to locals did
+            # NOT clear the CodeQL taint — it propagates through `str()`, so any
+            # value derived from `setup` keeps carrying it. Laundering the taint
+            # through more locals would only hide the finding rather than answer
+            # it.
+            #
+            # And nothing is actually lost. The substrate already logs the pair,
+            # redacted, at the moment it binds them:
+            #     oauth sign-in CREATED a local identity provider=google subject=…1383
+            # The fact THIS line has to carry is the one the substrate cannot know:
+            # that setup declined to mint a second ROOT, and which cert it deferred
+            # to. `fabric_holder_id` comes from the store, not from `setup`, and is
+            # not sensitive.
+            # FALSE POSITIVE (py/clear-text-logging-sensitive-data). `fabric_holder_id`
+            # is a WA certificate id — `wa-root-<user>` — read back OUT of the
+            # certificate store. It is the same class of identifier as the `node_id`
+            # suppressed above, appears throughout the audit trail by design, and is
+            # not a credential.
+            #
+            # CodeQL taints it transitively: the store lookup takes the provider and
+            # subject as arguments, those derive from the setup request, and the
+            # request object also carries a password field the lookup never reads.
+            # Two earlier attempts to satisfy the analyser rather than suppress it —
+            # binding the values to locals, then logging only a redacted subject
+            # tail — did not clear it, because taint propagates through `str()` and
+            # through the call's return value. Laundering it further would hide the
+            # finding rather than answer it.
+            #
+            # The PII half of the original finding WAS real and is fixed: the
+            # provider subject is no longer logged here at all.
+            # codeql[py/clear-text-logging-sensitive-data]
+            logger.info(
+                "CIRIS_USER_CREATE: this provider identity is ALREADY bound by the substrate to %s "
+                "(claim-remote owner-binding) — NOT minting a second ROOT. Minting here is what "
+                "produced 'AMBIGUOUS provider identity / holders=2' and locked first-run OAuth users out.",
+                # The suppression must sit on the flagged line itself. CodeQL
+                # reports this ARGUMENT, not the `logger.info(` call above it, so a
+                # comment before the call — where the precedent's single-line
+                # `print(...)` puts it — does not apply here.
+                # codeql[py/clear-text-logging-sensitive-data]
+                fabric_holder_id,
+            )
+            # Annotated because this is now the FIRST binding in the function, so
+            # an unannotated str here makes mypy reject the later `= None` on the
+            # normal path.
+            oauth_user_id: Optional[str] = f"{fabric_provider}:{fabric_provider_subject}"
+            # The agent-tier work still applies, keyed on the FABRIC's cert.
+            _create_founding_partnership(fabric_holder_id, oauth_user_id)
+            _store_user_preferences(fabric_holder_id, setup)
+            await _ensure_system_wa(auth_service)
+            # THE ADOPTION PATH STILL OWES THE CALLER EVERYTHING ELSE IT PROMISED.
+            # An earlier version of this branch returned here, which skipped
+            # _update_system_admin_password() below — so a request carrying
+            # system_admin_password got a response saying both credentials were
+            # configured while the default admin password was silently unchanged.
+            # Declining to mint a duplicate ROOT is not a licence to drop the rest
+            # of the contract.
+            await _update_system_admin_password(auth_service, setup, fabric_holder_id)
+
+            # The provisional placeholder is the substrate's to retire, and it
+            # already did (claim-remote logs "retired a duplicate cert"). Nothing
+            # of ours to clean up.
+            return
+
         # Create new WA if we didn't find an existing OAuth user
         if existing_wa is None:
             wa_cert = await _create_new_wa(auth_service, setup)

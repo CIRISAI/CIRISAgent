@@ -55,9 +55,11 @@ except Exception:  # pragma: no cover - never let the shim stop the runner
 import argparse
 import asyncio
 import glob
+import json
 import os
 import shutil
 import subprocess
+import tempfile
 import sys
 import time
 from dataclasses import dataclass
@@ -65,6 +67,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional
 
+import re
 import requests
 
 from tools.qa_runner.platform_procs import temp_path
@@ -312,8 +315,21 @@ class DesktopAppTestRunner:
 
         await self.run_test("enter_message", enter_message)
 
-        # Baseline BEFORE sending, so "did anything come back" is answerable.
-        baseline_elements = len(await self.helper.get_elements())
+        # Baseline BEFORE sending: the TEXTS already on screen, not a count.
+        #
+        # A COUNT CANNOT ANSWER THE QUESTION. Sending adds the user's OWN message
+        # bubble to the composed tree, so "the tree grew" becomes true the instant
+        # the echo renders — before the agent has done anything. That is exactly
+        # what shipped: a CI run passed `wait_for_response` in 1005ms against a
+        # screen showing one message, the user's, still displaying its pending
+        # indicator. The screenshot is the only reason anyone noticed.
+        #
+        # Texts, not elements, because the reply is CONTENT: something must appear
+        # that we did not put there.
+        def _texts(els) -> set:
+            return {e.text.strip() for e in els if getattr(e, "text", None) and e.text.strip()}
+
+        baseline_texts = _texts(await self.helper.get_elements())
 
         # Click send button
         async def click_send():
@@ -338,24 +354,60 @@ class DesktopAppTestRunner:
 
             Asserted through the UI rather than the API because this is the UI
             suite, and because the API answering while the screen stays empty is
-            precisely the failure worth catching. The signal is the composed tree
-            growing: a rendered reply is new elements.
+            precisely the failure worth catching.
+
+            THE SIGNAL IS NEW TEXT THAT WE DID NOT SEND. Not element count — see
+            the baseline above for why that could not fail. A reply is text on
+            screen that was not there before and is not the echo of our own
+            message.
+
+            Chrome is excluded explicitly: the message counter ("Showing last N
+            messages") changes when the echo renders, so accepting any new text
+            would reinstate the same hole one layer down.
             """
+            sent = message.strip()
+
+            # WHAT COUNTS AS "NOT A REPLY" IS DATA, NOT A GUESS.
+            #
+            # A hand-written regex here was wrong: it excluded "sending" and "…"
+            # but would have ACCEPTED the product's own
+            #   agent.still_processing  "Still processing. Check back later.
+            #                            Agent response is not guaranteed."
+            #   agent.error_generic     "I encountered an issue processing your
+            #                            request. Please try again."
+            # Both are strings the UI renders INSTEAD of an answer, so a run where
+            # the agent errored or stalled would have gone green. A blocklist of
+            # chrome leaks by construction, because chrome is open-ended.
+            #
+            # Every string the product can render is in the localization bundle,
+            # so the bundle IS the blocklist. Anything the app can say on its own
+            # is excluded; what remains is text that came from the model.
+            product_strings = _product_strings()
+            # Still keep a small structural filter for values the bundle cannot
+            # contain: timestamps and the message counter are formatted at runtime.
+            chrome = re.compile(r"^(showing last \d+ messages?|\d{1,2}:\d{2}\s*(am|pm)?|\.\.\.|·+)$", re.I)
+
             deadline = datetime.now() + timedelta(seconds=45)
             while datetime.now() < deadline:
                 await asyncio.sleep(1.0)
-                grown = len(await self.helper.get_elements()) - baseline_elements
-                if grown > 0:
+                fresh = _texts(await self.helper.get_elements()) - baseline_texts
+                replies = [
+                    t
+                    for t in fresh
+                    if t != sent and not chrome.match(t) and t not in product_strings and len(t) > 1
+                ]
+                if replies:
                     elapsed = 45 - (deadline - datetime.now()).total_seconds()
-                    self._log(f"Response rendered (+{grown} elements) after {elapsed:.1f}s")
+                    preview = max(replies, key=len)[:80]
+                    self._log(f'Reply rendered after {elapsed:.1f}s: "{preview}"')
                     return
             raise RuntimeError(
-                "No response rendered within 45s: the message was sent and the UI "
-                "never changed.\n"
-                "        The agent either did not answer or answered somewhere the "
-                "screen does not show.\n"
-                "        Check the LLM is configured (the wizard's AI screen) and the "
-                "app log for send/receive errors."
+                "No reply rendered within 45s.\n"
+                "        The message was sent and the only new text on screen was our own\n"
+                "        echo and UI chrome — the agent did not answer, or answered\n"
+                "        somewhere the screen does not show.\n"
+                "        Check the LLM is configured (the wizard's AI screen) and the\n"
+                "        app log for send/receive errors."
             )
 
         await self.run_test("wait_for_response", wait_for_response)
@@ -1271,6 +1323,51 @@ Examples:
         help="For federation: write the FederationWalkReport JSON to this path",
     )
     parser.add_argument(
+        "--platform",
+        choices=["desktop", "android", "ios"],
+        default=None,
+        help=(
+            "Which of the five targets to drive. THE SAME FLOW RUNS ON ALL OF THEM: "
+            "one CIRISClient Compose app, one TestAutomationServer on 9091, so a "
+            "command differs only in transport (desktop binds 9091 directly; android "
+            "forwards adb 8091->9091; ios forwards 18091->9091). Applies to EVERY "
+            "command, not just `federation`. Defaults to desktop. The older "
+            "--android/--ios switches remain as aliases."
+        ),
+    )
+    parser.add_argument(
+        "--ios-udid",
+        default="booted",
+        help="For --platform ios: simulator UDID, or 'booted' for the running one (default).",
+    )
+    parser.add_argument(
+        "--ios-app-path",
+        default=None,
+        help=(
+            "For --platform ios: path to the built *.app for the SIMULATOR "
+            "(-sdk iphonesimulator). Discovered from DerivedData when unset."
+        ),
+    )
+    parser.add_argument(
+        "--ios-physical",
+        action="store_true",
+        help=(
+            "For --platform ios: target a physical device (devicectl/pymobiledevice3) "
+            "instead of a simulator. CI uses the simulator — it needs no signing "
+            "identity, provisioning profile or registered UDID."
+        ),
+    )
+    parser.add_argument(
+        "--screenshot-on-success",
+        metavar="PATH",
+        default=None,
+        help=(
+            "Capture the final screen to PATH when the run PASSES. Review material "
+            "for the 5-platform gallery: a green tick says a reply rendered, a "
+            "picture shows WHAT rendered. Never fails the run on its own."
+        ),
+    )
+    parser.add_argument(
         "--android",
         action="store_true",
         help="For federation --launch: target an Android emulator instead of the desktop app. "
@@ -1315,8 +1412,45 @@ Examples:
     )
 
     args = parser.parse_args()
+    _reconcile_platform(args)
     _apply_platform_defaults(args)
+    # Remembered so the capture wrapper can read --platform/--screenshot-on-success
+    # without parsing argv a second time (which would diverge the moment a
+    # command mutates its own args).
+    global _LAST_ARGS
+    _LAST_ARGS = args
     return args
+
+
+#: The parsed args, kept so the success-capture wrapper can see them.
+_LAST_ARGS: Optional[argparse.Namespace] = None
+
+
+def _reconcile_platform(args: argparse.Namespace) -> None:
+    """Make `--platform` and the legacy `--android`/`--ios` switches one fact.
+
+    Both spellings exist because `--android`/`--ios` predate this and are wired
+    into existing invocations; `--platform` is the one that applies to every
+    command. Rather than have two sources of truth drift, they are collapsed here
+    into BOTH representations, so downstream code can read whichever it already
+    reads and get the same answer.
+    """
+    explicit = getattr(args, "platform", None)
+    legacy_android = bool(getattr(args, "android", False))
+    legacy_ios = bool(getattr(args, "ios", False))
+
+    if explicit is None:
+        args.platform = "android" if legacy_android else "ios" if legacy_ios else "desktop"
+    elif (legacy_android and explicit != "android") or (legacy_ios and explicit != "ios"):
+        # Contradicting yourself is a mistake worth surfacing, not silently
+        # resolving in favour of whichever the code happens to read first.
+        raise SystemExit(
+            f"--platform {explicit} contradicts the legacy "
+            f"--{'android' if legacy_android else 'ios'} switch; pass only one."
+        )
+
+    args.android = args.platform == "android"
+    args.ios = args.platform == "ios"
 
 
 def _apply_platform_defaults(args: argparse.Namespace) -> None:
@@ -1329,13 +1463,18 @@ def _apply_platform_defaults(args: argparse.Namespace) -> None:
     Honors any explicit user override (--desktop-port / --api-port).
     """
     if getattr(args, "ios", False):
-        # iOS uses the iproxy 18xxx convention to avoid collision with any
-        # locally-running host backend. Bump defaults only if the user hasn't
-        # explicitly overridden them.
+        # The 18xxx convention is for PHYSICAL devices only, where iproxy tunnels
+        # over USB and the offset avoids colliding with a host backend. A
+        # SIMULATOR shares the host network stack: the app's 9091 is reachable at
+        # localhost:9091 with no forward at all, exactly like desktop. Applying
+        # the offset to a simulator points the driver at a dead port and reports
+        # "the app is not running in test mode" — the wrong cause, which is the
+        # same trap documented below for desktop's 8091-vs-9091.
+        physical = getattr(args, "ios_physical", False)
         if args.desktop_port == 8091:
-            args.desktop_port = 18091
+            args.desktop_port = 18091 if physical else 9091
         if args.api_port is None:
-            args.api_port = 18080
+            args.api_port = 18080 if physical else 8080
     elif not getattr(args, "android", False):
         # DESKTOP binds 9091 DIRECTLY — TestAutomationServer.kt:39
         # (`private val port: Int = 9091`). Android and iOS reach it through a
@@ -2216,6 +2355,374 @@ def _kill_iproxy_children() -> None:
             pass
 
 
+def _product_strings() -> set:
+    """Every string the CLIENT can render on its own, from the localization bundle.
+
+    Used as the exclusion set for "did the agent reply": if the app could have
+    produced the text by itself, it is not evidence of an answer. This is the
+    blocklist as DATA — the alternative is enumerating chrome by hand, which
+    already missed `agent.still_processing` and `agent.error_generic`, the two
+    strings the UI shows precisely when there is no answer.
+
+    Best-effort: an empty set degrades to the structural filter alone, which is
+    the pre-existing behaviour rather than a new failure mode.
+    """
+    repo = Path(__file__).resolve().parents[4]
+    candidates = [
+        repo / "localization" / "en.json",
+        repo / "apps" / "android" / "src" / "main" / "assets" / "localization" / "en.json",
+    ]
+    out: set = set()
+    for path in candidates:
+        if not path.exists():
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+
+        def walk(node: object) -> None:
+            if isinstance(node, dict):
+                for value in node.values():
+                    walk(value)
+            elif isinstance(node, str):
+                text = node.strip()
+                if text:
+                    out.add(text)
+
+        walk(data)
+    return out
+
+
+def qa_log_dir() -> Path:
+    """Where bring-up writes everything it learns, so CI can upload it.
+
+    A FAILURE YOU CANNOT DIAGNOSE FROM THE ARTIFACT COSTS MORE THAN THE FAILURE.
+    Every truncated `stderr[:200]` in a CI log is a round trip: someone re-runs
+    the job with more logging to find out what the first run already knew. So the
+    full stdout/stderr of every command lands in a file here, and the console
+    keeps the short form for readability.
+
+    Overridable with CIRIS_QA_LOG_DIR so the workflow can point it somewhere it
+    already uploads.
+    """
+    d = Path(os.environ.get("CIRIS_QA_LOG_DIR") or (Path(tempfile.gettempdir()) / "ciris-qa-logs"))
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _record(name: str, proc: subprocess.CompletedProcess, cmd: Optional[List[str]] = None) -> Path:
+    """Persist a command's full result and return the file written."""
+    path = qa_log_dir() / f"{name}.log"
+    try:
+        with path.open("a", encoding="utf-8") as fh:
+            fh.write(f"$ {' '.join(cmd or getattr(proc, 'args', []) or [name])}\n")
+            fh.write(f"# returncode={proc.returncode}\n")
+            if proc.stdout:
+                fh.write("--- stdout ---\n" + str(proc.stdout) + "\n")
+            if proc.stderr:
+                fh.write("--- stderr ---\n" + str(proc.stderr) + "\n")
+            fh.write("\n")
+    except OSError:
+        pass
+    return path
+
+
+def _fail(step: str, proc: Optional[subprocess.CompletedProcess] = None, hint: str = "") -> None:
+    """One shape for every failure: what broke, the real error, where the rest is.
+
+    Prints a TAIL of stderr rather than a fixed-width slice — the useful part of
+    a toolchain error is almost always at the end, and `[:200]` reliably cuts it
+    off mid-sentence.
+    """
+    print(f" [FAIL] {step}")
+    if proc is not None:
+        err = (proc.stderr or proc.stdout or "").strip()
+        if err:
+            tail = err.splitlines()[-6:]
+            for line in tail:
+                print(f"        {line[:220]}")
+        print(f"        rc={proc.returncode}")
+    if hint:
+        for line in hint.splitlines():
+            print(f"        {line}")
+    print(f"        full output: {qa_log_dir()}")
+
+
+def _ios_diagnostics(udid: str, bundle_id: str) -> None:
+    """Dump everything that explains an iOS bring-up failure, to files.
+
+    Collected on the FAILURE PATH ONLY, because `log show` is slow and large. The
+    set is chosen from what actually gets asked when a simulator run misbehaves:
+    is the device really booted, did the app install, did it launch, and what did
+    it say on the way down.
+    """
+    print("  collecting iOS diagnostics…")
+    probes = [
+        ("ios-devices", ["xcrun", "simctl", "list", "devices"]),
+        ("ios-listapps", ["xcrun", "simctl", "listapps", udid]),
+        ("ios-container", ["xcrun", "simctl", "get_app_container", udid, bundle_id, "data"]),
+        # The app's own os_log output — the only place a Swift/Kotlin crash or a
+        # "test server refused to bind" message appears.
+        (
+            "ios-oslog",
+            [
+                "xcrun", "simctl", "spawn", udid, "log", "show",
+                "--last", "3m", "--style", "syslog",
+                "--predicate", f'process CONTAINS "{bundle_id.split(".")[-1]}" OR subsystem CONTAINS "{bundle_id}"',
+            ],
+        ),
+    ]
+    for name, cmd in probes:
+        try:
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+            _record(name, proc, cmd)
+            print(f"    {name}: rc={proc.returncode} -> {qa_log_dir() / (name + '.log')}")
+        except Exception as exc:  # noqa: BLE001
+            print(f"    {name}: could not collect ({type(exc).__name__})")
+
+
+def _simctl(args: List[str], timeout: int = 120) -> subprocess.CompletedProcess:
+    """Run `xcrun simctl ...`. Mirrors `_adb` so both bring-ups read alike."""
+    cmd = ["xcrun", "simctl", *args]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    except FileNotFoundError:
+        # No Xcode on this host. A TRACEBACK here is the worst possible outcome:
+        # in CI it buries the actual condition ("this runner has no Xcode") under
+        # a stack that points at subprocess.py, and the reader goes looking for a
+        # bug in the automation. Fail as a normal non-zero result so the caller's
+        # own diagnostics run and say something true.
+        proc = subprocess.CompletedProcess(
+            cmd, 127, "", "xcrun not found — this host has no Xcode command line tools."
+        )
+    except subprocess.TimeoutExpired:
+        proc = subprocess.CompletedProcess(
+            cmd, 124, "", f"timed out after {timeout}s"
+        )
+    # Recorded unconditionally, not just on failure: the command BEFORE the one
+    # that broke is usually what explains it, and by then it is too late to
+    # re-run it in the same state.
+    _record("simctl", proc, cmd)
+    return proc
+
+
+def _ios_pick_simulator(requested: Optional[str] = None) -> Optional[str]:
+    """Resolve the simulator UDID to drive.
+
+    `booted` is accepted verbatim — simctl understands it and it is what a
+    developer with a simulator already open will pass. Otherwise prefer an
+    already-booted device (nothing to wait for), then any available iPhone.
+
+    Returns None when no usable simulator exists, which is a REAL failure rather
+    than something to paper over: a run that silently targets the wrong device is
+    worse than one that stops.
+    """
+    if requested and requested != "booted":
+        return requested
+
+    listing = _simctl(["list", "devices", "available", "-j"], timeout=60)
+    if listing.returncode != 0:
+        return None
+    try:
+        devices = json.loads(listing.stdout).get("devices", {})
+    except (json.JSONDecodeError, AttributeError):
+        return None
+
+    flat = [d for runtime in devices.values() for d in runtime]
+    for dev in flat:
+        if dev.get("state") == "Booted":
+            return dev.get("udid")
+    for dev in flat:
+        if "iPhone" in (dev.get("name") or ""):
+            return dev.get("udid")
+    return flat[0].get("udid") if flat else None
+
+
+def _ios_find_app(explicit: Optional[str] = None) -> Optional[Path]:
+    """Locate the built .app bundle for the simulator.
+
+    A SIMULATOR BUILD, not a device build: the two have different architectures
+    and a device .app cannot be installed into a simulator. DerivedData is
+    searched because that is where xcodebuild puts it and pinning one path would
+    break the moment the scheme or configuration changes.
+    """
+    if explicit:
+        app = Path(explicit)
+        return app if app.exists() else None
+
+    repo_root = Path(__file__).resolve().parents[4]
+    roots = [
+        repo_root / "apps" / "ios" / "build",
+        Path.home() / "Library" / "Developer" / "Xcode" / "DerivedData",
+    ]
+    candidates: List[Path] = []
+    for root in roots:
+        if not root.exists():
+            continue
+        # iphonesimulator, never iphoneos — see the docstring.
+        candidates.extend(root.glob("**/Build/Products/*-iphonesimulator/*.app"))
+        candidates.extend(root.glob("**/*-iphonesimulator/*.app"))
+    if not candidates:
+        return None
+    # Newest wins: a stale bundle from a previous scheme is the classic way to
+    # test something other than what you just built.
+    return max(candidates, key=lambda p: p.stat().st_mtime)
+
+
+async def run_ios_simulator_up(args: argparse.Namespace) -> int:
+    """Bring up the CIRIS client on an iOS SIMULATOR and wait for its test server.
+
+    WHY A SEPARATE FUNCTION FROM `run_ios_up`. That one is physical-device only:
+    `devicectl process launch` plus `iproxy` USB tunnelling, and it resolves two
+    different UDIDs because devicectl and libimobiledevice disagree about what a
+    device's identifier is. None of that applies here, and bolting a mode switch
+    onto it would leave one function serving two transports with almost nothing
+    in common.
+
+    NO PORT FORWARDING. A simulator shares the host's network stack, so the app's
+    TestAutomationServer on 9091 is reachable at localhost:9091 directly — same
+    as desktop. The 18091/18080 iproxy convention applies ONLY to physical
+    devices; using it here points the driver at a dead port and reports "the app
+    is not running in test mode", which names the wrong cause.
+
+    Phases mirror `run_android_up` so the two read alike:
+      1. Resolve + boot the simulator
+      2. Locate the simulator .app (built separately; this does not build it)
+      3. Install
+      4. Launch with CIRIS_TEST_MODE=true
+      5. Poll /health until the test server answers
+    """
+    print(" CIRIS ios-simulator-up")
+
+    # 1. Resolve + boot.
+    print("[1/5] Resolving iOS simulator…")
+    udid = _ios_pick_simulator(getattr(args, "ios_udid", None))
+    if not udid:
+        # DISTINGUISH THE TWO CAUSES. "No simulator available" and "this host has
+        # no Xcode" lead to completely different fixes, and reporting the former
+        # for the latter sends the reader to `simctl list` on a machine where
+        # simctl does not exist.
+        if shutil.which("xcrun") is None:
+            _fail(
+                "no Xcode toolchain on this host",
+                hint="`xcrun` is not on PATH, so no simulator can exist here.\n"
+                     "iOS bring-up requires a macOS runner with Xcode; on Linux/Windows\n"
+                     "this platform should be SKIPPED, not attempted.",
+            )
+        else:
+            _fail(
+                "no available iOS simulator",
+                hint="`xcrun simctl list devices available` shows what this host has.\n"
+                     "A GitHub macos runner ships at least one iPhone runtime; if the list\n"
+                     "is empty the Xcode selection is probably wrong (check xcode-select -p).",
+            )
+        return 1
+    print(f"  simulator: {udid}")
+
+    boot = _simctl(["boot", udid], timeout=180)
+    # "Unable to boot device in current state: Booted" is success for our
+    # purposes — treating it as failure would make the function non-idempotent
+    # and break every second local run.
+    already = "current state: Booted" in (boot.stderr or "")
+    if boot.returncode != 0 and not already:
+        _fail(f"simctl boot {udid}", boot)
+        return 1
+    status = _simctl(["bootstatus", udid, "-b"], timeout=300)
+    if status.returncode != 0:
+        _fail("simulator never finished booting", status)
+        _ios_diagnostics(udid, getattr(args, "ios_bundle_id", None) or "ai.ciris.mobile")
+        return 1
+    print("  booted")
+
+    # 2. Locate the app.
+    print("[2/5] Locating the simulator .app…")
+    bundle_id = getattr(args, "ios_bundle_id", None) or "ai.ciris.mobile"
+    app = _ios_find_app(getattr(args, "ios_app_path", None))
+    if not app:
+        # `apps/ios/scripts/rebuild_and_deploy.sh` — the script that ships to the
+        # App Store — BUILDS AND INSTALLS. So the bundle can legitimately already
+        # be on the simulator with no .app left for us to point at. Re-installing
+        # is not required; relaunching it in test mode is.
+        already = _simctl(["get_app_container", udid, bundle_id, "app"], timeout=60)
+        if already.returncode == 0:
+            print(f"  no .app located, but {bundle_id} is already installed — install skipped")
+        else:
+            _fail(
+                "no *Debug-iphonesimulator*/*.app found and the bundle is not installed",
+                hint="Build it with `bash apps/ios/scripts/rebuild_and_deploy.sh`, which\n"
+                     "runs xcodegen, rebuilds Resources.zip and lays down the SIMULATOR\n"
+                     "Python bundle — a bare `xcodebuild -scheme iosApp` skips all three\n"
+                     "and produces an app that launches to nothing.\n"
+                     "Or pass --ios-app-path explicitly.",
+            )
+            return 1
+    else:
+        print(f"  app: {app}")
+
+    # 3. Install (skipped when the build script already did it).
+    print("[3/5] Installing…" if app else "[3/5] Install skipped — already present")
+    install = _simctl(["install", udid, str(app)], timeout=300) if app else None
+    if install is not None and install.returncode != 0:
+        _fail(f"simctl install {app.name}", install,
+              hint="A device (iphoneos) build cannot install into a simulator — the\n"
+                   "architectures differ. Confirm this bundle came from an\n"
+                   "-sdk iphonesimulator build.")
+        _ios_diagnostics(udid, getattr(args, "ios_bundle_id", None) or "ai.ciris.mobile")
+        return 1
+
+    # 4. Launch in test mode. simctl passes environment through to the app only
+    # via the SIMCTL_CHILD_ prefix; setting CIRIS_TEST_MODE directly would set it
+    # on simctl itself and the app would never see it.
+    print("[4/5] Launching with CIRIS_TEST_MODE=true…")
+    _simctl(["terminate", udid, bundle_id], timeout=60)  # idempotent; ignore rc
+    env = dict(os.environ)
+    env["SIMCTL_CHILD_CIRIS_TEST_MODE"] = "true"
+    env["SIMCTL_CHILD_CIRIS_TESTING_MODE"] = "true"
+    launch = subprocess.run(
+        ["xcrun", "simctl", "launch", udid, bundle_id],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=120,
+    )
+    _record("simctl-launch", launch, ["xcrun", "simctl", "launch", udid, bundle_id])
+    if launch.returncode != 0:
+        _fail(f"simctl launch {bundle_id}", launch,
+              hint="If this says the bundle is unknown, the install silently targeted a\n"
+                   "different simulator — check the UDID above against `simctl listapps`.")
+        _ios_diagnostics(udid, bundle_id)
+        return 1
+
+    # 5. Poll /health — the same signal android-up waits on.
+    port = getattr(args, "desktop_port", None) or 9091
+    server_url = f"http://localhost:{port}"
+    print(f"[5/5] Waiting for the test server at {server_url}…")
+    deadline = time.time() + 120
+    while time.time() < deadline:
+        try:
+            r = requests.get(f"{server_url}/health", timeout=2)
+            if r.status_code == 200:
+                print(" [OK] iOS simulator ready")
+                return 0
+        except Exception:  # noqa: BLE001
+            pass
+        time.sleep(2)
+
+    _fail(
+        f"no /health from {server_url} within 120s",
+        hint="The app launched but its TestAutomationServer never answered.\n"
+             "Most likely causes, in order:\n"
+             "  1. CIRIS_TEST_MODE did not reach the app — simctl only forwards env\n"
+             "     vars with the SIMCTL_CHILD_ prefix.\n"
+             "  2. This build does not embed the test server.\n"
+             "  3. The app crashed on launch — see the os_log dump below.\n"
+             "A simulator needs NO port forward: 9091 is reached directly on the host.",
+    )
+    _ios_diagnostics(udid, bundle_id)
+    return 1
+
+
 async def run_ios_up(args: argparse.Namespace) -> int:
     """End-to-end iOS bring-up: devicectl process launch + iproxy forwards.
 
@@ -2718,9 +3225,27 @@ async def main() -> int:
     # Node-client first-run setup wizard: --launch brings up backend in
     # FIRST-RUN mode + desktop app sitting on the Setup wizard, then drives it.
     if args.command == "desktop-setup" and args.launch:
-        rc = await run_desktop_first_run_up(args)
+        # BRING UP THE PLATFORM THAT WAS ASKED FOR.
+        #
+        # This called run_desktop_first_run_up() unconditionally, so
+        # `--platform android` booted no emulator and installed no APK — it
+        # started the DESKTOP app, on the Android port, and the whole run was then
+        # reported as an Android result. A gate that claims five platforms while
+        # exercising three is worse than one that admits to three.
+        #
+        # `--platform` is the single source of truth (platforms.py); bring-up is
+        # the one place it legitimately changes behaviour.
+        platform = getattr(args, "platform", None) or "desktop"
+        if platform == "android":
+            print("desktop-setup: --platform android — emulator + adb-forward bring-up")
+            rc = await run_android_up(args)
+        elif platform == "ios":
+            print("desktop-setup: --platform ios — simulator bring-up")
+            rc = await run_ios_simulator_up(args)
+        else:
+            rc = await run_desktop_first_run_up(args)
         if rc != 0:
-            print(f"desktop-setup: first-run bring-up failed (rc={rc})")
+            print(f"desktop-setup: {platform} bring-up failed (rc={rc})")
             return rc
 
     # Catch-up Add-Federation-ID flow: --launch brings up the full configured
@@ -2794,10 +3319,52 @@ async def main() -> int:
     return 0 if suite.success else 1
 
 
+async def _main_with_capture() -> int:
+    """Run the command, and on SUCCESS capture the final screen.
+
+    Wrapped here rather than inside each command so every flow — today's
+    `interact`, tomorrow's p2p chat or video — gets the same review artifact
+    without opting in.
+
+    ONLY ON SUCCESS, deliberately. A failure screenshot is a different artifact
+    with a different audience (debugging, not review), and the commands already
+    dump diagnostics on the failure path. Mixing them would make the gallery a
+    mix of "here is what shipped" and "here is what broke".
+
+    The capture NEVER changes the exit code. It is evidence for a human, not an
+    assertion: a run that answered correctly but could not be photographed still
+    passed, and failing it would make the gallery a source of false red.
+    """
+    rc = await main()
+    if rc != 0:
+        return rc
+
+    dest = getattr(_LAST_ARGS, "screenshot_on_success", None) if _LAST_ARGS else None
+    if not dest:
+        return rc
+
+    try:
+        from pathlib import Path as _Path
+
+        from .platforms import CaptureKind, build_platform
+
+        platform = build_platform(_LAST_ARGS)
+        written = platform.capture(CaptureKind.SCREENSHOT, _Path(dest))
+        if written:
+            print(f" [OK] screenshot ({platform.name}) -> {written}")
+        else:
+            # Say so rather than leaving a silently absent file: an empty slot in
+            # the gallery should be explained, not mysterious.
+            print(f" [WARN] {platform.name}: no screenshot captured (endpoint or tool unavailable)")
+    except Exception as exc:  # noqa: BLE001
+        print(f" [WARN] screenshot capture failed (non-fatal): {type(exc).__name__}: {exc}")
+    return rc
+
+
 def run() -> None:
     """Entry point for console script."""
     try:
-        sys.exit(asyncio.run(main()))
+        sys.exit(asyncio.run(_main_with_capture()))
     except KeyboardInterrupt:
         print("\n[WARN] Test interrupted by user")
         sys.exit(130)

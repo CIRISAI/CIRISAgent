@@ -532,6 +532,51 @@ def _row_to_wa_or_none(row: Dict[str, Any]) -> Optional[WACertificate]:
     return _row_to_wa(row)
 
 
+#: The provisional OAuth placeholder the substrate parks a browser hand-off as,
+#: before any certificate is minted: ``oauth-<provider>-<subject>``.
+_OAUTH_PLACEHOLDER_WA_ID = re.compile(r"^oauth-[A-Za-z0-9]+-.+$")
+
+
+def fabric_oauth_holder_id(provider: str, external_id: str) -> Optional[str]:
+    """wa_id of an ACTIVE cert the SUBSTRATE already bound to this identity.
+
+    Returns None when the holder is one of ours (``wa-YYYY-MM-DD-XXXXXX``), the
+    provisional ``oauth-<provider>-<sub>`` placeholder, or absent.
+
+    WHY THIS IS NOT `get_wa_by_oauth`. That returns a `WACertificate`, and
+    `WACertificate.wa_id` carries a hard pattern of OUR minting convention
+    (`authority_core.py`). The substrate mints `wa-root-<user>` during
+    claim-remote, which cannot be constructed as a WACertificate at all — so
+    `get_wa_by_oauth` reports None for an identity that is very much taken, and
+    setup concludes it must mint one.
+
+    That is what locked a real first-run out (2026-08-31): claim-remote bound
+    `google:…` to `wa-root-mooreericnyc-…`, setup could not see it, minted a
+    second ROOT, and the substrate then refused every later sign-in with
+    `AMBIGUOUS provider identity … holders=2`. Google failed on the ambiguity and
+    local failed because an OAuth user has no password — a closed door on both
+    sides.
+
+    So this answers the question WITHOUT materializing: is the identity already
+    spoken for by the fabric? The agent must not author a second claim on an
+    identity the fabric has already bound (CC 3.4.7.3; agent surfaces, fabric
+    produces).
+    """
+    engine = _get_engine()
+    raw = engine.wa_cert_get_by_oauth(provider, external_id)
+    row = _active_or_none(_parse_persist_payload(raw))
+    if not isinstance(row, dict):
+        return None
+    wa_id = row.get("wa_id")
+    if not isinstance(wa_id, str) or not wa_id:
+        return None
+    if _MINTED_WA_ID.match(wa_id):
+        return None  # ours — the normal path already handles it
+    if _OAUTH_PLACEHOLDER_WA_ID.match(wa_id):
+        return None  # provisional — retired after we mint+link
+    return wa_id
+
+
 def get_wa_by_oauth(provider: str, external_id: str) -> Optional[WACertificate]:
     """Get an active WA certificate by OAuth identity (primary + linked fallback)."""
     engine = _get_engine()

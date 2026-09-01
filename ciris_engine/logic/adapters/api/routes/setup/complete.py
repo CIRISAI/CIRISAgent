@@ -481,10 +481,14 @@ def _store_user_preferences(user_id: str, setup: SetupCompleteRequest) -> None:
 
     time_service = TimeService()
     add_graph_node(node, time_service)
-    lang = attributes.get("preferred_language", "not set")
-    loc = attributes.get("location", "not set")
-    share_loc = attributes.get("share_location_in_traces", False)
-    logger.info(f"Stored user preferences for {user_id}: lang={lang}, location={loc}, share_location={share_loc}")
+    # SAME RULE AS THE OAUTH LINES ABOVE: nothing derived from `setup` reaches the
+    # logger. `attributes` is built from the setup request, which carries
+    # system_admin_password, so language/location/user_id are all tainted — and a
+    # user's LOCATION is genuinely worth not writing to a log file regardless of
+    # what CodeQL thinks of it. Which preferences exist is the diagnostic; their
+    # values are the user's business.
+    stored = sorted(k for k in ("preferred_language", "location", "share_location_in_traces") if k in attributes)
+    logger.info("Stored user preferences for the setup user: %d key(s) %s", len(stored), stored)
 
 
 async def _log_wa_list(auth_service: Any, phase: str) -> None:

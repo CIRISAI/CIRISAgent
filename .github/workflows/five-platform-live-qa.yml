@@ -214,6 +214,43 @@ jobs:
       # resolves it from a flatDir repository at android/libs, and nothing else
       # puts it there. Only the iOS half was being fetched, so the android build
       # had no client to link against at all.
+      # CHAQUOPY WANTS PYTHON 3.10 AT AN ABSOLUTE PATH.
+      #
+      # apps/android/build.gradle pins `buildPython "/usr/bin/python3.10"`, which
+      # does not exist on the runner, so the APK build died with
+      #   [/usr/bin/python3.10] is not a valid Python 3.10 command
+      # after the emulator had booted and the .aar had been fetched. build.yml's
+      # android-release job already solves this the same way; the gate was simply
+      # never given the step.
+      #
+      # update-environment: false is the important part. This job runs the QA
+      # runner on 3.12, and letting setup-python prepend 3.10 to PATH would swap
+      # the interpreter the wheel was installed for — fixing the APK build by
+      # breaking everything after it.
+      - name: Set up Python 3.10 for Chaquopy (Android only)
+        id: py310
+        if: >-
+          contains(matrix.platforms, 'android')
+          && (inputs.platforms == '' || inputs.platforms == 'all'
+              || contains(inputs.platforms, 'android'))
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+          update-environment: false
+
+      - name: Symlink python3.10 for Chaquopy (Android only)
+        if: >-
+          contains(matrix.platforms, 'android')
+          && (inputs.platforms == '' || inputs.platforms == 'all'
+              || contains(inputs.platforms, 'android'))
+        run: |
+          set -euo pipefail
+          PY='${{ steps.py310.outputs.python-path }}'
+          [ -n "$PY" ] || { echo '::error::setup-python reported no interpreter path'; exit 1; }
+          sudo ln -sf "$PY" /usr/bin/python3.10
+          # Assert the exact thing gradle will assert, here where it is legible.
+          /usr/bin/python3.10 --version
+
       - name: Fetch the client .aar (Android only)
         if: >-
           contains(matrix.platforms, 'android')

@@ -249,3 +249,19 @@ def test_the_holder_assertion_queries_where_each_platform_writes(raw: str) -> No
     assert "NOT COVERED" in raw.split("assert_one_holder_per_identity.py")[1][:600], (
         "an unreachable store must report NOT COVERED, not a failure"
     )
+
+
+def test_chaquopy_gets_its_python_without_hijacking_the_runner(raw: str) -> None:
+    """The APK build needs 3.10; the QA runner needs 3.12.
+
+    apps/android/build.gradle pins buildPython to /usr/bin/python3.10, which the
+    runner does not have — the APK build failed there after the emulator had
+    booted. build.yml's android-release job already provisions it this way.
+
+    `update-environment: false` is load-bearing: letting setup-python prepend
+    3.10 to PATH would swap the interpreter the wheel was installed for, fixing
+    the APK build by breaking everything after it.
+    """
+    assert "/usr/bin/python3.10" in raw
+    step = raw.split("Set up Python 3.10 for Chaquopy")[1][:600]
+    assert "update-environment: false" in step, "3.10 would replace the runner's 3.12"

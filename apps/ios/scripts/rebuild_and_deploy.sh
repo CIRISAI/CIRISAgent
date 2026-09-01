@@ -173,10 +173,23 @@ elif [ "$MODE" = "--quick" ] || [ "$MODE" = "--source-only" ]; then
         "$CIRIS_ROOT/ciris_adapters/" "$RESOURCES_DIR/app/ciris_adapters/"
     ok "ciris_adapters overlaid"
 
-    # Overlay ciris_ios
-    rsync -a --exclude='__pycache__' \
-        "$CIRIS_ROOT/ios/CirisiOS/src/ciris_ios/" "$RESOURCES_DIR/app/ciris_ios/"
-    ok "ciris_ios overlaid"
+    # Overlay ciris_ios — ONLY IF THE BRIEFCASE TREE IS PRESENT.
+    #
+    # `ios/` is untracked (see .gitignore), so it exists only on a machine that
+    # has run `briefcase create iOS`. On CI it is absent, and rsync from a
+    # missing source is a hard error that stopped the iOS build before it began.
+    # The Resources bundle fetched by fetch_client_artifacts.py already carries a
+    # staged ciris_ios, so keeping it is correct there — but say which one is in
+    # play, because "overlaid" and "kept the pre-staged copy" are different
+    # builds and a silent skip would hide that.
+    if [ -d "$CIRIS_ROOT/ios/CirisiOS/src/ciris_ios" ]; then
+        rsync -a --exclude='__pycache__' \
+            "$CIRIS_ROOT/ios/CirisiOS/src/ciris_ios/" "$RESOURCES_DIR/app/ciris_ios/"
+        ok "ciris_ios overlaid"
+    else
+        warn "ciris_ios: no briefcase tree at $CIRIS_ROOT/ios/CirisiOS/src/ciris_ios"
+        warn "           keeping the pre-staged copy already in Resources"
+    fi
 
     # ciris_verify: managed by tools/update_ciris_verify.py — do NOT overlay
     # from local CIRISVerify repo (has stale dylib that overwrites version-matched one)

@@ -98,13 +98,53 @@ def test_a_platform_that_cannot_run_fails_rather_than_vanishing(raw: str) -> Non
     assert "overall=1" in ios_skip, "iOS skips without failing the job"
 
 
-def test_the_trace_gate_is_invoked_and_is_fatal(raw: str) -> None:
-    """Reaching Interact is half the gate; traces leaving is the other half."""
+def test_the_trace_gate_still_runs_and_still_asks_for_replication(raw: str) -> None:
+    """Reaching Interact is half the gate; traces leaving is the other half.
+
+    Enforcement is currently OFF: the `replication` rung sits on the
+    KEX/replication path upstream is rebuilding, so it cannot pass for reasons
+    no change here can fix, and holding five platforms red on someone else's
+    in-flight work trains everyone to ignore the colour.
+
+    What must NOT drift while it is off:
+      * it still runs (a check nobody executes rots silently)
+      * it still asks for `replication`, never `ship` — 'ship' keys on
+        envelopes_sent_total, which is blind to the replication plane
+        (CIRISEdge#434); softening the RUNG rather than the ENFORCEMENT would
+        quietly redefine what "delivered" means
+      * the run still SAYS so — an unenforced check that is also invisible is a
+        vacuous pass with extra steps
+    """
     assert "assert_traces_reached_canonical.py" in raw
+    assert "--require replication" in raw
     assert "--require ship" not in raw, (
         "'ship' keys on envelopes_sent_total, which is blind to the replication "
         "plane (CIRISEdge#434) — the gate must require 'replication'"
     )
+    trace_branch = raw.split("python tools/dev/assert_traces_reached_canonical.py")[1][:600]
+    assert "::warning::" in trace_branch, "the non-enforced result is not surfaced at all"
+    assert "NOT enforced" in trace_branch, "the log does not say enforcement is off"
+
+
+def test_the_interact_gate_is_still_fatal(raw: str) -> None:
+    """Whatever happens to the trace rung, silence on screen must stay fatal.
+
+    This is the half of the gate that is entirely ours, so it has no excuse to
+    be downgraded alongside the half that is not.
+    """
+    chat = raw.split("web_ui desktop-chat")[1][:700]
+    assert "overall=1" in chat and "interact failed" in chat
+
+
+def test_chat_authenticates_for_the_history_assertion(raw: str) -> None:
+    """desktop-chat reads /v1/agent/history, so it needs credentials.
+
+    Without them the command defaults to `admin`, which this workflow never
+    creates, and every platform fails with 401 raised by the GATE rather than by
+    the product — a red run that says nothing about the app.
+    """
+    chat = raw.split("web_ui desktop-chat")[1][:700]
+    assert "--username" in chat and "--password" in chat
 
 
 def test_headless_is_not_passed_to_mobile_targets(raw: str) -> None:

@@ -1928,6 +1928,17 @@ def _ensure_emulator(args: argparse.Namespace) -> Optional[str]:
 
     # No emulator → boot the requested AVD.
     paths = _android_sdk_paths()
+    # A MISSING EMULATOR IS A SETUP PROBLEM, NOT A CRASH. GitHub's ubuntu
+    # runners ship the Android SDK but neither the emulator package nor any
+    # system image, so this raised a bare FileNotFoundError mid-traceback and
+    # the actual cause — one absent binary — had to be read out of a stack.
+    if not Path(paths["emulator"]).exists():
+        print(f" [FAIL] no emulator binary at {paths['emulator']}")
+        print("        The Android SDK is present but the emulator package is not.")
+        print("        Install it with:")
+        print('          sdkmanager "emulator" "system-images;android-34;google_apis;x86_64"')
+        print('          avdmanager create avd -n ciris_qa -k "system-images;android-34;google_apis;x86_64"')
+        return None
     list_out = subprocess.run([str(paths["emulator"]), "-list-avds"], capture_output=True, text=True, timeout=10).stdout
     avds = [a.strip() for a in list_out.splitlines() if a.strip()]
     if not avds:

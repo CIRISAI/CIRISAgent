@@ -169,3 +169,53 @@ def test_the_retry_is_bounded_and_narrow() -> None:
     src = inspect.getsource(m.DesktopAppTestRunner.test_chat_flow)
     assert '"rate limit" in (m.get("content") or "").lower()' in src, "the retry is not gated on rate limiting"
     assert src.count("await _poll_for_reply()") == 2, "exactly two polls: the attempt and one resend"
+
+
+def test_no_nested_function_rebinds_a_variable_it_only_meant_to_mutate() -> None:
+    """The bug class my other tests could not see.
+
+    `baseline_ids |= {...}` inside a nested function is an ASSIGNMENT, so Python
+    binds the name locally and the enclosing one becomes unreachable:
+
+        cannot access free variable 'baseline_ids' where it is not associated
+        with a value in enclosing scope
+
+    That failed a Windows platform at runtime while every test here passed,
+    because they all read the SOURCE and never executed it. This walks the AST
+    instead: any augmented assignment inside a nested function, to a name the
+    outer function owns and that is not declared `nonlocal`, is the same trap.
+    """
+    import ast
+    import inspect
+    import textwrap
+
+    from tools.qa_runner.modules.web_ui import __main__ as m
+
+    tree = ast.parse(textwrap.dedent(inspect.getsource(m.DesktopAppTestRunner.test_chat_flow)))
+    outer = tree.body[0]
+    outer_names = {
+        t.id
+        for node in ast.walk(outer)
+        if isinstance(node, ast.Assign)
+        for t in node.targets
+        if isinstance(t, ast.Name)
+    }
+
+    offenders = []
+    for node in ast.walk(outer):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) or node is outer:
+            continue
+        declared = {n for d in ast.walk(node) if isinstance(d, ast.Nonlocal) for n in d.names}
+        for inner in ast.walk(node):
+            if (
+                isinstance(inner, ast.AugAssign)
+                and isinstance(inner.target, ast.Name)
+                and inner.target.id in outer_names
+                and inner.target.id not in declared
+            ):
+                offenders.append(f"{node.name}: {inner.target.id} {type(inner.op).__name__}")
+
+    assert not offenders, (
+        "augmented assignment to an enclosing-scope name inside a nested function — "
+        f"use .update()/.append() or declare nonlocal: {offenders}"
+    )

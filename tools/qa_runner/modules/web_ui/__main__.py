@@ -457,7 +457,14 @@ class DesktopAppTestRunner:
                             f"provider rate-limited within {RESPONSE_DEADLINE_SECONDS}s — "
                             "resending once; this is quota, not the agent"
                         )
-                        baseline_ids |= {m.get("id") for m in last_seen if m.get("id")}
+                        # `.update()`, NOT `|=`. An augmented assignment BINDS the name in
+                        # this scope, so `baseline_ids` — defined in the enclosing function
+                        # — became a local read before assignment:
+                        #     cannot access free variable 'baseline_ids' where it is not
+                        #     associated with a value in enclosing scope
+                        # which failed the Windows platform at runtime. `.update()` mutates
+                        # the same set without rebinding anything.
+                        baseline_ids.update(m.get("id") for m in last_seen if m.get("id"))
                         resent = await self.helper.input_text("input_message", message) and await self.helper.click(
                             "btn_send"
                         )

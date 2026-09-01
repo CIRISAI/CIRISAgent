@@ -40,6 +40,8 @@ the engine can only sign as the actor key, and a consent grant is self-attested.
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 from ciris_engine.logic.runtime import node_fold
@@ -52,63 +54,52 @@ from ciris_engine.logic.utils.path_resolution import (
 
 @pytest.fixture(autouse=True)
 def _clean_alias():
-    """Module state — restore it, or one test decides the next one's answer."""
     before = get_node_alias()
     yield
     set_node_alias(before)
 
 
-def test_the_node_boots_on_the_node_key_not_the_agent_key(monkeypatch) -> None:
-    """THE FIX. Once provisioning publishes a node alias, node_fold uses THAT.
+def test_the_node_fold_uses_the_engine_alias(monkeypatch) -> None:
+    """THE CONSTRAINT I BROKE AND RESTORED.
 
-    `serve_with_python_adapter(key_id=...)` receives this value. When it was the
-    agent's alias the substrate minted a node key behind our back, the
-    owner-binding could not follow it, and consent re-authoring became
-    unsatisfiable from the second boot onward.
+    The sealed keystore keys off (identity_dir, alias), so two spellings are two
+    keys and CIRISServer#380 refuses to boot on a mismatch. Returning the
+    provisioned NODE alias here — while the Engine still opened the federation
+    one — turned a working first boot into
+
+        RuntimeError: TWO FEDERATION IDENTITIES IN ONE NODE — refusing to start
+
+    strictly worse than the bug it was meant to cure. This pins it shut.
     """
     monkeypatch.setenv("CIRIS_AGENT_ID", "ciris-agent-bootstrap")
     set_node_alias("ciris-node-bootstrap")
 
-    resolved = node_fold._resolve_key_id()
-
-    assert resolved == "ciris-node-bootstrap"
-    assert resolved != get_federation_alias(), "the node must not be booted on the actor key"
+    assert node_fold._resolve_key_id() == get_federation_alias() == "ciris-agent-bootstrap"
 
 
-def test_both_call_sites_settle_on_one_value(monkeypatch) -> None:
-    """Edge and node fold must not derive the name independently.
+def test_the_split_is_recorded_when_it_exists(monkeypatch, caplog) -> None:
+    """Passing the engine alias is correct; being silent about the split is not.
 
-    They did, and disagreed — 'ciris-node-bootstrap' on one side,
-    'ciris-agent-bootstrap' on the other, four seconds apart in the same boot.
-    provision_node_identity owns the name; a second derivation is a second
-    source of truth, which is the bug.
+    The substrate mints its own node key and the owner-binding then has to follow
+    onto it. When that does not happen the install bricks on its SECOND boot, so
+    the boot that creates the condition should say the two names differ.
     """
     monkeypatch.setenv("CIRIS_AGENT_ID", "ciris-agent-bootstrap")
-    # What edge_runtime does with the id provisioning returned.
-    provisioned_key_id = "ciris-node-bootstrap-3nclwiulun"
-    set_node_alias(provisioned_key_id.rsplit("-", 1)[0])
+    set_node_alias("ciris-node-bootstrap")
 
-    assert node_fold._resolve_key_id() == get_node_alias() == "ciris-node-bootstrap"
+    with caplog.at_level(logging.INFO):
+        node_fold._resolve_key_id()
+
+    joined = " ".join(r.getMessage() for r in caplog.records)
+    assert "ciris-node-bootstrap" in joined and "CIRISServer#380" in joined
 
 
-def test_an_unprovisioned_node_says_so_loudly(monkeypatch, caplog) -> None:
-    """The dangerous state must not be silent.
-
-    Falling back to the actor key is exactly what bricks the install on its
-    SECOND boot, and it produced no agent-side signal at all — only a substrate
-    warning nobody correlated. If we must fall back, the log has to name the
-    consequence while the boot that causes it is still running.
-    """
-    import logging
-
+def test_no_split_no_noise(monkeypatch, caplog) -> None:
+    """Nothing to report when the substrate has not minted a separate key."""
     monkeypatch.setenv("CIRIS_AGENT_ID", "ciris-agent-bootstrap")
     set_node_alias(None)
 
-    with caplog.at_level(logging.WARNING):
-        resolved = node_fold._resolve_key_id()
+    with caplog.at_level(logging.INFO):
+        assert node_fold._resolve_key_id() == "ciris-agent-bootstrap"
 
-    assert resolved == get_federation_alias()
-    joined = " ".join(r.getMessage() for r in caplog.records)
-    assert "ACTOR" in joined and "owner-binding" in joined, (
-        "the fallback must state what it will cost, not just that it happened"
-    )
+    assert not [r for r in caplog.records if "NODE-KEY" in r.getMessage()]

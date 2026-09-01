@@ -184,31 +184,35 @@ def _resolve_key_id() -> Optional[str]:
     """
     from ciris_engine.logic.utils.path_resolution import get_federation_alias, get_node_alias
 
-    # THE NODE'S KEY, NOT THE AGENT'S.
+    # IT MUST MATCH THE ENGINE'S ALIAS. Not a preference — CIRISServer#380
+    # refuses to boot on a mismatch, and I proved it the hard way: returning the
+    # provisioned NODE alias here (while the Engine still opened the federation
+    # one) turned a working first boot into
     #
-    # This returned get_federation_alias() — the agent's. The substrate then
-    # reported an ACTOR key offered as the node identity, minted its own node key
-    # (CC 3.4.7.3 Clause A), and could not move the owner-binding onto it. The
-    # first boot survived; setup wrote a consent row naming that minted node key;
-    # every boot afterwards died re-authoring it, because the row names the node
-    # and this engine signs as the actor, and a consent grant is self-attested
-    # (CEG §5.6.8.15). See tests/repro/test_actor_node_key_split.py.
+    #     RuntimeError: TWO FEDERATION IDENTITIES IN ONE NODE — refusing to start
+    #
+    # which is strictly worse than the bug it was meant to cure. The docstring
+    # above said exactly this; I changed the code anyway.
+    #
+    # THE ACTOR/NODE SPLIT IS NOT FIXED HERE. The substrate already handles it —
+    # handed an actor key it mints a node key of its own (CC 3.4.7.3 Clause A).
+    # What fails is the step AFTER: the owner-binding cannot follow onto that
+    # minted key because no owner signer is on disk yet, so `owner_of(node)`
+    # never resolves and the consent row setup writes can never be re-authored.
+    # The remedy the substrate names is `plan_owner_binding_move`, and it belongs
+    # where the owner actually exists — after setup — not in the alias we pass.
+    alias = get_federation_alias()
     node_alias = get_node_alias()
-    if node_alias:
-        return node_alias
-
-    # Provisioning has not run, or the substrate predates it. Say so loudly: this
-    # is the exact state that bricks the install on its SECOND boot, and it is
-    # silent at the moment it is created.
-    logger.warning(
-        "[NODE-KEY] no provisioned node alias — falling back to the federation "
-        "alias %r for the node. The substrate will treat this as an ACTOR key, "
-        "mint its own node key, and be unable to move the owner-binding onto it "
-        "(CC 3.4.7.3 Clause A). Setup will then write a consent row this engine "
-        "cannot re-author, and the next boot will fail.",
-        get_federation_alias(),
-    )
-    return get_federation_alias()
+    if node_alias and node_alias != alias:
+        logger.info(
+            "[NODE-KEY] node identity is %r; passing the ENGINE alias %r to the node "
+            "fold because the sealed keystore keys off (identity_dir, alias) and a "
+            "mismatch is refused (CIRISServer#380). The split is the substrate's to "
+            "reconcile via the owner-binding, not ours to rename around.",
+            node_alias,
+            alias,
+        )
+    return alias
 
 
 def _surface_first_run_claim_pin() -> None:

@@ -66,8 +66,13 @@ LAST_BRICKING_VERSION = (2, 9, 46)
 FATAL_SIGNATURES = (
     "re-author consent",
     "consent grant is self-attested",
-    "node fold failed to start",
 )
+#: NOT "node fold failed to start". That is the WRAPPER around every node
+#: failure, so including it made the gate match faults that have nothing to do
+#: with this damage — a local boot proved it, archiving a healthy home over
+#: "TWO FEDERATION IDENTITIES IN ONE NODE", which a wipe does not fix and which
+#: would simply recur. Only the self-attestation signature identifies state that
+#: cannot be repaired in place.
 
 
 def _parse_version(raw: str) -> Optional[Tuple[int, ...]]:
@@ -183,6 +188,27 @@ def refuse_reason(home: Path) -> Optional[str]:
         return (
             f"{resolved} has none of {_HOME_MARKERS} — it does not look like a "
             "CIRIS home, and moving an unrecognised directory is not a repair"
+        )
+
+    # THERE MUST BE SOMETHING TO REPAIR. This damage is created BY a completed
+    # setup: setup writes the consent row that later cannot be re-authored. An
+    # install that has not completed setup cannot be carrying it, so if such a
+    # home fails the same way the cause is something else and a wipe changes
+    # nothing — it just destroys the user's first attempt and leaves them at the
+    # same error, with the marker now saying "already repaired".
+    #
+    # A local boot did exactly that: a FRESH home, no setup, hit the consent
+    # refusal and was archived for a fault the archive could not cure.
+    env = resolved / ".env"
+    configured = False
+    try:
+        configured = env.exists() and "CIRIS_CONFIGURED" in env.read_text(encoding="utf-8")
+    except OSError:
+        configured = False
+    if not configured:
+        return (
+            f"{resolved} has not completed setup (no configured .env) — this damage "
+            "is created by setup, so there is nothing here for a wipe to repair"
         )
     return None
 

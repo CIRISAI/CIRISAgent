@@ -30,6 +30,7 @@ def home(tmp_path):
     (h / "identity").mkdir(parents=True)
     (h / "data").mkdir()
     (h / "data" / "ciris_engine.db").write_text("not really a db")
+    (h / ".env").write_text('CIRIS_CONFIGURED="true"\n')
     return h
 
 
@@ -41,6 +42,11 @@ def test_the_field_failure_is_recognised() -> None:
 @pytest.mark.parametrize(
     "other",
     [
+        # A LIVE BOOT ARCHIVED A HEALTHY HOME OVER THIS ONE. "node fold failed to
+        # start" is the wrapper around EVERY node failure, so matching it made the
+        # gate fire on faults a wipe cannot fix and that simply recur.
+        "node fold failed to start (node-fails ⇒ agent-fails): RuntimeError: TWO "
+        "FEDERATION IDENTITIES IN ONE NODE — refusing to start (CIRISServer#380).",
         "Connection refused",
         "sqlite3.OperationalError: database is locked",
         "LLM call failed (InstructorRetryException): HTTP 402 requires more credits",
@@ -180,12 +186,19 @@ def test_a_real_home_is_still_repairable(home) -> None:
     assert br.repair_if_bricked(home, RuntimeError(FIELD_ERROR), VERSION) is not None
 
 
-def test_a_home_identified_only_by_its_marker_is_repairable(tmp_path) -> None:
-    """A home wiped down to its stamp is still a home."""
+def test_a_marker_alone_is_not_enough(tmp_path) -> None:
+    """Looking like a home is necessary, not sufficient.
+
+    The stamp says which build made it; the configured .env says setup actually
+    ran, which is what creates the damage. Both are required.
+    """
     d = tmp_path / "ciris"
     d.mkdir()
     br.record_install_version(d, "2.9.44-stable")
 
+    assert br.refuse_reason(d) is not None
+
+    (d / ".env").write_text('CIRIS_CONFIGURED="true"\n')
     assert br.refuse_reason(d) is None
 
 
@@ -227,3 +240,29 @@ def test_a_real_home_is_still_repairable(home) -> None:
     """The guard must not be so tight that it never fires on the actual bug."""
     assert br.refuse_reason(home) is None
     assert br.repair_if_bricked(home, RuntimeError(FIELD_ERROR), VERSION) is not None
+
+
+def test_a_fresh_home_is_never_repaired(tmp_path) -> None:
+    """Nothing to repair before setup — and a local boot proved it matters.
+
+    A FRESH home hit the consent refusal and was archived for a fault the archive
+    could not cure: the next boot failed identically, with the marker now
+    claiming the home had already been repaired. The damage this module exists
+    for is CREATED by setup, so a home that never completed setup cannot be
+    carrying it.
+    """
+    d = tmp_path / "ciris"
+    (d / "identity").mkdir(parents=True)
+    (d / "data").mkdir()
+
+    assert br.refuse_reason(d) is not None
+    assert br.repair_if_bricked(d, RuntimeError(FIELD_ERROR), VERSION) is None
+    assert (d / "identity").exists()
+
+
+def test_a_home_that_finished_setup_is_repairable(tmp_path) -> None:
+    d = tmp_path / "ciris"
+    (d / "identity").mkdir(parents=True)
+    (d / ".env").write_text('CIRIS_CONFIGURED="true"\n')
+
+    assert br.refuse_reason(d) is None

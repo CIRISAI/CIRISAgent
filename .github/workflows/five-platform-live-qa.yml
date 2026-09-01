@@ -238,7 +238,21 @@ jobs:
             echo "::group::$plat ($target)"
             llm_args="--mock-llm"
             if [ "$USE_LIVE_KEY" = "1" ] && [ -n "${OPENROUTER_API_KEY:-}" ]; then
-              llm_args="--llm-provider openrouter --llm-key $OPENROUTER_API_KEY --llm-require-live-models"
+              # PIN THE MODEL. Without --llm-model the automation clicks the first
+              # entry in the live dropdown, sorted alphabetically — which on
+              # OpenRouter is `aion-labs/aion-2.0`, a model that MANDATES reasoning:
+              #
+              #   HTTP 400 Reasoning is mandatory for this endpoint and cannot be
+              #   disabled.
+              #
+              # Every DMA then fails, no reply is produced, and interact times out
+              # at 110s. The gate reported "no reply rendered" and the cause was the
+              # model it had chosen for itself. "Whatever sorts first" is not a
+              # model choice.
+              #
+              # meta-llama/llama-4-scout is the documented OpenRouter QA model
+              # (CLAUDE.md, live model matrix).
+              llm_args="--llm-provider openrouter --llm-key $OPENROUTER_API_KEY --llm-require-live-models --llm-model meta-llama/llama-4-scout"
               echo "LLM: REAL key (live models required)"
             else
               echo "LLM: mock (no secret available) — flow is covered, the wire is NOT"

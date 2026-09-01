@@ -387,7 +387,19 @@ class DesktopAppTestRunner:
             # contain: timestamps and the message counter are formatted at runtime.
             chrome = re.compile(r"^(showing last \d+ messages?|\d{1,2}:\d{2}\s*(am|pm)?|\.\.\.|·+)$", re.I)
 
-            deadline = datetime.now() + timedelta(seconds=45)
+            # 45s WAS TOO TIGHT, AND IT MANUFACTURED A BUG.
+            #
+            # A gate run reported "no reply rendered within 45s" and the screenshot
+            # showed a pending message — which read as the UI failing to render an
+            # answer the agent had produced. It was not. The agent stored the reply
+            # at +39s, the assertion gave up at +45s, and the client's own interact
+            # call has a 110s timeout, so it was still legitimately waiting.
+            #
+            # A gate must outlast the thing it is measuring. The agent's
+            # `interaction_timeout` is the contract (110s by default), so this waits
+            # past it: if interact itself gives up, THAT is a real failure and the
+            # error below is then true rather than premature.
+            deadline = datetime.now() + timedelta(seconds=RESPONSE_DEADLINE_SECONDS)
             while datetime.now() < deadline:
                 await asyncio.sleep(1.0)
                 fresh = _texts(await self.helper.get_elements()) - baseline_texts
@@ -402,7 +414,7 @@ class DesktopAppTestRunner:
                     self._log(f'Reply rendered after {elapsed:.1f}s: "{preview}"')
                     return
             raise RuntimeError(
-                "No reply rendered within 45s.\n"
+                f"No reply rendered within {RESPONSE_DEADLINE_SECONDS}s.\n"
                 "        The message was sent and the only new text on screen was our own\n"
                 "        echo and UI chrome — the agent did not answer, or answered\n"
                 "        somewhere the screen does not show.\n"
@@ -522,9 +534,31 @@ class DesktopAppTestRunner:
                     if model_tag and f"menu_model_{model_tag}" in menu:
                         await self.helper.click(f"menu_model_{model_tag}")
                         self._log(f"AI (BYOK): selected requested model {model!r} from live dropdown")
+                    elif model_tag:
+                        # ASKED FOR A MODEL AND IT IS NOT THERE. Silently taking
+                        # another one means the run reports on a model nobody chose.
+                        raise RuntimeError(
+                            f"requested model {model!r} is not in the live dropdown "
+                            f"({len(menu)} offered). Refusing to substitute: a gate that "
+                            f"quietly tests a different model than the one pinned is "
+                            f"reporting on something nobody selected."
+                        )
                     elif menu:
+                        # LAST RESORT, AND IT IS A REAL RISK. The list is sorted, so
+                        # this takes whatever is alphabetically first — on OpenRouter
+                        # that is `aion-labs/aion-2.0`, which MANDATES reasoning and
+                        # answers HTTP 400 to every call CIRIS makes. A whole gate run
+                        # failed that way, reporting "no reply rendered" for a model it
+                        # had picked for itself.
+                        #
+                        # Kept for suites with no pinned model, but it now says loudly
+                        # that the choice was arbitrary.
                         await self.helper.click(menu[0])
-                        self._log(f"AI (BYOK): selected {menu[0]} (first of {len(menu)} live models)")
+                        self._log(
+                            f"AI (BYOK): no --llm-model pinned; taking {menu[0]}, the FIRST of "
+                            f"{len(menu)} models in alphabetical order. This is arbitrary — if the "
+                            f"run fails with provider 4xx, pin a known-good model instead."
+                        )
                     else:
                         self._log("AI (BYOK): model dropdown present but empty; provider default stands")
                     return
@@ -2353,6 +2387,13 @@ def _kill_iproxy_children() -> None:
                 p.kill()
         except Exception:
             pass
+
+
+#: How long to wait for a rendered reply. Must EXCEED the agent's own
+#: `interaction_timeout` (APIAdapterConfig, 110s), because until interact returns
+#: the client has nothing to render and a shorter deadline measures our patience
+#: rather than the product. Set from CIRIS_QA_RESPONSE_DEADLINE for a slow host.
+RESPONSE_DEADLINE_SECONDS = int(os.environ.get("CIRIS_QA_RESPONSE_DEADLINE", "150"))
 
 
 def _product_strings() -> set:

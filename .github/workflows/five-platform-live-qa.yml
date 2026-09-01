@@ -366,11 +366,33 @@ jobs:
           # missing from the artifact. Searching every plausible home and every
           # phase, because the one log that matters is the one for the phase that
           # failed.
-          for d in "${TMPDIR:-/tmp}" "${RUNNER_TEMP}" "$HOME" "${LOCALAPPDATA:-/nonexistent}" .; do
+          # WINDOWS KEEPS IT SOMEWHERE UNIX PATHS DO NOT REACH. The desktop client
+          # writes to `C:\Users\RUNNER~1\AppData\Local\Temp\ciris_desktop_setup.log`
+          # — observed verbatim in the Windows job. `$TMPDIR` is unset there and
+          # `$LOCALAPPDATA` arrives as a BACKSLASH path that `find` cannot walk, so
+          # a Unix-shaped root list quietly collected nothing on the one platform
+          # whose client log we have actually needed.
+          #
+          # cygpath converts when present (git-bash on the Windows runner); the
+          # ${VAR//\\//} fallback covers a bash without it. `$TEMP`/`$TMP` are the
+          # Windows spellings of the same directory.
+          roots="${TMPDIR:-/tmp} ${RUNNER_TEMP} $HOME ."
+          for w in "${LOCALAPPDATA:-}" "${TEMP:-}" "${TMP:-}"; do
+            [ -n "$w" ] || continue
+            if command -v cygpath >/dev/null 2>&1; then
+              w=$(cygpath -u "$w" 2>/dev/null || echo "$w")
+            else
+              w="${w//\\//}"
+            fi
+            roots="$roots $w"
+          done
+          for d in $roots; do
             [ -d "$d" ] || continue
-            find "$d" -maxdepth 2 -name 'ciris_desktop*.log' -newermt '-2 hours' \
+            # depth 3: AppData/Local/Temp sits three below $HOME on Windows.
+            find "$d" -maxdepth 3 -name 'ciris_desktop*.log' -newermt '-3 hours' \
               -exec cp {} artifacts/ \; 2>/dev/null
           done
+          echo "client-log search roots: $roots"
           ls artifacts/ciris_desktop*.log 2>/dev/null || echo "NOTE: no desktop client log found — a UI failure will not be diagnosable"
           # Android: the device's own logcat, which is where a Chaquopy or
           # TestAutomationServer failure actually appears.

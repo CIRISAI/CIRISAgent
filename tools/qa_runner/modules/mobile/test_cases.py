@@ -474,6 +474,21 @@ def connect_test_server(
     return None
 
 
+def _identity_failure(step: str, detail: str) -> TestReport:
+    """Failure report for the identity-preservation check in test_app_launch.
+
+    Module-level and self-contained: the callers of the two existing `fail`
+    closures cannot see them from here, which is exactly how a `NameError` came
+    to sit on this branch.
+    """
+    return TestReport(
+        name="test_app_launch",
+        result=TestResult.FAILED,
+        duration=0.0,
+        message=f"[{step}] {detail}",
+    )
+
+
 def test_app_launch(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
     """
     Test: App launches successfully.
@@ -554,7 +569,14 @@ def test_app_launch(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport
                 if key_after and key_after == key_before:
                     print(f"  [2/5] Identity restored — key_id={key_after} UNCHANGED")
                 else:
-                    return fail(
+                    # `fail(...)` here referenced a helper that does not exist in
+                    # this function — the two `def fail` in this module are local
+                    # to test_setup_wizard and one other. Reaching this branch
+                    # raised NameError instead of reporting the identity loss it
+                    # had just correctly detected, so the diagnostic destroyed
+                    # itself at the moment it fired. Same class as the
+                    # `_gate_verdict()` call in web_ui/__main__.py.
+                    return _identity_failure(
                         "preserve_identity",
                         f"identity NOT preserved: key_id was {key_before or '(none)'}, "
                         f"is now {key_after or '(none)'}. A re-minted agent is re-admitted at "

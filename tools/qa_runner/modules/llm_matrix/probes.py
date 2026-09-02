@@ -19,7 +19,10 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+
+if TYPE_CHECKING:  # annotation-only; `from __future__ import annotations` defers it
+    from ciris_engine.logic.adapters.api.routes.setup.models import LLMValidationResponse
 
 from .dimensions import OVER_CAP_MAX_TOKENS, OVER_CAP_PROMPT, PROBE_MAX_TOKENS, PROBE_PROMPT, ProviderSpec
 from .product_bridge import (

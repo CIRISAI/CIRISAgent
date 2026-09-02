@@ -511,6 +511,43 @@ class DesktopAppTestRunner:
     # we entered a key, the registered handler is stale, full stop.
     _BLANK_KEY_MESSAGE = "Enter an API key"
 
+    async def _gate_verdict(self) -> str:
+        """Whatever the app says about the AGENT/NODE gate, for the no-AI-screen error.
+
+        THIS WAS A CALL WITH NO DEFINITION. Added in 2.9.42 on an error path that
+        only runs when the AI screen is missing, so it never executed — until a
+        client bump made an earlier step fail, and then the diagnostic built to
+        explain the failure raised
+
+            NameError: name '_gate_verdict' is not defined
+
+        replacing the explanation with a stack trace at exactly the moment it was
+        needed. An error path that never runs is not a diagnostic; it is a second
+        failure waiting for the first.
+
+        Best-effort by construction: a build exposing no gate surface must still
+        get the surrounding message, so this says so rather than raising.
+        """
+        try:
+            elements = await self.helper.get_elements()
+        except Exception as exc:  # noqa: BLE001
+            return f"          (could not read the UI tree: {type(exc).__name__})\n"
+
+        prefixes = ("txt_gate", "txt_client_mode", "txt_node", "txt_agent_mode", "txt_mode")
+        lines = [
+            f"          {e.test_tag} = {e.text.strip()[:110]}"
+            for e in elements
+            if getattr(e, "text", None)
+            and e.text.strip()
+            and any(e.test_tag.startswith(pfx) for pfx in prefixes)
+        ]
+        if not lines:
+            return (
+                "          (the app exposed no gate/clientMode surface — either this "
+                "build predates it,\n           or the screen never rendered)\n"
+            )
+        return "\n".join(sorted(lines)) + "\n"
+
     async def _llm_verdict_texts(self) -> dict:
         """testTag -> text for the AI step's verdict surfaces (txt_llm_*)."""
         assert self.helper is not None
@@ -895,7 +932,7 @@ class DesktopAppTestRunner:
                     "No AI screen. This build is the AGENT and MUST offer LLM "
                     "configuration.\n"
                     "        The app's own verdict:\n"
-                    + _gate_verdict()
+                    + await self._gate_verdict()
                     + "        AGENT requires folded && reachable && !veto. folded and "
                     "reachable come from the NODE\n"
                     "        (CIRIS_NODE_URL, :4243 `agent` block); role and services "

@@ -634,7 +634,7 @@ def main():
         test_email=args.email,
         llm_api_key=args.llm_key or "",
         llm_provider=args.llm_provider,
-        llm_model=args.llm_model or TestConfig.llm_model,
+        llm_model=args.llm_model or MobileTestConfig.llm_model,
         output_dir=args.output_dir,
         save_screenshots=not args.no_screenshots,
         save_logcat=not args.no_logcat,

@@ -83,6 +83,29 @@ repos:
             | apps/android/wheels/.*\.whl
           )$
 
+  # UNDEFINED NAMES - BLOCKING. Narrow on purpose.
+  #
+  # The general ruff hook below is `stages: [manual]`, so it never runs in the
+  # normal flow — which is how `_gate_verdict()` reached main as a CALL WITH NO
+  # DEFINITION and sat there five releases. It lived on an error path, so it only
+  # fired when something else broke, and then the diagnostic meant to explain that
+  # failure raised NameError instead. Nine more of the same class were found
+  # alongside it — including a bare `os` in grace.py (the pre-commit gatekeeper
+  # itself) and `max_attempts`/`retry_delay` in qa_runner's retry path.
+  #
+  # F821 ONLY, and NO --fix: an undefined name is not a style opinion, it is code
+  # that cannot run, so it blocks. Keeping the rule narrow stops this becoming a
+  # lint-churn gate people learn to skip. `tests/` is excluded for now — it still
+  # carries 14 of these; add it once cleared, since a linter that skips tests is
+  # blind exactly where fixtures hide.
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.8
+    hooks:
+      - id: ruff
+        alias: ruff-undefined-names
+        name: ruff (F821 undefined names — blocking)
+        args: ['--select', 'F821', '--no-fix']
+        files: '^(ciris_engine|ciris_adapters|tools)/.*\.py$'
   # Quality checks - Run but don't block (Grace will report)
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.4.8

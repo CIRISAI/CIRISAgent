@@ -7,6 +7,7 @@ Tracks your natural rhythm, preserves context across breaks, and
 suggests appropriate tasks based on time, energy, and commitments.
 """
 
+import os
 import json
 import subprocess
 import sys

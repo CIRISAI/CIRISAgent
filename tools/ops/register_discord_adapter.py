@@ -8,6 +8,7 @@ This script:
 3. Registers a Discord adapter with the bot token and channel IDs
 """
 
+from typing import Optional
 import os
 import sys
 from pathlib import Path

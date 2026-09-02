@@ -2328,7 +2328,7 @@ class QARunner:
                             break  # Success, exit retry loop
                         else:
                             # Real error - endpoint might not exist or server error
-                            if attempt == max_attempts - 1:
+                            if attempt == self.config.retry_count - 1:
                                 # Last attempt, fail the test
                                 if self.config.verbose:
                                     self.console.print(f"[red][FAIL] {test.name}: {error_msg[:100]}[/red]")
@@ -2341,11 +2341,11 @@ class QARunner:
                                 }
                             else:
                                 # Not last attempt, wait and retry
-                                time.sleep(retry_delay)
+                                time.sleep(self.config.retry_delay)
                                 continue
                     except Exception as e:
                         # Non-WebSocket error
-                        if attempt == max_attempts - 1:
+                        if attempt == self.config.retry_count - 1:
                             return False, {
                                 "success": False,
                                 "error": f"Unexpected error: {str(e)[:200]}",
@@ -2353,7 +2353,7 @@ class QARunner:
                                 "attempts": attempt + 1,
                             }
                         else:
-                            time.sleep(retry_delay)
+                            time.sleep(self.config.retry_delay)
                             continue
                 elif test.method == "CUSTOM":
                     # Custom method handler for special tests like streaming verification

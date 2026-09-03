@@ -18,6 +18,22 @@
 name: accord i18n
 
 on:
+  # The cheap half runs on every PR that touches the corpus or its plumbing: no
+  # API key, no spend, just the invariants. Tonight's release needed all three
+  # of them and had none — a stale signature failed all 8 test shards with a
+  # message about tampering, a deleted file broke a completeness test three
+  # shards over, and 21 of 29 translations were missing sections nobody had
+  # counted.
+  pull_request:
+    paths:
+      - "ciris_engine/data/localized/accord_1.2b_*.txt"
+      - "ciris_engine/data/accord_1.2b_POLYGLOT*.txt"
+      - "ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE*.txt"
+      - "seed/accord_manifest.*"
+      - "ciris_engine/logic/utils/constants.py"
+      - "tools/accord_i18n.py"
+      - "tools/dev/regen_accord_*.py"
+      - ".github/workflows/accord-i18n.yml"
   workflow_dispatch:
     inputs:
       langs:
@@ -43,8 +59,51 @@ permissions:
   contents: write
 
 jobs:
+  # ── the gate: cheap, keyless, runs on every touching PR ──────────────────
+  guard:
+    name: accord corpus invariants
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Every language carries the canon's sections
+        run: python3 -u tools/accord_i18n.py --check
+
+      - name: Pins match the files on disk
+        # A mismatch is a startup RuntimeError, so an unpinned edit does not
+        # fail a test — it stops the agent booting. Regenerate and diff: any
+        # change here means the commit shipped a text without its pin.
+        run: |
+          set -euo pipefail
+          python3 tools/dev/regen_accord_pins.py
+          git diff --exit-code ciris_engine/logic/utils/constants.py \
+            || { echo "::error::accord pins are stale — run tools/dev/regen_accord_pins.py"; exit 1; }
+
+      - name: Manifest covers the corpus and its signature verifies
+        # The localized texts are what the action-selection DMAs put in front of
+        # the model, so they are inside the signed manifest. Editing one without
+        # a re-sign leaves a corpus nobody has vouched for.
+        run: |
+          set -euo pipefail
+          python3 tools/dev/regen_accord_manifest.py --check \
+            || { echo "::error::manifest is stale or unsigned — a key holder must run tools/dev/regen_accord_manifest.py"; exit 1; }
+
+      - name: The accord actually loads
+        run: |
+          CIRIS_PREFERRED_LANGUAGE=en python3 -c "
+          from ciris_engine.logic.utils import constants
+          assert constants.get_localized_accord_text('en'), 'canon did not load'
+          assert constants.get_accord_text('compressed'), 'braided did not load'
+          print('accord loads under its own integrity checks')"
+
+  # ── the lane: expensive, keyed, dispatch only ───────────────────────────
   lane:
     name: accord i18n (${{ inputs.langs || 'all' }})
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:

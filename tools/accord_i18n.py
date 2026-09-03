@@ -198,7 +198,10 @@ the existing {lang} text, which was translated from a superseded source.
 RULES, in order of precedence:
 1. Structural lines are reproduced BYTE-FOR-BYTE, never translated:
    - any line beginning `// content/sections/`
-   - every `---` front-matter fence
+   - EVERY line that is exactly `---`, whether it opens front matter or is a
+     horizontal rule between passages. Reproduce all of them, in place. The
+     count in your output must equal the count in the input; a rule that looks
+     decorative is still structure here.
    - any line carrying a formula (J = ..., k_eff = ..., V(k) = ...)
 2. Front-matter KEYS (`title:`, `description:`) stay in English; translate only their
    VALUES.
@@ -320,6 +323,35 @@ def chunk(text: str, limit: int = 5000) -> List[str]:
     return out
 
 
+def translate_between_rules(system: str, english: str, model: str, key: str) -> str:
+    """Translate a section without trusting the model to keep its `---` lines.
+
+    Splitting at `## ` fixed the abridgement of main/v6, and left one failure
+    behind: a standalone `---` dropped somewhere in the output, in Hindi,
+    Bengali, Korean, Hausa and Amharic alike. Those rules are structure, and no
+    amount of instruction reliably preserves a decorative-looking line.
+
+    So they stop being the model's job. The section is cut at every standalone
+    `---`, each piece is translated on its own, and the rules are re-inserted
+    verbatim at the joins. The count is then correct by construction rather
+    than by compliance.
+    """
+    lines = english.split("\n")
+    idx = [i for i, l in enumerate(lines) if l.strip() == "---"]
+    pieces, start = [], 0
+    for i in idx:
+        pieces.append("\n".join(lines[start:i]))
+        start = i + 1
+    pieces.append("\n".join(lines[start:]))
+    out = []
+    for piece in pieces:
+        if not piece.strip():
+            out.append(piece)
+            continue
+        out.append(call(system, piece, model, key).strip())
+    return "\n---\n".join(out)
+
+
 def translate_unit(lang: str, path: str, english: str, ground: str, model: str, key: str,
                    name: str) -> Tuple[str, Optional[str], List[str]]:
     """Cached, guarded translation of one section. Returns (path, text|None, problems)."""
@@ -350,6 +382,14 @@ def translate_unit(lang: str, path: str, english: str, ground: str, model: str, 
         return path, None, [f"{type(exc).__name__}: {exc}"]
     got = re.sub(r"^```[a-z]*\n|\n```$", "", got.strip())
     bad = guard(lang, english, got)
+    if bad and any("front-matter fences" in b for b in bad):
+        # Only the rules went missing. Redo this unit the deterministic way
+        # rather than spending another roll of the dice on the same prompt.
+        try:
+            got = translate_between_rules(system, english, model, key)
+            bad = guard(lang, english, got)
+        except Exception as exc:  # noqa: BLE001
+            return path, None, [f"rule-split retry: {type(exc).__name__}: {exc}"]
     if bad:
         return path, None, bad
     slot.parent.mkdir(parents=True, exist_ok=True)

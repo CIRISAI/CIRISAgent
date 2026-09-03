@@ -604,12 +604,29 @@ dependencies {
     implementation "com.google.android.play:integrity:1.4.0"
     implementation "com.microsoft.onnxruntime:onnxruntime-android:1.25.0"
 
-    // Compose
-    implementation "androidx.activity:activity-compose:1.8.2"
-    implementation "androidx.compose.ui:ui:1.6.1"
-    implementation "androidx.compose.material3:material3:1.2.0"
-    implementation "androidx.compose.ui:ui-tooling-preview:1.6.1"
-    debugImplementation "androidx.compose.ui:ui-tooling:1.6.1"
+    // Compose — THROUGH THE PLUGIN'S ACCESSORS, NEVER HAND-PINNED.
+    //
+    // These were `androidx.compose.ui:ui:1.6.1` etc. The client .aar is built
+    // by CIRISClient with the same `org.jetbrains.compose` 1.7.1 plugin (its
+    // build.gradle.kts uses `compose.runtime` / `compose.foundation` /
+    // `compose.material3`), so its bytecode calls Composer.startReplaceGroup,
+    // which exists only from Compose runtime 1.7.0. Our 1.6.1 pin capped the
+    // whole graph below that, and because the bare .aar carries no POM,
+    // nothing at build time could object. The app died on its first
+    // recomposition with NoSuchMethodError -- and only in the field/gate,
+    // never at compile time (five-platform run 33706020778, logcat).
+    //
+    // The accessors resolve to whatever Jetpack Compose the applied plugin
+    // version maps to, so our Compose version follows the plugin exactly as
+    // the client's does. The two can no longer drift apart silently: bumping
+    // the plugin here is the one place to keep in step with theirs.
+    implementation "androidx.activity:activity-compose:1.9.3"
+    implementation compose.runtime
+    implementation compose.ui
+    implementation compose.foundation
+    implementation compose.material3
+    implementation compose.preview
+    debugImplementation compose.uiTooling
 
     // ViewModel & Lifecycle
     implementation "androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0"

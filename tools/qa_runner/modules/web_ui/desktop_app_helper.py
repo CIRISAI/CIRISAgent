@@ -51,6 +51,16 @@ class DesktopAppConfig:
     # One field on the config fixes every present and future caller.
     input_settle_s: float = 0.0
 
+    # Send each HTTP request in ONE write. The iOS automation server is a
+    # hand-rolled POSIX server that does a single recv() into an 8 KB buffer and
+    # parses whatever arrived (TestAutomationServer.ios.kt L142-150). httpx
+    # writes headers and body separately, so a POST body lands in a second
+    # segment the server never reads; it then decodes an empty body and returns
+    # the kotlinx error text as the response. Every POST fails, every GET works
+    # (five-platform run 33780331440). A workaround for CIRISClient#33 -- one
+    # Ktor server in commonMain -- and it goes when that lands.
+    one_segment_http: bool = False
+
 
 @dataclass
 class Screenshot:
@@ -108,7 +118,11 @@ class DesktopAppHelper:
 
     async def start(self) -> "DesktopAppHelper":
         """Initialize the HTTP client and verify connection to test server."""
+        transport = _OneSegmentTransport() if self.config.one_segment_http else None
+        if transport is not None:
+            print("    (one-segment HTTP transport in use: the iOS test server reads one segment -- CIRISClient#33)")
         self._client = httpx.AsyncClient(
+            transport=transport,
             base_url=self.config.server_url,
             timeout=self.config.timeout_ms / 1000.0,
         )
@@ -829,6 +843,54 @@ def _json(response: "httpx.Response"):
             f"{response.request.url.path}: {exc}; parsed leniently. bytes around the fault: {window!r})"
         )
         return data
+
+
+class _OneSegmentTransport(httpx.AsyncBaseTransport):
+    """Deliver the whole request -- status line, headers, body -- in one write.
+
+    For a server that does a single recv() and parses what it got. Minimal on
+    purpose: HTTP/1.1, Connection: close, read the response to EOF, hand httpx
+    the status, headers and body. Nothing else the gate needs.
+    """
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        url = request.url
+        body = request.content or b""
+        target = url.raw_path.decode("ascii") if isinstance(url.raw_path, (bytes, bytearray)) else str(url.raw_path)
+        head = [f"{request.method} {target} HTTP/1.1", f"Host: {url.host}:{url.port or 80}", "Connection: close"]
+        for k, v in request.headers.items():
+            if k.lower() in ("host", "connection", "content-length", "transfer-encoding"):
+                continue
+            head.append(f"{k}: {v}")
+        head.append(f"Content-Length: {len(body)}")
+        wire = ("\r\n".join(head) + "\r\n\r\n").encode("latin-1") + body
+
+        reader, writer = await asyncio.open_connection(url.host, url.port or 80)
+        try:
+            writer.write(wire)          # ONE write: this is the entire point
+            await writer.drain()
+            raw = await reader.read(-1)
+        finally:
+            writer.close()
+            try:
+                await writer.wait_closed()
+            except Exception:  # noqa: BLE001
+                pass
+
+        head_end = raw.find(b"\r\n\r\n")
+        if head_end < 0:
+            raise httpx.TransportError(f"no header terminator in response from {url}")
+        head_lines = raw[:head_end].decode("latin-1").split("\r\n")
+        try:
+            status = int(head_lines[0].split(" ", 2)[1])
+        except (IndexError, ValueError) as exc:
+            raise httpx.TransportError(f"bad status line {head_lines[0]!r} from {url}") from exc
+        headers = []
+        for line in head_lines[1:]:
+            if ":" in line:
+                k, v = line.split(":", 1)
+                headers.append((k.strip(), v.strip()))
+        return httpx.Response(status, headers=headers, content=raw[head_end + 4:], request=request)
 
 _SECRET_MARKERS = ("password", "secret", "token", "api_key", "apikey")
 

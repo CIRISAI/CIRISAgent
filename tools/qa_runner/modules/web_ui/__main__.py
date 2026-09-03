@@ -3489,6 +3489,7 @@ async def run_federation_walk(args: argparse.Namespace) -> int:
         server_url=server_url,
         screenshot_dir=args.output_dir,
         input_settle_s=_input_settle_for(getattr(args, "platform", "desktop")),
+        one_segment_http=(getattr(args, "platform", "desktop") == "ios"),
     )
     helper = DesktopAppHelper(config)
     await helper.start()
@@ -3574,6 +3575,7 @@ async def run_desktop_tests(args: argparse.Namespace) -> int:
         server_url=server_url,
         screenshot_dir=args.output_dir,
         input_settle_s=_input_settle_for(getattr(args, "platform", "desktop")),
+        one_segment_http=(getattr(args, "platform", "desktop") == "ios"),
     )
     runner = DesktopAppTestRunner(config=config, verbose=args.verbose)
 

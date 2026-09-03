@@ -295,6 +295,31 @@ def units_of(canon_lines: List[str], secs: List[Section]) -> List[Tuple[str, str
     return out
 
 
+def chunk(text: str, limit: int = 5000) -> List[str]:
+    """Split a long section at `## ` headings, merging pieces under the limit.
+
+    The marker line and front matter ride with the first piece, so every chunk
+    is still a well-formed fragment the prompt's structural rules apply to.
+    """
+    if len(text) <= limit:
+        return [text]
+    lines = text.split("\n")
+    cuts = [i for i, l in enumerate(lines) if l.startswith("## ")]
+    if len(cuts) < 2:
+        return [text]
+    pieces, start = [], 0
+    for c in cuts[1:] + [len(lines)]:
+        pieces.append("\n".join(lines[start:c]))
+        start = c
+    out: List[str] = []
+    for piece in pieces:
+        if out and len(out[-1]) + len(piece) < limit:
+            out[-1] = out[-1] + "\n" + piece
+        else:
+            out.append(piece)
+    return out
+
+
 def translate_unit(lang: str, path: str, english: str, ground: str, model: str, key: str,
                    name: str) -> Tuple[str, Optional[str], List[str]]:
     """Cached, guarded translation of one section. Returns (path, text|None, problems)."""
@@ -312,7 +337,15 @@ def translate_unit(lang: str, path: str, english: str, ground: str, model: str, 
         return path, english, []
     system = (ground + "\n\n" if ground else "") + PROMPT.format(lang=lang, lang_name=name)
     try:
-        got = call(system, english, model, key)
+        # LARGE SECTIONS GET SPLIT. main/v6 is 13 KB and came back with one
+        # heading where the English has seven -- in Indonesian as readily as in
+        # Amharic, so this is the model summarising a long document, not an
+        # output budget or a script that expands. Chunking at `## ` boundaries
+        # keeps each request short enough to be translated rather than
+        # abridged, and the guard still judges the reassembled section.
+        parts = chunk(english)
+        got = "\n".join(call(system, c, model, key) for c in parts) if len(parts) > 1 \
+            else call(system, english, model, key)
     except Exception as exc:  # noqa: BLE001 -- one unit's failure must not end the run
         return path, None, [f"{type(exc).__name__}: {exc}"]
     got = re.sub(r"^```[a-z]*\n|\n```$", "", got.strip())

@@ -47,8 +47,22 @@ if [ "$CONFIGURATION" = "Release" ] || [ "$PLATFORM_NAME" = "iphoneos" ] || [[ "
         PYTHON_SLICE="ios-arm64"
     fi
     PYTHON_XCFRAMEWORK="${PROJECT_DIR}/Frameworks/Python.xcframework/${PYTHON_SLICE}"
-    LIB_DYNLOAD_SRC="${PYTHON_XCFRAMEWORK}/lib/python3.10/lib-dynload"
-    echo "Python slice for $PLATFORM_NAME: $PYTHON_SLICE"
+    # TWO LAYOUTS. Older support packages put lib-dynload under lib/; the
+    # BeeWare 3.10-b14 package the runner materialises keeps a per-arch dir --
+    # lib-arm64/ (and lib-x86_64/ for the fat simulator slice) -- and lib/ has
+    # no lib-dynload at all. With the slice finally right (run 33710240426),
+    # the phase still embedded nothing: "simulator lib-dynload not found at
+    # .../lib/python3.10/lib-dynload". Probe the arch dir first, then lib/.
+    HOST_ARCH="$(uname -m)"; [ "$HOST_ARCH" = "x86_64" ] || HOST_ARCH="arm64"
+    LIB_DYNLOAD_SRC=""
+    for libdir in "lib-${HOST_ARCH}" "lib-arm64" "lib"; do
+        if [ -d "${PYTHON_XCFRAMEWORK}/${libdir}/python3.10/lib-dynload" ]; then
+            LIB_DYNLOAD_SRC="${PYTHON_XCFRAMEWORK}/${libdir}/python3.10/lib-dynload"
+            break
+        fi
+    done
+    [ -n "$LIB_DYNLOAD_SRC" ] || LIB_DYNLOAD_SRC="${PYTHON_XCFRAMEWORK}/lib/python3.10/lib-dynload"
+    echo "Python slice for $PLATFORM_NAME: $PYTHON_SLICE (lib-dynload: $LIB_DYNLOAD_SRC)"
 
     if [ -d "$LIB_DYNLOAD_SRC" ]; then
         echo "Converting lib-dynload .so files to frameworks for App Store..."

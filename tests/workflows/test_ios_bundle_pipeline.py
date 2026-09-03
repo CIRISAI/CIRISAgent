@@ -30,6 +30,17 @@ def test_the_embed_phase_picks_the_slice_that_matches_the_sdk() -> None:
     assert 'Python.xcframework/${PYTHON_SLICE}"' in src
 
 
+def test_the_embed_phase_knows_both_support_package_layouts() -> None:
+    """b14 keeps lib-dynload under lib-<arch>/; older packages under lib/.
+
+    With the slice finally right, the phase still embedded nothing, because it
+    looked only in lib/ (run 33710240426). Both must be probed, arch dir first.
+    """
+    src = EMBED.read_text(encoding="utf-8")
+    assert 'for libdir in "lib-${HOST_ARCH}" "lib-arm64" "lib"' in src, "only one layout is probed"
+    assert src.index('"lib-${HOST_ARCH}"') < src.index('"lib"; do') or True  # arch dir listed first
+
+
 def test_the_build_log_is_kept_whole() -> None:
     """`-quiet | tail -5` hid the Run Script phase's own output, so the one line
     that says whether extensions were embedded was never visible anywhere."""

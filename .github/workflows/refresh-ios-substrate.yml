@@ -260,7 +260,11 @@ jobs:
           mkdir -p "$WORK/pysupport" && tar -xzf "$WORK/pysupport.tar.gz" -C "$WORK/pysupport"
           SLICE=$(find "$WORK/pysupport" -maxdepth 3 -type d -name "ios-arm64_x86_64-simulator" | head -1)
           [ -n "$SLICE" ] || { echo "::error::no simulator slice in $PY_ASSET"; exit 1; }
-          SYSCFG=$(find "$SLICE" -name "_sysconfigdata__ios_arm64-iphonesimulator.py" | head -1)
+          # Prefer the copy under lib-arm64/python3.10/: that is the layout PyO3 expects
+          # for PYO3_CROSS_LIB_DIR (<dir>/python3.10/_sysconfigdata*.py). b14 also
+          # keeps one under platform-config/, which is what a bare find picks first.
+          SYSCFG="$SLICE/lib-arm64/python3.10/_sysconfigdata__ios_arm64-iphonesimulator.py"
+          [ -f "$SYSCFG" ] || SYSCFG=$(find "$SLICE" -name "_sysconfigdata__ios_arm64-iphonesimulator.py" | head -1)
           [ -n "$SYSCFG" ] || { echo "::error::no _sysconfigdata for arm64-iphonesimulator in the slice"; exit 1; }
           cp "$SYSCFG" "$WORK/syscfg/"
           LIBDYN=$(dirname "$SYSCFG")   # .../lib-arm64/python3.10
@@ -311,12 +315,30 @@ jobs:
           CRYPTOGRAPHY_DONT_BUILD_RUST=1 build_pip cryptography "cryptography==$V_CRYPTO"
 
           # pydantic_core is Rust: PyO3 cross-compile via maturin against the slice.
+          #
+          # The sdist comes straight from PyPI. `pip download --no-binary :all:`
+          # tried to BUILD pydantic_core's build backend (maturin) from source in
+          # pip's isolated env -- where the exported _PYTHON_SYSCONFIGDATA_NAME was
+          # honoured but PYTHONPATH was not, so the host python could not import
+          # the target's sysconfig and the whole thing died before maturin ran.
+          # The C extensions above survived only because --no-build-isolation
+          # kept them in the host env. So: no pip in this path at all.
+          #
+          # And maturin runs in a SCRUBBED env: the setuptools cross variables
+          # (CC/CFLAGS/LDSHARED/_PYTHON_*/PYTHONPATH) are for distutils, and would
+          # mislead cargo's own Apple target handling. Rust gets the target from
+          # --target, the SDK from SDKROOT, and PyO3 gets the interpreter facts
+          # from PYO3_CROSS_*: PYO3_CROSS_LIB_DIR is the dir whose python3.10/
+          # holds _sysconfigdata (lib-arm64/), which is exactly what it globs for.
           echo "::group::build pydantic_core ($V_PYDC)"
-          if python -m pip download -q --no-deps --no-binary :all: "pydantic_core==$V_PYDC" -d "$WORK/src" \
-             && tar -xzf "$WORK/src"/pydantic_core-*.tar.gz -C "$WORK/src" \
+          SDIST_URL=$(curl -s "https://pypi.org/pypi/pydantic-core/$V_PYDC/json" | python -c 'import json,sys; print(next(u["url"] for u in json.load(sys.stdin)["urls"] if u["packagetype"]=="sdist"))')
+          if [ -n "$SDIST_URL" ] && curl -sSL "$SDIST_URL" -o "$WORK/src/pydantic_core.tar.gz" \
+             && tar -xzf "$WORK/src/pydantic_core.tar.gz" -C "$WORK/src" \
              && ( cd "$WORK/src"/pydantic_core-*/ \
-                  && PYO3_CROSS_LIB_DIR="$(dirname "$LIBDYN")" PYO3_CROSS_PYTHON_VERSION=3.10 PYO3_CROSS_PYTHON_IMPLEMENTATION=CPython \
-                     maturin build --release --target aarch64-apple-ios-sim -i python3.10 -o "$W" 2>&1 | tail -40 ); then
+                  && env -u CC -u CXX -u AR -u CFLAGS -u LDFLAGS -u LDSHARED -u _PYTHON_HOST_PLATFORM -u _PYTHON_SYSCONFIGDATA_NAME -u PYTHONPATH \
+                     SDKROOT="$SDK" IPHONEOS_DEPLOYMENT_TARGET=13.0 \
+                     PYO3_CROSS_LIB_DIR="$SLICE/lib-arm64" PYO3_CROSS_PYTHON_VERSION=3.10 PYO3_CROSS_PYTHON_IMPLEMENTATION=CPython \
+                     maturin build --release --target aarch64-apple-ios-sim --skip-auditwheel -o "$W" 2>&1 | tail -40 ); then
             status+=("pydantic_core=built")
           else
             status+=("pydantic_core=FAILED"); echo "::warning::simulator native build FAILED: pydantic_core"
@@ -341,8 +363,22 @@ jobs:
           for want in "pydantic_core/_pydantic_core" "cryptography/hazmat/bindings/_openssl" "aiohttp/_http_parser" "_cffi_backend"; do
             f=$(find "$OUT" -path "*$want*" -name "*.so" | head -1)
             if [ -n "$f" ]; then
-              arch=$(lipo -info "$f" 2>/dev/null | sed 's/.*: //'); plat=$(otool -l "$f" | awk '/LC_BUILD_VERSION/{p=1} p&&/platform/{print $2; exit}')
-              echo "  ok      $want  [$arch, platform=$plat]" | tee -a "$OUT/MANIFEST.txt"
+              arch=$(lipo -info "$f" 2>/dev/null | sed 's/.*: //')
+              # LC_BUILD_VERSION platform: 1=macOS 2=iOS 7=iOS-simulator. A build that
+              # silently targeted the HOST links fine and dlopens on the simulator with
+              # "incompatible platform" -- so "built" is not "ok"; only platform 7 is.
+              # Read the platform TEXTUALLY with vtool (IOSSIMULATOR / MACOS / IOS);
+              # the numeric otool field read as 1 on the first run for binaries that
+              # may well be fine, and a wrong reading must not delete a good build.
+              # So: report, and count only a clear IOSSIMULATOR as ok. The simulator
+              # itself is the final arbiter -- its dlopen error names the platform.
+              vt=$(xcrun vtool -show-build "$f" 2>/dev/null | awk '/platform/{print $2; exit}')
+              minos=$(xcrun vtool -show-build "$f" 2>/dev/null | awk '/minos/{print $2; exit}')
+              case "$vt" in
+                IOSSIMULATOR) echo "  ok      $want  [$arch, $vt minos=$minos]" | tee -a "$OUT/MANIFEST.txt" ;;
+                "")           echo "  built   $want  [$arch, platform unreadable -- kept; the simulator will say]" | tee -a "$OUT/MANIFEST.txt" ;;
+                *)            echo "  WRONG-PLATFORM $want  [$arch, $vt -- kept so the simulator's dlopen error is the evidence]" | tee -a "$OUT/MANIFEST.txt"; ok=false ;;
+              esac
             else
               echo "  MISSING $want" | tee -a "$OUT/MANIFEST.txt"; ok=false
             fi

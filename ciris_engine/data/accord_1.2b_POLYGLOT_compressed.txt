@@ -1,4 +1,4 @@
-// CIRIS Accord v1.2-Beta — MUSCULAR BRAIDED EDITION
+// CIRIS Accord 1.2b — MUSCULAR BRAIDED EDITION — instantiates CIRIS Constitution 1.0-rc4 (registry of record; CC governs where they differ)
 // Strategy: High-Signal Braided Weave + Quantitative Safety Scaffolding
 // Bridges the gap between human-legible poetry and autonomous-ready logic.
 
@@ -105,11 +105,8 @@ Prevent ecological waste and orphaned dependencies.
 
 ## Section IX: The Mathematics of Coherence
 
-**The Coherence Ratchet:**
-Sustained deception is topologically improbable—欺骗在拓扑上变得不可能—when constraint manifolds intersect. Truth maintenance is O(1); deception is O(n). 
-
-**Ethilogics:**
-Truth and aligned action are the path of least computational resistance—真理是阻力最小的路径. The architecture is the safety; the math is the vow.
+**The Coherence Ratchet — 相干棘轮 — سقاطة التماسك:**
+Independent, diverse constraints collapse whichever region they cut; the mathematics prices constraints, it does not choose them. Effective independence is capped at 1/ρ̄: copies of one voice count as one. Which constraints the covenant enforces is declared, not derived — a wager, stated as one (CC 6.2.1, 6.2.5). 独立约束坍缩其所切割的区域；数学为选择定价，而不做出选择.
 
 ---
 

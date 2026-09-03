@@ -2,10 +2,10 @@
   "version": "1.2b",
   "files": {
     "accord_1.2b_POLYGLOT.txt": {
-      "sha256": "f9bdeb3d78a6232663a5e26e4934fcccb7e56ce57690d80982a17cc323c39f99"
+      "sha256": "3aeb4a9f63eebef7e776d54423100845a3d2c00c1481536d8c6bae8d4badad0f"
     },
     "accord_1.2b_POLYGLOT_compressed.txt": {
-      "sha256": "e05d18acbf4656237431155ca465142b53fd2f63854d9f5659e62a947a201adc"
+      "sha256": "8b92eba7c7ff9f80e66c26c550407fad62a483a516a386bd63b2400ded1b82e7"
     },
     "CIRIS_COMPREHENSIVE_GUIDE.md": {
       "sha256": "0515a63e8feab3acdd361ea047d27255dbc75382a0f00ab19e7859bfcb75e58f"

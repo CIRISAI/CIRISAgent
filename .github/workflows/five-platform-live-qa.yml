@@ -380,6 +380,33 @@ jobs:
           echo "stdlib:  $(du -sh apps/ios/Resources/python | cut -f1)"
           echo "support: $(du -sh apps/ios/Frameworks/Python.xcframework | cut -f1)"
 
+          # THE SUBSTRATE, SIMULATOR SLICE. app_packages_native_sim/ is
+          # gitignored -- it holds a 56 MB ciris_server/_native.abi3.so -- so it
+          # exists on a developer machine and never on a runner. Without it the
+          # embed phase reports "no app_packages_native_sim/" and `import
+          # ciris_server` cannot succeed on-simulator, which is the engine.
+          #
+          # ciris-server ships BOTH slices in its -ios.tar.gz release asset
+          # (ios-device/ and ios-simulator/, verified on v0.5.196), and
+          # update_substrate_libs already stages the simulator one here. So this
+          # is a fetch, not a build.
+          python3 -m tools.update_substrate_libs --platform ios --lib server
+          SIM_SO="apps/ios/app_packages_native_sim/ciris_server/_native.abi3.so"
+          test -f "$SIM_SO" \
+            || { echo "::error::update_substrate_libs staged no simulator ciris_server at $SIM_SO"; exit 1; }
+          echo "substrate: $(du -sh apps/ios/app_packages_native_sim | cut -f1) (simulator ciris_server)"
+
+          # WHAT IS STILL MISSING, NAMED. The four third-party natives come from
+          # a briefcase simulator build no runner performs, and no wheel source
+          # exists for them: pydantic-core and cryptography publish no iOS
+          # wheels at all, aiohttp and cffi publish them only for cp313 while
+          # this embed is cp310. Say so here rather than letting the embed phase
+          # report it 200 lines later as a bare WARNING (CIRISAgent#1135).
+          for mod in pydantic_core cryptography aiohttp _cffi_backend; do
+            find apps/ios -path "*app_packages.iphonesimulator*/$mod*" -name "*.so" -print -quit 2>/dev/null | grep -q . \
+              || echo "::warning::iOS simulator native missing: $mod (CIRISAgent#1135) — the embedded engine will not import"
+          done
+
       - name: Build + deploy the iOS app to the simulator
         # BOTH questions, because they are different: matrix.platforms says
         # this RUNNER owns ios; inputs.platforms says whether the operator

@@ -106,3 +106,27 @@ def test_bring_up_refuses_a_port_the_host_already_owns() -> None:
     assert not [x for x in literals if x.strip().lower() in ("lsof", "netstat")], (
         "POSIX-only binary invoked directly; platform_procs owns that decision"
     )
+
+
+def test_ci_stages_the_simulator_substrate() -> None:
+    """app_packages_native_sim/ is gitignored, so a runner never has it.
+
+    It carries ciris_server/_native.abi3.so -- the engine. Without it the embed
+    phase prints "no app_packages_native_sim/" and `import ciris_server` cannot
+    succeed on-simulator. ciris-server publishes both slices in its -ios.tar.gz,
+    so CI must FETCH it; the alternative is an iOS job that can never pass.
+    """
+    wf = (ROOT / ".github" / "workflows" / "five-platform-live-qa.yml").read_text(encoding="utf-8")
+    assert "update_substrate_libs --platform ios --lib server" in wf, "CI never stages the simulator substrate"
+    # And it must be checked, not merely attempted: a silent no-op here reads as
+    # success and the failure surfaces 200 lines later as a dlopen error.
+    assert "app_packages_native_sim/ciris_server/_native.abi3.so" in wf, "staging result is not verified"
+
+
+def test_the_staging_runs_before_the_app_is_built() -> None:
+    """Staging after the build would embed nothing -- the frameworks are made
+    during xcodebuild's Run Script phase."""
+    wf = (ROOT / ".github" / "workflows" / "five-platform-live-qa.yml").read_text(encoding="utf-8")
+    stage = wf.index("update_substrate_libs --platform ios")
+    build = wf.index("Build + deploy the iOS app to the simulator")
+    assert stage < build, "substrate is staged after the app is built"

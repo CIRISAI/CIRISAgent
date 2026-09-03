@@ -145,7 +145,7 @@ class DesktopAppHelper:
             raise RuntimeError("Not connected. Call start() first.")
 
         response = await self._client.get("/screen")
-        data = response.json()
+        data = _json(response)
         self._current_screen = data.get("screen", "unknown")
         return self._current_screen
 
@@ -155,7 +155,7 @@ class DesktopAppHelper:
             raise RuntimeError("Not connected. Call start() first.")
 
         response = await self._client.get("/tree")
-        data = response.json()
+        data = _json(response)
         self._current_screen = data.get("screen", "unknown")
 
         elements = []
@@ -182,7 +182,7 @@ class DesktopAppHelper:
         response = await self._client.get(f"/element/{test_tag}")
         if response.status_code == 404:
             return None
-        data = response.json()
+        data = _json(response)
         if "error" in data:
             raise RuntimeError(f"get_element '{test_tag}' failed: {data['error']}")
         return ElementInfo(
@@ -215,7 +215,7 @@ class DesktopAppHelper:
             "/click",
             json={"testTag": test_tag},
         )
-        data = response.json()
+        data = _json(response)
         if not data.get("success", False):
             error = data.get("error", "unknown error")
             raise RuntimeError(f"Click '{test_tag}' failed: {error} (response: {data})")
@@ -257,7 +257,7 @@ class DesktopAppHelper:
                 "clearFirst": clear_first,
             },
         )
-        data = response.json()
+        data = _json(response)
         if not data.get("success", False):
             error = data.get("error", "unknown error")
             raise RuntimeError(f"Input '{test_tag}' failed: {error} (response: {data})")
@@ -344,7 +344,7 @@ class DesktopAppHelper:
             },
             timeout=timeout_ms / 1000.0 + 5,  # Add 5s buffer
         )
-        data = response.json()
+        data = _json(response)
         if not data.get("success", False):
             error = data.get("error", "unknown error")
             raise RuntimeError(f"Wait for element '{test_tag}' timed out after {timeout_ms}ms: {error}")
@@ -413,7 +413,7 @@ class DesktopAppHelper:
             payload["filterTags"] = filter_tags
 
         response = await self._client.post("/act", json=payload)
-        data = response.json()
+        data = _json(response)
 
         # Update current screen from response
         self._current_screen = data.get("screen", "unknown")
@@ -692,7 +692,7 @@ class DesktopAppHelper:
                 "sizeBytes": size_bytes,
             },
         )
-        data = response.json()
+        data = _json(response)
         if not data.get("success", False):
             error = data.get("error", "unknown error")
             raise RuntimeError(f"File injection '{filename}' failed: {error} (response: {data})")
@@ -749,7 +749,7 @@ class DesktopAppHelper:
             raise RuntimeError("Not connected. Call start() first.")
 
         response = await self._client.post("/clear-attachments")
-        data = response.json()
+        data = _json(response)
         if not data.get("success", False):
             error = data.get("error", "unknown error")
             raise RuntimeError(f"Clear attachments failed: {error} (response: {data})")
@@ -798,6 +798,38 @@ class DesktopAppHelper:
             await asyncio.sleep(poll_interval_ms / 1000.0)
 
 
+
+def _json(response: "httpx.Response"):
+    """Parse a test-server response; tolerate a raw control character, and SAY SO.
+
+    The iOS automation server is a hand-rolled POSIX HTTP server (CIRISClient#33)
+    and, the first time it ever answered in CI, every response failed strict
+    JSON parsing: "Invalid control character at: line 1 column 77" (run
+    33777943107). A driver that dies on that learns nothing -- not which route,
+    not which bytes. So: try strict; on a control-character failure, parse with
+    strict=False (the same payload, control characters allowed inside strings)
+    and print the offending bytes with the position, escaped, so the report
+    upstream can quote them. Anything else stays a hard error.
+    """
+    import json as _json_mod
+
+    try:
+        return response.json()
+    except ValueError as exc:
+        text = response.text
+        try:
+            data = _json_mod.loads(text, strict=False)
+        except ValueError:
+            raise exc
+        pos = getattr(exc, "pos", None)
+        lo = max(0, (pos or 0) - 40)
+        window = text[lo:(pos or 0) + 40].encode("unicode_escape").decode("ascii")
+        print(
+            f"    (test server returned invalid JSON on {response.request.method} "
+            f"{response.request.url.path}: {exc}; parsed leniently. bytes around the fault: {window!r})"
+        )
+        return data
+
 _SECRET_MARKERS = ("password", "secret", "token", "api_key", "apikey")
 
 
@@ -824,7 +856,7 @@ async def describe_test_server(server_url: str = "http://localhost:8091") -> str
     except Exception as exc:  # noqa: BLE001
         return f"nothing answered at {server_url}/health ({type(exc).__name__})"
     try:
-        data = response.json()
+        data = _json(response)
     except ValueError:
         return f"{server_url}/health returned {response.status_code}, not JSON: {response.text[:120]!r}"
     if data.get("status") != "ok":
@@ -887,7 +919,7 @@ async def check_desktop_app_running(server_url: str = "http://localhost:8091") -
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             response = await client.get(f"{server_url}/health")
-            data = response.json()
+            data = _json(response)
             return data.get("status") == "ok" and data.get("testMode", False)
     except Exception:
         return False

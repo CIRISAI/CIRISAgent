@@ -325,20 +325,26 @@ ZIP_SIZE=$(du -sh Resources.zip | cut -f1)
 ok "Resources.zip rebuilt ($ZIP_SIZE)"
 
 # Step 5: Build
+# Keep the WHOLE build log. `-quiet ... | tail -5` hid the Run Script phases'
+# own output, so "Found N .so files to convert" -- the one line that says
+# whether Python extensions were embedded -- was never visible anywhere.
+XCODEBUILD_LOG="${CIRIS_QA_LOG_DIR:-/tmp}/ios-xcodebuild.log"
+mkdir -p "$(dirname "$XCODEBUILD_LOG")"
+echo "  xcodebuild log: $XCODEBUILD_LOG"
 if $IS_DEVICE; then
     step "Building for device (this may take a minute)..."
     xcodebuild -project iosApp.xcodeproj -scheme iosApp \
         -sdk iphoneos -configuration Debug \
         -destination 'generic/platform=iOS' \
         -allowProvisioningUpdates \
-        -quiet build 2>&1 | tail -5
+        build 2>&1 | tee "$XCODEBUILD_LOG" | tail -5
 else
     step "Building for simulator (this may take a minute)..."
     xcodebuild -project iosApp.xcodeproj -scheme iosApp \
         -sdk iphonesimulator \
         -destination "platform=iOS Simulator,name=$SIMULATOR_NAME" \
         -configuration Debug \
-        -quiet build 2>&1 | tail -5
+        build 2>&1 | tee "$XCODEBUILD_LOG" | tail -5
 fi
 
 if [ ${PIPESTATUS[0]} -ne 0 ]; then

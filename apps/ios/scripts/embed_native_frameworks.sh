@@ -33,8 +33,22 @@ if [ "$CONFIGURATION" = "Release" ] || [ "$PLATFORM_NAME" = "iphoneos" ] || [[ "
     # CRITICAL: For App Store, convert lib-dynload .so files to .framework bundles
     # Apple App Store rejects standalone .so files - they MUST be in framework format.
     # The .fwork redirect files in lib-dynload point to Frameworks/<module>.framework/<module>
-    PYTHON_XCFRAMEWORK="${PROJECT_DIR}/Frameworks/Python.xcframework/ios-arm64"
+    # THE SLICE MUST MATCH THE SDK. This branch only runs for Debug simulator
+    # builds (Release and iphoneos return above), yet it read the DEVICE slice
+    # -- so on a runner that materialised only what the simulator needs, the
+    # source dir did not exist, the loop below embedded nothing, and every
+    # .fwork redirect in lib-dynload dangled. First import in kmp_main:
+    #   ImportError: dlopen(.../Frameworks/_struct.framework/_struct): no such file
+    # The embedded backend never started and the Compose view -- with the test
+    # server inside it -- was never shown (five-platform run 33708152999).
+    if [ "$PLATFORM_NAME" = "iphonesimulator" ] || [[ "$SDKROOT" == *"iphonesimulator"* ]]; then
+        PYTHON_SLICE="ios-arm64_x86_64-simulator"
+    else
+        PYTHON_SLICE="ios-arm64"
+    fi
+    PYTHON_XCFRAMEWORK="${PROJECT_DIR}/Frameworks/Python.xcframework/${PYTHON_SLICE}"
     LIB_DYNLOAD_SRC="${PYTHON_XCFRAMEWORK}/lib/python3.10/lib-dynload"
+    echo "Python slice for $PLATFORM_NAME: $PYTHON_SLICE"
 
     if [ -d "$LIB_DYNLOAD_SRC" ]; then
         echo "Converting lib-dynload .so files to frameworks for App Store..."

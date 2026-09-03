@@ -2749,6 +2749,20 @@ def _ios_diagnostics(udid: str, bundle_id: str, process_name: str = "iosApp") ->
     # the process is alive. Without these, a bring-up failure is diagnosable
     # only down to "it did not answer".
     try:
+        # WHAT WAS EMBEDDED. The .fwork redirects in lib-dynload point at
+        # Frameworks/<module>.framework/<module> inside the .app; if the build
+        # phase embedded nothing, every stdlib C extension import dies with
+        # "no such file". Listing the directory turns that from a Python
+        # traceback into a one-line build fact.
+        app_box = _simctl(["get_app_container", udid, bundle_id, "app"], timeout=60)
+        app_root = (app_box.stdout or "").strip().splitlines()
+        if app_root and app_root[0].startswith("/"):
+            fw_dir = Path(app_root[0]) / "Frameworks"
+            names = sorted(p.name for p in fw_dir.iterdir()) if fw_dir.is_dir() else []
+            (qa_log_dir() / "ios-app-frameworks.txt").write_text("\n".join(names) + "\n", encoding="utf-8")
+            ext = [n for n in names if n.endswith(".framework") and n not in ("shared.framework", "CIRISVerify.framework", "Python.framework")]
+            print(f"    app Frameworks/: {len(names)} entries, {len(ext)} Python extension framework(s); "
+                  f"_struct.framework {'present' if '_struct.framework' in names else 'MISSING'}")
         box = _simctl(["get_app_container", udid, bundle_id, "data"], timeout=60)
         root = (box.stdout or "").strip().splitlines()
         base = Path(root[0]) / "Documents" / "ciris" if root and root[0].startswith("/") else None
@@ -2757,6 +2771,14 @@ def _ios_diagnostics(udid: str, bundle_id: str, process_name: str = "iosApp") ->
             dest.mkdir(parents=True, exist_ok=True)
             copied = 0
             for f in sorted(base.rglob("*.log")) + sorted(base.rglob("*.txt")):
+                if f.is_file():
+                    shutil.copy2(f, dest / f.name)
+                    copied += 1
+            # The embedded interpreter writes its OWN failure report one level up,
+            # Documents/python_error.log -- the full traceback of why kmp_main did
+            # not start. Documents/ciris/ is where the ENGINE logs; when the engine
+            # never imported, that directory says nothing and this file says all.
+            for f in sorted(base.parent.glob("*.log")):
                 if f.is_file():
                     shutil.copy2(f, dest / f.name)
                     copied += 1
@@ -2774,6 +2796,24 @@ def _ios_diagnostics(udid: str, bundle_id: str, process_name: str = "iosApp") ->
                   "had not started writing yet")
     except Exception as exc:  # noqa: BLE001
         print(f"    ios-app-logs: could not collect ({type(exc).__name__}: {exc})")
+
+
+def _host_listener(port: int) -> Optional[str]:
+    """Who is LISTENING on this host port, or None. Clients on the port do not count."""
+    try:
+        out = subprocess.run(
+            ["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN", "-Fpc"],
+            capture_output=True, text=True, timeout=15,
+        )
+    except Exception:  # noqa: BLE001 -- no lsof, or it hung: say nothing rather than block
+        return None
+    pid = cmd = None
+    for line in (out.stdout or "").splitlines():
+        if line.startswith("p"):
+            pid = line[1:]
+        elif line.startswith("c"):
+            cmd = line[1:]
+    return f"{cmd or '?'} (pid {pid})" if pid else None
 
 
 def _simctl(args: List[str], timeout: int = 120) -> subprocess.CompletedProcess:
@@ -2953,6 +2993,24 @@ async def run_ios_simulator_up(args: argparse.Namespace) -> int:
             return 1
     else:
         print(f"  app: {app}")
+
+    # THE HEALTH PROBE CANNOT TELL THE SIMULATOR'S BACKEND FROM THE HOST'S. A
+    # simulator shares the host's loopback, and the app checks
+    # http://localhost:8080/v1/system/health before it shows the Compose view.
+    # In run 33708152999 the macOS desktop backend was still listening there, so
+    # the iOS app "became healthy" against the wrong stack, showed its UI, and
+    # scored a desktop backend as an iOS one -- while its own embedded Python
+    # had died on its first import. Refuse to start into that ambiguity.
+    for port in (int(getattr(args, "port", 8080) or 8080), 9091):
+        owner = _host_listener(port)
+        if owner:
+            _fail(
+                f"port {port} is already owned on the host by {owner}",
+                hint="The simulator reaches the host's loopback, so the app's own health\n"
+                     "check and this gate's probes would both be answered by that process,\n"
+                     "not by the iOS app. Tear the previous platform down first.",
+            )
+            return 1
 
     # 3. Install (skipped when the build script already did it).
     print("[3/5] Installing…" if app else "[3/5] Install skipped — already present")

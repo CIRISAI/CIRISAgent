@@ -2702,7 +2702,7 @@ def _ios_startup_state(udid: str, bundle_id: str) -> str:
     return f"container=ok {' '.join(bits)} last-write={age}-ago"
 
 
-def _ios_diagnostics(udid: str, bundle_id: str) -> None:
+def _ios_diagnostics(udid: str, bundle_id: str, process_name: str = "iosApp") -> None:
     """Dump everything that explains an iOS bring-up failure, to files.
 
     Collected on the FAILURE PATH ONLY, because `log show` is slow and large. The
@@ -2717,12 +2717,21 @@ def _ios_diagnostics(udid: str, bundle_id: str) -> None:
         ("ios-container", ["xcrun", "simctl", "get_app_container", udid, bundle_id, "data"]),
         # The app's own os_log output — the only place a Swift/Kotlin crash or a
         # "test server refused to bind" message appears.
+        #
+        # MATCH THE EXECUTABLE, NOT A BUNDLE-ID FRAGMENT. launchd names the process
+        # by its binary -- "Successfully spawned iosApp[27615]" -- while the
+        # bundle id is ai.ciris.mobile. The old predicate took the last id
+        # segment, "mobile", which matched Apple's mobileassetd and not one line
+        # from our app: run 33706020778 produced 7 "hits", all asset-daemon
+        # noise, and zero of the NSLog("[TestAutomation.ios] ...") lines that
+        # say whether the server bound. And 3m from the failure point missed
+        # the launch itself; the bring-up budget alone is 120s.
         (
             "ios-oslog",
             [
                 "xcrun", "simctl", "spawn", udid, "log", "show",
-                "--last", "3m", "--style", "syslog",
-                "--predicate", f'process CONTAINS "{bundle_id.split(".")[-1]}" OR subsystem CONTAINS "{bundle_id}"',
+                "--last", "10m", "--style", "syslog",
+                "--predicate", f'process == "{process_name}" OR subsystem CONTAINS "{bundle_id}"',
             ],
         ),
     ]
@@ -2740,6 +2749,20 @@ def _ios_diagnostics(udid: str, bundle_id: str) -> None:
     # the process is alive. Without these, a bring-up failure is diagnosable
     # only down to "it did not answer".
     try:
+        # WHAT WAS EMBEDDED. The .fwork redirects in lib-dynload point at
+        # Frameworks/<module>.framework/<module> inside the .app; if the build
+        # phase embedded nothing, every stdlib C extension import dies with
+        # "no such file". Listing the directory turns that from a Python
+        # traceback into a one-line build fact.
+        app_box = _simctl(["get_app_container", udid, bundle_id, "app"], timeout=60)
+        app_root = (app_box.stdout or "").strip().splitlines()
+        if app_root and app_root[0].startswith("/"):
+            fw_dir = Path(app_root[0]) / "Frameworks"
+            names = sorted(p.name for p in fw_dir.iterdir()) if fw_dir.is_dir() else []
+            (qa_log_dir() / "ios-app-frameworks.txt").write_text("\n".join(names) + "\n", encoding="utf-8")
+            ext = [n for n in names if n.endswith(".framework") and n not in ("shared.framework", "CIRISVerify.framework", "Python.framework")]
+            print(f"    app Frameworks/: {len(names)} entries, {len(ext)} Python extension framework(s); "
+                  f"_struct.framework {'present' if '_struct.framework' in names else 'MISSING'}")
         box = _simctl(["get_app_container", udid, bundle_id, "data"], timeout=60)
         root = (box.stdout or "").strip().splitlines()
         base = Path(root[0]) / "Documents" / "ciris" if root and root[0].startswith("/") else None
@@ -2748,6 +2771,14 @@ def _ios_diagnostics(udid: str, bundle_id: str) -> None:
             dest.mkdir(parents=True, exist_ok=True)
             copied = 0
             for f in sorted(base.rglob("*.log")) + sorted(base.rglob("*.txt")):
+                if f.is_file():
+                    shutil.copy2(f, dest / f.name)
+                    copied += 1
+            # The embedded interpreter writes its OWN failure report one level up,
+            # Documents/python_error.log -- the full traceback of why kmp_main did
+            # not start. Documents/ciris/ is where the ENGINE logs; when the engine
+            # never imported, that directory says nothing and this file says all.
+            for f in sorted(base.parent.glob("*.log")):
                 if f.is_file():
                     shutil.copy2(f, dest / f.name)
                     copied += 1
@@ -2765,6 +2796,29 @@ def _ios_diagnostics(udid: str, bundle_id: str) -> None:
                   "had not started writing yet")
     except Exception as exc:  # noqa: BLE001
         print(f"    ios-app-logs: could not collect ({type(exc).__name__}: {exc})")
+
+
+def _host_listener(port: int) -> Optional[str]:
+    """Who is LISTENING on this host port, or None if nothing is or we cannot tell.
+
+    Delegates to platform_procs.pids_listening_on, which speaks netstat on
+    Windows and lsof elsewhere -- invoking lsof directly here made the whole QA
+    runner POSIX-only, which is what tests/tools/qa_runner/
+    test_no_posix_only_binaries.py exists to prevent.
+
+    That helper returns [] both when the port is free AND when it cannot
+    determine the answer, and those must not be conflated. Conflating them here
+    is safe in one direction only: we refuse to start when we KNOW someone owns
+    the port, and proceed when we do not know. A false "free" costs us the
+    ambiguity this guard was added for; a false "owned" would block a run that
+    should have proceeded.
+    """
+    from tools.qa_runner.platform_procs import pids_listening_on
+
+    pids = pids_listening_on(port)
+    if not pids:
+        return None
+    return f"pid {', '.join(str(p) for p in pids)}"
 
 
 def _simctl(args: List[str], timeout: int = 120) -> subprocess.CompletedProcess:
@@ -2944,6 +2998,24 @@ async def run_ios_simulator_up(args: argparse.Namespace) -> int:
             return 1
     else:
         print(f"  app: {app}")
+
+    # THE HEALTH PROBE CANNOT TELL THE SIMULATOR'S BACKEND FROM THE HOST'S. A
+    # simulator shares the host's loopback, and the app checks
+    # http://localhost:8080/v1/system/health before it shows the Compose view.
+    # In run 33708152999 the macOS desktop backend was still listening there, so
+    # the iOS app "became healthy" against the wrong stack, showed its UI, and
+    # scored a desktop backend as an iOS one -- while its own embedded Python
+    # had died on its first import. Refuse to start into that ambiguity.
+    for port in (int(getattr(args, "port", 8080) or 8080), 9091):
+        owner = _host_listener(port)
+        if owner:
+            _fail(
+                f"port {port} is already owned on the host by {owner}",
+                hint="The simulator reaches the host's loopback, so the app's own health\n"
+                     "check and this gate's probes would both be answered by that process,\n"
+                     "not by the iOS app. Tear the previous platform down first.",
+            )
+            return 1
 
     # 3. Install (skipped when the build script already did it).
     print("[3/5] Installing…" if app else "[3/5] Install skipped — already present")
@@ -3446,10 +3518,17 @@ async def run_desktop_tests(args: argparse.Namespace) -> int:
         # conditions and named only one of them, so on Android it announced that
         # the DESKTOP app was not in test mode seconds after bring-up had
         # reported the Android test server healthy on that very port.
-        from .desktop_app_helper import describe_test_server
+        from .desktop_app_helper import attribute_device_failure, describe_test_server
 
         print(f"\n[FAIL] the test server is not usable: {await describe_test_server(server_url)}")
         platform = getattr(args, "platform", "desktop")
+        # NAME THE OWNER. On a device the automation port and the embedded
+        # backend are two listeners in one process, so asking the sibling turns
+        # "something died" into "which layer died" — the difference between a
+        # client bug and a process kill, which run 33704781359 could not settle.
+        if platform in ("android", "ios"):
+            backend_url = f"http://localhost:{getattr(args, 'port', 8080)}"
+            print(f"  -> {await attribute_device_failure(server_url, backend_url)}")
         if platform == "android":
             print("\nAndroid: the app is launched with `--es CIRIS_TEST_MODE true` and")
             print("  `setprop debug.CIRIS_TEST_MODE true`, and a debug build should set")

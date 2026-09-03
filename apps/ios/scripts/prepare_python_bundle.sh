@@ -75,7 +75,9 @@ cp -R "$BEEWARE_APP/python" "$RESOURCES_DIR/"
 # This is REQUIRED for App Store - Apple rejects standalone .so files
 if [ "$BUILD_TYPE" = "device" ]; then
     echo "Device build: Converting lib-dynload to .fwork redirects..."
-    DEVICE_DYNLOAD="$PYTHON_XCF/ios-arm64/lib/python3.10/lib-dynload"
+    # b14 keeps lib-dynload under lib-arm64/, older packages under lib/.
+    DEVICE_DYNLOAD="$PYTHON_XCF/ios-arm64/lib-arm64/python3.10/lib-dynload"
+    [ -d "$DEVICE_DYNLOAD" ] || DEVICE_DYNLOAD="$PYTHON_XCF/ios-arm64/lib/python3.10/lib-dynload"
     LIB_DYNLOAD_DST="$RESOURCES_DIR/python/lib/python3.10/lib-dynload"
 
     if [ -d "$DEVICE_DYNLOAD" ]; then

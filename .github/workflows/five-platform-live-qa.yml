@@ -99,6 +99,11 @@ jobs:
       # the artifact costs a re-run with more logging to discover what the first
       # run already knew.
       CIRIS_QA_LOG_DIR: ${{ github.workspace }}/artifacts/cmdlogs
+      # Stage lines must carry the time they HAPPENED. Buffered, every "[n/5]"
+      # print of the iOS bring-up flushed together at the end -- all stamped
+      # 02:17:01, including "[5/5] Waiting ... (up to 120s)" -- so the job log
+      # could not place the launch against what os_log showed.
+      PYTHONUNBUFFERED: "1"
 
     steps:
       - uses: actions/checkout@v4
@@ -487,8 +492,13 @@ jobs:
             # Killing by port rather than by name because the desktop app, the embedded
             # backend and the simulator host process are different binaries that only
             # agree on where they listen.
+            # LISTENERS ONLY. Without -sTCP:LISTEN, lsof also returns every process
+            # holding a CLIENT socket on the port -- and the iOS simulator app polls
+            # 127.0.0.1:8080 for its backend, so the macOS teardown's kill -9 took the
+            # simulator app down with it (run 33706020778: "exited due to SIGKILL |
+            # sent by bash"). Owning a port means listening on it, not talking to it.
             for port in 8080 9091 8091; do
-              pids=$(lsof -ti "tcp:$port" 2>/dev/null || true)
+              pids=$(lsof -ti "tcp:$port" -sTCP:LISTEN 2>/dev/null || true)
               [ -n "$pids" ] && { echo "  teardown: killing $port ($pids)"; kill -9 $pids 2>/dev/null || true; }
             done
 
@@ -513,10 +523,16 @@ jobs:
             fi
 
             # 1. Setup wizard through the real UI, with a real key.
+            # A SHOT AT EVERY STAGE. The capture wrapper runs after main() whatever
+            # the exit code, but only when asked -- and only desktop-chat asked. A
+            # platform that dies in setup (Android, every run so far) therefore
+            # produced no screenshot at all, and "what did the screen say when it
+            # refused to advance" had to be inferred from a tag dump.
             python -m tools.qa_runner.modules.web_ui desktop-setup \
               --platform "$target" --launch $extra \
               --username qaadmin --password "qa_test_password_12345" \
               $llm_args \
+              --screenshot-on-success "artifacts/shots/$plat-setup.png" \
               -v || { overall=1; echo "::error::$plat setup failed"; echo "::endgroup::"; continue; }
 
             # 2. LOG IN. `desktop-setup` completes the wizard and leaves the app
@@ -529,6 +545,7 @@ jobs:
             python -m tools.qa_runner.modules.web_ui desktop-login \
               --platform "$target" $extra \
               --username qaadmin --password "qa_test_password_12345" \
+              --screenshot-on-success "artifacts/shots/$plat-login.png" \
               -v \
               || { overall=1; echo "::error::$plat login failed"; echo "::endgroup::"; continue; }
 
@@ -732,9 +749,27 @@ jobs:
           # upload-artifact step behind it, so the macOS failure could not be
           # diagnosed at all. A collect step must never be able to outlive the
           # thing it is collecting for.
-          if [ "${MATRIX_PLATFORMS#*android}" != "$MATRIX_PLATFORMS" ] && command -v adb >/dev/null 2>&1; then
-            timeout 60 adb logcat -d > artifacts/logs/android-logcat.txt 2>/dev/null || \
-              echo "logcat unavailable (no device or adb timed out)" > artifacts/logs/android-logcat.txt
+          # The platform gate alone already excludes macos-ios (its
+          # MATRIX_PLATFORMS is "macos ios"), so `command -v adb` was never what
+          # kept adb off the macOS runner — and on the ubuntu runner adb is NOT
+          # on PATH: the emulator steps above reach it through
+          # $SDK/platform-tools. So the guard was false on the one runner that
+          # has a device, the block was skipped, and because the "unavailable"
+          # fallback lived INSIDE the guard, the absence was silent. Run
+          # 33704781359 lost the only log that could explain why Android's test
+          # server died right after answering /health with testMode=true.
+          #
+          # Resolve adb explicitly, and always leave a file saying why if we
+          # cannot: a missing diagnostic must never be indistinguishable from a
+          # diagnostic that was never attempted.
+          if [ "${MATRIX_PLATFORMS#*android}" != "$MATRIX_PLATFORMS" ]; then
+            ADB=$(command -v adb 2>/dev/null || echo "${ANDROID_HOME:-/usr/local/lib/android/sdk}/platform-tools/adb")
+            if [ -x "$ADB" ]; then
+              timeout 60 "$ADB" logcat -d > artifacts/logs/android-logcat.txt 2>/dev/null || \
+                echo "logcat unavailable (adb timed out or no device attached)" > artifacts/logs/android-logcat.txt
+            else
+              echo "logcat unavailable (no adb executable at '$ADB')" > artifacts/logs/android-logcat.txt
+            fi
           fi
           # iOS: the SIMULATOR's own os_log for our bundle. Until now this was
           # gathered only by _ios_diagnostics on the FAILURE path, so a run that
@@ -763,9 +798,19 @@ jobs:
             echo
             echo "## expected-but-absent"
             for plat in ${MATRIX_PLATFORMS}; do
-              [ -f "artifacts/shots/$plat.png" ]   || echo "  shots/$plat.png (no screenshot — did the app start at all?)"
+              [ -f "artifacts/shots/$plat-setup.png" ] || echo "  shots/$plat-setup.png (no setup screenshot — did the app start at all?)"
+              [ -f "artifacts/shots/$plat.png" ]   || echo "  shots/$plat.png (no chat screenshot — did the flow reach the chat step?)"
               [ -f "artifacts/chat-$plat.json" ]   || echo "  chat-$plat.json (no result — did the flow reach the chat step?)"
               [ -d "artifacts/logs/ciris-$plat" ]  || echo "  logs/ciris-$plat/ (no agent logs — did the platform boot?)"
+              # The DEVICE-side log. Absent, an app that dies after coming up
+              # looks identical to one that never started — which is exactly
+              # the question Android posed in run 33704781359.
+              case "$plat" in
+                android) [ -f "artifacts/logs/android-logcat.txt" ] \
+                  || echo "  logs/android-logcat.txt (no device log — an app death cannot be diagnosed)" ;;
+                ios)     [ -f "artifacts/logs/ios-oslog.txt" ] \
+                  || echo "  logs/ios-oslog.txt (no simulator log — an app death cannot be diagnosed)" ;;
+              esac
             done
             ls artifacts/ciris_desktop*.log >/dev/null 2>&1 || echo "  ciris_desktop*.log (no CLIENT log — a UI failure cannot be diagnosed)"
           } > artifacts/MANIFEST.txt 2>&1

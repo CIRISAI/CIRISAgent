@@ -33,8 +33,36 @@ if [ "$CONFIGURATION" = "Release" ] || [ "$PLATFORM_NAME" = "iphoneos" ] || [[ "
     # CRITICAL: For App Store, convert lib-dynload .so files to .framework bundles
     # Apple App Store rejects standalone .so files - they MUST be in framework format.
     # The .fwork redirect files in lib-dynload point to Frameworks/<module>.framework/<module>
-    PYTHON_XCFRAMEWORK="${PROJECT_DIR}/Frameworks/Python.xcframework/ios-arm64"
-    LIB_DYNLOAD_SRC="${PYTHON_XCFRAMEWORK}/lib/python3.10/lib-dynload"
+    # THE SLICE MUST MATCH THE SDK. This branch only runs for Debug simulator
+    # builds (Release and iphoneos return above), yet it read the DEVICE slice
+    # -- so on a runner that materialised only what the simulator needs, the
+    # source dir did not exist, the loop below embedded nothing, and every
+    # .fwork redirect in lib-dynload dangled. First import in kmp_main:
+    #   ImportError: dlopen(.../Frameworks/_struct.framework/_struct): no such file
+    # The embedded backend never started and the Compose view -- with the test
+    # server inside it -- was never shown (five-platform run 33708152999).
+    if [ "$PLATFORM_NAME" = "iphonesimulator" ] || [[ "$SDKROOT" == *"iphonesimulator"* ]]; then
+        PYTHON_SLICE="ios-arm64_x86_64-simulator"
+    else
+        PYTHON_SLICE="ios-arm64"
+    fi
+    PYTHON_XCFRAMEWORK="${PROJECT_DIR}/Frameworks/Python.xcframework/${PYTHON_SLICE}"
+    # TWO LAYOUTS. Older support packages put lib-dynload under lib/; the
+    # BeeWare 3.10-b14 package the runner materialises keeps a per-arch dir --
+    # lib-arm64/ (and lib-x86_64/ for the fat simulator slice) -- and lib/ has
+    # no lib-dynload at all. With the slice finally right (run 33710240426),
+    # the phase still embedded nothing: "simulator lib-dynload not found at
+    # .../lib/python3.10/lib-dynload". Probe the arch dir first, then lib/.
+    HOST_ARCH="$(uname -m)"; [ "$HOST_ARCH" = "x86_64" ] || HOST_ARCH="arm64"
+    LIB_DYNLOAD_SRC=""
+    for libdir in "lib-${HOST_ARCH}" "lib-arm64" "lib"; do
+        if [ -d "${PYTHON_XCFRAMEWORK}/${libdir}/python3.10/lib-dynload" ]; then
+            LIB_DYNLOAD_SRC="${PYTHON_XCFRAMEWORK}/${libdir}/python3.10/lib-dynload"
+            break
+        fi
+    done
+    [ -n "$LIB_DYNLOAD_SRC" ] || LIB_DYNLOAD_SRC="${PYTHON_XCFRAMEWORK}/lib/python3.10/lib-dynload"
+    echo "Python slice for $PLATFORM_NAME: $PYTHON_SLICE (lib-dynload: $LIB_DYNLOAD_SRC)"
 
     if [ -d "$LIB_DYNLOAD_SRC" ]; then
         echo "Converting lib-dynload .so files to frameworks for App Store..."

@@ -14,6 +14,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import time
 import httpx
 
 
@@ -202,7 +203,12 @@ class DesktopAppHelper:
         return True
 
     async def input_text(
-        self, test_tag: str, text: str, clear_first: bool = True, timeout: Optional[int] = None
+        self,
+        test_tag: str,
+        text: str,
+        clear_first: bool = True,
+        timeout: Optional[int] = None,
+        verify: bool = True,
     ) -> bool:
         """
         Input text to an element by testTag.
@@ -236,7 +242,44 @@ class DesktopAppHelper:
         if not data.get("success", False):
             error = data.get("error", "unknown error")
             raise RuntimeError(f"Input '{test_tag}' failed: {error} (response: {data})")
+        if verify and not _looks_secret(test_tag):
+            await self._verify_input_landed(test_tag, text)
         return True
+
+    async def _verify_input_landed(self, test_tag: str, text: str, budget_s: float = 3.0) -> None:
+        """success:true means the request was POSTED, not that the field changed.
+
+        On Android and iOS, /input drops a TextInputRequest onto a StateFlow
+        and answers success immediately; the Compose field applies it when it
+        next collects. A StateFlow keeps only the latest value, so three
+        inputs in quick succession can leave the first two applied to nothing
+        -- every call acknowledged, the wizard refusing to advance because a
+        required field is empty (five-platform run 33708152999, you_step).
+        Desktop applies input synchronously and never shows this.
+
+        So read the field back. The client's tree exposes each element's text;
+        wait for it to equal what was typed. A field that exposes no text at
+        all is reported as unverifiable rather than failed -- but a field that
+        reports a DIFFERENT value is the exact defect this exists to catch.
+        """
+        deadline = time.monotonic() + budget_s
+        seen: Optional[str] = None
+        exposes_text = False
+        while time.monotonic() < deadline:
+            el = await self.get_element(test_tag)
+            if el is not None and el.text is not None:
+                exposes_text = True
+                seen = el.text
+                if seen == text:
+                    return
+            await asyncio.sleep(0.1)
+        if not exposes_text:
+            print(f"    (input '{test_tag}' unverifiable: element exposes no text)")
+            return
+        raise RuntimeError(
+            f"Input '{test_tag}' was acknowledged but {budget_s:.0f}s later the field holds "
+            f"{seen!r}, not {text!r} — the client reported success for input it never applied"
+        )
 
     async def wait_for_element(self, test_tag: str, timeout: Optional[int] = None) -> bool:
         """
@@ -726,6 +769,15 @@ class DesktopAppHelper:
             await asyncio.sleep(poll_interval_ms / 1000.0)
 
 
+_SECRET_MARKERS = ("password", "secret", "token", "api_key", "apikey")
+
+
+def _looks_secret(test_tag: str) -> bool:
+    """Masked fields cannot be read back; do not pretend to verify them."""
+    t = test_tag.lower()
+    return any(m in t for m in _SECRET_MARKERS)
+
+
 async def describe_test_server(server_url: str = "http://localhost:8091") -> str:
     """Say WHAT the test server answered, for a failure message worth reading.
 
@@ -754,6 +806,51 @@ async def describe_test_server(server_url: str = "http://localhost:8091") -> str
             f"running WITHOUT test mode (payload: {data})"
         )
     return f"{server_url}/health ok, testMode enabled"
+
+
+async def attribute_device_failure(server_url: str, backend_url: str) -> str:
+    """Which layer died: the automation server, or the whole app process?
+
+    On Android the automation port is reached through an adb forward, and adb
+    accepts on the HOST socket before it tries the device. If the device-side
+    port is gone, adb accepts and then closes — byte-identical to a live server
+    whose request handler died. So the exception seen on :9091 alone cannot
+    tell a dead app process from a dead accept loop.
+
+    In run 33704781359 that ambiguity WAS the question. The automation server
+    had answered /health with testMode=true seconds earlier, then returned
+    RemoteProtocolError, and from the host there was no way to say whether the
+    client's accept loop had died or the whole app had been killed — a
+    different owner in each case.
+
+    The sibling port settles it. The embedded Python backend is a separate
+    listener, on a separate forward, inside the SAME app process:
+
+      backend answers  -> the process is ALIVE; only the automation server
+                          stopped. Client-side (the automation surface).
+      backend is gone  -> the process itself died; look for an OOM/low-memory
+                          kill in logcat, not for an accept-loop bug.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.get(f"{backend_url}/v1/system/health")
+        alive = r.status_code in (200, 401, 403)
+        detail = f"HTTP {r.status_code}"
+    except Exception as exc:  # noqa: BLE001
+        alive = False
+        detail = type(exc).__name__
+
+    if alive:
+        return (
+            f"the app PROCESS IS ALIVE — the embedded backend at {backend_url} still "
+            f"answers ({detail}), so only the automation server on {server_url} stopped. "
+            "Look at the automation surface, not at a process death."
+        )
+    return (
+        f"the app PROCESS IS GONE — the embedded backend at {backend_url} is also "
+        f"unreachable ({detail}), so both listeners died together. Look for a process "
+        "kill (OOM / low-memory) in logcat before suspecting the automation server."
+    )
 
 
 async def check_desktop_app_running(server_url: str = "http://localhost:8091") -> bool:

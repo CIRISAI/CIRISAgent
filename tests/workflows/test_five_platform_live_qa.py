@@ -167,7 +167,11 @@ def test_log_collection_cannot_outlive_the_job(raw: str) -> None:
     runner that actually owns Android, and cap it regardless.
     """
     assert "MATRIX_PLATFORMS" in raw, "logcat is not gated on the runner owning android"
-    logcat = [ln for ln in raw.splitlines() if "adb logcat" in ln]
+    # Any invocation of logcat: adb resolved by name OR through "$ADB". The
+    # collect step stopped relying on `command -v adb` -- it is not on PATH on
+    # the ubuntu runner, so the guard was false on the one host with a device
+    # and the device log was never collected (run 33704781359).
+    logcat = [ln for ln in raw.splitlines() if "logcat -d" in ln and not ln.strip().startswith("#")]
     assert logcat, "no logcat collection at all"
     for line in logcat:
         assert "timeout " in line, f"adb logcat is not time-capped: {line.strip()}"
@@ -265,3 +269,29 @@ def test_chaquopy_gets_its_python_without_hijacking_the_runner(raw: str) -> None
     assert "/usr/bin/python3.10" in raw
     step = raw.split("Set up Python 3.10 for Chaquopy")[1][:600]
     assert "update-environment: false" in step, "3.10 would replace the runner's 3.12"
+
+
+def test_every_stage_asks_for_a_screenshot(raw: str) -> None:
+    """The capture wrapper runs whatever the exit code, but only when asked.
+
+    Only desktop-chat asked, so a platform that died in setup produced no
+    screenshot at all -- Android, every run -- and the failing screen had to
+    be reconstructed from a testTag dump. Each stage names its own file so a
+    setup failure is visible as a picture, not inferred.
+    """
+    lines = raw.splitlines()
+    blocks: dict[str, str] = {}
+    i = 0
+    while i < len(lines):
+        ln = lines[i]
+        if "python -m tools.qa_runner.modules.web_ui desktop-" in ln:
+            cmd = ln.split("web_ui ", 1)[1].split()[0]
+            block = [ln]
+            while block[-1].rstrip().endswith("\\") and i + 1 < len(lines):
+                i += 1
+                block.append(lines[i])
+            blocks[cmd] = "\n".join(block)
+        i += 1
+    assert set(blocks) >= {"desktop-setup", "desktop-login", "desktop-chat"}, sorted(blocks)
+    for cmd, block in blocks.items():
+        assert "--screenshot-on-success" in block, f"{cmd} runs without a screenshot"

@@ -882,8 +882,19 @@ class DesktopAppTestRunner:
             # budget and join_federation then passed 0.8s later -- run 33782490319).
             # A wizard that takes twelve seconds is not a wizard that refused; only
             # the refusal is the finding, and it still surfaces, 20s later.
+            # ADVANCE IS A POSITIVE SIGNAL, NOT AN ABSENCE. This loop used to wait for
+            # the age band to DISAPPEAR. On iOS, testableClickable registers elements
+            # and never unregisters them (no DisposableEffect -- CIRISClient#33), so
+            # the registry kept every YOU-step tag alive after the wizard moved on:
+            # "still on the YOU step 30s after btn_next" while join_federation found
+            # its toggle 0.8s later, run after run. Absence in a registry that never
+            # forgets is not evidence. The next step's own control appearing is --
+            # on every platform -- and a real refusal (required field unsatisfied)
+            # still produces no such control, so the failure is still caught.
             deadline = asyncio.get_event_loop().time() + 30.0
             while await self.helper.is_element_visible(band_tag):
+                if await self.helper.is_element_visible("toggle_announce_ownership"):
+                    break   # JOIN FEDERATION is on screen: YOU advanced
                 if asyncio.get_event_loop().time() > deadline:
                     await self._dump_tree("you_step:did-not-advance")
                     raise RuntimeError(

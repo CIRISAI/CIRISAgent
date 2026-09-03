@@ -164,3 +164,25 @@ def test_a_client_that_omits_text_is_concluded_immediately(fake) -> None:
         assert _t.monotonic() - t0 < 1.0, "burned the whole budget on a structural fact"
     finally:
         _FakeClient.omit_text = False
+
+
+def test_the_you_step_advance_is_detected_by_the_next_steps_control() -> None:
+    """Absence in a registry that never forgets is not evidence.
+
+    iOS registers elements and never unregisters them (CIRISClient#33), so
+    waiting for the age band to vanish reported "still on the YOU step" for the
+    full budget while join_federation found its toggle 0.8s later (runs
+    33782490319, 33784560419). The next step's own control appearing is the
+    signal, on every platform.
+    """
+    import inspect
+
+    from tools.qa_runner.modules.web_ui import __main__ as m
+
+    src = inspect.getsource(m.DesktopAppTestRunner)
+    # The LAST occurrence: the phrase also appears in the comment that explains
+    # this fix, which precedes the code. The raise is what we anchor on.
+    i = src.rindex("still on the YOU step")
+    loop = src[i - 1500:i]
+    assert 'is_element_visible("toggle_announce_ownership")' in loop, "advance must be detected positively"
+    assert "while await self.helper.is_element_visible(band_tag)" in loop

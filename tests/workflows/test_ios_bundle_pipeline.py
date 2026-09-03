@@ -31,15 +31,35 @@ def test_the_embed_phase_picks_the_slice_that_matches_the_sdk() -> None:
     assert 'Python.xcframework/${PYTHON_SLICE}"' in src
 
 
-def test_the_embed_phase_knows_both_support_package_layouts() -> None:
-    """b14 keeps lib-dynload under lib-<arch>/; older packages under lib/.
+def test_the_SIMULATOR_stdlib_source_probes_both_layouts() -> None:
+    """Guard the branch that actually runs for a Debug simulator build.
 
-    With the slice finally right, the phase still embedded nothing, because it
-    looked only in lib/ (run 33710240426). Both must be probed, arch dir first.
+    The script has two stdlib-embedding paths. The first is inside
+    `if [ "$CONFIGURATION" = Release ] || [ "$PLATFORM_NAME" = iphoneos ]`,
+    which a Debug simulator build never enters; the second, keyed on
+    SIM_LIB_DYNLOAD, is the one CI executes. An earlier fix went into the
+    first, so CI kept embedding nothing and the test written alongside it
+    passed while the product stayed broken -- a mutation putting the
+    simulator path back to lib/ did not fail it.
+
+    So assert on SIM_LIB_DYNLOAD specifically: it must be a probe over the
+    per-arch directories b14 uses, not a hardcoded lib/.
     """
     src = EMBED.read_text(encoding="utf-8")
-    assert 'for libdir in "lib-${HOST_ARCH}" "lib-arm64" "lib"' in src, "only one layout is probed"
-    assert src.index('"lib-${HOST_ARCH}"') < src.index('"lib"; do') or True  # arch dir listed first
+    assert "SIM_LIB_DYNLOAD" in src, "no simulator stdlib source at all"
+    body = src[src.index("SIM_SLICE="):src.index("stdlib_n=0")]
+    assert 'for _libdir in' in body, "the simulator source is not probed"
+    for d in ("lib-${SIM_HOST_ARCH}", "lib-arm64", "lib-x86_64"):
+        assert d in body, f"{d} not probed -- b14 keeps the simulator stdlib there"
+    assert 'ios-arm64_x86_64-simulator/lib/python3.10/lib-dynload"' not in src, (
+        "the simulator stdlib source is hardcoded to lib/, which b14 leaves empty"
+    )
+
+
+def test_the_device_branch_probes_layouts_too() -> None:
+    """Same two-layout problem, on the path a device build takes."""
+    src = EMBED.read_text(encoding="utf-8")
+    assert 'for libdir in "lib-${HOST_ARCH}" "lib-arm64" "lib"' in src
 
 
 def test_the_build_log_is_kept_whole() -> None:

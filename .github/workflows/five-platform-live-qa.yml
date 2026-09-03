@@ -63,7 +63,34 @@ permissions:
   contents: read
 
 jobs:
+  # THE iOS BUNDLE, BUILT ONCE. The simulator app needs frameworks for every
+  # native extension the embedded engine imports: the substrate (ciris_server,
+  # a fetch) and four third-party modules (a cross-build no runner had ever
+  # performed). refresh-ios-substrate.yml owns both on the macOS toolchain and
+  # hands the result back as an artifact; the macos-ios leg below downloads it
+  # before building the app (CIRISAgent#1135).
+  ios-bundle:
+    name: iOS bundle (substrate + simulator natives)
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.platforms == '' || inputs.platforms == 'all' || contains(inputs.platforms, 'ios') }}
+    # The reusable workflow declares write scopes for its push path; upload_only
+    # never pushes, so they go unused here, but a caller must still grant them.
+    permissions:
+      contents: write
+      pull-requests: write
+    uses: ./.github/workflows/refresh-ios-substrate.yml
+    with:
+      target_branch: ${{ github.ref_name }}
+      libs: server
+      upload_only: true
+      always_upload: true
+      build_sim_natives: true
+    secrets: inherit
+
   live-qa:
+    needs: [ios-bundle]
+    # ios-bundle failing (or skipped on a non-iOS dispatch) must not skip the
+    # gate: the mac leg falls back to fetching the substrate itself.
+    if: ${{ !cancelled() }}
     name: ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 75
@@ -339,6 +366,20 @@ jobs:
       # Both are asserted after the fact, because a missing bundle does not fail
       # the build — it produces an app that installs and launches to nothing,
       # which is the failure mode this whole gate exists to stop.
+      - name: Pull the iOS bundle built by ios-bundle
+        if: >-
+          contains(matrix.platforms, 'ios')
+          && (inputs.platforms == '' || inputs.platforms == 'all'
+              || contains(inputs.platforms, 'ios'))
+        # Uploaded with apps/ios/... paths, so the artifact root is apps/ios;
+        # extracting there restores app_packages_native_sim/ (simulator natives
+        # + substrate) and the rest in place.
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: ios-substrate-refresh
+          path: apps/ios
+
       - name: Materialize the iOS Python bundle
         # BOTH questions, because they are different: matrix.platforms says
         # this RUNNER owns ios; inputs.platforms says whether the operator
@@ -390,10 +431,18 @@ jobs:
           # (ios-device/ and ios-simulator/, verified on v0.5.196), and
           # update_substrate_libs already stages the simulator one here. So this
           # is a fetch, not a build.
-          python3 -m tools.update_substrate_libs --platform ios --lib server
           SIM_SO="apps/ios/app_packages_native_sim/ciris_server/_native.abi3.so"
+          if [ -f "$SIM_SO" ]; then
+            echo "substrate: provided by the ios-bundle artifact"
+          else
+            echo "substrate: ios-bundle artifact absent -- fetching directly"
+            python3 -m tools.update_substrate_libs --platform ios --lib server
+          fi
           test -f "$SIM_SO" \
-            || { echo "::error::update_substrate_libs staged no simulator ciris_server at $SIM_SO"; exit 1; }
+            || { echo "::error::no simulator ciris_server at $SIM_SO (neither the ios-bundle artifact nor update_substrate_libs provided it)"; exit 1; }
+          if [ -f apps/ios/app_packages_native_sim/MANIFEST.txt ]; then
+            echo "--- simulator natives (from ios-bundle) ---"; cat apps/ios/app_packages_native_sim/MANIFEST.txt
+          fi
           echo "substrate: $(du -sh apps/ios/app_packages_native_sim | cut -f1) (simulator ciris_server)"
 
           # WHAT IS STILL MISSING, NAMED. The four third-party natives come from
@@ -403,7 +452,7 @@ jobs:
           # this embed is cp310. Say so here rather than letting the embed phase
           # report it 200 lines later as a bare WARNING (CIRISAgent#1135).
           for mod in pydantic_core cryptography aiohttp _cffi_backend; do
-            find apps/ios -path "*app_packages.iphonesimulator*/$mod*" -name "*.so" -print -quit 2>/dev/null | grep -q . \
+            find apps/ios/app_packages_native_sim -path "*$mod*" -name "*.so" -print -quit 2>/dev/null | grep -q . \
               || echo "::warning::iOS simulator native missing: $mod (CIRISAgent#1135) — the embedded engine will not import"
           done
 

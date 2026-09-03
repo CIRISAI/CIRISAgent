@@ -49,9 +49,17 @@ BYTE_EXACT = [
     "seed/accord_manifest.sig",
     "ciris_engine/data/accord_1.2b_POLYGLOT.txt",
     "ciris_engine/data/accord_1.2b_POLYGLOT_compressed.txt",
-    "ciris_engine/data/CIRIS_COMPREHENSIVE_GUIDE.md",
-    "ciris_engine/data/CIRIS_COMPREHENSIVE_GUIDE_MOBILE.md",
-]
+    # The guides moved to localized/*.txt in 2.8.5; the .md paths named here
+    # (and in the manifest) had not existed since.
+    "ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE.txt",
+    "ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_MOBILE.txt",
+] + sorted(
+    # The 29 localized accord texts. These are what the action-selection DMAs
+    # put in front of the model, and they are now in the signed manifest, so
+    # they must be byte-exact too -- .gitattributes covers them by the
+    # `ciris_engine/data/localized/** -text` rule.
+    str(p.relative_to(REPO)) for p in (REPO / "ciris_engine/data/localized").glob("accord_1.2b_*.txt")
+)
 
 
 def _git_text_attr(rel: str) -> str:

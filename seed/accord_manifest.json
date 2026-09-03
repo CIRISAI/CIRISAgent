@@ -7,13 +7,100 @@
     "accord_1.2b_POLYGLOT_compressed.txt": {
       "sha256": "8b92eba7c7ff9f80e66c26c550407fad62a483a516a386bd63b2400ded1b82e7"
     },
-    "CIRIS_COMPREHENSIVE_GUIDE.md": {
-      "sha256": "0515a63e8feab3acdd361ea047d27255dbc75382a0f00ab19e7859bfcb75e58f"
+    "accord_1.2b_am.txt": {
+      "sha256": "e77de0afe2985fcf9367fe860ba2f3a9c89de48d4de536641b9f3f8d7963d7f2"
     },
-    "CIRIS_COMPREHENSIVE_GUIDE_MOBILE.md": {
+    "accord_1.2b_ar.txt": {
+      "sha256": "473acf8265521789186624191486d0592fc89ca2cb0f4b99d309f6cc58025fca"
+    },
+    "accord_1.2b_bn.txt": {
+      "sha256": "1a892588f4b0cc9b0db0bafe1f1cddb2be8a0f821bfb2239bac0c6a481ebafb7"
+    },
+    "accord_1.2b_de.txt": {
+      "sha256": "8f3415f43bc6c0f365580f70e69045629a74fa076e23f8b2e28568286fb1a201"
+    },
+    "accord_1.2b_en.txt": {
+      "sha256": "727018681678d4dda17bbeb8d0da72735cf78f3f8658be92f148a8d9f6484743"
+    },
+    "accord_1.2b_es.txt": {
+      "sha256": "713bfe65e0fd71fa37c7b8c8cef77cedbc9c2c12655d5c90688d95822ff1a86c"
+    },
+    "accord_1.2b_fa.txt": {
+      "sha256": "9624e65b65352fa5ac0190de2342c581652f9847c5b20ad90c3b73bf52c0a78d"
+    },
+    "accord_1.2b_fr.txt": {
+      "sha256": "b28a509ff4af7369adc9930101e151af6acfcfd6f83c087359da8ee4cc401241"
+    },
+    "accord_1.2b_ha.txt": {
+      "sha256": "a6667e5f2160f607a56d5836c4d9215316a8e236c4306d0196457114ccd9f292"
+    },
+    "accord_1.2b_hi.txt": {
+      "sha256": "e3f0883661c3721f71d360ecad5e02dc00bb4e6eff301d6b5cbcdaeb35889134"
+    },
+    "accord_1.2b_id.txt": {
+      "sha256": "725f3083c863ec622646816ab3b5755a8257bd07f4fea03989f97a576289ad4a"
+    },
+    "accord_1.2b_it.txt": {
+      "sha256": "d0173992b5590142b414278a54eb92556a069e1170b8ea00d64732d6e6ef50c5"
+    },
+    "accord_1.2b_ja.txt": {
+      "sha256": "4b0cc96923fc1c88e67c7e5d29e053ea8368a14fdef3ccbd311a9971d9333272"
+    },
+    "accord_1.2b_ko.txt": {
+      "sha256": "b2c7cf46cb3f95c0f41ad43ad004052c103ae7f6790a9916f6ee34e44f260093"
+    },
+    "accord_1.2b_mr.txt": {
+      "sha256": "4662645c0fa42628ac07655a3679b9763f9aa5ea771bfee6d460f310d322dcb5"
+    },
+    "accord_1.2b_my.txt": {
+      "sha256": "5773c4548340539561830b98d673d757cda7cf631df1e36c6ff336c51170175e"
+    },
+    "accord_1.2b_pa.txt": {
+      "sha256": "b945d7ffb2ac7cc2024cfcdbb31683a73cfd154f2fcd9408e85e874f5dc9dddc"
+    },
+    "accord_1.2b_pt.txt": {
+      "sha256": "06bc8c938f89a45d0c288c0c369445cc6626b6d0ff5338e17d2ac4234e289f81"
+    },
+    "accord_1.2b_ru.txt": {
+      "sha256": "e1372bb8baabac8f740e8fed670373f5d9158200b97cba89d833174178ba623b"
+    },
+    "accord_1.2b_sw.txt": {
+      "sha256": "defa4731cb58e1d5e0b93bbce13843d8921dabdaa972d202e2f5793d958bb516"
+    },
+    "accord_1.2b_ta.txt": {
+      "sha256": "99c18a68606ab81139c45fbfee644c1f4b4743480f55b6e178a79262772997b6"
+    },
+    "accord_1.2b_te.txt": {
+      "sha256": "414bea9382ccf7a0fcb60c6193c04e3c3c9ebcd777dae7da1c84ccd2eb6eeda4"
+    },
+    "accord_1.2b_th.txt": {
+      "sha256": "cb385c0e42593de3ff7beed210da213f978273296f50d1673a98ae8422e43683"
+    },
+    "accord_1.2b_tr.txt": {
+      "sha256": "d424b5ae49dbd6e8e3f2cd0c1ccc9389c5d889b62a4919156f7618d1c2b2199d"
+    },
+    "accord_1.2b_uk.txt": {
+      "sha256": "9cdee95cff9d4ca94abea2b5ffafde4f13918ed82d776050536c882301e161e2"
+    },
+    "accord_1.2b_ur.txt": {
+      "sha256": "9403840fe8b6a7bade8aae140079607bc2d55b5c064c87e70a8511fcb6e893aa"
+    },
+    "accord_1.2b_vi.txt": {
+      "sha256": "4d093b82ae56afb71a43e5c93f6751b2752cc44d71071a9ed7aed0b22579e3df"
+    },
+    "accord_1.2b_yo.txt": {
+      "sha256": "17a15ff0af9501c7b7a6738c76e631a51693194f55cc1ea542106701722dd744"
+    },
+    "accord_1.2b_zh.txt": {
+      "sha256": "a18f73eeb143b63caada5eabf5d81e6ddba8005442b6d763b9f7a4192bc135ab"
+    },
+    "CIRIS_COMPREHENSIVE_GUIDE.txt": {
+      "sha256": "c07f2419849fb2876d5a31c6c4523c2c7f2e75efe2172f6aa947931ba6fae9cb"
+    },
+    "CIRIS_COMPREHENSIVE_GUIDE_MOBILE.txt": {
       "sha256": "1e09c817142e8ee0491815fef1977f5d1f58b73a87d3954be19493f36e01455d"
     }
   },
-  "signed_at": "2026-04-20T00:00:00Z",
+  "signed_at": "2026-09-03T18:54:26Z",
   "signer": "wa-ROOT-00"
 }

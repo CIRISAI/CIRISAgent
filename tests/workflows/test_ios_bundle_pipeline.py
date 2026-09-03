@@ -13,6 +13,7 @@ view -- with the test server inside it -- was never shown.
 from __future__ import annotations
 
 import inspect
+import textwrap
 import re
 from pathlib import Path
 
@@ -74,4 +75,14 @@ def test_bring_up_refuses_a_port_the_host_already_owns() -> None:
     assert guard != -1, "no host-listener guard"
     assert launch != -1 and guard < launch, "the guard must run before the app is launched"
     hs = inspect.getsource(m._host_listener)
-    assert "-sTCP:LISTEN" in hs, "clients on the port must not count as owners"
+    assert "pids_listening_on" in hs, "must go through platform_procs, not invoke lsof directly"
+    # An INVOCATION, not the word: the docstring explains why lsof is not called
+    # here, so a substring check would fail on its own rationale. Look for the
+    # binary appearing as a string literal, which is the only way to run it.
+    import ast as _ast
+
+    tree = _ast.parse(textwrap.dedent(hs))
+    literals = [n.value for n in _ast.walk(tree) if isinstance(n, _ast.Constant) and isinstance(n.value, str)]
+    assert not [x for x in literals if x.strip().lower() in ("lsof", "netstat")], (
+        "POSIX-only binary invoked directly; platform_procs owns that decision"
+    )

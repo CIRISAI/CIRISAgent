@@ -2799,21 +2799,26 @@ def _ios_diagnostics(udid: str, bundle_id: str, process_name: str = "iosApp") ->
 
 
 def _host_listener(port: int) -> Optional[str]:
-    """Who is LISTENING on this host port, or None. Clients on the port do not count."""
-    try:
-        out = subprocess.run(
-            ["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN", "-Fpc"],
-            capture_output=True, text=True, timeout=15,
-        )
-    except Exception:  # noqa: BLE001 -- no lsof, or it hung: say nothing rather than block
+    """Who is LISTENING on this host port, or None if nothing is or we cannot tell.
+
+    Delegates to platform_procs.pids_listening_on, which speaks netstat on
+    Windows and lsof elsewhere -- invoking lsof directly here made the whole QA
+    runner POSIX-only, which is what tests/tools/qa_runner/
+    test_no_posix_only_binaries.py exists to prevent.
+
+    That helper returns [] both when the port is free AND when it cannot
+    determine the answer, and those must not be conflated. Conflating them here
+    is safe in one direction only: we refuse to start when we KNOW someone owns
+    the port, and proceed when we do not know. A false "free" costs us the
+    ambiguity this guard was added for; a false "owned" would block a run that
+    should have proceeded.
+    """
+    from tools.qa_runner.platform_procs import pids_listening_on
+
+    pids = pids_listening_on(port)
+    if not pids:
         return None
-    pid = cmd = None
-    for line in (out.stdout or "").splitlines():
-        if line.startswith("p"):
-            pid = line[1:]
-        elif line.startswith("c"):
-            cmd = line[1:]
-    return f"{cmd or '?'} (pid {pid})" if pid else None
+    return f"pid {', '.join(str(p) for p in pids)}"
 
 
 def _simctl(args: List[str], timeout: int = 120) -> subprocess.CompletedProcess:

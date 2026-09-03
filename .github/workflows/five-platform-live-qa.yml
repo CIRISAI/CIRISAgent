@@ -523,10 +523,16 @@ jobs:
             fi
 
             # 1. Setup wizard through the real UI, with a real key.
+            # A SHOT AT EVERY STAGE. The capture wrapper runs after main() whatever
+            # the exit code, but only when asked -- and only desktop-chat asked. A
+            # platform that dies in setup (Android, every run so far) therefore
+            # produced no screenshot at all, and "what did the screen say when it
+            # refused to advance" had to be inferred from a tag dump.
             python -m tools.qa_runner.modules.web_ui desktop-setup \
               --platform "$target" --launch $extra \
               --username qaadmin --password "qa_test_password_12345" \
               $llm_args \
+              --screenshot-on-success "artifacts/shots/$plat-setup.png" \
               -v || { overall=1; echo "::error::$plat setup failed"; echo "::endgroup::"; continue; }
 
             # 2. LOG IN. `desktop-setup` completes the wizard and leaves the app
@@ -539,6 +545,7 @@ jobs:
             python -m tools.qa_runner.modules.web_ui desktop-login \
               --platform "$target" $extra \
               --username qaadmin --password "qa_test_password_12345" \
+              --screenshot-on-success "artifacts/shots/$plat-login.png" \
               -v \
               || { overall=1; echo "::error::$plat login failed"; echo "::endgroup::"; continue; }
 
@@ -791,7 +798,8 @@ jobs:
             echo
             echo "## expected-but-absent"
             for plat in ${MATRIX_PLATFORMS}; do
-              [ -f "artifacts/shots/$plat.png" ]   || echo "  shots/$plat.png (no screenshot — did the app start at all?)"
+              [ -f "artifacts/shots/$plat-setup.png" ] || echo "  shots/$plat-setup.png (no setup screenshot — did the app start at all?)"
+              [ -f "artifacts/shots/$plat.png" ]   || echo "  shots/$plat.png (no chat screenshot — did the flow reach the chat step?)"
               [ -f "artifacts/chat-$plat.json" ]   || echo "  chat-$plat.json (no result — did the flow reach the chat step?)"
               [ -d "artifacts/logs/ciris-$plat" ]  || echo "  logs/ciris-$plat/ (no agent logs — did the platform boot?)"
               # The DEVICE-side log. Absent, an app that dies after coming up

@@ -219,6 +219,15 @@ def prompt_content_environment(
         stack.enter_context(
             patch("ciris_engine.logic.dma.tsaspdma.get_localized_accord_text", localized_accord)
         )
+        # msaspdma binds the helper at module scope too (msaspdma.py:28) and was
+        # the one member of the family left unpatched, so its golden was the only
+        # one carrying the REAL accord instead of the sentinel. Any edit to the
+        # Accord then failed this test and nothing else -- a governance-text
+        # change reading as a composition regression. Patch it like its siblings:
+        # the golden proves composition, not corpus contents.
+        stack.enter_context(
+            patch("ciris_engine.logic.dma.msaspdma.get_localized_accord_text", localized_accord)
+        )
         # #995 P0-1 made the conscience faculties call `get_accord_text` instead
         # of binding the module constant, but this patch set never followed them
         # there — so the largest block in the dump (180,522 B of accord, four

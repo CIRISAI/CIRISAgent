@@ -877,12 +877,17 @@ class DesktopAppTestRunner:
             # POLL, don't one-shot: on the Windows CI runner the transition
             # takes ~1s, and a fixed 0.5s sleep flagged a wizard that advanced
             # 300ms after the check (join_federation then passed immediately).
-            deadline = asyncio.get_event_loop().time() + 10.0
+            # 30s, not 10. Leaving YOU mints the node identity, and on the mobile
+            # embeds that takes ~10-12s (Android 9.2s; iOS advanced just AFTER a 10s
+            # budget and join_federation then passed 0.8s later -- run 33782490319).
+            # A wizard that takes twelve seconds is not a wizard that refused; only
+            # the refusal is the finding, and it still surfaces, 20s later.
+            deadline = asyncio.get_event_loop().time() + 30.0
             while await self.helper.is_element_visible(band_tag):
                 if asyncio.get_event_loop().time() > deadline:
                     await self._dump_tree("you_step:did-not-advance")
                     raise RuntimeError(
-                        "still on the YOU step 10s after btn_next — a required field is "
+                        "still on the YOU step 30s after btn_next — a required field is "
                         "unsatisfied (age band, account, or fed-ID label)"
                     )
                 await asyncio.sleep(0.5)

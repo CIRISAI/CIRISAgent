@@ -99,6 +99,11 @@ jobs:
       # the artifact costs a re-run with more logging to discover what the first
       # run already knew.
       CIRIS_QA_LOG_DIR: ${{ github.workspace }}/artifacts/cmdlogs
+      # Stage lines must carry the time they HAPPENED. Buffered, every "[n/5]"
+      # print of the iOS bring-up flushed together at the end -- all stamped
+      # 02:17:01, including "[5/5] Waiting ... (up to 120s)" -- so the job log
+      # could not place the launch against what os_log showed.
+      PYTHONUNBUFFERED: "1"
 
     steps:
       - uses: actions/checkout@v4
@@ -487,8 +492,13 @@ jobs:
             # Killing by port rather than by name because the desktop app, the embedded
             # backend and the simulator host process are different binaries that only
             # agree on where they listen.
+            # LISTENERS ONLY. Without -sTCP:LISTEN, lsof also returns every process
+            # holding a CLIENT socket on the port -- and the iOS simulator app polls
+            # 127.0.0.1:8080 for its backend, so the macOS teardown's kill -9 took the
+            # simulator app down with it (run 33706020778: "exited due to SIGKILL |
+            # sent by bash"). Owning a port means listening on it, not talking to it.
             for port in 8080 9091 8091; do
-              pids=$(lsof -ti "tcp:$port" 2>/dev/null || true)
+              pids=$(lsof -ti "tcp:$port" -sTCP:LISTEN 2>/dev/null || true)
               [ -n "$pids" ] && { echo "  teardown: killing $port ($pids)"; kill -9 $pids 2>/dev/null || true; }
             done
 

@@ -167,7 +167,11 @@ def test_log_collection_cannot_outlive_the_job(raw: str) -> None:
     runner that actually owns Android, and cap it regardless.
     """
     assert "MATRIX_PLATFORMS" in raw, "logcat is not gated on the runner owning android"
-    logcat = [ln for ln in raw.splitlines() if "adb logcat" in ln]
+    # Any invocation of logcat: adb resolved by name OR through "$ADB". The
+    # collect step stopped relying on `command -v adb` -- it is not on PATH on
+    # the ubuntu runner, so the guard was false on the one host with a device
+    # and the device log was never collected (run 33704781359).
+    logcat = [ln for ln in raw.splitlines() if "logcat -d" in ln and not ln.strip().startswith("#")]
     assert logcat, "no logcat collection at all"
     for line in logcat:
         assert "timeout " in line, f"adb logcat is not time-capped: {line.strip()}"

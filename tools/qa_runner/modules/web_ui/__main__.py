@@ -2702,7 +2702,7 @@ def _ios_startup_state(udid: str, bundle_id: str) -> str:
     return f"container=ok {' '.join(bits)} last-write={age}-ago"
 
 
-def _ios_diagnostics(udid: str, bundle_id: str) -> None:
+def _ios_diagnostics(udid: str, bundle_id: str, process_name: str = "iosApp") -> None:
     """Dump everything that explains an iOS bring-up failure, to files.
 
     Collected on the FAILURE PATH ONLY, because `log show` is slow and large. The
@@ -2717,12 +2717,21 @@ def _ios_diagnostics(udid: str, bundle_id: str) -> None:
         ("ios-container", ["xcrun", "simctl", "get_app_container", udid, bundle_id, "data"]),
         # The app's own os_log output — the only place a Swift/Kotlin crash or a
         # "test server refused to bind" message appears.
+        #
+        # MATCH THE EXECUTABLE, NOT A BUNDLE-ID FRAGMENT. launchd names the process
+        # by its binary -- "Successfully spawned iosApp[27615]" -- while the
+        # bundle id is ai.ciris.mobile. The old predicate took the last id
+        # segment, "mobile", which matched Apple's mobileassetd and not one line
+        # from our app: run 33706020778 produced 7 "hits", all asset-daemon
+        # noise, and zero of the NSLog("[TestAutomation.ios] ...") lines that
+        # say whether the server bound. And 3m from the failure point missed
+        # the launch itself; the bring-up budget alone is 120s.
         (
             "ios-oslog",
             [
                 "xcrun", "simctl", "spawn", udid, "log", "show",
-                "--last", "3m", "--style", "syslog",
-                "--predicate", f'process CONTAINS "{bundle_id.split(".")[-1]}" OR subsystem CONTAINS "{bundle_id}"',
+                "--last", "10m", "--style", "syslog",
+                "--predicate", f'process == "{process_name}" OR subsystem CONTAINS "{bundle_id}"',
             ],
         ),
     ]

@@ -55,8 +55,11 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import hashlib
+import http.client
 import json
 import os
+import random
+import time
 import re
 import sys
 import unicodedata
@@ -217,32 +220,58 @@ Return ONLY the translated section, starting at its first line. No preamble, no 
 fence, no commentary."""
 
 
-def call(system: str, user: str, model: str, key: str) -> str:
-    req = urllib.request.Request(
-        ENDPOINT,
-        # Sized to the input, not fixed. main/v6 is 13 KB of English, and Amharic,
-        # Bengali and Burmese expand well past one token per character -- a flat
-        # 16k budget stopped mid-section and came back as content=None, which is
-        # what the first pass's rejects were.
-        data=json.dumps({"model": model, "max_tokens": max(16000, min(64000, len(user) * 6)),
-                         "temperature": 0.2,
-                         "messages": [{"role": "system", "content": system},
-                                      {"role": "user", "content": user}]}).encode(),
-        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json",
-                 "X-Title": "CIRIS accord i18n"},
-    )
-    with urllib.request.urlopen(req, timeout=300) as r:
-        body = json.loads(r.read().decode())
-    if "choices" not in body:
-        raise RuntimeError(f"no choices in response: {json.dumps(body)[:300]}")
-    choice = body["choices"][0]
-    content = (choice.get("message") or {}).get("content")
-    if not content:
-        # A refusal, a filter, or a length stop with nothing emitted. It arrives
-        # as content=None and used to surface as AttributeError on .strip(),
-        # which reads like a bug in the pipeline rather than a model outcome.
-        raise RuntimeError(f"empty content (finish_reason={choice.get('finish_reason')!r})")
-    return content.strip()
+def call(system: str, user: str, model: str, key: str, attempts: int = 5) -> str:
+    """One completion, retried through transport failures.
+
+    Long outputs in Telugu, Thai, Tamil and Turkish came back as
+    RemoteDisconnected, `EOF occurred in violation of protocol`, and read
+    timeouts -- the connection dying mid-response, not the model refusing. With
+    no retry those surfaced as rejected units and looked like translation
+    failures, which sent me looking at prompts instead of at the socket.
+
+    Retries are transport-only: a guard rejection is a real verdict about the
+    text and must not be re-rolled here. Backoff is exponential with jitter so a
+    provider hiccup does not turn into eight workers hammering in lockstep.
+    """
+    payload = json.dumps({
+        # Sized to the input: a flat budget truncated the long sections.
+        "model": model, "max_tokens": max(16000, min(64000, len(user) * 6)),
+        "temperature": 0.2,
+        "messages": [{"role": "system", "content": system},
+                     {"role": "user", "content": user}],
+    }).encode()
+    last: Exception = RuntimeError("no attempt made")
+    for n in range(attempts):
+        req = urllib.request.Request(
+            ENDPOINT, data=payload,
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json",
+                     "X-Title": "CIRIS accord i18n"},
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=600) as r:
+                body = json.loads(r.read().decode())
+        except (urllib.error.URLError, http.client.HTTPException, TimeoutError, OSError, ValueError) as exc:
+            last = exc
+            if n + 1 < attempts:
+                time.sleep(min(30.0, 2.0 ** n) + random.uniform(0, 1.5))
+            continue
+        if "choices" not in body:
+            last = RuntimeError(f"no choices: {json.dumps(body)[:200]}")
+            if n + 1 < attempts:
+                time.sleep(min(30.0, 2.0 ** n) + random.uniform(0, 1.5))
+            continue
+        choice = body["choices"][0]
+        content = (choice.get("message") or {}).get("content")
+        if not content:
+            # A refusal, a filter, or a length stop with nothing emitted. It
+            # arrives as content=None and used to surface as AttributeError on
+            # .strip(), reading like a pipeline bug rather than a model outcome.
+            last = RuntimeError(f"empty content (finish_reason={choice.get('finish_reason')!r})")
+            if n + 1 < attempts:
+                time.sleep(min(30.0, 2.0 ** n) + random.uniform(0, 1.5))
+            continue
+        return content.strip()
+    raise last
 
 
 def guard(lang: str, english: str, got: str) -> List[str]:
@@ -368,6 +397,14 @@ def translate_unit(lang: str, path: str, english: str, ground: str, model: str, 
         slot.write_text(english, encoding="utf-8")
         return path, english, []
     system = (ground + "\n\n" if ground else "") + PROMPT.format(lang=lang, lang_name=name)
+    # THE MARKER NEVER GOES TO THE MODEL. `// content/sections/main/v6.mdx` is a
+    # path, not prose, and Russian duly translated it -- which loses the file's
+    # only stable section identity, the one thing every parser here keys on.
+    # Asking nicely is not a mechanism: hold it back and re-attach it verbatim.
+    marker = ""
+    if english.startswith("// content/sections/"):
+        marker, _, english = english.partition("\n")
+        marker += "\n"
     try:
         # LARGE SECTIONS GET SPLIT. main/v6 is 13 KB and came back with one
         # heading where the English has seven -- in Indonesian as readily as in
@@ -380,13 +417,14 @@ def translate_unit(lang: str, path: str, english: str, ground: str, model: str, 
             else call(system, english, model, key)
     except Exception as exc:  # noqa: BLE001 -- one unit's failure must not end the run
         return path, None, [f"{type(exc).__name__}: {exc}"]
-    got = re.sub(r"^```[a-z]*\n|\n```$", "", got.strip())
+    got = marker + re.sub(r"^```[a-z]*\n|\n```$", "", got.strip())
+    english = marker + english
     bad = guard(lang, english, got)
     if bad and any("front-matter fences" in b for b in bad):
         # Only the rules went missing. Redo this unit the deterministic way
         # rather than spending another roll of the dice on the same prompt.
         try:
-            got = translate_between_rules(system, english, model, key)
+            got = marker + translate_between_rules(system, english[len(marker):], model, key)
             bad = guard(lang, english, got)
         except Exception as exc:  # noqa: BLE001
             return path, None, [f"rule-split retry: {type(exc).__name__}: {exc}"]

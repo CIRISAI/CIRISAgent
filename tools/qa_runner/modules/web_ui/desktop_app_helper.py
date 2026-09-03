@@ -32,6 +32,25 @@ class DesktopAppConfig:
     # Screenshot directory (for any screenshots taken)
     screenshot_dir: str = "desktop_app_qa_reports"
 
+    # Seconds to wait after a successful /input before the next one. ZERO ON
+    # DESKTOP, non-zero on Android/iOS.
+    #
+    # KMP TextField binds its value through a StateFlow, and /input answers as
+    # soon as the request is POSTED -- the field applies it when it next
+    # collects. A StateFlow keeps only the latest value, so back-to-back inputs
+    # race that commit and the earlier ones are dropped, every call still
+    # reporting success. apps/ios/CLAUDE.md has recorded this for a while as
+    # "Text input needs 2-second delay between fields", and login() has slept
+    # between fields for exactly this reason.
+    #
+    # It lives HERE rather than at the call sites because the setup wizard did
+    # not know to do it: you_step types username -> password -> confirm
+    # back-to-back, the password was the one that vanished, and Android stopped
+    # on "Password is required" with btn_next disabled -- every input
+    # acknowledged (five-platform runs 33708152999 through the 09-03 nightly).
+    # One field on the config fixes every present and future caller.
+    input_settle_s: float = 0.0
+
 
 @dataclass
 class Screenshot:
@@ -242,6 +261,8 @@ class DesktopAppHelper:
         if not data.get("success", False):
             error = data.get("error", "unknown error")
             raise RuntimeError(f"Input '{test_tag}' failed: {error} (response: {data})")
+        if self.config.input_settle_s:
+            await asyncio.sleep(self.config.input_settle_s)
         if verify and not _looks_secret(test_tag):
             await self._verify_input_landed(test_tag, text)
         return True
@@ -267,14 +288,22 @@ class DesktopAppHelper:
         exposes_text = False
         while time.monotonic() < deadline:
             el = await self.get_element(test_tag)
-            if el is not None and el.text is not None:
+            if el is not None:
+                if el.text is None:
+                    # STRUCTURAL, NOT SLOW. A client that omits `text` for input
+                    # elements will omit it however long we poll, so burning the
+                    # whole budget per field buys nothing and costs real time --
+                    # three fields in the setup wizard, on the platform that is
+                    # already the slowest. Conclude on the first clean read.
+                    print(f"    (input '{test_tag}' unverifiable: element exposes no text)")
+                    return
                 exposes_text = True
                 seen = el.text
                 if seen == text:
                     return
             await asyncio.sleep(0.1)
         if not exposes_text:
-            print(f"    (input '{test_tag}' unverifiable: element exposes no text)")
+            print(f"    (input '{test_tag}' unverifiable: element never appeared)")
             return
         raise RuntimeError(
             f"Input '{test_tag}' was acknowledged but {budget_s:.0f}s later the field holds "

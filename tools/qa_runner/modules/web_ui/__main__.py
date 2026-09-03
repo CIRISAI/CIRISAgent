@@ -3478,6 +3478,7 @@ async def run_federation_walk(args: argparse.Namespace) -> int:
     config = DesktopAppConfig(
         server_url=server_url,
         screenshot_dir=args.output_dir,
+        input_settle_s=_input_settle_for(getattr(args, "platform", "desktop")),
     )
     helper = DesktopAppHelper(config)
     await helper.start()
@@ -3505,6 +3506,17 @@ async def run_federation_walk(args: argparse.Namespace) -> int:
     if report.all_passed:
         return 0
     return 1
+
+
+#: Android and iOS apply /input asynchronously through a StateFlow that keeps
+#: only the latest value, so consecutive inputs race the commit; desktop applies
+#: synchronously. 2.0s is the interval apps/ios/CLAUDE.md already prescribes and
+#: login() already used -- this makes it the default for every caller.
+_MOBILE_INPUT_SETTLE_S = 2.0
+
+
+def _input_settle_for(platform: str) -> float:
+    return _MOBILE_INPUT_SETTLE_S if platform in ("android", "ios") else 0.0
 
 
 async def run_desktop_tests(args: argparse.Namespace) -> int:
@@ -3551,6 +3563,7 @@ async def run_desktop_tests(args: argparse.Namespace) -> int:
     config = DesktopAppConfig(
         server_url=server_url,
         screenshot_dir=args.output_dir,
+        input_settle_s=_input_settle_for(getattr(args, "platform", "desktop")),
     )
     runner = DesktopAppTestRunner(config=config, verbose=args.verbose)
 

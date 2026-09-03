@@ -3446,10 +3446,17 @@ async def run_desktop_tests(args: argparse.Namespace) -> int:
         # conditions and named only one of them, so on Android it announced that
         # the DESKTOP app was not in test mode seconds after bring-up had
         # reported the Android test server healthy on that very port.
-        from .desktop_app_helper import describe_test_server
+        from .desktop_app_helper import attribute_device_failure, describe_test_server
 
         print(f"\n[FAIL] the test server is not usable: {await describe_test_server(server_url)}")
         platform = getattr(args, "platform", "desktop")
+        # NAME THE OWNER. On a device the automation port and the embedded
+        # backend are two listeners in one process, so asking the sibling turns
+        # "something died" into "which layer died" — the difference between a
+        # client bug and a process kill, which run 33704781359 could not settle.
+        if platform in ("android", "ios"):
+            backend_url = f"http://localhost:{getattr(args, 'port', 8080)}"
+            print(f"  -> {await attribute_device_failure(server_url, backend_url)}")
         if platform == "android":
             print("\nAndroid: the app is launched with `--es CIRIS_TEST_MODE true` and")
             print("  `setprop debug.CIRIS_TEST_MODE true`, and a debug build should set")

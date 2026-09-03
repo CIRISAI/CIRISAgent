@@ -756,6 +756,51 @@ async def describe_test_server(server_url: str = "http://localhost:8091") -> str
     return f"{server_url}/health ok, testMode enabled"
 
 
+async def attribute_device_failure(server_url: str, backend_url: str) -> str:
+    """Which layer died: the automation server, or the whole app process?
+
+    On Android the automation port is reached through an adb forward, and adb
+    accepts on the HOST socket before it tries the device. If the device-side
+    port is gone, adb accepts and then closes — byte-identical to a live server
+    whose request handler died. So the exception seen on :9091 alone cannot
+    tell a dead app process from a dead accept loop.
+
+    In run 33704781359 that ambiguity WAS the question. The automation server
+    had answered /health with testMode=true seconds earlier, then returned
+    RemoteProtocolError, and from the host there was no way to say whether the
+    client's accept loop had died or the whole app had been killed — a
+    different owner in each case.
+
+    The sibling port settles it. The embedded Python backend is a separate
+    listener, on a separate forward, inside the SAME app process:
+
+      backend answers  -> the process is ALIVE; only the automation server
+                          stopped. Client-side (the automation surface).
+      backend is gone  -> the process itself died; look for an OOM/low-memory
+                          kill in logcat, not for an accept-loop bug.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.get(f"{backend_url}/v1/system/health")
+        alive = r.status_code in (200, 401, 403)
+        detail = f"HTTP {r.status_code}"
+    except Exception as exc:  # noqa: BLE001
+        alive = False
+        detail = type(exc).__name__
+
+    if alive:
+        return (
+            f"the app PROCESS IS ALIVE — the embedded backend at {backend_url} still "
+            f"answers ({detail}), so only the automation server on {server_url} stopped. "
+            "Look at the automation surface, not at a process death."
+        )
+    return (
+        f"the app PROCESS IS GONE — the embedded backend at {backend_url} is also "
+        f"unreachable ({detail}), so both listeners died together. Look for a process "
+        "kill (OOM / low-memory) in logcat before suspecting the automation server."
+    )
+
+
 async def check_desktop_app_running(server_url: str = "http://localhost:8091") -> bool:
     """Check if the CIRIS Desktop app is running with test mode enabled."""
     try:

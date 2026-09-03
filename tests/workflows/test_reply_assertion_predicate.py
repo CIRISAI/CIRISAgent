@@ -219,3 +219,48 @@ def test_no_nested_function_rebinds_a_variable_it_only_meant_to_mutate() -> None
         "augmented assignment to an enclosing-scope name inside a nested function — "
         f"use .update()/.append() or declare nonlocal: {offenders}"
     )
+
+
+def test_no_input_or_click_failure_is_swallowed() -> None:
+    """A driving call that fails must reach the runner, not a bare except.
+
+    `input_text` RAISES on `success: false` rather than returning False, so the
+    `if not await ...` guards at the call sites are belt-and-braces and the real
+    contract is the exception. That contract only became load-bearing on mobile
+    with ciris-client 0.5.199: before it, Android and iOS `handleInput` returned
+    `success: true` whether or not a field was listening, so a setup step could
+    go green having entered nothing — the same vacuous pass as an error row
+    counting as a reply. Now that the client tells the truth, a broad `except`
+    around a driving call would put the hole straight back.
+    """
+    import ast
+    import inspect
+
+    from tools.qa_runner.modules.web_ui import __main__ as m
+
+    src = inspect.getsource(m)
+    tree = ast.parse(src)
+
+    def drives(node) -> str | None:
+        for n in ast.walk(node):
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute):
+                if n.func.attr in ("input_text", "click"):
+                    return n.func.attr
+        return None
+
+    offenders = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Try):
+            continue
+        driven = drives(node)
+        if not driven:
+            continue
+        for h in node.handlers:
+            broad = h.type is None or (isinstance(h.type, ast.Name) and h.type.id in ("Exception", "BaseException"))
+            if broad and not any(isinstance(x, ast.Raise) for x in ast.walk(h)):
+                offenders.append(f"line {node.lineno}: {driven}() failure swallowed")
+
+    assert not offenders, (
+        "a failed input/click must propagate — catching it broadly restores the "
+        f"silent-success bug ciris-client 0.5.199 fixed: {offenders}"
+    )

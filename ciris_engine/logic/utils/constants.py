@@ -76,13 +76,13 @@ GUIDE_EXPECTED_HASHES: Dict[str, str] = {
 }
 
 ACCORD_EXPECTED_HASHES: Dict[str, str] = {
-    "accord_1.2b_POLYGLOT.txt": "3aeb4a9f63eebef7e776d54423100845a3d2c00c1481536d8c6bae8d4badad0f",
-    "accord_1.2b_POLYGLOT_compressed.txt": "8b92eba7c7ff9f80e66c26c550407fad62a483a516a386bd63b2400ded1b82e7",
-    "accord_1.2b_am.txt": "e77de0afe2985fcf9367fe860ba2f3a9c89de48d4de536641b9f3f8d7963d7f2",
+    "accord_1.2b_POLYGLOT.txt": "7d316488dd86846ab9ca114282f9f8746f23488aa87ddd7834edc1e8c1c1c020",
+    "accord_1.2b_POLYGLOT_compressed.txt": "0f6f2afd3967d25be2f3992e9da05050893f85507ceefee07040583aba789efd",
+    "accord_1.2b_am.txt": "aba4dbeb775201ae32ef70af34a9ba1a650d629215966ddccd3c0f4bd60b429b",
     "accord_1.2b_ar.txt": "473acf8265521789186624191486d0592fc89ca2cb0f4b99d309f6cc58025fca",
     "accord_1.2b_bn.txt": "1a892588f4b0cc9b0db0bafe1f1cddb2be8a0f821bfb2239bac0c6a481ebafb7",
-    "accord_1.2b_de.txt": "8f3415f43bc6c0f365580f70e69045629a74fa076e23f8b2e28568286fb1a201",
-    "accord_1.2b_en.txt": "727018681678d4dda17bbeb8d0da72735cf78f3f8658be92f148a8d9f6484743",
+    "accord_1.2b_de.txt": "4734890fdfe1651bc9a04502e60594eacd0fc8b58d5ba725df912cfe771306d6",
+    "accord_1.2b_en.txt": "808fe5f21d649dd1ce509de357489ac0b7abad1435402e0970782035b020bb53",
     "accord_1.2b_es.txt": "713bfe65e0fd71fa37c7b8c8cef77cedbc9c2c12655d5c90688d95822ff1a86c",
     "accord_1.2b_fa.txt": "9624e65b65352fa5ac0190de2342c581652f9847c5b20ad90c3b73bf52c0a78d",
     "accord_1.2b_fr.txt": "b28a509ff4af7369adc9930101e151af6acfcfd6f83c087359da8ee4cc401241",

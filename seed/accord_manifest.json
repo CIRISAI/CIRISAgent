@@ -2,13 +2,13 @@
   "version": "1.2b",
   "files": {
     "accord_1.2b_POLYGLOT.txt": {
-      "sha256": "3aeb4a9f63eebef7e776d54423100845a3d2c00c1481536d8c6bae8d4badad0f"
+      "sha256": "7d316488dd86846ab9ca114282f9f8746f23488aa87ddd7834edc1e8c1c1c020"
     },
     "accord_1.2b_POLYGLOT_compressed.txt": {
-      "sha256": "8b92eba7c7ff9f80e66c26c550407fad62a483a516a386bd63b2400ded1b82e7"
+      "sha256": "0f6f2afd3967d25be2f3992e9da05050893f85507ceefee07040583aba789efd"
     },
     "accord_1.2b_am.txt": {
-      "sha256": "e77de0afe2985fcf9367fe860ba2f3a9c89de48d4de536641b9f3f8d7963d7f2"
+      "sha256": "aba4dbeb775201ae32ef70af34a9ba1a650d629215966ddccd3c0f4bd60b429b"
     },
     "accord_1.2b_ar.txt": {
       "sha256": "473acf8265521789186624191486d0592fc89ca2cb0f4b99d309f6cc58025fca"
@@ -17,10 +17,10 @@
       "sha256": "1a892588f4b0cc9b0db0bafe1f1cddb2be8a0f821bfb2239bac0c6a481ebafb7"
     },
     "accord_1.2b_de.txt": {
-      "sha256": "8f3415f43bc6c0f365580f70e69045629a74fa076e23f8b2e28568286fb1a201"
+      "sha256": "4734890fdfe1651bc9a04502e60594eacd0fc8b58d5ba725df912cfe771306d6"
     },
     "accord_1.2b_en.txt": {
-      "sha256": "727018681678d4dda17bbeb8d0da72735cf78f3f8658be92f148a8d9f6484743"
+      "sha256": "808fe5f21d649dd1ce509de357489ac0b7abad1435402e0970782035b020bb53"
     },
     "accord_1.2b_es.txt": {
       "sha256": "713bfe65e0fd71fa37c7b8c8cef77cedbc9c2c12655d5c90688d95822ff1a86c"
@@ -101,6 +101,6 @@
       "sha256": "1e09c817142e8ee0491815fef1977f5d1f58b73a87d3954be19493f36e01455d"
     }
   },
-  "signed_at": "2026-09-03T18:54:26Z",
+  "signed_at": "2026-09-03T23:45:10Z",
   "signer": "wa-ROOT-00"
 }

@@ -1,0 +1,143 @@
+# Regenerate the localized ACCORD texts from the English canon.
+#
+# Modelled on ciris-website's i18n-lane.yml, including its two hard-won rules:
+# the guard runs `if: always()` so a partial lane still gets checked, and the
+# commit runs `if: always()` too so good work is banked rather than discarded
+# when one unit fails.
+#
+# THE SIGNING CONSEQUENCE. The 29 localized texts are inside the Ed25519-signed
+# seed/accord_manifest.json (they are what the action-selection DMAs put in
+# front of the model, so leaving them out left that loop open). Changing them
+# therefore invalidates the signature, and this workflow CANNOT close it: the
+# root key is not in CI and must not be. The lane commits the texts and the
+# regenerated hash pins to a branch, and a key holder runs
+# `tools/dev/regen_accord_manifest.py` locally before the PR can merge. A run
+# that ends with "manifest needs re-signing" has succeeded, not failed.
+#
+# Secrets: OPENROUTER_API_KEY. Vars: ACCORD_I18N_MODEL (optional).
+name: accord i18n
+
+on:
+  workflow_dispatch:
+    inputs:
+      langs:
+        description: "language codes, space-separated. Empty = all 28"
+        required: false
+        type: string
+      sections:
+        description: "fnmatch over section paths, space-separated (e.g. 'main/v9*'). Empty = the whole document"
+        required: false
+        type: string
+      workers:
+        description: "concurrent translation units"
+        required: false
+        default: "6"
+        type: string
+      commit:
+        description: "push the result to a branch (false = report only)"
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  lane:
+    name: accord i18n (${{ inputs.langs || 'all' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # The website's dictionaries are one of the three grounding anchors; the
+      # lane still runs without them, on language_guidance and the glossary.
+      - name: Fetch the website dictionaries (grounding)
+        continue-on-error: true
+        run: |
+          git clone --depth 1 --filter=blob:none --sparse \
+            https://github.com/CIRISAI/ciris-website.git /tmp/website
+          git -C /tmp/website sparse-checkout set src/i18n/dictionaries
+
+      - name: Plan (no API call)
+        id: plan
+        run: |
+          set -euo pipefail
+          args=""
+          for l in ${{ inputs.langs }}; do args="$args --lang $l"; done
+          for s in ${{ inputs.sections }}; do args="$args --sections $s"; done
+          echo "args=$args" >> "$GITHUB_OUTPUT"
+          python3 -u tools/accord_i18n.py $args --plan | tee plan.log
+          { echo "### Plan"; echo '```'; cat plan.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run the lane
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          ACCORD_I18N_MODEL: ${{ vars.ACCORD_I18N_MODEL }}
+          CIRIS_WEBSITE_DICTS: /tmp/website/src/i18n/dictionaries
+        run: |
+          set -o pipefail
+          python3 -u tools/accord_i18n.py ${{ steps.plan.outputs.args }} \
+            --workers "${{ inputs.workers }}" | tee lane.log
+          { echo "### Lane"; echo '```'; tail -40 lane.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      # ALWAYS: a lane that exited 1 still wrote whole languages, and those need
+      # checking. A structural guard is the only thing standing between machine
+      # translation and the corpus, so it runs whatever happened above.
+      - name: Guard — structure, pins, and a real import
+        if: always()
+        run: |
+          set -euo pipefail
+          python3 -u tools/accord_i18n.py --check
+          python3 tools/dev/regen_accord_pins.py
+          # The pins are a startup fail-safe: if they and the files disagree the
+          # agent refuses to boot, so prove the import here rather than in prod.
+          CIRIS_PREFERRED_LANGUAGE=en python3 -c "
+          from ciris_engine.logic.utils import constants
+          assert constants.get_localized_accord_text('en'), 'canon did not load'
+          print('accord loads; pins agree with the files on disk')"
+
+      - name: Commit to a branch
+        if: always() && inputs.commit
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ciris_engine/data/localized ciris_engine/logic/utils/constants.py
+          if git diff --cached --quiet; then echo "nothing to commit"; exit 0; fi
+          BR="accord-i18n/$(date -u +%Y%m%d-%H%M%S)"
+          git checkout -b "$BR"
+          git commit -F - <<'MSG'
+          accord: regenerate the localized texts from the English canon
+
+          Machine translation, grounded in this project's own corpus
+          (prompts.language_guidance, a glossary diffed from en.json, and
+          in-domain prose) and accepted only against a structural guard:
+          formula lines byte-identical, CC references preserved, no withdrawn
+          claim reintroduced, not identical to the English, expected script
+          present, heading and front-matter parity.
+
+          The guard proves structure and terminology. It does not prove
+          fluency, and the corpora it is grounded in are themselves machine
+          translations that were pipeline-repaired and spot-verified, not
+          human-reviewed. Treat this as machine translation pending native
+          review, and review it like any other diff.
+          MSG
+          git push origin "$BR"
+          {
+            echo "### Pushed \`$BR\`"
+            echo
+            echo "**A key holder must re-sign before this merges.** The localized"
+            echo "texts are inside the signed manifest, so changing them invalidates"
+            echo "\`seed/accord_manifest.sig\`, and the root key is not in CI:"
+            echo
+            echo '```bash'
+            echo "git fetch origin $BR && git checkout $BR"
+            echo "python3 tools/dev/regen_accord_manifest.py   # rebuilds + re-signs"
+            echo "git commit -am 'accord: re-sign the manifest over the refreshed texts'"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

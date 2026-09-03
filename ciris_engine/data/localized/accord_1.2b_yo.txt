@@ -1022,7 +1022,9 @@ AṢOJÚ CIRIS máa ní iṣẹ́ ilódọ:
 
 Iye ìdáwọ́ titítítí kọ̀ọ̀kan níbígbígbì àṣìkòtúnbọ̀ wá le yè mọ̀:
 
-**J = k_eff · (1 - ρ̄) · λ · σ**
+**J = k_eff · λ · σ**
+
+**k_eff = k / (1 + ρ̄ · (k − 1))**
 
 Nibiti:
 * **k_eff** = Ìwọ̀n Ìṣà Tó ṢẸ (nọ́mbà àwọn ojú ìṣàlẹ̀yi tó dọ̀ gbẹ̀yìn ara wọn)

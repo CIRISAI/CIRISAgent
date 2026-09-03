@@ -1018,7 +1018,9 @@ Her kısıtlama, izin verilen durumların bir manifoldunu tanımlar. Bu manifold
 
 Tutarlı aldatmayı sürdürme maliyeti şöyle ifade edilebilir:
 
-**J = k_eff · (1 - ρ̄) · λ · σ**
+**J = k_eff · λ · σ**
+
+**k_eff = k / (1 + ρ̄ · (k − 1))**
 
 Burada:
 * **k_eff** = Etkin ölçek (bağımsız doğrulama noktalarının sayısı)

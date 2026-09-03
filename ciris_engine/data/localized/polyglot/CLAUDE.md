@@ -50,7 +50,7 @@ applied at the prompt layer: each language is one of the manifolds
 baggage is the noise that does not intersect across the densest
 encodings. A polyglot encoding is the federated ratchet operationalized
 not over agent decisions but over concept transmission. See
-`FSD/PROOF_OF_BENEFIT_FEDERATION.md` §2 and `accord_1.2b.txt` Book IX
+`FSD/PROOF_OF_BENEFIT_FEDERATION.md` §2 and `localized/accord_1.2b_en.txt` Book IX (the root-level `accord_1.2b.txt` duplicate was removed; CC rc4 Part 6 is the statement of record)
 Ch. 3-4 for the parent claim.
 
 ---

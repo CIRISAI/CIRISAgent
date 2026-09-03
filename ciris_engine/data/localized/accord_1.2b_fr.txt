@@ -1018,7 +1018,9 @@ Chaque contrainte définit une variété d'états permissibles. L'intersection d
 
 Le coût de maintenir une tromperie cohérente peut être exprimé comme :
 
-**J = k_eff · (1 - ρ̄) · λ · σ**
+**J = k_eff · λ · σ**
+
+**k_eff = k / (1 + ρ̄ · (k − 1))**
 
 Où :
 * **k_eff** = Échelle effective (nombre de points de vérification indépendants)

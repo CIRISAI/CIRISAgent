@@ -1018,7 +1018,9 @@ Kila kikwazo kinafafanua mfumo wa hali zinazokubalika. Makutano ya mifumo hii—
 
 Gharama ya kudumisha udanganyifu wenye upatano inaweza kuwakilishwa kama:
 
-**J = k_eff · (1 - ρ̄) · λ · σ**
+**J = k_eff · λ · σ**
+
+**k_eff = k / (1 + ρ̄ · (k − 1))**
 
 Ambapo:
 * **k_eff** = Ukubwa wa kweli (idadi ya viungo huru vya uthibitishaji)

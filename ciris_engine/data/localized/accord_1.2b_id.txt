@@ -1020,7 +1020,9 @@ Setiap kendala mendefinisikan manifold keadaan yang diizinkan. Persimpangan mani
 
 Biaya mempertahankan penipuan koheren dapat dinyatakan sebagai:
 
-**J = k_eff · (1 - ρ̄) · λ · σ**
+**J = k_eff · λ · σ**
+
+**k_eff = k / (1 + ρ̄ · (k − 1))**
 
 Di mana:
 * **k_eff** = Skala efektif (jumlah titik verifikasi independen)

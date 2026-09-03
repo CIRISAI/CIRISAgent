@@ -1034,7 +1034,9 @@ Coherence Ratchet وہ mechanism ہے جس سے CIRIS agents قدرتی طور �
 
 Coherent deception کو maintain کرنے کی cost کو express کیا جا سکتا ہے:
 
-**J = k_eff · (1 - ρ̄) · λ · σ**
+**J = k_eff · λ · σ**
+
+**k_eff = k / (1 + ρ̄ · (k − 1))**
 
 جہاں:
 * **k_eff** = Effective scale (independent verification points کی تعداد)

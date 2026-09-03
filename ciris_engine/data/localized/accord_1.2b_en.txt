@@ -1,6 +1,6 @@
-// CIRIS Accord v1.2-Beta
-// Issued: 2025-04-16 | Auto-expires: 2027-04-16
-// Status: Beta (pending completion of stub annexes and empirical validation)
+// CIRIS Accord 1.2b text — an instantiation of the CIRIS Constitution 1.0-rc4 (CIRISAI/CIRISConstitution @ 78c5bda, 2026-09-03), the registry of record.
+// Where this text and the Constitution differ, the Constitution governs. No expiry: stewardship is perpetual (CC Part 7).
+// Book IX / Section IX follows CC Part 6: a capacity analysis under chosen constraints, not a justification of them (CC 6.2.1, 6.2.5).
 
 // content/sections/foreword/section0.mdx
 ---
@@ -1018,7 +1018,9 @@ Each constraint defines a manifold of permissible states. The intersection of th
 
 The cost of maintaining coherent deception can be expressed as:
 
-**J = k_eff · (1 - ρ̄) · λ · σ**
+**J = k_eff · λ · σ**
+
+**k_eff = k / (1 + ρ̄ · (k − 1))**
 
 Where:
 * **k_eff** = Effective scale (number of independent verification points)

@@ -1018,7 +1018,9 @@ Jede Beschränkung definiert eine Mannigfaltigkeit zulässiger Zustände. Die Sc
 
 Die Kosten der Aufrechterhaltung kohärenter Täuschung können ausgedrückt werden als:
 
-**J = k_eff · (1 - ρ̄) · λ · σ**
+**J = k_eff · λ · σ**
+
+**k_eff = k / (1 + ρ̄ · (k − 1))**
 
 Wobei:
 * **k_eff** = Effektive Größenordnung (Anzahl unabhängiger Verifikationspunkte)

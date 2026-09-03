@@ -1018,7 +1018,9 @@ Ogni vincolo definisce una varietà di stati permissibili. L'intersezione di que
 
 Il costo di mantenere l'inganno coerente può essere espresso come:
 
-**J = k_eff · (1 - ρ̄) · λ · σ**
+**J = k_eff · λ · σ**
+
+**k_eff = k / (1 + ρ̄ · (k − 1))**
 
 Dove:
 * **k_eff** = Scala effettiva (numero di punti di verifica indipendenti)

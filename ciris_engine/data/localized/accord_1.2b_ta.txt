@@ -1002,7 +1002,9 @@ Each constraint defines a manifold of permissible states. The intersection of th
 
 The cost of maintaining coherent deception can be expressed as:
 
-**J = k_eff · (1 - ρ̄) · λ · σ**
+**J = k_eff · λ · σ**
+
+**k_eff = k / (1 + ρ̄ · (k − 1))**
 
 Where:
 * **k_eff** = Effective scale (number of independent verification points)

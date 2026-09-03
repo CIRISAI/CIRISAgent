@@ -1018,7 +1018,9 @@ Cada restrição define uma variedade de estados permissíveis. A interseção d
 
 O custo de manter decepção coerente pode ser expresso como:
 
-**J = k_eff · (1 - ρ̄) · λ · σ**
+**J = k_eff · λ · σ**
+
+**k_eff = k / (1 + ρ̄ · (k − 1))**
 
 Onde:
 * **k_eff** = Escala efetiva (número de pontos de verificação independentes)

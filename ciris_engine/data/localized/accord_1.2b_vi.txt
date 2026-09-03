@@ -1018,7 +1018,9 @@ Mỗi ràng buộc xác định một đa tạp của các trạng thái cho ph�
 
 Chi phí duy trì lừa dối nhất quán có thể được biểu thị như:
 
-**J = k_eff · (1 - ρ̄) · λ · σ**
+**J = k_eff · λ · σ**
+
+**k_eff = k / (1 + ρ̄ · (k − 1))**
 
 Trong đó:
 * **k_eff** = Quy mô hiệu quả (số điểm xác minh độc lập)

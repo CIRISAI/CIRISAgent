@@ -644,8 +644,18 @@ class DesktopAppTestRunner:
                 tags = await _tags()
                 if "input_llm_model" in tags:
                     await self.helper.click("input_llm_model")
-                    await asyncio.sleep(0.6)
-                    menu = sorted(t for t in await _tags() if t.startswith("menu_model_"))
+                    # POLL, don't sleep-and-read-once. A fixed 0.6s read the tree
+                    # before macOS had registered the 425 menu items and reported
+                    # "0 offered" -- three nightlies running, always macOS, while the
+                    # client's own log said "Listed 425 models from live". The list
+                    # is there; the tree just had not caught up yet.
+                    menu: list = []
+                    _deadline = time.time() + 8.0
+                    while time.time() < _deadline:
+                        menu = sorted(t for t in await _tags() if t.startswith("menu_model_"))
+                        if menu:
+                            break
+                        await asyncio.sleep(0.25)
                     if model_tag and f"menu_model_{model_tag}" in menu:
                         await self.helper.click(f"menu_model_{model_tag}")
                         self._log(f"AI (BYOK): selected requested model {model!r} from live dropdown")

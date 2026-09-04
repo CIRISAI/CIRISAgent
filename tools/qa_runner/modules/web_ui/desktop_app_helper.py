@@ -32,6 +32,35 @@ class DesktopAppConfig:
     # Screenshot directory (for any screenshots taken)
     screenshot_dir: str = "desktop_app_qa_reports"
 
+    # Seconds to wait after a successful /input before the next one. ZERO ON
+    # DESKTOP, non-zero on Android/iOS.
+    #
+    # KMP TextField binds its value through a StateFlow, and /input answers as
+    # soon as the request is POSTED -- the field applies it when it next
+    # collects. A StateFlow keeps only the latest value, so back-to-back inputs
+    # race that commit and the earlier ones are dropped, every call still
+    # reporting success. apps/ios/CLAUDE.md has recorded this for a while as
+    # "Text input needs 2-second delay between fields", and login() has slept
+    # between fields for exactly this reason.
+    #
+    # It lives HERE rather than at the call sites because the setup wizard did
+    # not know to do it: you_step types username -> password -> confirm
+    # back-to-back, the password was the one that vanished, and Android stopped
+    # on "Password is required" with btn_next disabled -- every input
+    # acknowledged (five-platform runs 33708152999 through the 09-03 nightly).
+    # One field on the config fixes every present and future caller.
+    input_settle_s: float = 0.0
+
+    # Send each HTTP request in ONE write. The iOS automation server is a
+    # hand-rolled POSIX server that does a single recv() into an 8 KB buffer and
+    # parses whatever arrived (TestAutomationServer.ios.kt L142-150). httpx
+    # writes headers and body separately, so a POST body lands in a second
+    # segment the server never reads; it then decodes an empty body and returns
+    # the kotlinx error text as the response. Every POST fails, every GET works
+    # (five-platform run 33780331440). A workaround for CIRISClient#33 -- one
+    # Ktor server in commonMain -- and it goes when that lands.
+    one_segment_http: bool = False
+
 
 @dataclass
 class Screenshot:
@@ -89,7 +118,11 @@ class DesktopAppHelper:
 
     async def start(self) -> "DesktopAppHelper":
         """Initialize the HTTP client and verify connection to test server."""
+        transport = _OneSegmentTransport() if self.config.one_segment_http else None
+        if transport is not None:
+            print("    (one-segment HTTP transport in use: the iOS test server reads one segment -- CIRISClient#33)")
         self._client = httpx.AsyncClient(
+            transport=transport,
             base_url=self.config.server_url,
             timeout=self.config.timeout_ms / 1000.0,
         )
@@ -126,7 +159,7 @@ class DesktopAppHelper:
             raise RuntimeError("Not connected. Call start() first.")
 
         response = await self._client.get("/screen")
-        data = response.json()
+        data = _json(response)
         self._current_screen = data.get("screen", "unknown")
         return self._current_screen
 
@@ -136,7 +169,7 @@ class DesktopAppHelper:
             raise RuntimeError("Not connected. Call start() first.")
 
         response = await self._client.get("/tree")
-        data = response.json()
+        data = _json(response)
         self._current_screen = data.get("screen", "unknown")
 
         elements = []
@@ -163,7 +196,7 @@ class DesktopAppHelper:
         response = await self._client.get(f"/element/{test_tag}")
         if response.status_code == 404:
             return None
-        data = response.json()
+        data = _json(response)
         if "error" in data:
             raise RuntimeError(f"get_element '{test_tag}' failed: {data['error']}")
         return ElementInfo(
@@ -196,7 +229,7 @@ class DesktopAppHelper:
             "/click",
             json={"testTag": test_tag},
         )
-        data = response.json()
+        data = _json(response)
         if not data.get("success", False):
             error = data.get("error", "unknown error")
             raise RuntimeError(f"Click '{test_tag}' failed: {error} (response: {data})")
@@ -238,10 +271,12 @@ class DesktopAppHelper:
                 "clearFirst": clear_first,
             },
         )
-        data = response.json()
+        data = _json(response)
         if not data.get("success", False):
             error = data.get("error", "unknown error")
             raise RuntimeError(f"Input '{test_tag}' failed: {error} (response: {data})")
+        if self.config.input_settle_s:
+            await asyncio.sleep(self.config.input_settle_s)
         if verify and not _looks_secret(test_tag):
             await self._verify_input_landed(test_tag, text)
         return True
@@ -267,14 +302,22 @@ class DesktopAppHelper:
         exposes_text = False
         while time.monotonic() < deadline:
             el = await self.get_element(test_tag)
-            if el is not None and el.text is not None:
+            if el is not None:
+                if el.text is None:
+                    # STRUCTURAL, NOT SLOW. A client that omits `text` for input
+                    # elements will omit it however long we poll, so burning the
+                    # whole budget per field buys nothing and costs real time --
+                    # three fields in the setup wizard, on the platform that is
+                    # already the slowest. Conclude on the first clean read.
+                    print(f"    (input '{test_tag}' unverifiable: element exposes no text)")
+                    return
                 exposes_text = True
                 seen = el.text
                 if seen == text:
                     return
             await asyncio.sleep(0.1)
         if not exposes_text:
-            print(f"    (input '{test_tag}' unverifiable: element exposes no text)")
+            print(f"    (input '{test_tag}' unverifiable: element never appeared)")
             return
         raise RuntimeError(
             f"Input '{test_tag}' was acknowledged but {budget_s:.0f}s later the field holds "
@@ -315,7 +358,7 @@ class DesktopAppHelper:
             },
             timeout=timeout_ms / 1000.0 + 5,  # Add 5s buffer
         )
-        data = response.json()
+        data = _json(response)
         if not data.get("success", False):
             error = data.get("error", "unknown error")
             raise RuntimeError(f"Wait for element '{test_tag}' timed out after {timeout_ms}ms: {error}")
@@ -384,7 +427,7 @@ class DesktopAppHelper:
             payload["filterTags"] = filter_tags
 
         response = await self._client.post("/act", json=payload)
-        data = response.json()
+        data = _json(response)
 
         # Update current screen from response
         self._current_screen = data.get("screen", "unknown")
@@ -663,7 +706,7 @@ class DesktopAppHelper:
                 "sizeBytes": size_bytes,
             },
         )
-        data = response.json()
+        data = _json(response)
         if not data.get("success", False):
             error = data.get("error", "unknown error")
             raise RuntimeError(f"File injection '{filename}' failed: {error} (response: {data})")
@@ -720,7 +763,7 @@ class DesktopAppHelper:
             raise RuntimeError("Not connected. Call start() first.")
 
         response = await self._client.post("/clear-attachments")
-        data = response.json()
+        data = _json(response)
         if not data.get("success", False):
             error = data.get("error", "unknown error")
             raise RuntimeError(f"Clear attachments failed: {error} (response: {data})")
@@ -769,6 +812,86 @@ class DesktopAppHelper:
             await asyncio.sleep(poll_interval_ms / 1000.0)
 
 
+
+def _json(response: "httpx.Response"):
+    """Parse a test-server response; tolerate a raw control character, and SAY SO.
+
+    The iOS automation server is a hand-rolled POSIX HTTP server (CIRISClient#33)
+    and, the first time it ever answered in CI, every response failed strict
+    JSON parsing: "Invalid control character at: line 1 column 77" (run
+    33777943107). A driver that dies on that learns nothing -- not which route,
+    not which bytes. So: try strict; on a control-character failure, parse with
+    strict=False (the same payload, control characters allowed inside strings)
+    and print the offending bytes with the position, escaped, so the report
+    upstream can quote them. Anything else stays a hard error.
+    """
+    import json as _json_mod
+
+    try:
+        return response.json()
+    except ValueError as exc:
+        text = response.text
+        try:
+            data = _json_mod.loads(text, strict=False)
+        except ValueError:
+            raise exc
+        pos = getattr(exc, "pos", None)
+        lo = max(0, (pos or 0) - 40)
+        window = text[lo:(pos or 0) + 40].encode("unicode_escape").decode("ascii")
+        print(
+            f"    (test server returned invalid JSON on {response.request.method} "
+            f"{response.request.url.path}: {exc}; parsed leniently. bytes around the fault: {window!r})"
+        )
+        return data
+
+
+class _OneSegmentTransport(httpx.AsyncBaseTransport):
+    """Deliver the whole request -- status line, headers, body -- in one write.
+
+    For a server that does a single recv() and parses what it got. Minimal on
+    purpose: HTTP/1.1, Connection: close, read the response to EOF, hand httpx
+    the status, headers and body. Nothing else the gate needs.
+    """
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        url = request.url
+        body = request.content or b""
+        target = url.raw_path.decode("ascii") if isinstance(url.raw_path, (bytes, bytearray)) else str(url.raw_path)
+        head = [f"{request.method} {target} HTTP/1.1", f"Host: {url.host}:{url.port or 80}", "Connection: close"]
+        for k, v in request.headers.items():
+            if k.lower() in ("host", "connection", "content-length", "transfer-encoding"):
+                continue
+            head.append(f"{k}: {v}")
+        head.append(f"Content-Length: {len(body)}")
+        wire = ("\r\n".join(head) + "\r\n\r\n").encode("latin-1") + body
+
+        reader, writer = await asyncio.open_connection(url.host, url.port or 80)
+        try:
+            writer.write(wire)          # ONE write: this is the entire point
+            await writer.drain()
+            raw = await reader.read(-1)
+        finally:
+            writer.close()
+            try:
+                await writer.wait_closed()
+            except Exception:  # noqa: BLE001
+                pass
+
+        head_end = raw.find(b"\r\n\r\n")
+        if head_end < 0:
+            raise httpx.TransportError(f"no header terminator in response from {url}")
+        head_lines = raw[:head_end].decode("latin-1").split("\r\n")
+        try:
+            status = int(head_lines[0].split(" ", 2)[1])
+        except (IndexError, ValueError) as exc:
+            raise httpx.TransportError(f"bad status line {head_lines[0]!r} from {url}") from exc
+        headers = []
+        for line in head_lines[1:]:
+            if ":" in line:
+                k, v = line.split(":", 1)
+                headers.append((k.strip(), v.strip()))
+        return httpx.Response(status, headers=headers, content=raw[head_end + 4:], request=request)
+
 _SECRET_MARKERS = ("password", "secret", "token", "api_key", "apikey")
 
 
@@ -795,7 +918,7 @@ async def describe_test_server(server_url: str = "http://localhost:8091") -> str
     except Exception as exc:  # noqa: BLE001
         return f"nothing answered at {server_url}/health ({type(exc).__name__})"
     try:
-        data = response.json()
+        data = _json(response)
     except ValueError:
         return f"{server_url}/health returned {response.status_code}, not JSON: {response.text[:120]!r}"
     if data.get("status") != "ok":
@@ -858,7 +981,7 @@ async def check_desktop_app_running(server_url: str = "http://localhost:8091") -
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             response = await client.get(f"{server_url}/health")
-            data = response.json()
+            data = _json(response)
             return data.get("status") == "ok" and data.get("testMode", False)
     except Exception:
         return False

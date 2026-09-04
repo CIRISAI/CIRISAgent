@@ -644,8 +644,18 @@ class DesktopAppTestRunner:
                 tags = await _tags()
                 if "input_llm_model" in tags:
                     await self.helper.click("input_llm_model")
-                    await asyncio.sleep(0.6)
-                    menu = sorted(t for t in await _tags() if t.startswith("menu_model_"))
+                    # POLL, don't sleep-and-read-once. A fixed 0.6s read the tree
+                    # before macOS had registered the 425 menu items and reported
+                    # "0 offered" -- three nightlies running, always macOS, while the
+                    # client's own log said "Listed 425 models from live". The list
+                    # is there; the tree just had not caught up yet.
+                    menu: list = []
+                    _deadline = time.time() + 8.0
+                    while time.time() < _deadline:
+                        menu = sorted(t for t in await _tags() if t.startswith("menu_model_"))
+                        if menu:
+                            break
+                        await asyncio.sleep(0.25)
                     if model_tag and f"menu_model_{model_tag}" in menu:
                         await self.helper.click(f"menu_model_{model_tag}")
                         self._log(f"AI (BYOK): selected requested model {model!r} from live dropdown")
@@ -867,12 +877,28 @@ class DesktopAppTestRunner:
             # POLL, don't one-shot: on the Windows CI runner the transition
             # takes ~1s, and a fixed 0.5s sleep flagged a wizard that advanced
             # 300ms after the check (join_federation then passed immediately).
-            deadline = asyncio.get_event_loop().time() + 10.0
+            # 30s, not 10. Leaving YOU mints the node identity, and on the mobile
+            # embeds that takes ~10-12s (Android 9.2s; iOS advanced just AFTER a 10s
+            # budget and join_federation then passed 0.8s later -- run 33782490319).
+            # A wizard that takes twelve seconds is not a wizard that refused; only
+            # the refusal is the finding, and it still surfaces, 20s later.
+            # ADVANCE IS A POSITIVE SIGNAL, NOT AN ABSENCE. This loop used to wait for
+            # the age band to DISAPPEAR. On iOS, testableClickable registers elements
+            # and never unregisters them (no DisposableEffect -- CIRISClient#33), so
+            # the registry kept every YOU-step tag alive after the wizard moved on:
+            # "still on the YOU step 30s after btn_next" while join_federation found
+            # its toggle 0.8s later, run after run. Absence in a registry that never
+            # forgets is not evidence. The next step's own control appearing is --
+            # on every platform -- and a real refusal (required field unsatisfied)
+            # still produces no such control, so the failure is still caught.
+            deadline = asyncio.get_event_loop().time() + 30.0
             while await self.helper.is_element_visible(band_tag):
+                if await self.helper.is_element_visible("toggle_announce_ownership"):
+                    break   # JOIN FEDERATION is on screen: YOU advanced
                 if asyncio.get_event_loop().time() > deadline:
                     await self._dump_tree("you_step:did-not-advance")
                     raise RuntimeError(
-                        "still on the YOU step 10s after btn_next — a required field is "
+                        "still on the YOU step 30s after btn_next — a required field is "
                         "unsatisfied (age band, account, or fed-ID label)"
                     )
                 await asyncio.sleep(0.5)
@@ -3006,7 +3032,15 @@ async def run_ios_simulator_up(args: argparse.Namespace) -> int:
     # the iOS app "became healthy" against the wrong stack, showed its UI, and
     # scored a desktop backend as an iOS one -- while its own embedded Python
     # had died on its first import. Refuse to start into that ambiguity.
-    for port in (int(getattr(args, "port", 8080) or 8080), 9091):
+    # ONLY THE AUTOMATION PORT. This used to include the backend port as well,
+    # which was wrong in principle: in the iOS flow the host backend on :8080 is
+    # ours and expected -- the simulator shares the host's loopback, so that is
+    # exactly where the app is supposed to look. Refusing to start on it blocked
+    # the legitimate case (run 33822805017, "port 8080 is already owned by pid
+    # 39622" -- our own backend). :9091 is different: if something else holds the
+    # automation port, the driver talks to the wrong app and every result is
+    # about a program we did not launch.
+    for port in (9091,):
         owner = _host_listener(port)
         if owner:
             _fail(
@@ -3478,6 +3512,12 @@ async def run_federation_walk(args: argparse.Namespace) -> int:
     config = DesktopAppConfig(
         server_url=server_url,
         screenshot_dir=args.output_dir,
+        input_settle_s=_input_settle_for(getattr(args, "platform", "desktop")),
+        # ciris-client 0.5.200 reports the iOS server now reads to Content-Length
+        # (CIRISClient#35). The workaround becomes opt-in so the next run exercises
+        # THEIR fix rather than my compensation for it. If POSTs come back empty
+        # again, set CIRIS_QA_IOS_ONE_SEGMENT=1 and reopen the issue.
+        one_segment_http=(os.environ.get("CIRIS_QA_IOS_ONE_SEGMENT") == "1"),
     )
     helper = DesktopAppHelper(config)
     await helper.start()
@@ -3505,6 +3545,17 @@ async def run_federation_walk(args: argparse.Namespace) -> int:
     if report.all_passed:
         return 0
     return 1
+
+
+#: Android and iOS apply /input asynchronously through a StateFlow that keeps
+#: only the latest value, so consecutive inputs race the commit; desktop applies
+#: synchronously. 2.0s is the interval apps/ios/CLAUDE.md already prescribes and
+#: login() already used -- this makes it the default for every caller.
+_MOBILE_INPUT_SETTLE_S = 2.0
+
+
+def _input_settle_for(platform: str) -> float:
+    return _MOBILE_INPUT_SETTLE_S if platform in ("android", "ios") else 0.0
 
 
 async def run_desktop_tests(args: argparse.Namespace) -> int:
@@ -3551,6 +3602,12 @@ async def run_desktop_tests(args: argparse.Namespace) -> int:
     config = DesktopAppConfig(
         server_url=server_url,
         screenshot_dir=args.output_dir,
+        input_settle_s=_input_settle_for(getattr(args, "platform", "desktop")),
+        # ciris-client 0.5.200 reports the iOS server now reads to Content-Length
+        # (CIRISClient#35). The workaround becomes opt-in so the next run exercises
+        # THEIR fix rather than my compensation for it. If POSTs come back empty
+        # again, set CIRIS_QA_IOS_ONE_SEGMENT=1 and reopen the issue.
+        one_segment_http=(os.environ.get("CIRIS_QA_IOS_ONE_SEGMENT") == "1"),
     )
     runner = DesktopAppTestRunner(config=config, verbose=args.verbose)
 

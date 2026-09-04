@@ -63,7 +63,34 @@ permissions:
   contents: read
 
 jobs:
+  # THE iOS BUNDLE, BUILT ONCE. The simulator app needs frameworks for every
+  # native extension the embedded engine imports: the substrate (ciris_server,
+  # a fetch) and four third-party modules (a cross-build no runner had ever
+  # performed). refresh-ios-substrate.yml owns both on the macOS toolchain and
+  # hands the result back as an artifact; the macos-ios leg below downloads it
+  # before building the app (CIRISAgent#1135).
+  ios-bundle:
+    name: iOS bundle (substrate + simulator natives)
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.platforms == '' || inputs.platforms == 'all' || contains(inputs.platforms, 'ios') }}
+    # The reusable workflow declares write scopes for its push path; upload_only
+    # never pushes, so they go unused here, but a caller must still grant them.
+    permissions:
+      contents: write
+      pull-requests: write
+    uses: ./.github/workflows/refresh-ios-substrate.yml
+    with:
+      target_branch: ${{ github.ref_name }}
+      libs: server
+      upload_only: true
+      always_upload: true
+      build_sim_natives: true
+    secrets: inherit
+
   live-qa:
+    needs: [ios-bundle]
+    # ios-bundle failing (or skipped on a non-iOS dispatch) must not skip the
+    # gate: the mac leg falls back to fetching the substrate itself.
+    if: ${{ !cancelled() }}
     name: ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 75
@@ -127,7 +154,7 @@ jobs:
           set -euo pipefail
           CLIENT_VERSION=$(grep -oE '^ciris-client==[0-9.]+' requirements.txt | cut -d= -f3)
           python -m pip download "ciris-client==${CLIENT_VERSION}" --no-deps -d "${RUNNER_TEMP}/clientwheel"
-          python tools/dev/vendor_desktop_jar.py "${RUNNER_TEMP}/clientwheel" ciris_engine/desktop_app "$CLIENT_VERSION"
+          python3 tools/dev/vendor_desktop_jar.py "${RUNNER_TEMP}/clientwheel" ciris_engine/desktop_app "$CLIENT_VERSION"
 
       # Install the WHEEL, not the checkout: `pip install .` exercises a source
       # tree no user ever receives.
@@ -339,6 +366,20 @@ jobs:
       # Both are asserted after the fact, because a missing bundle does not fail
       # the build — it produces an app that installs and launches to nothing,
       # which is the failure mode this whole gate exists to stop.
+      - name: Pull the iOS bundle built by ios-bundle
+        if: >-
+          contains(matrix.platforms, 'ios')
+          && (inputs.platforms == '' || inputs.platforms == 'all'
+              || contains(inputs.platforms, 'ios'))
+        # Uploaded with apps/ios/... paths, so the artifact root is apps/ios;
+        # extracting there restores app_packages_native_sim/ (simulator natives
+        # + substrate) and the rest in place.
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: ios-substrate-refresh
+          path: apps/ios
+
       - name: Materialize the iOS Python bundle
         # BOTH questions, because they are different: matrix.platforms says
         # this RUNNER owns ios; inputs.platforms says whether the operator
@@ -379,6 +420,41 @@ jobs:
             || { echo "::error::Python.xcframework has no simulator slice"; exit 1; }
           echo "stdlib:  $(du -sh apps/ios/Resources/python | cut -f1)"
           echo "support: $(du -sh apps/ios/Frameworks/Python.xcframework | cut -f1)"
+
+          # THE SUBSTRATE, SIMULATOR SLICE. app_packages_native_sim/ is
+          # gitignored -- it holds a 56 MB ciris_server/_native.abi3.so -- so it
+          # exists on a developer machine and never on a runner. Without it the
+          # embed phase reports "no app_packages_native_sim/" and `import
+          # ciris_server` cannot succeed on-simulator, which is the engine.
+          #
+          # ciris-server ships BOTH slices in its -ios.tar.gz release asset
+          # (ios-device/ and ios-simulator/, verified on v0.5.196), and
+          # update_substrate_libs already stages the simulator one here. So this
+          # is a fetch, not a build.
+          SIM_SO="apps/ios/app_packages_native_sim/ciris_server/_native.abi3.so"
+          if [ -f "$SIM_SO" ]; then
+            echo "substrate: provided by the ios-bundle artifact"
+          else
+            echo "substrate: ios-bundle artifact absent -- fetching directly"
+            python3 -m tools.update_substrate_libs --platform ios --lib server
+          fi
+          test -f "$SIM_SO" \
+            || { echo "::error::no simulator ciris_server at $SIM_SO (neither the ios-bundle artifact nor update_substrate_libs provided it)"; exit 1; }
+          if [ -f apps/ios/app_packages_native_sim/MANIFEST.txt ]; then
+            echo "--- simulator natives (from ios-bundle) ---"; cat apps/ios/app_packages_native_sim/MANIFEST.txt
+          fi
+          echo "substrate: $(du -sh apps/ios/app_packages_native_sim | cut -f1) (simulator ciris_server)"
+
+          # WHAT IS STILL MISSING, NAMED. The four third-party natives come from
+          # a briefcase simulator build no runner performs, and no wheel source
+          # exists for them: pydantic-core and cryptography publish no iOS
+          # wheels at all, aiohttp and cffi publish them only for cp313 while
+          # this embed is cp310. Say so here rather than letting the embed phase
+          # report it 200 lines later as a bare WARNING (CIRISAgent#1135).
+          for mod in pydantic_core cryptography aiohttp _cffi_backend; do
+            find apps/ios/app_packages_native_sim -path "*$mod*" -name "*.so" -print -quit 2>/dev/null | grep -q . \
+              || echo "::warning::iOS simulator native missing: $mod (CIRISAgent#1135) — the embedded engine will not import"
+          done
 
       - name: Build + deploy the iOS app to the simulator
         # BOTH questions, because they are different: matrix.platforms says
@@ -595,13 +671,25 @@ jobs:
             db=""
             case "$target" in
               desktop) db="$CIRIS_HOME/data/ciris_engine.db" ;;
-              android)
-                pkg=ai.ciris.mobile.debug
-                remote=$(adb exec-out run-as "$pkg" sh -c 'find . -name ciris_engine.db 2>/dev/null | head -1' 2>/dev/null | tr -d '\r')
-                if [ -n "$remote" ]; then
-                  adb exec-out run-as "$pkg" cat "$remote" > "artifacts/db-$plat.db" 2>/dev/null \
-                    && db="artifacts/db-$plat.db"
-                fi ;;
+                android)
+                  # adb is NOT on PATH here -- the emulator steps reach it through
+                  # $SDK/platform-tools -- and under `set -e` a command substitution
+                  # whose binary is missing kills the step. That is the exit 127 that
+                  # failed linux-android after setup 6/6, login 7/7 and chat 5/5 had
+                  # all passed, twice over. The ios branch below already guarded its
+                  # substitution with `|| true`; this one never did.
+                  pkg=ai.ciris.mobile.debug
+                  ADB=$(command -v adb 2>/dev/null || echo "${ANDROID_HOME:-/usr/local/lib/android/sdk}/platform-tools/adb")
+                  remote=""
+                  if [ -x "$ADB" ]; then
+                    remote=$("$ADB" exec-out run-as "$pkg" sh -c 'find . -name ciris_engine.db 2>/dev/null | head -1' 2>/dev/null | tr -d '\r' || true)
+                  else
+                    echo "::warning::adb not found at '$ADB' -- skipping the one-holder check for $plat"
+                  fi
+                  if [ -n "$remote" ]; then
+                    "$ADB" exec-out run-as "$pkg" cat "$remote" > "artifacts/db-$plat.db" 2>/dev/null \
+                      && db="artifacts/db-$plat.db"
+                  fi ;;
               ios)
                 data=$(xcrun simctl get_app_container booted ai.ciris.mobile data 2>/dev/null || true)
                 if [ -n "$data" ]; then
@@ -611,7 +699,12 @@ jobs:
             esac
 
             if [ -n "$db" ] && [ -f "$db" ]; then
-              python tools/dev/assert_one_holder_per_identity.py "$db" \
+              # python3, not python: the runners carry no unversioned `python`,
+              # so this and the trace assertion below exited 127 (command not
+              # found) — and 127 escaped as the step's exit code, failing
+              # linux-android after every one of its tests had passed. Two
+              # checks were reporting nothing while looking like they ran.
+              python3 tools/dev/assert_one_holder_per_identity.py "$db" \
                 || { overall=1; echo "::error::$plat provider identity has >1 live holder"; }
             else
               echo "::notice::$plat OAuth-holder invariant NOT COVERED — no reachable database"
@@ -643,7 +736,7 @@ jobs:
             #    canonical" for a run that proved nothing, which is how this was
             #    wrong before.
             set +e
-            python tools/dev/assert_traces_reached_canonical.py \
+            python3 tools/dev/assert_traces_reached_canonical.py \
               "$CIRIS_HOME/logs" artifacts/cmdlogs --require replication --wait-secs 240
             trace_status=$?
             set -e

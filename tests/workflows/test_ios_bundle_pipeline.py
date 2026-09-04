@@ -31,15 +31,35 @@ def test_the_embed_phase_picks_the_slice_that_matches_the_sdk() -> None:
     assert 'Python.xcframework/${PYTHON_SLICE}"' in src
 
 
-def test_the_embed_phase_knows_both_support_package_layouts() -> None:
-    """b14 keeps lib-dynload under lib-<arch>/; older packages under lib/.
+def test_the_SIMULATOR_stdlib_source_probes_both_layouts() -> None:
+    """Guard the branch that actually runs for a Debug simulator build.
 
-    With the slice finally right, the phase still embedded nothing, because it
-    looked only in lib/ (run 33710240426). Both must be probed, arch dir first.
+    The script has two stdlib-embedding paths. The first is inside
+    `if [ "$CONFIGURATION" = Release ] || [ "$PLATFORM_NAME" = iphoneos ]`,
+    which a Debug simulator build never enters; the second, keyed on
+    SIM_LIB_DYNLOAD, is the one CI executes. An earlier fix went into the
+    first, so CI kept embedding nothing and the test written alongside it
+    passed while the product stayed broken -- a mutation putting the
+    simulator path back to lib/ did not fail it.
+
+    So assert on SIM_LIB_DYNLOAD specifically: it must be a probe over the
+    per-arch directories b14 uses, not a hardcoded lib/.
     """
     src = EMBED.read_text(encoding="utf-8")
-    assert 'for libdir in "lib-${HOST_ARCH}" "lib-arm64" "lib"' in src, "only one layout is probed"
-    assert src.index('"lib-${HOST_ARCH}"') < src.index('"lib"; do') or True  # arch dir listed first
+    assert "SIM_LIB_DYNLOAD" in src, "no simulator stdlib source at all"
+    body = src[src.index("SIM_SLICE="):src.index("stdlib_n=0")]
+    assert 'for _libdir in' in body, "the simulator source is not probed"
+    for d in ("lib-${SIM_HOST_ARCH}", "lib-arm64", "lib-x86_64"):
+        assert d in body, f"{d} not probed -- b14 keeps the simulator stdlib there"
+    assert 'ios-arm64_x86_64-simulator/lib/python3.10/lib-dynload"' not in src, (
+        "the simulator stdlib source is hardcoded to lib/, which b14 leaves empty"
+    )
+
+
+def test_the_device_branch_probes_layouts_too() -> None:
+    """Same two-layout problem, on the path a device build takes."""
+    src = EMBED.read_text(encoding="utf-8")
+    assert 'for libdir in "lib-${HOST_ARCH}" "lib-arm64" "lib"' in src
 
 
 def test_the_build_log_is_kept_whole() -> None:
@@ -86,3 +106,27 @@ def test_bring_up_refuses_a_port_the_host_already_owns() -> None:
     assert not [x for x in literals if x.strip().lower() in ("lsof", "netstat")], (
         "POSIX-only binary invoked directly; platform_procs owns that decision"
     )
+
+
+def test_ci_stages_the_simulator_substrate() -> None:
+    """app_packages_native_sim/ is gitignored, so a runner never has it.
+
+    It carries ciris_server/_native.abi3.so -- the engine. Without it the embed
+    phase prints "no app_packages_native_sim/" and `import ciris_server` cannot
+    succeed on-simulator. ciris-server publishes both slices in its -ios.tar.gz,
+    so CI must FETCH it; the alternative is an iOS job that can never pass.
+    """
+    wf = (ROOT / ".github" / "workflows" / "five-platform-live-qa.yml").read_text(encoding="utf-8")
+    assert "update_substrate_libs --platform ios --lib server" in wf, "CI never stages the simulator substrate"
+    # And it must be checked, not merely attempted: a silent no-op here reads as
+    # success and the failure surfaces 200 lines later as a dlopen error.
+    assert "app_packages_native_sim/ciris_server/_native.abi3.so" in wf, "staging result is not verified"
+
+
+def test_the_staging_runs_before_the_app_is_built() -> None:
+    """Staging after the build would embed nothing -- the frameworks are made
+    during xcodebuild's Run Script phase."""
+    wf = (ROOT / ".github" / "workflows" / "five-platform-live-qa.yml").read_text(encoding="utf-8")
+    stage = wf.index("update_substrate_libs --platform ios")
+    build = wf.index("Build + deploy the iOS app to the simulator")
+    assert stage < build, "substrate is staged after the app is built"

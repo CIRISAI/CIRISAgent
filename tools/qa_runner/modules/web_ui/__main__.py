@@ -3105,6 +3105,28 @@ async def run_ios_simulator_up(args: argparse.Namespace) -> int:
             r = requests.get(f"{server_url}/health", timeout=2)
             if r.status_code == 200:
                 print(f" [OK] iOS simulator ready after {time.time() - started:.0f}s")
+                # BEST-EFFORT WAIT ON THE EMBEDDED PYTHON BACKEND, as android-up does.
+                # The KMP automation server binds first; the Python backend inside the
+                # same process comes up 10-30s later. Since --no-launch moved the app's
+                # launch to the start of this leg, the wizard's AI step (which lists
+                # models through the backend) can otherwise arrive before it listens.
+                api_port = getattr(args, "port", None) or 8080
+                backend_url = f"http://127.0.0.1:{api_port}"
+                b_deadline = time.time() + 30
+                backend_ok = False
+                while time.time() < b_deadline:
+                    try:
+                        rb = requests.get(f"{backend_url}/v1/system/health", timeout=2)
+                        if rb.status_code in (200, 401, 403):
+                            backend_ok = True
+                            break
+                    except Exception:  # noqa: BLE001
+                        pass
+                    time.sleep(2)
+                if backend_ok:
+                    print(f" [OK] embedded backend reachable at {backend_url}")
+                else:
+                    print(f"  \u26a0\ufe0f  embedded backend not yet ready at {backend_url}; the wizard will proceed and the AI step may fail to list models")
                 return 0
         except Exception:  # noqa: BLE001
             pass

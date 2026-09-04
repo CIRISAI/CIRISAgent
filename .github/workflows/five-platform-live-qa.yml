@@ -730,6 +730,20 @@ jobs:
                 if [ -n "$data" ]; then
                   f=$(find "$data" -name ciris_engine.db 2>/dev/null | head -1)
                   [ -n "$f" ] && cp "$f" "artifacts/db-$plat.db" && db="artifacts/db-$plat.db"
+                fi
+                # THE iOS APP LOGS, on every leg outcome. _ios_diagnostics gathers them only
+                # when the simulator bring-up FAILS; a leg that came up and then failed in
+                # the wizard shipped no app-side log at all (run 33897843767). Same shape as
+                # the Android pull: the runtime's files/ciris/logs plus the KMP bridge logs,
+                # named as found, a missing set named too.
+                if [ -n "$data" ]; then
+                  mkdir -p "artifacts/logs/$plat"
+                  n=0
+                  while IFS= read -r f; do
+                    cp "$f" "artifacts/logs/$plat/$(basename "$f")" 2>/dev/null && n=$((n+1))
+                  done < <(find "$data" \( -name "*.log" -o -name "*.log.*" \) -type f -size -50M 2>/dev/null | grep -E "/ciris/logs/|kmp_[a-z]+\.log$" | head -40)
+                  echo "  pulled $n $plat log file(s) into artifacts/logs/$plat"
+                  [ -s "artifacts/logs/$plat/incidents_latest.log" ] || echo "::warning::$plat: no incidents_latest.log in the app container -- the agent-side story will be missing"
                 fi ;;
             esac
 

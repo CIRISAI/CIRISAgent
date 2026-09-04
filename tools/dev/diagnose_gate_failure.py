@@ -38,7 +38,10 @@ import sys
 import urllib.error
 import urllib.request
 
-# (layer, regex, what it means). First match wins, so order is significance,
+# (layer, regex, what it means). HTTP status codes must appear in HTTP context
+# ((HTTP|status|code) 429, or the reason phrase): a bare 3-digit number is also a
+# pid, a byte count, a port, a timestamp fragment and a simulator UDID.
+# First match wins, so order is significance,
 # not alphabet: a provider refusal explains a silent agent, never the reverse.
 # THE HARNESS TALKS TOO. The driver prints advice ("check the agent log for DMA
 # errors") and the workflow echoes its own commented source; both contain the
@@ -74,10 +77,10 @@ def strip_advice(blob: str) -> str:
 
 SIGNATURES: list[tuple[str, str, str]] = [
     ("WIRE", r"Key limit exceeded|insufficient[_ ]credits|quota exceeded", "provider refused: account limit or credit exhausted"),
-    ("WIRE", r"\b402\b|payment required", "provider refused: payment required"),
-    ("WIRE", r"\b429\b|rate.?limit", "provider refused: rate limited"),
-    ("WIRE", r"\b401\b.*(openrouter|provider|llm)|invalid[_ ]api[_ ]key|unauthorized.*llm", "provider refused: key rejected"),
-    ("WIRE", r"model_not_available|model not found|\b404\b.*model", "provider refused: model name not served"),
+    ("WIRE", r"(?:HTTP|status|status_code|code)[ =:]*402\b|\b402 Payment Required|payment required", "provider refused: payment required"),
+    ("WIRE", r"(?:HTTP|status|status_code|code)[ =:]*429\b|\b429 Too Many|rate.?limit(?:ed| exceeded)?\b(?![_a-z])", "provider refused: rate limited"),
+    ("WIRE", r"(?:HTTP|status|status_code|code)[ =:]*401\b.*(openrouter|provider|llm)|invalid[_ ]api[_ ]key|unauthorized.*llm", "provider refused: key rejected"),
+    ("WIRE", r"model_not_available|model not found|(?:HTTP|status|status_code|code)[ =:]*404\b.*model", "provider refused: model name not served"),
     ("WIRE", r"(connection|read) timed out.*(openrouter|api\.|llm)|provider.*unreachable", "provider unreachable"),
     ("AGENT", r"(ERROR|CRITICAL)\b[^\n]*\bDMA\b|\b\w*DMA\w*(Evaluator)?\b[^\n]*\b(raised|failed:|exception|ValidationError)", "a DMA errored"),
     ("AGENT", r"(ERROR|CRITICAL)\b[^\n]*conscience|conscience[^\n]*(raised|failed:|exception)", "a conscience errored"),
@@ -140,10 +143,14 @@ def probe_provider() -> tuple[str, str] | None:
 
 def classify(blob: str, phase: str) -> tuple[str, str, str]:
     for layer, pat, meaning in SIGNATURES:
-        m = re.search(pat, blob, re.IGNORECASE)
-        if m:
-            line = next((l.strip() for l in blob.splitlines() if m.group(0).lower() in l.lower()), m.group(0))
-            return layer, meaning, line[:300]
+        rx = re.compile(pat, re.IGNORECASE)
+        for l in blob.splitlines():
+            if rx.search(l):
+                # THE LINE THE REGEX MATCHED. An earlier version searched the whole
+                # blob and then quoted the first line containing the matched TEXT
+                # as a substring -- which quoted a simulator UDID (...F7429C) as
+                # evidence of an HTTP 429 and called a wizard failure "rate limited".
+                return layer, meaning, l.strip()[:300]
     layer, meaning = PHASE_DEFAULT.get(phase, ("UNKNOWN", "no known signature matched"))
     return layer, meaning, "(no matching line in the collected logs)"
 

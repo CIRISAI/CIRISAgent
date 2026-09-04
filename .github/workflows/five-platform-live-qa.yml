@@ -895,7 +895,7 @@ jobs:
                   case "$f" in *.log|*.log.*) "$ADB" exec-out run-as ai.ciris.mobile.debug cat "files/ciris/logs/$f" > "artifacts/logs/android/$f" 2>/dev/null && n=$((n+1)) ;; esac
                 done
                 echo "  pulled $n android log file(s) into artifacts/logs/android"
-                [ -s artifacts/logs/android/incidents_latest.log ] || echo "::warning::android: no incidents_latest.log pulled from the device -- the agent-side story will be missing"
+                ls artifacts/logs/android/incidents_latest.log artifacts/logs/android/incidents_*.log >/dev/null 2>&1 || echo "::warning::android: no incidents log pulled from the device -- the agent-side story will be missing"
               fi
             fi
           fi
@@ -909,7 +909,7 @@ jobs:
               while IFS= read -r f; do cp "$f" "artifacts/logs/ios/$(basename "$f")" 2>/dev/null && n=$((n+1)); done \
                 < <(find "$data" \( -name "*.log" -o -name "*.log.*" \) -type f -size -50M 2>/dev/null | grep -E "/ciris/logs/|kmp_[a-z]+\.log$" | head -40)
               echo "  pulled $n ios log file(s) into artifacts/logs/ios"
-              [ -s artifacts/logs/ios/incidents_latest.log ] || echo "::warning::ios: no incidents_latest.log in the app container -- the agent-side story will be missing"
+              ls artifacts/logs/ios/incidents_latest.log artifacts/logs/ios/incidents_*.log >/dev/null 2>&1 || echo "::warning::ios: no incidents log in the app container -- the agent-side story will be missing"
             else
               echo "  ios: no app container resolved (app not installed on the booted simulator?) -- no app logs"
             fi

@@ -29,6 +29,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import pathlib
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -117,12 +119,24 @@ def check() -> int:
 def main() -> int:
     if "--check" in sys.argv:
         return check()
-    sys.path.insert(0, str(ROOT))
-    from tools.generate_template_manifest import load_root_private_key
+    # Signing key path comes from the operator, not from this source file.
+    env = os.environ.get("CIRIS_ROOT_WA_KEY")
+    if not env:
+        print("FAIL: set CIRIS_ROOT_WA_KEY to the path of the 32-byte root signing key")
+        return 1
+    key = pathlib.Path(env).expanduser()
+    if not key.is_file():
+        print("FAIL: CIRIS_ROOT_WA_KEY does not point at a file")
+        return 1
+    raw = key.read_bytes()
+    if len(raw) != 32:
+        print(f"FAIL: signing key is {len(raw)} bytes, expected 32")
+        return 1
+    from nacl.signing import SigningKey
 
     body = build()
     MANIFEST.write_bytes(body)
-    SIG.write_bytes(load_root_private_key().sign(body).signature)
+    SIG.write_bytes(SigningKey(raw).sign(body).signature)
     n = len(json.loads(body.decode())["files"])
     print(f"manifest rebuilt over {n} files and re-signed ({len(body)} bytes)")
     return check()

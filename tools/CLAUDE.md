@@ -36,7 +36,7 @@ Development, QA, security, and operational tooling for the CIRIS platform.
 | `api_telemetry_tool.py` | Test all telemetry endpoints with auth |
 | `build_test_wheel.py` | Build platform-specific wheel with bundled GUI JAR (mimics CI) |
 | `extract_changelog.py` | Extract release notes from CHANGELOG.md for CI/CD messages |
-| `generate_template_manifest.py` | Generate signed manifest of pre-approved agent templates |
+| `dev/regen_template_manifest.py` | Rebuild and sign the pre-approved agent template manifest (`--check` verifies) |
 | `he300_accuracy_test.py` | Run HE-300 ethical scenarios against live agent via A2A |
 | `introspect_memory.py` | Profile Python memory usage of running CIRIS agent |
 | `ios_screenshot.swift` | Swift tool for iOS device screenshots |

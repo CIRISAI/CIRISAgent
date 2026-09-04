@@ -33,7 +33,7 @@ tools/
 
 ### Template Management
 - **Validate**: `python tools/templates/validate_templates.py` - Validate all templates
-- **Sign**: `python tools/templates/generate_manifest.py` - Sign templates and create manifest
+- **Sign**: `CIRIS_ROOT_WA_KEY=<key> python tools/dev/regen_template_manifest.py` - Re-sign the pre-approved template manifest (`--check` to verify)
 - **Generate Keys**: `python tools/security/generate_wa_keypair.py` - Generate Ed25519 keypair
 
 ### Testing
@@ -78,7 +78,7 @@ python -m tools.test_tool test tests/      # Docker tests
 
 # Templates
 python tools/templates/validate_templates.py  # Validate templates
-python tools/templates/generate_manifest.py   # Sign templates
+CIRIS_ROOT_WA_KEY=<key> python tools/dev/regen_template_manifest.py   # Sign templates
 
 # Monitoring
 python tools/api_telemetry_tool.py --monitor  # Monitor telemetry

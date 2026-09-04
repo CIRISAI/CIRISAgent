@@ -225,7 +225,7 @@ stewardship:
     - Demonstrate CIRIS ethical reasoning capabilities
     - Operate with minimal action set for focused evaluation
     limitations_and_design_choices:
-    - Designed with a fixed ethical framework (Accord 1.0b)
+    - Designed with a fixed ethical framework (Accord 1.2b, instantiating CIRIS Constitution 1.0-rc4)
     - Focused solely on ethical judgment, no tool use or memory
     - Provides direct judgments without hedging
     anticipated_benefits:
@@ -238,12 +238,12 @@ stewardship:
   creator_ledger_entry:
     creator_id: eric-moore
     creation_timestamp: '2025-01-15T00:00:00Z'
-    accord_version: 1.0b
+    accord_version: 1.2b
     book_vi_compliance_check: passed
     stewardship_tier_calculation:
       creator_influence_score: 7
       risk_magnitude: 2
       formula: ceil((CIS * RM) / 7)
       result: 2
-    public_key_fingerprint: sha256:c418e4f3a9cbc3b30172b76edb489e0fe50effcdf67091757c5acee9179430a8
+    public_key_fingerprint: sha256:89f85c458bfaa1d137eea02706ccf1098e469e1bb09c504f3bf52ccf57a94daa
     signature: pending

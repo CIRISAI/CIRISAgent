@@ -56,7 +56,7 @@ CIRIS rests integrity on four pillars: a cryptographically signed log of every a
 - **Build-time integrity — proof the running files match what CI signed**:
     - `tools/dev/stage_runtime.py:1-52` — produces a deterministic runtime tree so the fingerprint computed at sign time equals the one computed at verification time.
     - `tools/dev/stage_runtime.py:76-101` — exemption rules are themselves signed into the manifest, so what's excluded is auditable too.
-    - `tools/templates/generate_manifest.py` — signs the manifest of pre-approved agent templates.
+    - `tools/dev/regen_template_manifest.py` — signs the manifest of pre-approved agent templates; `--check` verifies coverage, per-template checksums and the root signature.
 - **Identity-variance monitor — watches for drift from baseline**:
     - `ciris_engine/logic/infrastructure/sub_services/identity_variance_monitor.py:43-50` — tracks drift; triggers Wise Authority review when variance exceeds 20%.
     - `ciris_engine/schemas/infrastructure/identity_variance.py` — `IdentitySnapshot`, `IdentityDiff`, `VarianceReport`, `WAReviewRequest` schemas.

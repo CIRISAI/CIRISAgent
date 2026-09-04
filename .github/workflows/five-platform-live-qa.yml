@@ -671,13 +671,25 @@ jobs:
             db=""
             case "$target" in
               desktop) db="$CIRIS_HOME/data/ciris_engine.db" ;;
-              android)
-                pkg=ai.ciris.mobile.debug
-                remote=$(adb exec-out run-as "$pkg" sh -c 'find . -name ciris_engine.db 2>/dev/null | head -1' 2>/dev/null | tr -d '\r')
-                if [ -n "$remote" ]; then
-                  adb exec-out run-as "$pkg" cat "$remote" > "artifacts/db-$plat.db" 2>/dev/null \
-                    && db="artifacts/db-$plat.db"
-                fi ;;
+                android)
+                  # adb is NOT on PATH here -- the emulator steps reach it through
+                  # $SDK/platform-tools -- and under `set -e` a command substitution
+                  # whose binary is missing kills the step. That is the exit 127 that
+                  # failed linux-android after setup 6/6, login 7/7 and chat 5/5 had
+                  # all passed, twice over. The ios branch below already guarded its
+                  # substitution with `|| true`; this one never did.
+                  pkg=ai.ciris.mobile.debug
+                  ADB=$(command -v adb 2>/dev/null || echo "${ANDROID_HOME:-/usr/local/lib/android/sdk}/platform-tools/adb")
+                  remote=""
+                  if [ -x "$ADB" ]; then
+                    remote=$("$ADB" exec-out run-as "$pkg" sh -c 'find . -name ciris_engine.db 2>/dev/null | head -1' 2>/dev/null | tr -d '\r' || true)
+                  else
+                    echo "::warning::adb not found at '$ADB' -- skipping the one-holder check for $plat"
+                  fi
+                  if [ -n "$remote" ]; then
+                    "$ADB" exec-out run-as "$pkg" cat "$remote" > "artifacts/db-$plat.db" 2>/dev/null \
+                      && db="artifacts/db-$plat.db"
+                  fi ;;
               ios)
                 data=$(xcrun simctl get_app_container booted ai.ciris.mobile data 2>/dev/null || true)
                 if [ -n "$data" ]; then

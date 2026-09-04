@@ -50,3 +50,18 @@ def test_evidence_is_the_matching_line() -> None:
     text = "harmless line mentioning 429 bytes\nopenrouter returned HTTP 429 Too Many Requests\n"
     _, _, evidence = d.classify(text, "interact")
     assert evidence.startswith("openrouter returned HTTP 429")
+
+
+def test_an_attestation_sources_dict_is_not_a_rate_limit() -> None:
+    """2026-09-04 run 33901202920: an iOS LOGIN failure was called 'rate limited'
+    because 'rate_limited' appeared as a boolean key in the attestation
+    verifier's sources dump."""
+    line = ("2026-09-04 17:47:41.650 - ciris_engine.logic.services.infrastructure.authentication.attestation.verifier_runner "
+            "- INFO - [attestation] sources={'dns_us_reachable': True, 'dns_us_valid': True, 'dns_us_rate_limited': False, 'registry': 'ok'}")
+    layer, _ = classify(line + "\nInput 'input_username' failed: no text sink is listening for input_username; the field is tagged but not drivable\n", phase="login")
+    assert layer == "CLIENT"
+
+
+def test_a_provider_naming_a_rate_limit_is_still_the_wire() -> None:
+    assert classify("openrouter: rate limit exceeded, retry_after=30\n", phase="interact")[0] == "WIRE"
+    assert classify("provider returned 429 Too Many Requests\n", phase="interact")[0] == "WIRE"

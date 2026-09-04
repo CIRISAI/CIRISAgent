@@ -54,7 +54,10 @@ import urllib.request
 # required" -- which the first live run classified as the LLM provider refusing
 # to serve us, while the budget probe in the same breath reported $88 available.
 # A line about the wallet is never evidence about the model wire.
-NOT_THE_LLM = re.compile(r"wallet|x402|WALLET_INIT|credit_gate|agent_credits", re.IGNORECASE)
+NOT_THE_LLM = re.compile(
+    r"wallet|x402|WALLET_INIT|credit_gate|agent_credits|\[attestation\]|verifier_runner|ciris_verify|sources=\{",
+    re.IGNORECASE,
+)
 
 ADVICE = re.compile(
     r"check the (llm|agent)|see the agent log|a gate that cannot find|"
@@ -78,7 +81,9 @@ def strip_advice(blob: str) -> str:
 SIGNATURES: list[tuple[str, str, str]] = [
     ("WIRE", r"Key limit exceeded|insufficient[_ ]credits|quota exceeded", "provider refused: account limit or credit exhausted"),
     ("WIRE", r"(?:HTTP|status|status_code|code)[ =:]*402\b|\b402 Payment Required|payment required", "provider refused: payment required"),
-    ("WIRE", r"(?:HTTP|status|status_code|code)[ =:]*429\b|\b429 Too Many|rate.?limit(?:ed| exceeded)?\b(?![_a-z])", "provider refused: rate limited"),
+    # "rate limited" only as an EVENT: a status line, the reason phrase, or the
+    # provider naming it. A dict key like 'dns_us_rate_limited': False is not one.
+    ("WIRE", r"(?:HTTP|status|status_code|code)[ =:]*429\b|\b429 Too Many|Too Many Requests|rate.?limit(?:ed)? (?:exceeded|reached|hit)|rate.?limit.*retry.?after|(?:openrouter|provider|llm)[^\n]{0,40}rate.?limit(?!ed['\"]?[:=])", "provider refused: rate limited"),
     ("WIRE", r"(?:HTTP|status|status_code|code)[ =:]*401\b.*(openrouter|provider|llm)|invalid[_ ]api[_ ]key|unauthorized.*llm", "provider refused: key rejected"),
     ("WIRE", r"model_not_available|model not found|(?:HTTP|status|status_code|code)[ =:]*404\b.*model", "provider refused: model name not served"),
     ("WIRE", r"(connection|read) timed out.*(openrouter|api\.|llm)|provider.*unreachable", "provider unreachable"),

@@ -417,7 +417,12 @@ def translate_unit(lang: str, path: str, english: str, ground: str, model: str, 
             else call(system, english, model, key)
     except Exception as exc:  # noqa: BLE001 -- one unit's failure must not end the run
         return path, None, [f"{type(exc).__name__}: {exc}"]
-    got = marker + re.sub(r"^```[a-z]*\n|\n```$", "", got.strip())
+    got = re.sub(r"^```[a-z]*\n|\n```$", "", got.strip())
+    # The model sometimes reproduces a marker of its own -- occasionally a
+    # translated one -- and prepending ours then yields two. Withholding is only
+    # half the mechanism; the other half is that the body may not contain one at
+    # all. Strip any it emitted, then attach exactly the canon's.
+    got = marker + "\n".join(l for l in got.split("\n") if not l.startswith("// content/sections/"))
     english = marker + english
     bad = guard(lang, english, got)
     if bad and any("front-matter fences" in b for b in bad):

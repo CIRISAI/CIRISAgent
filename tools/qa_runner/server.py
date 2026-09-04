@@ -1531,6 +1531,20 @@ class APIServerManager:
             self.mock_logshipper = None
 
         # Skip port cleanup - it's causing hangs
+        # JOIN THE LOG READER. It is a daemon thread teeing the server's stdout;
+        # once the process is gone its readline returns EOF and it exits -- but
+        # nothing waited for that, so the runner could reach interpreter shutdown
+        # with the thread mid-write and abort:
+        #   Fatal Python error: _enter_buffered_busy: could not acquire lock for
+        #   <_io.BufferedWriter name='<stdout>'> at interpreter shutdown,
+        #   possibly due to daemon threads
+        # (Staged QA sqlite, 2026-09-04, exit -6 after 82/82 passed.)
+        t = getattr(self, "_log_thread", None)
+        if t is not None and t.is_alive():
+            t.join(timeout=5)
+            if t.is_alive():
+                self.console.print("[yellow]  log reader thread did not finish within 5s[/yellow]")
+
 
     def _is_server_running(self) -> bool:
         """Check if server is running on the configured port."""

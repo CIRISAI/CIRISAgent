@@ -14,6 +14,8 @@ except Exception:  # pragma: no cover - never let the shim stop the runner
     pass
 
 import argparse
+import os
+import logging
 import sys
 from pathlib import Path
 from typing import List
@@ -697,4 +699,21 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except SystemExit as _exit:
+        # FLUSH, THEN LEAVE WITHOUT FINALIZING THE INTERPRETER. Several module
+        # monitors are daemon threads that print (stream watchers, log tees);
+        # a plain sys.exit lets interpreter finalization race them for the
+        # stdout buffer lock, and CPython aborts the process with exit -6 --
+        # after every test passed and the status files were written. os._exit
+        # ends the process once our own output is flushed; nothing after the
+        # summary needs the interpreter's teardown. main() keeps sys.exit for
+        # programmatic callers.
+        _code = _exit.code if isinstance(_exit.code, int) else (0 if _exit.code is None else 1)
+        try:
+            sys.stdout.flush()
+            sys.stderr.flush()
+            logging.shutdown()
+        finally:
+            os._exit(_code)

@@ -73,7 +73,12 @@ import requests
 from tools.qa_runner.platform_procs import temp_path
 
 from .browser_helper import BrowserConfig, ensure_playwright_installed
-from .desktop_app_helper import DesktopAppConfig, DesktopAppHelper, check_desktop_app_running
+from .desktop_app_helper import (
+    DesktopAppConfig,
+    DesktopAppHelper,
+    attribute_device_failure,
+    check_desktop_app_running,
+)
 from .federation_walk_test import FederationWalkTest
 from .server_manager import ServerConfig
 from .test_cases import WebUITestConfig
@@ -141,32 +146,91 @@ class DesktopAppTestRunner:
         except Exception as exc:
             print(f"  [tree:{label}] could not read the element tree: {type(exc).__name__}: {exc}")
 
+    async def _safe_screen(self) -> Optional[str]:
+        """The current screen name, or None -- never an exception.
+
+        run_test used to call get_screen() unguarded in BOTH branches, including
+        the except branch. When the app's automation server stopped answering,
+        the retry in the except branch raised httpx.ConnectError straight out of
+        the harness: no [FAIL] line, no screenshot, no diagnostics, a bare stack
+        trace ending in "All connection attempts failed" (iOS, 2026-09-04, right
+        after join_federation had succeeded through the same server).
+        """
+        if not self.helper:
+            return None
+        try:
+            return await self.helper.get_screen()
+        except Exception:  # noqa: BLE001 - a screen name is decoration, not evidence
+            return None
+
+    @staticmethod
+    def _is_dead_server(exc: BaseException) -> bool:
+        text = f"{type(exc).__name__}: {exc}"
+        return any(
+            k in text
+            for k in (
+                "ConnectError", "ConnectTimeout", "RemoteProtocolError", "ReadError",
+                "All connection attempts failed", "Connection refused", "Connection reset",
+            )
+        )
+
+    async def _attribute_dead_server(self) -> str:
+        """Which layer died: the automation server, or the whole app process.
+
+        attribute_device_failure() already answers that by probing the embedded
+        backend on its sibling port; the answer just never reached a failure
+        that escaped run_test. On iOS the app-container diagnostics are gathered
+        here as well, since the bring-up's failure-path collector does not run
+        for a leg that came up and died later.
+        """
+        args = _LAST_ARGS
+        try:
+            server_url = str(getattr(getattr(self.helper, "_client", None), "base_url", "") or "").rstrip("/")
+            api_port = getattr(args, "port", None) or 8080
+            verdict = await attribute_device_failure(server_url or "http://localhost:9091", f"http://127.0.0.1:{api_port}")
+        except Exception as exc:  # noqa: BLE001
+            verdict = f"(could not attribute the dead server: {type(exc).__name__}: {exc})"
+        if args is not None and getattr(args, "ios", False):
+            try:
+                _ios_diagnostics(
+                    _ios_pick_simulator(getattr(args, "ios_udid", None)),
+                    getattr(args, "ios_bundle_id", None) or "ai.ciris.mobile",
+                )
+            except Exception as exc:  # noqa: BLE001
+                verdict += f"\n        (iOS diagnostics failed: {type(exc).__name__}: {exc})"
+        return verdict
+
     async def run_test(self, name: str, test_fn) -> DesktopTestResult:
         """Run a single test and record result."""
         start = datetime.now()
         try:
             await test_fn()
             duration = (datetime.now() - start).total_seconds() * 1000
-            screen = await self.helper.get_screen() if self.helper else None
             result = DesktopTestResult(
                 name=name,
                 success=True,
                 duration_ms=duration,
-                screen=screen,
+                screen=await self._safe_screen(),
             )
             print(f" [OK] {name} ({duration:.0f}ms)")
         except Exception as e:
             duration = (datetime.now() - start).total_seconds() * 1000
-            screen = await self.helper.get_screen() if self.helper else None
+            error = str(e)
+            if self._is_dead_server(e):
+                # THE AUTOMATION SERVER STOPPED ANSWERING MID-FLOW. Name the layer
+                # instead of letting the next probe crash the harness.
+                error = (
+                    f"the client's automation server stopped answering during '{name}' "
+                    f"({type(e).__name__}: {e}).\n        " + await self._attribute_dead_server()
+                )
             result = DesktopTestResult(
                 name=name,
                 success=False,
                 duration_ms=duration,
-                error=str(e),
-                screen=screen,
+                error=error,
+                screen=await self._safe_screen(),
             )
-            print(f" [FAIL] {name}: {e}")
-
+            print(f" [FAIL] {name}: {error}")
         self.results.append(result)
         return result
 

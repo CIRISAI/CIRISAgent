@@ -140,17 +140,17 @@ Available modules:
         "--live", action="store_true", help="Use real LLM API instead of mock. Reads key from --live-key-file"
     )
     parser.add_argument(
-        "--live-key-file", default="~/.groq_key", help="Path to file containing API key (default: ~/.groq_key)"
+        "--live-key-file", default="~/.openrouter_key", help="Path to file containing API key (default: ~/.openrouter_key)"
     )
     parser.add_argument(
         "--live-model",
-        default="meta-llama/llama-4-maverick-17b-128e-instruct",
-        help="Model to use for live LLM (default: meta-llama/llama-4-maverick-17b-128e-instruct)",
+        default="qwen/qwen3.6-35b-a3b",
+        help="Model to use for live LLM (default: qwen/qwen3.6-35b-a3b)",
     )
     parser.add_argument(
         "--live-base-url",
-        default="https://api.groq.com/openai/v1",
-        help="Base URL for LLM API (default: https://api.groq.com/openai/v1)",
+        default="https://openrouter.ai/api/v1",
+        help="Base URL for LLM API (default: https://openrouter.ai/api/v1)",
     )
     parser.add_argument(
         "--live-provider",

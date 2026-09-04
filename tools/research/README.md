@@ -36,7 +36,7 @@ API_KEY=sk-... ./tools/research/capture_traces.sh
 |---|---|---|
 | `API_KEY` / `API_KEY_FILE` | — | **required** |
 | `PROVIDER` | `openrouter` | `openrouter` `together` `groq` `openai` `deepinfra` |
-| `MODEL` | `meta-llama/llama-4-scout` | **case-sensitive** — Together lists both `google/gemma-4-31B-it` and `pearl-ai/gemma-4-31b-it` |
+| `MODEL` | `qwen/qwen3.6-35b-a3b` | **case-sensitive** — Together lists both `google/gemma-4-31B-it` and `pearl-ai/gemma-4-31b-it` |
 | `LANGUAGES` | `en` | comma-separated |
 | `QUESTIONS_FILE` | built-in corpus | container path, e.g. `/questions/mine.json` |
 | `CONCURRENCY` | `1` | |

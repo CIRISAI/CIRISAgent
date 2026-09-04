@@ -30,9 +30,9 @@ class DegradedModeTests:
 
     REQUIRES_LIVE_LLM = True
     LIVE_LLM_DEFAULTS = {
-        "key_file": "~/.groq_key",
-        "base_url": "https://api.groq.com/openai/v1",
-        "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+        "key_file": "~/.openrouter_key",
+        "base_url": "https://openrouter.ai/api/v1",
+        "model": "qwen/qwen3.6-35b-a3b",
         "provider": "openai",
     }
 

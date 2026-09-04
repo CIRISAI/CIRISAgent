@@ -547,9 +547,14 @@ jobs:
               # model it had chosen for itself. "Whatever sorts first" is not a
               # model choice.
               #
-              # meta-llama/llama-4-scout is the documented OpenRouter QA model
-              # (CLAUDE.md, live model matrix).
-              llm_args="--llm-provider openrouter --llm-key $OPENROUTER_API_KEY --llm-require-live-models --llm-model meta-llama/llama-4-scout"
+              # qwen/qwen3.6-35b-a3b is the OpenRouter QA default (CLAUDE.md, live
+              # model matrix). It replaced meta-llama/llama-4-scout on 2026-09-04
+              # after an RCA on the Android leg: scout returned malformed
+              # structured output for the epistemic-humility conscience twice in
+              # one thought (recommended_action="speak" instead of the enum, then
+              # a missing required field), each turning a correct SPEAK into a
+              # forced PONDER. Qwen returned the schema exactly on the same prompt.
+              llm_args="--llm-provider openrouter --llm-key $OPENROUTER_API_KEY --llm-require-live-models --llm-model qwen/qwen3.6-35b-a3b"
               echo "LLM: REAL key (live models required)"
             else
               echo "LLM: mock (no secret available) — flow is covered, the wire is NOT"

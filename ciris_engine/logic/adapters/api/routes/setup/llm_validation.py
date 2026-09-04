@@ -89,8 +89,9 @@ def _get_llm_providers() -> List[LLMProvider]:
             requires_base_url=False,
             requires_model=True,
             default_base_url="https://openrouter.ai/api/v1",
-            default_model="meta-llama/llama-4-maverick",
+            default_model="qwen/qwen3.6-35b-a3b",
             examples=[
+                "Qwen3.6 35B A3B",
                 "Llama 4 Maverick",
                 "GPT-4o via OpenRouter",
             ],

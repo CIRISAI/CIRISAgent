@@ -75,9 +75,9 @@ class MobileTestConfig:
     setup_password: str = "qa_test_password_12345"
 
     # LLM settings for setup
-    llm_provider: str = "groq"
+    llm_provider: str = "openrouter"
     llm_api_key: str = ""
-    llm_model: str = "meta-llama/llama-4-maverick-17b-128e-instruct"
+    llm_model: str = "qwen/qwen3.6-35b-a3b"
 
     # Test settings
     test_message: str = "Hello CIRIS! This is an automated test. Please respond briefly."

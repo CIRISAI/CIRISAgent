@@ -84,17 +84,22 @@ def check() -> int:
             bad.append(f"{name}: named by the manifest but not on disk")
         elif hashlib.sha256(p.read_bytes()).hexdigest() != rec["sha256"]:
             bad.append(f"{name}: hash differs from the manifest")
-    import nacl.signing  # noqa: PLC0415  -- optional dep, only needed here
-    from nacl.exceptions import BadSignatureError
-
-    pub = json.loads((ROOT / "seed" / "root_pub.json").read_text(encoding="utf-8"))["pubkey"]
+    # Verify with `cryptography`, the same library the agent's own startup check
+    # uses (logic/utils/constants.py), not PyNaCl. PyNaCl is only needed to SIGN
+    # -- which happens on a key holder's machine -- and requiring it to *check*
+    # made this guard fail in CI with ModuleNotFoundError, reported as "manifest
+    # is stale or unsigned". A verification path that cannot run is not a check.
     import base64
 
+    from cryptography.exceptions import InvalidSignature
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
+    pub = json.loads((ROOT / "seed" / "root_pub.json").read_text(encoding="utf-8"))["pubkey"]
     raw = base64.urlsafe_b64decode(pub + "=" * (-len(pub) % 4))
     try:
-        nacl.signing.VerifyKey(raw).verify(MANIFEST.read_bytes(), SIG.read_bytes())
+        Ed25519PublicKey.from_public_bytes(raw).verify(SIG.read_bytes(), MANIFEST.read_bytes())
         print(f"signature ok over {len(doc['files'])} files")
-    except BadSignatureError:
+    except InvalidSignature:
         bad.append("signature does NOT verify against seed/root_pub.json")
     for b in bad:
         print(f"  {b}")

@@ -47,6 +47,18 @@ if [ "$MODE" = "--device" ]; then
     MODE="--quick"
 fi
 
+# --no-launch: install only. CI's five-platform gate runs the macOS desktop leg
+# and the iOS simulator on the SAME loopback; when this script launched the app
+# at install time, the iOS app was already holding :8080/:9091 while the macOS
+# leg ran, the macOS teardown killed it as a port-holder, and the iOS leg then
+# relaunched into a half-torn-down state (2026-09-04 RCA). The gate driver's
+# ios-simulator-up launches with CIRIS_TEST_MODE when it is the iOS leg's turn.
+NO_LAUNCH=false
+for _arg in "$@"; do
+    [ "$_arg" = "--no-launch" ] && NO_LAUNCH=true
+done
+[ "$MODE" = "--no-launch" ] && MODE="--full"
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -232,7 +244,11 @@ if [ "$MODE" = "--source-only" ]; then
         warn "Could not hot-swap zip. Falling back to full install."
 
         # Relaunch
-        xcrun simctl launch booted ai.ciris.mobile
+        if $NO_LAUNCH; then
+            ok "Installed; not launched (--no-launch)"
+        else
+            xcrun simctl launch booted ai.ciris.mobile
+        fi
         ok "App relaunched with updated Resources.zip"
 
         echo ""
@@ -409,8 +425,12 @@ else
         rm -rf "$APP_DATA_DIR/Documents/PythonResources"
         ok "Cleared cached PythonResources post-install"
     fi
-    xcrun simctl launch booted ai.ciris.mobile
-    ok "App launched"
+    if $NO_LAUNCH; then
+        ok "Installed; not launched (--no-launch): the gate driver launches with CIRIS_TEST_MODE"
+    else
+        xcrun simctl launch booted ai.ciris.mobile
+        ok "App launched"
+    fi
 fi
 
 echo ""

@@ -3099,6 +3099,7 @@ async def run_ios_simulator_up(args: argparse.Namespace) -> int:
     deadline = time.time() + wait_secs
     started = time.time()
     last_note = 0.0
+    absent_streak = 0  # consecutive CONFIRMED absences; a failed query never counts
     while time.time() < deadline:
         try:
             r = requests.get(f"{server_url}/health", timeout=2)
@@ -3119,12 +3120,26 @@ async def run_ios_simulator_up(args: argparse.Namespace) -> int:
         if elapsed - last_note >= 15:
             last_note = elapsed
             alive = _simctl(["spawn", udid, "launchctl", "list"], timeout=30)
-            running = bundle_id in (alive.stdout or "")
+            # A QUERY THAT FAILED IS NOT AN APP THAT DIED. `launchctl list` can
+            # time out (rc=124) or error under load, and then stdout is empty --
+            # which read as "bundle absent" and produced "the app EXITED after
+            # 15s" for a process os_log showed alive a minute later (2026-09-04).
+            # Only a query that SUCCEEDED and does not list the bundle counts,
+            # and it has to say so twice in a row before we call it a crash.
+            if alive.returncode != 0 or not (alive.stdout or "").strip():
+                state = f"unknown (launchctl list rc={alive.returncode})"
+                absent_streak = 0
+            elif bundle_id in alive.stdout:
+                state = "running"
+                absent_streak = 0
+            else:
+                absent_streak += 1
+                state = f"not listed ({absent_streak}/2)"
             stamp = datetime.now().strftime("%H:%M:%S")
-            print(f"  [{stamp}] +{elapsed:.0f}s  app={'running' if running else 'EXITED'}  {_ios_startup_state(udid, bundle_id)}")
+            print(f"  [{stamp}] +{elapsed:.0f}s  app={state}  {_ios_startup_state(udid, bundle_id)}")
             # A DEAD APP IS NOT A SLOW APP. From outside both are "no answer on
-            # 9091"; only one is worth waiting for, so stop as soon as we know.
-            if not running:
+            # 9091"; only one is worth waiting for, so stop as soon as we KNOW.
+            if absent_streak >= 2:
                 _fail(
                     f"the app EXITED while we waited for {server_url}/health after {elapsed:.0f}s",
                     hint="It launched and then stopped, so this is a crash on startup\n"

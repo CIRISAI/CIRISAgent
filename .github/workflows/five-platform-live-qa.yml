@@ -484,7 +484,10 @@ jobs:
           # above, as the script's own preflight confirms ("Resources: 46MB").
           # --quick overlays the repo's live ciris_engine/ciris_adapters onto it,
           # which is the part CI exists to test.
-          bash apps/ios/scripts/rebuild_and_deploy.sh --quick 2>&1 \
+          # --no-launch: install only. Launching here left the iOS app holding
+          # :8080/:9091 across the macOS desktop leg on the same loopback; the
+          # driver's ios-simulator-up launches it when the iOS leg starts.
+          bash apps/ios/scripts/rebuild_and_deploy.sh --quick --no-launch 2>&1 \
             | tee artifacts/cmdlogs/ios-rebuild-and-deploy.log | tail -30
           # Same locator the script uses — note -not -path Index.noindex, which a
           # naive find picks up and then installs a stub that launches to nothing.

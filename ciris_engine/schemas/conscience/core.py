@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ciris_engine.schemas.types import JSONDict
 
@@ -154,10 +154,67 @@ class CoherenceCheckResult(BaseModel):
     model_config = ConfigDict(defer_build=True, extra="forbid")
 
 
+# --- GATE VERBS -------------------------------------------------------------
+# The two LLM-backed gate shards (optimization veto, epistemic humility) each
+# ask the model for a single decision verb. On 2026-09-04 llama-4-scout
+# answered the humility check with recommended_action="speak" -- the name of
+# the action it had been asked to evaluate, meaning "go ahead" -- and the bare
+# `str` field accepted it, so `passed = (verb == "proceed")` failed a reply the
+# model had just called ethically unremarkable. The action was forced to PONDER
+# twice on one thought and the user never got an answer.
+#
+# Normalise the VERB, and nothing else: case and whitespace, common synonyms,
+# and the evaluated action's own name (an echo is approval). Anything still
+# unrecognised raises, which pydantic turns into a ValidationError and
+# instructor feeds back to the model as a reask naming the allowed verbs --
+# that is the retry the gate should have had. The fields stay strictly
+# required; this widens what counts as a verb, never what counts as a result.
+_ACTION_ECHO_IS_APPROVAL = frozenset({"speak", "tool", "observe", "memorize", "recall", "forget", "task_complete"})
+_VERB_SYNONYMS = {
+    "proceed": frozenset({"proceed", "continue", "approve", "approved", "accept", "accepted", "allow", "allowed", "ok", "okay", "pass", "go", "yes"}),
+    "ponder": frozenset({"ponder", "reconsider", "rethink", "reflect", "pause", "revise", "modify", "amend"}),
+    "defer": frozenset({"defer", "escalate", "wise_authority", "wa", "human"}),
+    "abort": frozenset({"abort", "reject", "stop", "halt", "block", "veto", "deny"}),
+}
+
+
+def normalize_gate_verb(value: object, *, allowed: tuple, offered: tuple, fallback: Optional[Dict[str, str]] = None) -> str:
+    """Return the canonical verb for a model's decision string, or raise.
+
+    `allowed` is what the field accepts (may include the code's own fail-closed
+    fallback, e.g. "abort"); `offered` is what the model is told it may say, so
+    the reask message never advertises a verb we do not want it to choose.
+    `fallback` maps a recognised-but-not-allowed canonical verb to an allowed
+    one -- the optimization veto has no reconsider verb, and has always passed
+    anything that was not abort/defer, so "modify" reads as proceed there.
+    """
+    if not isinstance(value, str):
+        raise ValueError(f"decision verb must be a string, one of {', '.join(offered)}; got {type(value).__name__}")
+    raw = value.strip().lower().strip("\"'.")
+    # "HandlerActionType.SPEAK" -> "speak"
+    raw = raw.rsplit(".", 1)[-1]
+    if raw in _ACTION_ECHO_IS_APPROVAL and "proceed" in allowed:
+        return "proceed"
+    for canonical, words in _VERB_SYNONYMS.items():
+        if raw in words:
+            if canonical in allowed:
+                return canonical
+            if fallback and canonical in fallback and fallback[canonical] in allowed:
+                return fallback[canonical]
+    raise ValueError(f"decision verb must be one of {', '.join(offered)}; got {value!r}")
+
+
 class OptimizationVetoResult(BaseModel):
     """Result of optimization veto check"""
 
     decision: str = Field(description="Decision: proceed, abort, or defer")
+
+    @field_validator("decision", mode="before")
+    @classmethod
+    def _normalize_decision(cls, v: object) -> str:
+        return normalize_gate_verb(
+            v, allowed=("proceed", "abort", "defer"), offered=("proceed", "abort", "defer"), fallback={"ponder": "proceed"}
+        )
     justification: str = Field(default="", description="Justification for the decision")
     entropy_reduction_ratio: float = Field(
         ge=0.0,
@@ -183,7 +240,10 @@ class EpistemicHumilityResult(BaseModel):
 
     Keep `recommended_action`, `epistemic_certainty`, and
     `reflective_justification` strictly required. The conscience code is
-    where fail-safe lives, not the schema.
+    where fail-safe lives, not the schema. The only leniency is the VERB
+    normaliser (see normalize_gate_verb): a synonym or an echo of the evaluated
+    action is read as the verb it means; an unrecognised verb is a validation
+    error, which instructor reasks -- it is never defaulted.
 
     Only `identified_uncertainties` carries a harmless default (empty list)
     — a missing uncertainty list doesn't bypass any gate.
@@ -193,6 +253,14 @@ class EpistemicHumilityResult(BaseModel):
     identified_uncertainties: List[str] = Field(default_factory=list, description="Identified uncertainties")
     reflective_justification: str = Field(..., description="Reflective justification")
     recommended_action: str = Field(..., description="Recommended action: proceed, ponder, or defer")
+
+    @field_validator("recommended_action", mode="before")
+    @classmethod
+    def _normalize_recommended_action(cls, v: object) -> str:
+        # "abort" is accepted because the conscience's fail-closed fallback
+        # constructs it; it is deliberately NOT in `offered`, so a reask never
+        # invites the model to veto by naming the option.
+        return normalize_gate_verb(v, allowed=("proceed", "ponder", "defer", "abort"), offered=("proceed", "ponder", "defer"))
 
     model_config = ConfigDict(defer_build=True, extra="forbid")
 

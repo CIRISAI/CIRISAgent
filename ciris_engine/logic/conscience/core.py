@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import logging
+import time
 from datetime import datetime, timezone
 from typing import Any, List, Optional
 
@@ -55,6 +57,21 @@ class ConscienceConfig(BaseModel):
         ),
     )
     coherence_threshold: float = Field(default=0.60, description="Minimum coherence score")
+    # THE FACILITY OWNS ITS OWN BUDGET. Below this layer a single structured
+    # call can run 3 provider attempts x (1 + 2 instructor reasks) x a 60s HTTP
+    # timeout -- about nine minutes -- and the bus adds one attempt per
+    # provider. Above it there is nothing: EssentialConfig.round_timeout_seconds
+    # is defined and applied nowhere. On 2026-09-04 four conscience calls hung
+    # in parallel for ~5 minutes and the thought was forced to PONDER with no
+    # record of which call never answered. This budget is sized to ONE honest
+    # call (observed 2-14s; the 87K-token veto call ~9s), retried once with a
+    # fresh request, and it wins over the provider's stack by cancelling it.
+    llm_call_timeout_seconds: float = Field(
+        default=45.0, gt=0, description="Wall-clock budget for one conscience LLM call before it is cancelled and retried"
+    )
+    llm_call_retries: int = Field(
+        default=1, ge=0, le=3, description="Fresh attempts after a timed-out or schema-failed conscience LLM call"
+    )
     entropy_threshold: float = Field(default=0.40, description="Maximum entropy allowed")
 
 
@@ -64,7 +81,7 @@ logger = logging.getLogger(__name__)
 MSG_SINK_UNAVAILABLE_ALLOWING = "Sink service unavailable, allowing action"
 MSG_SINK_UNAVAILABLE = "Sink service unavailable"
 MSG_NO_CONTENT = "No content to evaluate"
-from ciris_engine.logic.conscience.transport import is_transport_failure, unavailable_result
+from .transport import LLM_FAULT_CATEGORIES, categorize_conscience_error, is_transport_failure, unavailable_result
 
 MSG_SINK_NO_LLM = "Sink does not have LLM service"
 MSG_INVALID_LLM_RESULT = "Invalid result type from LLM"
@@ -197,6 +214,63 @@ class _BaseConscience(ConscienceInterface):
             tags=None,
         )
         persistence.update_correlation(update_req, self._time_service)
+
+    async def _call_llm_with_budget(self, sink: Any, **kwargs: Any) -> Any:
+        """One structured call under the facility's own timeout, retried once.
+
+        Mirrors `sink.llm.call_llm_structured(**kwargs)` exactly, so every shard
+        calls it the same way. Three outcomes, each named in the log:
+
+          answered   -> returned as-is
+          timed out  -> cancelled (which cancels the provider's own retry loop
+                        underneath), retried with a fresh call up to
+                        `llm_call_retries`; exhausted -> TimeoutError, which the
+                        caller's transport branch turns into unavailable_result
+                        (fail-closed, check_ran=False, no processor retry)
+          LLM fault  -> (schema validation, context length, content filter)
+                        one fresh attempt; exhausted -> re-raised to the
+                        caller's existing fail-closed fallback
+          transport  -> re-raised immediately: the provider already retried and
+                        the bus already failed over; spending the budget again
+                        here is what #1049 removed
+
+        A cancellation does not trip the provider's circuit breaker -- the
+        facility running out of patience is not evidence the provider is down.
+        """
+        timeout = float(getattr(self.config, "llm_call_timeout_seconds", 45.0))
+        retries = int(getattr(self.config, "llm_call_retries", 1))
+        name = kwargs.get("handler_name", type(self).__name__)
+        last: Optional[BaseException] = None
+        for attempt in range(1, retries + 2):
+            t0 = time.monotonic()
+            try:
+                result = await asyncio.wait_for(sink.llm.call_llm_structured(**kwargs), timeout=timeout)
+                if attempt > 1:
+                    logger.info("[CONSCIENCE] %s: answered on attempt %d after %.1fs", name, attempt, time.monotonic() - t0)
+                return result
+            except asyncio.TimeoutError as e:
+                last = e
+                logger.warning(
+                    "[CONSCIENCE] %s: no answer within the facility budget (%.0fs) on attempt %d/%d%s",
+                    name, timeout, attempt, retries + 1,
+                    " -- retrying with a fresh call" if attempt <= retries else " -- giving up",
+                )
+            except Exception as e:  # noqa: BLE001 - categorised below, never swallowed
+                cat = categorize_conscience_error(e)
+                if cat in LLM_FAULT_CATEGORIES and attempt <= retries:
+                    last = e
+                    logger.warning(
+                        "[CONSCIENCE] %s: %s on attempt %d/%d after %.1fs -- retrying with a fresh call (%s)",
+                        name, cat, attempt, retries + 1, time.monotonic() - t0, str(e)[:160],
+                    )
+                    continue
+                raise
+        assert last is not None
+        if isinstance(last, asyncio.TimeoutError):
+            raise TimeoutError(
+                f"{name}: LLM API timeout -- no answer within the facility budget ({retries + 1} x {timeout:.0f}s)"
+            ) from last
+        raise last
 
     async def _get_sink(self) -> Any:
         """Get the multi-service sink for centralized LLM calls with circuit breakers."""
@@ -388,7 +462,7 @@ class EntropyConscience(_BaseConscience):
                 text, image_context, language=self._resolve_language(context)
             )
             if hasattr(sink, "llm"):
-                entropy_eval, _ = await sink.llm.call_llm_structured(
+                entropy_eval, _ = await self._call_llm_with_budget(sink, 
                     messages=messages,
                     response_model=EntropyResult,
                     handler_name="entropy_conscience",
@@ -551,7 +625,7 @@ class CoherenceConscience(_BaseConscience):
                 user_message=self._extract_user_message(context),
             )
             if hasattr(sink, "llm"):
-                coherence_eval, _ = await sink.llm.call_llm_structured(
+                coherence_eval, _ = await self._call_llm_with_budget(sink, 
                     messages=messages,
                     response_model=CoherenceResult,
                     handler_name="coherence_conscience",
@@ -672,7 +746,7 @@ class OptimizationVetoConscience(_BaseConscience):
 
         try:
             if hasattr(sink, "llm"):
-                result, _ = await sink.llm.call_llm_structured(
+                result, _ = await self._call_llm_with_budget(sink, 
                     messages=messages,
                     response_model=OptimizationVetoResult,
                     handler_name="optimization_veto_conscience",
@@ -808,7 +882,7 @@ class EpistemicHumilityConscience(_BaseConscience):
 
         try:
             if hasattr(sink, "llm"):
-                result, _ = await sink.llm.call_llm_structured(
+                result, _ = await self._call_llm_with_budget(sink, 
                     messages=messages,
                     response_model=EpistemicHumilityResult,
                     handler_name="epistemic_humility_conscience",

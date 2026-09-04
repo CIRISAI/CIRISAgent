@@ -3505,7 +3505,11 @@ async def run_federation_walk(args: argparse.Namespace) -> int:
         server_url=server_url,
         screenshot_dir=args.output_dir,
         input_settle_s=_input_settle_for(getattr(args, "platform", "desktop")),
-        one_segment_http=(getattr(args, "platform", "desktop") == "ios"),
+        # ciris-client 0.5.200 reports the iOS server now reads to Content-Length
+        # (CIRISClient#35). The workaround becomes opt-in so the next run exercises
+        # THEIR fix rather than my compensation for it. If POSTs come back empty
+        # again, set CIRIS_QA_IOS_ONE_SEGMENT=1 and reopen the issue.
+        one_segment_http=(os.environ.get("CIRIS_QA_IOS_ONE_SEGMENT") == "1"),
     )
     helper = DesktopAppHelper(config)
     await helper.start()
@@ -3591,7 +3595,11 @@ async def run_desktop_tests(args: argparse.Namespace) -> int:
         server_url=server_url,
         screenshot_dir=args.output_dir,
         input_settle_s=_input_settle_for(getattr(args, "platform", "desktop")),
-        one_segment_http=(getattr(args, "platform", "desktop") == "ios"),
+        # ciris-client 0.5.200 reports the iOS server now reads to Content-Length
+        # (CIRISClient#35). The workaround becomes opt-in so the next run exercises
+        # THEIR fix rather than my compensation for it. If POSTs come back empty
+        # again, set CIRIS_QA_IOS_ONE_SEGMENT=1 and reopen the issue.
+        one_segment_http=(os.environ.get("CIRIS_QA_IOS_ONE_SEGMENT") == "1"),
     )
     runner = DesktopAppTestRunner(config=config, verbose=args.verbose)
 

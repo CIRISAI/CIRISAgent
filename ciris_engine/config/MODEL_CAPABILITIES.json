@@ -301,6 +301,28 @@
           "ciris_compatible": true,
           "ciris_recommended": true,
           "notes": "QA default from 2026-09-04. Reasoning must be OFF on the wire (OpenRouter reasoning.enabled=false, which the LLM service already sends); live check returned the EpistemicHumilityResult schema exactly with 0 reasoning tokens."
+        },
+        "meta-llama/llama-4-scout": {
+          "display_name": "Llama 4 Scout",
+          "architecture": "mixture_of_experts",
+          "active_params": "17B",
+          "context_window": 131072,
+          "capabilities": {
+            "tool_use": true,
+            "structured_output": true,
+            "vision": true,
+            "json_mode": true,
+            "streaming": true
+          },
+          "underlying_providers": [
+            "deepinfra",
+            "groq",
+            "together"
+          ],
+          "tier": "default",
+          "ciris_compatible": true,
+          "ciris_recommended": false,
+          "notes": "Supported; not the default since 2026-09-04. Known: on the epistemic-humility conscience it has returned recommended_action=\"speak\" (the evaluated action's name) and omitted required fields -- the conscience now normalizes and retries around this, but qwen/qwen3.6-35b-a3b returned the schema exactly on the same prompt."
         }
       }
     },
@@ -438,11 +460,6 @@
       "display_name": "Llama 2 70B",
       "rejection_reason": "No native tool use support, context window only 4K",
       "tested_date": "2024-06-01"
-    },
-    "meta-llama/llama-4-scout": {
-      "display_name": "Llama 4 Scout (OpenRouter)",
-      "rejection_reason": "Malformed structured output on the epistemic-humility conscience: returned recommended_action=\"speak\" (the evaluated action, not the enum) and, on the next thought, omitted the required reflective_justification (InstructorRetryException). Each converts a correct SPEAK into a forced PONDER; five-platform Android leg went silent for 5 minutes. Qwen3.6-35B-A3B returned the schema exactly on the same prompt.",
-      "tested_date": "2026-09-04"
     }
   },
   "tiers": {

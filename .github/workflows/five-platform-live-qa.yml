@@ -707,6 +707,20 @@ jobs:
                   if [ -n "$remote" ]; then
                     "$ADB" exec-out run-as "$pkg" cat "$remote" > "artifacts/db-$plat.db" 2>/dev/null \
                       && db="artifacts/db-$plat.db"
+                  fi
+                  # THE RUNTIME LOGS GO TO FILES, not logcat. latest.log, incidents_latest.log
+                  # and the Rust ciris-server.log* live under files/ciris/logs in the app's data
+                  # dir; logcat carries only python.stdout fragments. The 2026-09-04 RCA of a
+                  # silent Android reply had to be rebuilt from DB correlations because this
+                  # step took the DB and logcat and left the logs behind. Same run-as path as
+                  # the DB pull; a missing file is named, never silent.
+                  if [ -x "$ADB" ]; then
+                    mkdir -p "artifacts/logs/$plat"
+                    for f in $("$ADB" exec-out run-as "$pkg" sh -c 'ls files/ciris/logs 2>/dev/null' 2>/dev/null | tr -d '\r'); do
+                      case "$f" in *.log|*.log.*) "$ADB" exec-out run-as "$pkg" cat "files/ciris/logs/$f" > "artifacts/logs/$plat/$f" 2>/dev/null || echo "(could not read $f)" > "artifacts/logs/$plat/$f.MISSING" ;; esac
+                    done
+                    ls "artifacts/logs/$plat" 2>/dev/null | head -8 | sed "s|^|  pulled $plat log: |"
+                    [ -s "artifacts/logs/$plat/incidents_latest.log" ] || echo "::warning::$plat: no incidents_latest.log pulled from the device -- the agent-side story will be missing"
                   fi ;;
               ios)
                 data=$(xcrun simctl get_app_container booted ai.ciris.mobile data 2>/dev/null || true)

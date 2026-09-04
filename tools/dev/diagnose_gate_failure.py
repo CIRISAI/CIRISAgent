@@ -45,6 +45,14 @@ import urllib.request
 # words we match on. Classifying those produced a confident, wrong AGENT verdict
 # on the very first test -- the same mistake a human makes reading the raw log.
 # Strip the harness's own voice before looking for the product's.
+# THE PRODUCT HAS ITS OWN VOCABULARY, and it collides with ours. The wallet
+# adapter's provider is literally named "x402" and speaks the x402 payment
+# protocol, so its perfectly healthy INIT lines contain "402" and "payment
+# required" -- which the first live run classified as the LLM provider refusing
+# to serve us, while the budget probe in the same breath reported $88 available.
+# A line about the wallet is never evidence about the model wire.
+NOT_THE_LLM = re.compile(r"wallet|x402|WALLET_INIT|credit_gate|agent_credits", re.IGNORECASE)
+
 ADVICE = re.compile(
     r"check the (llm|agent)|see the agent log|a gate that cannot find|"
     r"must fail, not pass quietly|#\s|echo \"|::(group|endgroup|warning)::",
@@ -53,7 +61,15 @@ ADVICE = re.compile(
 
 
 def strip_advice(blob: str) -> str:
-    return "\n".join(l for l in blob.splitlines() if not ADVICE.search(l))
+    """Remove the harness's own voice AND the product's payment vocabulary.
+
+    Both produced confident wrong verdicts on their first contact with a real
+    run, for the same reason: the words we match on appear in text that is not
+    about what we are diagnosing.
+    """
+    return "\n".join(
+        l for l in blob.splitlines() if not ADVICE.search(l) and not NOT_THE_LLM.search(l)
+    )
 
 
 SIGNATURES: list[tuple[str, str, str]] = [
@@ -63,7 +79,7 @@ SIGNATURES: list[tuple[str, str, str]] = [
     ("WIRE", r"\b401\b.*(openrouter|provider|llm)|invalid[_ ]api[_ ]key|unauthorized.*llm", "provider refused: key rejected"),
     ("WIRE", r"model_not_available|model not found|\b404\b.*model", "provider refused: model name not served"),
     ("WIRE", r"(connection|read) timed out.*(openrouter|api\.|llm)|provider.*unreachable", "provider unreachable"),
-    ("AGENT", r"(ERROR|CRITICAL|WARNING)\b.*\bDMA\b|\b\w*DMA\w*(Evaluator)?\b[^\n]*\b(raised|failed:|exception|ValidationError)", "a DMA errored"),
+    ("AGENT", r"(ERROR|CRITICAL)\b[^\n]*\bDMA\b|\b\w*DMA\w*(Evaluator)?\b[^\n]*\b(raised|failed:|exception|ValidationError)", "a DMA errored"),
     ("AGENT", r"(ERROR|CRITICAL)\b[^\n]*conscience|conscience[^\n]*(raised|failed:|exception)", "a conscience errored"),
     ("AGENT", r"Traceback \(most recent call last\)", "unhandled exception in the agent"),
     ("INFRA", r"none of the given log paths exist", "no logs were produced: the app or server never started"),
@@ -153,6 +169,16 @@ def main() -> int:
             override, probe_note = p
             if override:
                 layer, meaning = override, probe_note
+
+    # THE PROBE VETOES A CREDIT VERDICT. If some line made this look like a
+    # billing refusal but the provider says the budget is intact, the line was
+    # not about the model wire -- report the doubt rather than a false cause.
+    if layer == "WIRE" and ("credit" in meaning or "payment" in meaning):
+        v = probe_provider()
+        if v and v[0] is None:
+            layer = "UNKNOWN"
+            meaning = f"a payment-shaped line matched, but {v[1]} -- not a billing refusal"
+            probe_note = v[1]
 
     head = f"{a.platform}/{a.phase}: {layer} -- {meaning}"
     print(f"::error::{head}")

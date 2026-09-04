@@ -3032,7 +3032,15 @@ async def run_ios_simulator_up(args: argparse.Namespace) -> int:
     # the iOS app "became healthy" against the wrong stack, showed its UI, and
     # scored a desktop backend as an iOS one -- while its own embedded Python
     # had died on its first import. Refuse to start into that ambiguity.
-    for port in (int(getattr(args, "port", 8080) or 8080), 9091):
+    # ONLY THE AUTOMATION PORT. This used to include the backend port as well,
+    # which was wrong in principle: in the iOS flow the host backend on :8080 is
+    # ours and expected -- the simulator shares the host's loopback, so that is
+    # exactly where the app is supposed to look. Refusing to start on it blocked
+    # the legitimate case (run 33822805017, "port 8080 is already owned by pid
+    # 39622" -- our own backend). :9091 is different: if something else holds the
+    # automation port, the driver talks to the wrong app and every result is
+    # about a program we did not launch.
+    for port in (9091,):
         owner = _host_listener(port)
         if owner:
             _fail(

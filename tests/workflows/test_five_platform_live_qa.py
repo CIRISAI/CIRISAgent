@@ -123,7 +123,7 @@ def test_the_trace_gate_still_runs_and_still_asks_for_replication(raw: str) -> N
         "'ship' keys on envelopes_sent_total, which is blind to the replication "
         "plane (CIRISEdge#434) — the gate must require 'replication'"
     )
-    trace_branch = raw.split("python tools/dev/assert_traces_reached_canonical.py")[1][:600]
+    trace_branch = raw.split("python3 tools/dev/assert_traces_reached_canonical.py")[1][:600]
     assert "::warning::" in trace_branch, "the non-enforced result is not surfaced at all"
     assert "NOT enforced" in trace_branch, "the log does not say enforcement is off"
 

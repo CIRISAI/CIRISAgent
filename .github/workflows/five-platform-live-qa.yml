@@ -154,7 +154,7 @@ jobs:
           set -euo pipefail
           CLIENT_VERSION=$(grep -oE '^ciris-client==[0-9.]+' requirements.txt | cut -d= -f3)
           python -m pip download "ciris-client==${CLIENT_VERSION}" --no-deps -d "${RUNNER_TEMP}/clientwheel"
-          python tools/dev/vendor_desktop_jar.py "${RUNNER_TEMP}/clientwheel" ciris_engine/desktop_app "$CLIENT_VERSION"
+          python3 tools/dev/vendor_desktop_jar.py "${RUNNER_TEMP}/clientwheel" ciris_engine/desktop_app "$CLIENT_VERSION"
 
       # Install the WHEEL, not the checkout: `pip install .` exercises a source
       # tree no user ever receives.
@@ -687,7 +687,12 @@ jobs:
             esac
 
             if [ -n "$db" ] && [ -f "$db" ]; then
-              python tools/dev/assert_one_holder_per_identity.py "$db" \
+              # python3, not python: the runners carry no unversioned `python`,
+              # so this and the trace assertion below exited 127 (command not
+              # found) — and 127 escaped as the step's exit code, failing
+              # linux-android after every one of its tests had passed. Two
+              # checks were reporting nothing while looking like they ran.
+              python3 tools/dev/assert_one_holder_per_identity.py "$db" \
                 || { overall=1; echo "::error::$plat provider identity has >1 live holder"; }
             else
               echo "::notice::$plat OAuth-holder invariant NOT COVERED — no reachable database"
@@ -719,7 +724,7 @@ jobs:
             #    canonical" for a run that proved nothing, which is how this was
             #    wrong before.
             set +e
-            python tools/dev/assert_traces_reached_canonical.py \
+            python3 tools/dev/assert_traces_reached_canonical.py \
               "$CIRIS_HOME/logs" artifacts/cmdlogs --require replication --wait-secs 240
             trace_status=$?
             set -e

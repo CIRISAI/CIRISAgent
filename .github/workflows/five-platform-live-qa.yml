@@ -710,40 +710,12 @@ jobs:
                   if [ -n "$remote" ]; then
                     "$ADB" exec-out run-as "$pkg" cat "$remote" > "artifacts/db-$plat.db" 2>/dev/null \
                       && db="artifacts/db-$plat.db"
-                  fi
-                  # THE RUNTIME LOGS GO TO FILES, not logcat. latest.log, incidents_latest.log
-                  # and the Rust ciris-server.log* live under files/ciris/logs in the app's data
-                  # dir; logcat carries only python.stdout fragments. The 2026-09-04 RCA of a
-                  # silent Android reply had to be rebuilt from DB correlations because this
-                  # step took the DB and logcat and left the logs behind. Same run-as path as
-                  # the DB pull; a missing file is named, never silent.
-                  if [ -x "$ADB" ]; then
-                    mkdir -p "artifacts/logs/$plat"
-                    for f in $("$ADB" exec-out run-as "$pkg" sh -c 'ls files/ciris/logs 2>/dev/null' 2>/dev/null | tr -d '\r'); do
-                      case "$f" in *.log|*.log.*) "$ADB" exec-out run-as "$pkg" cat "files/ciris/logs/$f" > "artifacts/logs/$plat/$f" 2>/dev/null || echo "(could not read $f)" > "artifacts/logs/$plat/$f.MISSING" ;; esac
-                    done
-                    ls "artifacts/logs/$plat" 2>/dev/null | head -8 | sed "s|^|  pulled $plat log: |"
-                    [ -s "artifacts/logs/$plat/incidents_latest.log" ] || echo "::warning::$plat: no incidents_latest.log pulled from the device -- the agent-side story will be missing"
                   fi ;;
               ios)
                 data=$(xcrun simctl get_app_container booted ai.ciris.mobile data 2>/dev/null || true)
                 if [ -n "$data" ]; then
                   f=$(find "$data" -name ciris_engine.db 2>/dev/null | head -1)
                   [ -n "$f" ] && cp "$f" "artifacts/db-$plat.db" && db="artifacts/db-$plat.db"
-                fi
-                # THE iOS APP LOGS, on every leg outcome. _ios_diagnostics gathers them only
-                # when the simulator bring-up FAILS; a leg that came up and then failed in
-                # the wizard shipped no app-side log at all (run 33897843767). Same shape as
-                # the Android pull: the runtime's files/ciris/logs plus the KMP bridge logs,
-                # named as found, a missing set named too.
-                if [ -n "$data" ]; then
-                  mkdir -p "artifacts/logs/$plat"
-                  n=0
-                  while IFS= read -r f; do
-                    cp "$f" "artifacts/logs/$plat/$(basename "$f")" 2>/dev/null && n=$((n+1))
-                  done < <(find "$data" \( -name "*.log" -o -name "*.log.*" \) -type f -size -50M 2>/dev/null | grep -E "/ciris/logs/|kmp_[a-z]+\.log$" | head -40)
-                  echo "  pulled $n $plat log file(s) into artifacts/logs/$plat"
-                  [ -s "artifacts/logs/$plat/incidents_latest.log" ] || echo "::warning::$plat: no incidents_latest.log in the app container -- the agent-side story will be missing"
                 fi ;;
             esac
 
@@ -911,6 +883,35 @@ jobs:
                 echo "logcat unavailable (adb timed out or no device attached)" > artifacts/logs/android-logcat.txt
             else
               echo "logcat unavailable (no adb executable at '$ADB')" > artifacts/logs/android-logcat.txt
+              # THE RUNTIME LOGS GO TO FILES, not logcat: latest.log, incidents_latest.log and
+              # the Rust ciris-server.log* under files/ciris/logs in the app's data dir.
+              # Pulled HERE, in the always() collection step, because the per-platform
+              # block `continue`s on a setup/login failure before its post-chat section --
+              # a pull placed there ran only for legs that had already got past login
+              # (2026-09-04, run 33901202920: iOS failed at login, no app logs shipped).
+              if [ -x "$ADB" ]; then
+                mkdir -p artifacts/logs/android; n=0
+                for f in $("$ADB" exec-out run-as ai.ciris.mobile.debug sh -c 'ls files/ciris/logs 2>/dev/null' 2>/dev/null | tr -d '\r'); do
+                  case "$f" in *.log|*.log.*) "$ADB" exec-out run-as ai.ciris.mobile.debug cat "files/ciris/logs/$f" > "artifacts/logs/android/$f" 2>/dev/null && n=$((n+1)) ;; esac
+                done
+                echo "  pulled $n android log file(s) into artifacts/logs/android"
+                [ -s artifacts/logs/android/incidents_latest.log ] || echo "::warning::android: no incidents_latest.log pulled from the device -- the agent-side story will be missing"
+              fi
+            fi
+          fi
+          # THE iOS APP LOGS, on every leg outcome: the runtime's files/ciris/logs plus
+          # the KMP bridge logs from the app container. _ios_diagnostics gathers them
+          # only when bring-up fails; here they ship whatever happened after.
+          if [ "${MATRIX_PLATFORMS#*ios}" != "$MATRIX_PLATFORMS" ]; then
+            data=$(xcrun simctl get_app_container booted ai.ciris.mobile data 2>/dev/null || true)
+            if [ -n "$data" ]; then
+              mkdir -p artifacts/logs/ios; n=0
+              while IFS= read -r f; do cp "$f" "artifacts/logs/ios/$(basename "$f")" 2>/dev/null && n=$((n+1)); done \
+                < <(find "$data" \( -name "*.log" -o -name "*.log.*" \) -type f -size -50M 2>/dev/null | grep -E "/ciris/logs/|kmp_[a-z]+\.log$" | head -40)
+              echo "  pulled $n ios log file(s) into artifacts/logs/ios"
+              [ -s artifacts/logs/ios/incidents_latest.log ] || echo "::warning::ios: no incidents_latest.log in the app container -- the agent-side story will be missing"
+            else
+              echo "  ios: no app container resolved (app not installed on the booted simulator?) -- no app logs"
             fi
           fi
           # iOS: the SIMULATOR's own os_log for our bundle. Until now this was

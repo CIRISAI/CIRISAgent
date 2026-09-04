@@ -6,7 +6,7 @@ Provides schemas for conscience validation results and epistemic safety checks.
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -178,7 +178,13 @@ _VERB_SYNONYMS = {
 }
 
 
-def normalize_gate_verb(value: object, *, allowed: tuple, offered: tuple, fallback: Optional[Dict[str, str]] = None) -> str:
+def normalize_gate_verb(
+    value: object,
+    *,
+    allowed: Tuple[str, ...],
+    offered: Tuple[str, ...],
+    fallback: Optional[Dict[str, str]] = None,
+) -> str:
     """Return the canonical verb for a model's decision string, or raise.
 
     `allowed` is what the field accepts (may include the code's own fail-closed

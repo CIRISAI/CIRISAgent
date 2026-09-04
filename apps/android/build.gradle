@@ -25,7 +25,7 @@ android {
         applicationId "ai.ciris.mobile"
         minSdk 24
         targetSdk 36
-        versionCode 186
+        versionCode 187
         versionName "2.9.49"
 
         ndk {

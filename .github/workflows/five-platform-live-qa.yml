@@ -630,7 +630,7 @@ jobs:
               --username qaadmin --password "qa_test_password_12345" \
               $llm_args \
               --screenshot-on-success "artifacts/shots/$plat-setup.png" \
-              -v || { overall=1; python3 tools/dev/diagnose_gate_failure.py --platform "$plat" --phase setup --logs artifacts artifacts/logs artifacts/cmdlogs "${CIRIS_QA_LOG_DIR:-artifacts/cmdlogs}"  || true; echo "::endgroup::"; continue; }
+              -v || { overall=1; echo "::error::$plat setup failed"; python3 tools/dev/diagnose_gate_failure.py --platform "$plat" --phase setup --logs artifacts artifacts/logs artifacts/cmdlogs "${CIRIS_QA_LOG_DIR:-artifacts/cmdlogs}"  || true; echo "::endgroup::"; continue; }
 
             # 2. LOG IN. `desktop-setup` completes the wizard and leaves the app
             #    on the Login screen ("Desktop existing user - showing local login
@@ -644,7 +644,7 @@ jobs:
               --username qaadmin --password "qa_test_password_12345" \
               --screenshot-on-success "artifacts/shots/$plat-login.png" \
               -v \
-              || { overall=1; python3 tools/dev/diagnose_gate_failure.py --platform "$plat" --phase login --logs artifacts artifacts/logs artifacts/cmdlogs "${CIRIS_QA_LOG_DIR:-artifacts/cmdlogs}"  || true; echo "::endgroup::"; continue; }
+              || { overall=1; echo "::error::$plat login failed"; python3 tools/dev/diagnose_gate_failure.py --platform "$plat" --phase login --logs artifacts artifacts/logs artifacts/cmdlogs "${CIRIS_QA_LOG_DIR:-artifacts/cmdlogs}"  || true; echo "::endgroup::"; continue; }
 
             # 3. THE GATE: reach Interact, send a message, require a rendered
             #    reply, and photograph what shipped.
@@ -658,7 +658,7 @@ jobs:
               --platform "$target" $extra \
               --username qaadmin --password "qa_test_password_12345" \
               --screenshot-on-success "artifacts/shots/$plat.png" \
-              -v || { chat_rc=1; overall=1; python3 tools/dev/diagnose_gate_failure.py --platform "$plat" --phase interact --logs artifacts artifacts/logs artifacts/cmdlogs "${CIRIS_QA_LOG_DIR:-artifacts/cmdlogs}" --probe-provider || true; }
+              -v || { chat_rc=1; overall=1; echo "::error::$plat interact failed"; python3 tools/dev/diagnose_gate_failure.py --platform "$plat" --phase interact --logs artifacts artifacts/logs artifacts/cmdlogs "${CIRIS_QA_LOG_DIR:-artifacts/cmdlogs}" --probe-provider || true; }
 
             # RECORD THE RESULT OURSELVES. `--json-report` is FEDERATION-ONLY:
             # the global parser accepts it and only the `federation` command

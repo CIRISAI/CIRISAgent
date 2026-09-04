@@ -111,8 +111,12 @@ class BillingManager(
             .setProductList(productList)
             .build()
 
-        billingClient?.queryProductDetailsAsync(params) { billingResult, productDetailsList ->
+        // Billing 8.0 changed this callback's second argument from List<ProductDetails>
+        // to QueryProductDetailsResult, which carries the list plus per-product
+        // unfetched-id diagnostics.
+        billingClient?.queryProductDetailsAsync(params) { billingResult, queryResult ->
             if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
+                val productDetailsList = queryResult.productDetailsList
                 Log.i(TAG, "Loaded ${productDetailsList.size} products")
                 productDetailsList.forEach { product ->
                     Log.d(TAG, "Product: ${product.productId} - ${product.oneTimePurchaseOfferDetails?.formattedPrice}")

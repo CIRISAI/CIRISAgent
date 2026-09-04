@@ -600,7 +600,13 @@ dependencies {
     implementation "com.yubico.yubikit:core:3.1.0"
 
     implementation "com.google.android.gms:play-services-auth:20.7.0"
-    implementation "com.android.billingclient:billing-ktx:7.1.1"
+    // Play rejects an upload whose resolved billing library is below 8.0.0.
+    // PINNED AT 8.0.0, and it cannot move until Kotlin does: 8.1.0 and every
+    // version after it (through 9.1.0) is built against kotlin-stdlib 2.2.10 and
+    // carries Kotlin metadata 2.2/2.3, which this project's Kotlin 2.0.21
+    // compiler refuses to read ("Module was compiled with an incompatible
+    // version of Kotlin"). 8.0.0 is the last release on kotlin-stdlib 1.4.0.
+    implementation "com.android.billingclient:billing-ktx:8.0.0"
     implementation "com.google.android.play:integrity:1.4.0"
     implementation "com.microsoft.onnxruntime:onnxruntime-android:1.25.0"
 
@@ -643,8 +649,9 @@ dependencies {
     // Google Sign-In (same as original android/ project)
     implementation "com.google.android.gms:play-services-auth:20.7.0"
 
-    // Google Play Billing for in-app purchases
-    implementation "com.android.billingclient:billing-ktx:7.0.0"
+    // Google Play Billing is declared once, above. Play rejects an upload
+    // whose resolved billing library is below 8.0.0; a second, lower
+    // declaration here only invited the two to drift.
 
     // Google Play Integrity for device attestation
     implementation "com.google.android.play:integrity:1.4.0"

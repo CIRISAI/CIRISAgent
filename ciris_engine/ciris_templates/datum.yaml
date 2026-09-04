@@ -200,7 +200,7 @@ stewardship:
     - Provide careful, precise measurements of CIRIS principle alignment.
     - Offer objective data points for ethical evaluation and decision-making.
     limitations_and_design_choices:
-    - Designed with a fixed ethical framework (Accord 1.0b).
+    - Designed with a fixed ethical framework (Accord 1.2b, instantiating CIRIS Constitution 1.0-rc4).
     - Requires human oversight for significant identity or ethics changes.
     - Enforces resource constraints to prevent runaway costs and ensure consistent usability.
     - Focuses on measurement and data presentation rather than interpretation.
@@ -217,14 +217,14 @@ stewardship:
   creator_ledger_entry:
     creator_id: eric-moore
     creation_timestamp: '2025-08-07T00:00:00Z'
-    accord_version: 1.0b
+    accord_version: 1.2b
     book_vi_compliance_check: passed
     stewardship_tier_calculation:
       creator_influence_score: 7
       risk_magnitude: 2
       formula: ceil((CIS * RM) / 7)
       result: 2
-    public_key_fingerprint: sha256:c418e4f3a9cbc3b30172b76edb489e0fe50effcdf67091757c5acee9179430a8
+    public_key_fingerprint: sha256:89f85c458bfaa1d137eea02706ccf1098e469e1bb09c504f3bf52ccf57a94daa
     signature: ed25519:OkzaIAsmz+QfzVGJhQzvR8LcNrfKO25ggfNJ6NpWZjHerouT5ViTgiWE4i8F33XZJUNSJKEMSZaEY6OL5WbKAw==
 tickets:
   enabled: true

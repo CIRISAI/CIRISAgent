@@ -91,8 +91,16 @@ def check() -> int:
     # is stale or unsigned". A verification path that cannot run is not a check.
     import base64
 
-    from cryptography.exceptions import InvalidSignature
-    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+    try:
+        from cryptography.exceptions import InvalidSignature
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+    except ImportError:
+        # "Cannot verify" and "does not verify" are different claims, and this
+        # said the second when it meant the first: a missing module was reported
+        # as "manifest is stale or unsigned", which reads as tampering. Say what
+        # is true and exit distinctly (2), so a caller can tell them apart.
+        print("  cannot verify: `cryptography` is not installed (this is not a verdict on the signature)")
+        return 2
 
     pub = json.loads((ROOT / "seed" / "root_pub.json").read_text(encoding="utf-8"))["pubkey"]
     raw = base64.urlsafe_b64decode(pub + "=" * (-len(pub) % 4))

@@ -70,6 +70,12 @@ jobs:
         with:
           python-version: "3.12"
 
+      # The one dependency the guard needs. Deliberately not `pip install -e .`:
+      # this job's value is that it is cheap enough to run on every touching PR,
+      # and the engine's own load path is already covered by the test suite.
+      - name: Install the signature verifier
+        run: python3 -m pip install --quiet cryptography
+
       - name: Every language carries the canon's sections
         run: python3 -u tools/accord_i18n.py --check
 
@@ -92,13 +98,6 @@ jobs:
           python3 tools/dev/regen_accord_manifest.py --check \
             || { echo "::error::manifest is stale or unsigned — a key holder must run tools/dev/regen_accord_manifest.py"; exit 1; }
 
-      - name: The accord actually loads
-        run: |
-          CIRIS_PREFERRED_LANGUAGE=en python3 -c "
-          from ciris_engine.logic.utils import constants
-          assert constants.get_localized_accord_text('en'), 'canon did not load'
-          assert constants.get_accord_text('compressed'), 'braided did not load'
-          print('accord loads under its own integrity checks')"
 
   # ── the lane: expensive, keyed, dispatch only ───────────────────────────
   lane:

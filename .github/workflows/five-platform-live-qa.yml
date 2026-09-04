@@ -518,6 +518,19 @@ jobs:
           mkdir -p artifacts/shots artifacts/logs
           overall=0
 
+          # A FAILING LEG MUST NAME ITS LAYER. Every failure below routes through
+          # diagnose_gate_failure.py, which reads the logs, classifies the break
+          # (INFRA / CLIENT / WIRE / AGENT / SILENT / DELIVERY) and appends a row
+          # here. Header written once, before any row can land under it.
+          if [ -n "${GITHUB_STEP_SUMMARY:-}" ] && [ ! -s "${GITHUB_STEP_SUMMARY}" ]; then
+            {
+              echo "### Five-platform gate - failures by layer"
+              echo ""
+              echo "| platform | phase | layer | meaning | evidence |"
+              echo "|---|---|---|---|---|"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
           for plat in ${{ matrix.platforms }}; do
             if [ "$REQUESTED" != "all" ] && ! echo " $REQUESTED " | grep -q " $plat "; then
               echo "::notice::$plat not in requested subset — skipping"

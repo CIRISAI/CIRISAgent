@@ -27,7 +27,7 @@ on:
         options: [openrouter, together, groq, openai, deepinfra]
       model:
         description: 'Model id — CASE-SENSITIVE. Together lists both google/gemma-4-31B-it and pearl-ai/gemma-4-31b-it'
-        default: 'meta-llama/llama-4-scout'
+        default: 'qwen/qwen3.6-35b-a3b'
         type: string
       languages:
         description: 'Comma-separated locales, e.g. en or en,es,ja'

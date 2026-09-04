@@ -132,7 +132,7 @@ class SetupE2ETestModule:
                 if provider == "groq":
                     self.llm_model = "llama-3.3-70b-versatile"
                 elif provider == "openrouter":
-                    self.llm_model = "meta-llama/llama-4-maverick"
+                    self.llm_model = "qwen/qwen3.6-35b-a3b"
                 elif provider == "anthropic":
                     self.llm_model = "claude-haiku-4-5-20251001"
                 elif provider == "openai":

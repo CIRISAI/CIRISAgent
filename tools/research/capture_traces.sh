@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Capture signed CEG traces from a live model run.
 #
-#   PROVIDER=openrouter API_KEY=sk-... MODEL=meta-llama/llama-4-scout \
+#   PROVIDER=openrouter API_KEY=sk-... MODEL=qwen/qwen3.6-35b-a3b \
 #     ./tools/research/capture_traces.sh
 #
 # MODULE selects which qa_runner module produces the traces (default model_eval):
@@ -30,7 +30,7 @@
 set -euo pipefail
 
 PROVIDER="${PROVIDER:-openrouter}"
-MODEL="${MODEL:-meta-llama/llama-4-scout}"
+MODEL="${MODEL:-qwen/qwen3.6-35b-a3b}"
 # Which qa_runner module produces the traces. `model_eval` was hardcoded, so the
 # research container could capture sealed traces but could not be pointed at the
 # module whose scoreable `results.jsonl` a campaign needs — the only way through

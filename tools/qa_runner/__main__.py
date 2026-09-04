@@ -14,6 +14,8 @@ except Exception:  # pragma: no cover - never let the shim stop the runner
     pass
 
 import argparse
+import os
+import logging
 import sys
 from pathlib import Path
 from typing import List
@@ -140,17 +142,17 @@ Available modules:
         "--live", action="store_true", help="Use real LLM API instead of mock. Reads key from --live-key-file"
     )
     parser.add_argument(
-        "--live-key-file", default="~/.groq_key", help="Path to file containing API key (default: ~/.groq_key)"
+        "--live-key-file", default="~/.openrouter_key", help="Path to file containing API key (default: ~/.openrouter_key)"
     )
     parser.add_argument(
         "--live-model",
-        default="meta-llama/llama-4-maverick-17b-128e-instruct",
-        help="Model to use for live LLM (default: meta-llama/llama-4-maverick-17b-128e-instruct)",
+        default="qwen/qwen3.6-35b-a3b",
+        help="Model to use for live LLM (default: qwen/qwen3.6-35b-a3b)",
     )
     parser.add_argument(
         "--live-base-url",
-        default="https://api.groq.com/openai/v1",
-        help="Base URL for LLM API (default: https://api.groq.com/openai/v1)",
+        default="https://openrouter.ai/api/v1",
+        help="Base URL for LLM API (default: https://openrouter.ai/api/v1)",
     )
     parser.add_argument(
         "--live-provider",
@@ -697,4 +699,21 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except SystemExit as _exit:
+        # FLUSH, THEN LEAVE WITHOUT FINALIZING THE INTERPRETER. Several module
+        # monitors are daemon threads that print (stream watchers, log tees);
+        # a plain sys.exit lets interpreter finalization race them for the
+        # stdout buffer lock, and CPython aborts the process with exit -6 --
+        # after every test passed and the status files were written. os._exit
+        # ends the process once our own output is flushed; nothing after the
+        # summary needs the interpreter's teardown. main() keeps sys.exit for
+        # programmatic callers.
+        _code = _exit.code if isinstance(_exit.code, int) else (0 if _exit.code is None else 1)
+        try:
+            sys.stdout.flush()
+            sys.stderr.flush()
+            logging.shutdown()
+        finally:
+            os._exit(_code)

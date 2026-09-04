@@ -247,7 +247,11 @@ def test_the_holder_assertion_queries_where_each_platform_writes(raw: str) -> No
     check that cannot succeed is not a gate, it is a permanent red light.
     """
     block = raw.split("assert_one_holder_per_identity.py")[0]
-    tail = block[-2000:]
+    # The per-platform store resolution now sits behind the on-device LOG pulls
+    # (files/ciris/logs for Android via the same run-as; the app container for
+    # iOS), which are longer than the DB pulls they follow. The window is sized
+    # to hold both; the invariant is unchanged.
+    tail = block[-6000:]
     assert "simctl get_app_container" in tail, "iOS store is not resolved from the simulator sandbox"
     assert "run-as" in tail, "android store is not pulled from the device"
     assert "NOT COVERED" in raw.split("assert_one_holder_per_identity.py")[1][:600], (

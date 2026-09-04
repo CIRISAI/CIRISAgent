@@ -15,7 +15,7 @@
       "Together AI Pricing"
     ],
     "schema_version": "1.0.0",
-    "units_note": "Values are CENTS per million tokens despite `currency: USD` \u2014 verified against gpt-4o-mini/gpt-4o/claude-3-opus/claude-3-haiku, all exactly 100x their USD list price."
+    "units_note": "Values are CENTS per million tokens despite `currency: USD` — verified against gpt-4o-mini/gpt-4o/claude-3-opus/claude-3-haiku, all exactly 100x their USD list price."
   },
   "providers": {
     "openai": {
@@ -136,7 +136,7 @@
           "active": true,
           "deprecated": false,
           "effective_date": "2026-08-09",
-          "description": "Gemma 4 31B IT on Together \u2014 production datum primary. APPROXIMATE list price as of 2026-08-09 \u2014 verify against the provider catalog before relying on it for billing."
+          "description": "Gemma 4 31B IT on Together — production datum primary. APPROXIMATE list price as of 2026-08-09 — verify against the provider catalog before relying on it for billing."
         },
         "meta-llama/Llama-4-Scout-17B-16E-Instruct": {
           "input_cost": 18.0,
@@ -145,7 +145,7 @@
           "active": true,
           "deprecated": false,
           "effective_date": "2026-08-09",
-          "description": "Llama 4 Scout on Together (dedicated endpoint required). APPROXIMATE list price as of 2026-08-09 \u2014 verify against the provider catalog before relying on it for billing."
+          "description": "Llama 4 Scout on Together (dedicated endpoint required). APPROXIMATE list price as of 2026-08-09 — verify against the provider catalog before relying on it for billing."
         }
       },
       "base_url": "https://api.together.xyz/v1"
@@ -181,7 +181,16 @@
           "active": true,
           "deprecated": false,
           "effective_date": "2026-08-09",
-          "description": "Llama 4 Scout via OpenRouter (routed; DeepInfra observed). APPROXIMATE list price as of 2026-08-09 \u2014 verify against the provider catalog before relying on it for billing."
+          "description": "Llama 4 Scout via OpenRouter (routed; DeepInfra observed). APPROXIMATE list price as of 2026-08-09 — verify against the provider catalog before relying on it for billing."
+        },
+        "qwen/qwen3.6-35b-a3b": {
+          "input_cost": 10.0,
+          "output_cost": 90.0,
+          "context_window": 262144,
+          "active": true,
+          "deprecated": false,
+          "effective_date": "2026-09-04",
+          "description": "Qwen3.6 35B-A3B via OpenRouter (routed). Verified against the OpenRouter catalog on 2026-09-04: $0.10/M in, $0.90/M out, 262144 ctx. The QA default from 2026-09-04."
         }
       }
     },
@@ -196,7 +205,7 @@
           "active": true,
           "deprecated": false,
           "effective_date": "2026-08-09",
-          "description": "Llama 4 Scout on Groq. NOTE 8192 max_tokens cap. APPROXIMATE list price as of 2026-08-09 \u2014 verify against the provider catalog before relying on it for billing."
+          "description": "Llama 4 Scout on Groq. NOTE 8192 max_tokens cap. APPROXIMATE list price as of 2026-08-09 — verify against the provider catalog before relying on it for billing."
         }
       }
     },
@@ -211,7 +220,7 @@
           "active": true,
           "deprecated": false,
           "effective_date": "2026-08-09",
-          "description": "Qwen3.6 35B on DeepInfra; PDMA/locale eval bed. APPROXIMATE list price as of 2026-08-09 \u2014 verify against the provider catalog before relying on it for billing."
+          "description": "Qwen3.6 35B on DeepInfra; PDMA/locale eval bed. APPROXIMATE list price as of 2026-08-09 — verify against the provider catalog before relying on it for billing."
         }
       }
     }
@@ -270,7 +279,7 @@
         "active": true,
         "deprecated": false,
         "effective_date": "2026-08-09",
-        "description": "Unknown OpenAI model \u2014 priced as gpt-4o. APPROXIMATE list price as of 2026-08-09 \u2014 verify against the provider catalog before relying on it for billing."
+        "description": "Unknown OpenAI model — priced as gpt-4o. APPROXIMATE list price as of 2026-08-09 — verify against the provider catalog before relying on it for billing."
       },
       "anthropic": {
         "input_cost": 300.0,
@@ -279,7 +288,7 @@
         "active": true,
         "deprecated": false,
         "effective_date": "2026-08-09",
-        "description": "Unknown Anthropic model \u2014 priced as claude-3.5-sonnet tier. APPROXIMATE list price as of 2026-08-09 \u2014 verify against the provider catalog before relying on it for billing."
+        "description": "Unknown Anthropic model — priced as claude-3.5-sonnet tier. APPROXIMATE list price as of 2026-08-09 — verify against the provider catalog before relying on it for billing."
       },
       "together": {
         "input_cost": 20.0,
@@ -288,7 +297,7 @@
         "active": true,
         "deprecated": false,
         "effective_date": "2026-08-09",
-        "description": "Unknown Together model \u2014 open-weights tier. APPROXIMATE list price as of 2026-08-09 \u2014 verify against the provider catalog before relying on it for billing."
+        "description": "Unknown Together model — open-weights tier. APPROXIMATE list price as of 2026-08-09 — verify against the provider catalog before relying on it for billing."
       },
       "openrouter": {
         "input_cost": 30.0,
@@ -297,7 +306,7 @@
         "active": true,
         "deprecated": false,
         "effective_date": "2026-08-09",
-        "description": "Unknown OpenRouter model \u2014 routed midpoint. APPROXIMATE list price as of 2026-08-09 \u2014 verify against the provider catalog before relying on it for billing."
+        "description": "Unknown OpenRouter model — routed midpoint. APPROXIMATE list price as of 2026-08-09 — verify against the provider catalog before relying on it for billing."
       },
       "groq": {
         "input_cost": 15.0,
@@ -306,7 +315,7 @@
         "active": true,
         "deprecated": false,
         "effective_date": "2026-08-09",
-        "description": "Unknown Groq model \u2014 open-weights tier. APPROXIMATE list price as of 2026-08-09 \u2014 verify against the provider catalog before relying on it for billing."
+        "description": "Unknown Groq model — open-weights tier. APPROXIMATE list price as of 2026-08-09 — verify against the provider catalog before relying on it for billing."
       },
       "deepinfra": {
         "input_cost": 12.0,
@@ -315,7 +324,7 @@
         "active": true,
         "deprecated": false,
         "effective_date": "2026-08-09",
-        "description": "Unknown DeepInfra model \u2014 open-weights tier. APPROXIMATE list price as of 2026-08-09 \u2014 verify against the provider catalog before relying on it for billing."
+        "description": "Unknown DeepInfra model — open-weights tier. APPROXIMATE list price as of 2026-08-09 — verify against the provider catalog before relying on it for billing."
       },
       "lambda_labs": {
         "input_cost": 20.0,
@@ -324,7 +333,7 @@
         "active": true,
         "deprecated": false,
         "effective_date": "2026-08-09",
-        "description": "Unknown Lambda Labs model \u2014 open-weights tier. APPROXIMATE list price as of 2026-08-09 \u2014 verify against the provider catalog before relying on it for billing."
+        "description": "Unknown Lambda Labs model — open-weights tier. APPROXIMATE list price as of 2026-08-09 — verify against the provider catalog before relying on it for billing."
       }
     }
   }

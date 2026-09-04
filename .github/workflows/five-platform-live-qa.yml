@@ -484,7 +484,10 @@ jobs:
           # above, as the script's own preflight confirms ("Resources: 46MB").
           # --quick overlays the repo's live ciris_engine/ciris_adapters onto it,
           # which is the part CI exists to test.
-          bash apps/ios/scripts/rebuild_and_deploy.sh --quick 2>&1 \
+          # --no-launch: install only. Launching here left the iOS app holding
+          # :8080/:9091 across the macOS desktop leg on the same loopback; the
+          # driver's ios-simulator-up launches it when the iOS leg starts.
+          bash apps/ios/scripts/rebuild_and_deploy.sh --quick --no-launch 2>&1 \
             | tee artifacts/cmdlogs/ios-rebuild-and-deploy.log | tail -30
           # Same locator the script uses — note -not -path Index.noindex, which a
           # naive find picks up and then installs a stub that launches to nothing.
@@ -518,6 +521,19 @@ jobs:
           mkdir -p artifacts/shots artifacts/logs
           overall=0
 
+          # A FAILING LEG MUST NAME ITS LAYER. Every failure below routes through
+          # diagnose_gate_failure.py, which reads the logs, classifies the break
+          # (INFRA / CLIENT / WIRE / AGENT / SILENT / DELIVERY) and appends a row
+          # here. Header written once, before any row can land under it.
+          if [ -n "${GITHUB_STEP_SUMMARY:-}" ] && [ ! -s "${GITHUB_STEP_SUMMARY}" ]; then
+            {
+              echo "### Five-platform gate - failures by layer"
+              echo ""
+              echo "| platform | phase | layer | meaning | evidence |"
+              echo "|---|---|---|---|---|"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
           for plat in ${{ matrix.platforms }}; do
             if [ "$REQUESTED" != "all" ] && ! echo " $REQUESTED " | grep -q " $plat "; then
               echo "::notice::$plat not in requested subset — skipping"
@@ -547,9 +563,14 @@ jobs:
               # model it had chosen for itself. "Whatever sorts first" is not a
               # model choice.
               #
-              # meta-llama/llama-4-scout is the documented OpenRouter QA model
-              # (CLAUDE.md, live model matrix).
-              llm_args="--llm-provider openrouter --llm-key $OPENROUTER_API_KEY --llm-require-live-models --llm-model meta-llama/llama-4-scout"
+              # qwen/qwen3.6-35b-a3b is the OpenRouter QA default (CLAUDE.md, live
+              # model matrix). It replaced meta-llama/llama-4-scout on 2026-09-04
+              # after an RCA on the Android leg: scout returned malformed
+              # structured output for the epistemic-humility conscience twice in
+              # one thought (recommended_action="speak" instead of the enum, then
+              # a missing required field), each turning a correct SPEAK into a
+              # forced PONDER. Qwen returned the schema exactly on the same prompt.
+              llm_args="--llm-provider openrouter --llm-key $OPENROUTER_API_KEY --llm-require-live-models --llm-model qwen/qwen3.6-35b-a3b"
               echo "LLM: REAL key (live models required)"
             else
               echo "LLM: mock (no secret available) — flow is covered, the wire is NOT"
@@ -609,7 +630,7 @@ jobs:
               --username qaadmin --password "qa_test_password_12345" \
               $llm_args \
               --screenshot-on-success "artifacts/shots/$plat-setup.png" \
-              -v || { overall=1; echo "::error::$plat setup failed"; echo "::endgroup::"; continue; }
+              -v || { overall=1; echo "::error::$plat setup failed"; python3 tools/dev/diagnose_gate_failure.py --platform "$plat" --phase setup --logs artifacts artifacts/logs artifacts/cmdlogs "${CIRIS_QA_LOG_DIR:-artifacts/cmdlogs}"  || true; echo "::endgroup::"; continue; }
 
             # 2. LOG IN. `desktop-setup` completes the wizard and leaves the app
             #    on the Login screen ("Desktop existing user - showing local login
@@ -623,7 +644,7 @@ jobs:
               --username qaadmin --password "qa_test_password_12345" \
               --screenshot-on-success "artifacts/shots/$plat-login.png" \
               -v \
-              || { overall=1; echo "::error::$plat login failed"; echo "::endgroup::"; continue; }
+              || { overall=1; echo "::error::$plat login failed"; python3 tools/dev/diagnose_gate_failure.py --platform "$plat" --phase login --logs artifacts artifacts/logs artifacts/cmdlogs "${CIRIS_QA_LOG_DIR:-artifacts/cmdlogs}"  || true; echo "::endgroup::"; continue; }
 
             # 3. THE GATE: reach Interact, send a message, require a rendered
             #    reply, and photograph what shipped.
@@ -637,7 +658,7 @@ jobs:
               --platform "$target" $extra \
               --username qaadmin --password "qa_test_password_12345" \
               --screenshot-on-success "artifacts/shots/$plat.png" \
-              -v || { chat_rc=1; overall=1; echo "::error::$plat interact failed"; }
+              -v || { chat_rc=1; overall=1; echo "::error::$plat interact failed"; python3 tools/dev/diagnose_gate_failure.py --platform "$plat" --phase interact --logs artifacts artifacts/logs artifacts/cmdlogs "${CIRIS_QA_LOG_DIR:-artifacts/cmdlogs}" --probe-provider || true; }
 
             # RECORD THE RESULT OURSELVES. `--json-report` is FEDERATION-ONLY:
             # the global parser accepts it and only the `federation` command
@@ -862,6 +883,35 @@ jobs:
                 echo "logcat unavailable (adb timed out or no device attached)" > artifacts/logs/android-logcat.txt
             else
               echo "logcat unavailable (no adb executable at '$ADB')" > artifacts/logs/android-logcat.txt
+              # THE RUNTIME LOGS GO TO FILES, not logcat: latest.log, incidents_latest.log and
+              # the Rust ciris-server.log* under files/ciris/logs in the app's data dir.
+              # Pulled HERE, in the always() collection step, because the per-platform
+              # block `continue`s on a setup/login failure before its post-chat section --
+              # a pull placed there ran only for legs that had already got past login
+              # (2026-09-04, run 33901202920: iOS failed at login, no app logs shipped).
+              if [ -x "$ADB" ]; then
+                mkdir -p artifacts/logs/android; n=0
+                for f in $("$ADB" exec-out run-as ai.ciris.mobile.debug sh -c 'ls files/ciris/logs 2>/dev/null' 2>/dev/null | tr -d '\r'); do
+                  case "$f" in *.log|*.log.*) "$ADB" exec-out run-as ai.ciris.mobile.debug cat "files/ciris/logs/$f" > "artifacts/logs/android/$f" 2>/dev/null && n=$((n+1)) ;; esac
+                done
+                echo "  pulled $n android log file(s) into artifacts/logs/android"
+                ls artifacts/logs/android/incidents_latest.log artifacts/logs/android/incidents_*.log >/dev/null 2>&1 || echo "::warning::android: no incidents log pulled from the device -- the agent-side story will be missing"
+              fi
+            fi
+          fi
+          # THE iOS APP LOGS, on every leg outcome: the runtime's files/ciris/logs plus
+          # the KMP bridge logs from the app container. _ios_diagnostics gathers them
+          # only when bring-up fails; here they ship whatever happened after.
+          if [ "${MATRIX_PLATFORMS#*ios}" != "$MATRIX_PLATFORMS" ]; then
+            data=$(xcrun simctl get_app_container booted ai.ciris.mobile data 2>/dev/null || true)
+            if [ -n "$data" ]; then
+              mkdir -p artifacts/logs/ios; n=0
+              while IFS= read -r f; do cp "$f" "artifacts/logs/ios/$(basename "$f")" 2>/dev/null && n=$((n+1)); done \
+                < <(find "$data" \( -name "*.log" -o -name "*.log.*" \) -type f -size -50M 2>/dev/null | grep -E "/ciris/logs/|kmp_[a-z]+\.log$" | head -40)
+              echo "  pulled $n ios log file(s) into artifacts/logs/ios"
+              ls artifacts/logs/ios/incidents_latest.log artifacts/logs/ios/incidents_*.log >/dev/null 2>&1 || echo "::warning::ios: no incidents log in the app container -- the agent-side story will be missing"
+            else
+              echo "  ios: no app container resolved (app not installed on the booted simulator?) -- no app logs"
             fi
           fi
           # iOS: the SIMULATOR's own os_log for our bundle. Until now this was

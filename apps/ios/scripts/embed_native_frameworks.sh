@@ -367,7 +367,30 @@ sim_make_framework() {
 }
 
 # --- 1. stdlib lib-dynload (simulator slice of Python.xcframework) ---
-SIM_LIB_DYNLOAD="${PROJECT_DIR}/Frameworks/Python.xcframework/ios-arm64_x86_64-simulator/lib/python3.10/lib-dynload"
+# TWO LAYOUTS, AND THIS IS THE PATH THAT ACTUALLY RUNS FOR THE SIMULATOR.
+# BeeWare's 3.10-b14 package -- the one CI materialises -- keeps lib-dynload
+# under a per-arch directory (lib-arm64/, lib-x86_64/); its lib/ has no
+# lib-dynload at all. Listed from the tarball: 136 simulator .so files, every
+# one under lib-arm64/python3.10/lib-dynload/. Older packages used lib/.
+#
+# Hardcoding lib/ meant this loop found nothing on every CI run, so the .app
+# shipped 0 Python extension frameworks and every .fwork redirect in the
+# bundled stdlib dangled -- kmp_main died on `import struct` before the
+# backend could start (runs 33708152999 / 33710240426 / 33711249310 / the
+# 09-03 nightly). An earlier attempt at this fix was written into the
+# Release/iphoneos branch above, which a Debug simulator build never enters,
+# so it changed nothing here.
+SIM_SLICE="${PROJECT_DIR}/Frameworks/Python.xcframework/ios-arm64_x86_64-simulator"
+SIM_HOST_ARCH="$(uname -m)"; [ "$SIM_HOST_ARCH" = "x86_64" ] || SIM_HOST_ARCH="arm64"
+SIM_LIB_DYNLOAD=""
+for _libdir in "lib-${SIM_HOST_ARCH}" "lib-arm64" "lib-x86_64" "lib"; do
+    if [ -d "${SIM_SLICE}/${_libdir}/python3.10/lib-dynload" ]; then
+        SIM_LIB_DYNLOAD="${SIM_SLICE}/${_libdir}/python3.10/lib-dynload"
+        break
+    fi
+done
+[ -n "$SIM_LIB_DYNLOAD" ] || SIM_LIB_DYNLOAD="${SIM_SLICE}/lib/python3.10/lib-dynload"
+echo "  simulator lib-dynload: $SIM_LIB_DYNLOAD"
 stdlib_n=0
 if [ -d "$SIM_LIB_DYNLOAD" ]; then
     for so_file in "$SIM_LIB_DYNLOAD"/*.so; do

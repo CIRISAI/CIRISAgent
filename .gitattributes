@@ -45,8 +45,8 @@ seed/*.sig                                -text
 # rather than a silent one.
 ciris_engine/data/accord_1.2b_POLYGLOT.txt             -text
 ciris_engine/data/accord_1.2b_POLYGLOT_compressed.txt  -text
-ciris_engine/data/CIRIS_COMPREHENSIVE_GUIDE.md         -text
-ciris_engine/data/CIRIS_COMPREHENSIVE_GUIDE_MOBILE.md  -text
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE.txt        -text
+ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_MOBILE.txt -text
 
 # Localized ACCORD + guide corpora. Not manifest-covered today, but they are
 # content whose bytes matter and which a future manifest is likely to cover.

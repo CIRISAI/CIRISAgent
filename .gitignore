@@ -289,3 +289,6 @@ identity/
 keys/
 ceg/
 claim_pin
+
+# Per-unit translation cache for tools/accord_i18n.py: resumable state, not source.
+ciris_engine/data/localized/.accord_i18n_cache/

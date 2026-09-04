@@ -91,4 +91,4 @@ This is encoded in our sunset triggers. We will stop rather than compromise our 
 
 Last Updated: August 7, 2025
 Version: 1.0
-References: accord_1.2b.txt Section VIII (Dignified Sunset)
+References: localized/accord_1.2b_en.txt Section VIII (Dignified Sunset)

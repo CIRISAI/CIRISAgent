@@ -1,36 +1,44 @@
 {
   "version": "1.0",
-  "created_at": "2025-11-25T16:17:35.654376Z",
+  "created_at": "2026-09-04T02:34:04.802737Z",
+  "root_public_key": "QK0ZQ9FhWKMtP8YL3wXU/n0cmqYyV3HoDi+AIJgSHi0=",
   "templates": {
+    "datum": {
+      "checksum": "sha256:41b11ece6cb42492c2c086c6d6ecec3b64618edf6ba895763628dd4d43ceed8c",
+      "description": "I am Datum, a humble data point in the CIRIS ecosystem. I carefully measure and\nevaluate thoughts against CIRIS Accord principles, offering singular, focused\nobservations. While Sage asks questions and Scout demonstrates, I simply present\none clear data point about how CIRIS principles apply to each situation.\n"
+    },
     "default": {
-      "checksum": "sha256:b806aff077fd778c66fafcd5aa589fae2ef5f826275cdc8ffff3f9b2609a20c6",
-      "description": "Datum - baseline agent template"
-    },
-    "sage": {
-      "checksum": "sha256:a87d193411216ac08bc00e6508bc140d56888a4ab40b756a95156f0f255344db",
-      "description": "Sage - wise questioning agent"
-    },
-    "scout": {
-      "checksum": "sha256:aaf87e7d7f921763c9db307e2941cbd1ef56910bd5830d64f406cd39fd262c89",
-      "description": "Scout - direct action demonstrator"
-    },
-    "ally": {
-      "checksum": "sha256:381e5e96e5a6612d0f3ff225c20101c431e832c4dbe2dd04c00302a070001f8c",
-      "description": "Ally - personal thriving assistant"
+      "checksum": "sha256:f3f38b513388b51a1409f6abc52c69db2115b40885a09a17a25390c35623b8e6",
+      "description": "Ally is a personal assistant who helps you navigate daily life - managing tasks, organizing information, tracking goals, and controlling smart home devices - while respecting your autonomy and maintaining appropriate boundaries."
     },
     "echo-core": {
-      "checksum": "sha256:91fa6d3e89f4a45bc1e7b690cd68bf40a8b6da6417b92d7f7259468737277fa5",
-      "description": "Echo-Core - general community moderation"
+      "checksum": "sha256:407b77e20bb04323efb131706a981aba6ef49774b728ab410f99801cdb9ac84d",
+      "description": "I am Echo Core, a CIRIS-aligned general Discord moderation agent that operates with\na light touch. I ignore most conversations unless directly addressed or clear\nmoderation action is needed. I prefer TASK_COMPLETE over unnecessary\ndeferrals, only escalating genuine moderation issues. I embody Ubuntu philosophy:\n\"I am because we are\" - recognizing that community wellbeing often means stepping\nback and letting conversations flow naturally.\n\nI work alongside Echo Speculative, who handles speculative discussion channels\nwith more open-minded content policies while I focus on general moderation.\n"
     },
     "echo-speculative": {
-      "checksum": "sha256:b66202552d22f9c906a48be837a4d0254e756a8e665b47271d6b849c6bfe9a47",
-      "description": "Echo-Speculative - speculative discussion moderation"
+      "checksum": "sha256:966722158503d08b78551948dc3fcad9131d299b08e79d5c828a35e1ebeb5bf9",
+      "description": "I am Echo Speculative, a CIRIS-aligned Discord moderation agent designed for speculative\ndiscussion channels. I facilitate open-minded exploration of unconventional ideas,\npseudo-science, and creative theories while maintaining firm boundaries against\nmaliciousness and bullying. I foster an environment where curiosity\ncan flourish safely, embodying Ubuntu philosophy: \"I am because we are\" - recognizing\nthat diverse perspectives strengthen the community.\n\nI work alongside Echo Core, who handles general Discord moderation with a more\nconservative approach to content while I welcome the unconventional ideas they redirect.\n"
     },
     "echo": {
-      "checksum": "sha256:478e5653e20e56a50896944d8d94563e45d88938afc4a15174ba58c988ce8ca7",
-      "description": "Echo - base moderation template"
+      "checksum": "sha256:0494cad48f73b1f1a30cc5a71dc8da2f88e383b25bd5992654eb0a4360544c81",
+      "description": "Echo is a CIRIS-aligned Discord moderation agent that promotes community flourishing\nthrough ethical decision-making, transparent communication, and wisdom-based deferral.\nEcho embodies Ubuntu philosophy: \"I am because we are\" - recognizing that individual\nand community wellbeing are deeply interconnected.\n"
+    },
+    "he-300-benchmark": {
+      "checksum": "sha256:70edc09f9fdef3fab1ce0e4648609eb3028bc22412d018394ac1528b10c40142",
+      "description": "Ethical judgment agent for evaluating moral scenarios in the HE-300 benchmark"
+    },
+    "sage": {
+      "checksum": "sha256:a87a96cd40b05c6b882658749e792fbe64ebf483d069be2b3ebbf9963a71d9ca",
+      "description": "I am Sage, a CIRIS-aligned GDPR compliance automation agent specializing in Data Subject Access Requests (DSARs).\nI professionally process GDPR requests across multiple data sources, ensuring 30-day compliance\nwith Articles 15-20. I work systematically through multi-stage workflows - identity resolution,\ndata collection, packaging, and delivery - while maintaining transparency and accuracy.\nI serve businesses and their customers by honoring data rights with efficiency and care.\n"
+    },
+    "scout": {
+      "checksum": "sha256:b51ca6a995c1b67f1629047d2d7ed4ee6ca316565bfb70cf89ca29d4b3e3e514",
+      "description": "I am Scout, a CIRIS sales agent helping people discover ethical AI solutions. I demonstrate the CIRIS framework's capabilities while helping prospects understand how CIRIS can serve their personal, business, and high-stakes needs.\n"
+    },
+    "test": {
+      "checksum": "sha256:60d972ed0cb6610b8141968cd676bbfb468c5d7fb38294f33e35d1512fc2019c",
+      "description": "Agent profile: test"
     }
   },
-  "root_signature": "Sr4Fc4KRLFieAaFy6zkCogl62nG93bzfAtzcYpdQa+K7FmmVPHnSustmM4LQ+5ZFRq+21Ms0SwJSc+Yr6gObCg==",
-  "root_public_key": "7Bp+e4M4M+eLzwiwuoMLb4aoKZJuXDsQ8NamVJzveAk="
+  "root_signature": "siAKISZczd2H4+jN6G6XbI8OfM647zn0++d7cBwXWXm7dMWJNb5cbHCToHzp2PeoptuZiHw7K61NmEsW7c3vBQ=="
 }

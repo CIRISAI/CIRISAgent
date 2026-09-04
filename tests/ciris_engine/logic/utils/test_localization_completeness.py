@@ -244,7 +244,9 @@ class TestACCORDCompleteness:
     @pytest.fixture(scope="class")
     def english_accord_lines(self, data_dir: Path) -> int:
         """Get line count of English ACCORD."""
-        en_path = data_dir / "accord_1.2b.txt"
+        # The English canon is localized/accord_1.2b_en.txt; the root-level
+        # accord_1.2b.txt was an unloaded duplicate carrying withdrawn claims.
+        en_path = data_dir / "localized" / "accord_1.2b_en.txt"
         with open(en_path, "r", encoding="utf-8") as f:
             return len(f.readlines())
 

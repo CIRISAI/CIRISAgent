@@ -43,8 +43,8 @@ The canonical signed manifest lives in the upstream CIRIS substrate (the verifie
     - `tools/dev/stage_runtime.py:25-36` — include roots are `ciris_engine`, `ciris_adapters`, `ciris_sdk`; exempt directories and extensions are enumerated.
     - `tools/dev/stage_runtime.py:49-51` — `--print-manifest` output is CI-stable and diffable against the registered manifest.
 - **Template manifest — subordinate signed chain for templates**:
-    - `tools/templates/generate_manifest.py:3` — generates a signed manifest of pre-approved agent templates.
-    - `tools/templates/generate-template-manifest.py:3` and `tools/generate_template_manifest.py:3` — alternate entry points.
+    - `tools/dev/regen_template_manifest.py:1` — generates a signed manifest of pre-approved agent templates, enumerating the template directory rather than a hardcoded list.
+    - `tests/test_template_integrity.py` — gates checksum, coverage, signature and ledger-key agreement in CI.
     - `tools/templates/validate_templates.py` — validates templates against the signed manifest before runtime loads them.
 - **Runtime verification — every loadable file fingerprint-checked**:
     - `ciris_engine/logic/services/infrastructure/authentication/attestation/tree_verify.py` — walks the file tree and reproduces the same hashes the signing-time walker produced.
@@ -85,7 +85,7 @@ If you want to verify the running agent against its registered manifest, the per
 - **Identity-lineage cross-link to build manifest** — `IdentityLineage` tracks identity creation provenance but is not yet cross-linked to the build manifest ("I was created by an agent running build hash X"). Next step.
 - **Skill-import signed manifests** — community skill imports validate source URL but do not yet require a signed manifest. The substrate spec for this primitive is `provenance:skill_import:{source}`; tracked at `CIRISRegistry#28`.
 
-Proposed pointer (from seed): `(none specified in seed)` — Agent-side primary code: `tools/dev/stage_runtime.py` (canonical staging), `tools/templates/generate_manifest.py` (template manifest), `ciris_engine/logic/services/infrastructure/authentication/attestation/tree_verify.py` (runtime verification), `ciris_engine/schemas/services/attestation.py:69-167` (per-file results, cross-validation flags).
+Proposed pointer (from seed): `(none specified in seed)` — Agent-side primary code: `tools/dev/stage_runtime.py` (canonical staging), `tools/dev/regen_template_manifest.py` (template manifest), `ciris_engine/logic/services/infrastructure/authentication/attestation/tree_verify.py` (runtime verification), `ciris_engine/schemas/services/attestation.py:69-167` (per-file results, cross-validation flags).
 
 ## Quantitative baseline
 

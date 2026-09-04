@@ -38,6 +38,7 @@ and revocation (withdraws/recants) only function if these emits run.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import hashlib
 import logging
 import os
@@ -427,6 +428,24 @@ def build_community_structural(
     )
 
 
+def _instant(row: "dict[str, object]") -> "datetime":
+    """Sort key for a persist row's ``asserted_at``: the INSTANT, never its rendering.
+
+    Persist v39 moved signed instants from microsecond to millisecond resolution
+    (CC 2.6.2), so a corpus that spans the upgrade carries both ``.049840Z`` and
+    ``.049Z`` -- and lexically ``.049840Z`` < ``.049Z`` because ``'8'`` < ``'Z'``.
+    Sorting the string picked a pre-v39 grant asserted LATER as older than a
+    post-v39 grant in the same second (CIRISAgent#1136). Persist's own
+    ``check_instant_binding`` parses tolerantly for the same reason; so do we.
+    An unparseable value sorts last.
+    """
+    raw = str(row.get("asserted_at") or "")
+    try:
+        return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return datetime.min.replace(tzinfo=timezone.utc)
+
+
 def current_community_grant_id() -> Optional[str]:
     """attestation_id of the current community-trust grant, or None.
 
@@ -497,7 +516,7 @@ def current_community_grant_id() -> Optional[str]:
         grants = [r for r in rows if r.get("attestation_type") == "scores"]
         if not grants:
             return None
-        grants.sort(key=lambda r: r.get("asserted_at", ""), reverse=True)
+        grants.sort(key=_instant, reverse=True)
         return str(grants[0].get("attestation_id"))
     except Exception as exc:  # pragma: no cover - defensive
         logger.debug("consent-CEG: grant lookup failed: %s", exc)
@@ -530,7 +549,7 @@ def current_community_grant_asserted_at() -> Optional[str]:
         grants = [r for r in rows if r.get("attestation_type") == "scores"]
         if not grants:
             return None
-        grants.sort(key=lambda r: r.get("asserted_at", ""), reverse=True)
+        grants.sort(key=_instant, reverse=True)
         asserted_at = grants[0].get("asserted_at")
         return str(asserted_at) if asserted_at else None
     except Exception as exc:  # pragma: no cover - defensive

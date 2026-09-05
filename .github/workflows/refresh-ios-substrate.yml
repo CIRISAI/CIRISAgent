@@ -96,7 +96,11 @@ concurrency:
   # cancel-in-progress, so two PRs bumping the substrate pin at the same time
   # cancelled each other's refresh and whichever lost came back "stale" with no
   # explanation. The refresh is per-branch work; the mutex must be too.
-  group: refresh-ios-substrate-${{ inputs.target_branch || github.ref }}
+  # ...and PER MODE. The five-platform gate calls this workflow in upload-only
+  # mode on every PR run; a dispatched refresh that COMMITS shares the branch
+  # but not the work, and with one group the gate's call cancelled the dispatch
+  # eight seconds into its checkout (2026-09-05, release/2.10.0).
+  group: refresh-ios-substrate-${{ inputs.target_branch || github.ref }}-${{ inputs.upload_only && 'upload' || 'commit' }}
   cancel-in-progress: true
 
 jobs:

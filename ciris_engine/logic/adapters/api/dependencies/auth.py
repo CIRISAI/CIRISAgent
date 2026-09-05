@@ -299,6 +299,26 @@ def _describe_token_family(token: str) -> str:
     return "unrecognized"
 
 
+def _identity_unavailable_detail() -> str:
+    """The 503's reason, when the Edge runtime is the thing that is down (#1101).
+
+    An outage is not a rejection, so the status stays 503; but "unavailable"
+    with no cause is what let an Edge-init failure hide behind a green health
+    for a whole E2E. The Edge module remembers why it did not come up.
+    """
+    try:
+        from ciris_engine.logic.runtime import edge_runtime
+
+        if not edge_runtime.is_available():
+            why = edge_runtime.get_init_error()
+            if edge_runtime._edge_disabled():
+                return "Identity verification unavailable: edge runtime disabled by environment"
+            return "Identity verification unavailable: edge runtime not initialized" + (f" ({why})" if why else "")
+    except Exception:  # noqa: BLE001 — the detail must never be the failure
+        pass
+    return "Identity verification unavailable"
+
+
 def resolve_substrate_session(token: str) -> Dict[str, Any]:
     """Ask the substrate who this `sess:` token is. Shared by BOTH auth surfaces.
 
@@ -333,7 +353,7 @@ def resolve_substrate_session(token: str) -> Dict[str, Any]:
         )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Identity verification unavailable",
+            detail=_identity_unavailable_detail(),
         ) from None
 
     if resolved is None:

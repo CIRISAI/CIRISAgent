@@ -387,6 +387,12 @@ class CIRISRuntime(ServicePropertyMixin):
 
     async def initialize(self) -> None:
         """Initialize all components and services."""
+        # An in-process RESTART (mobile resume) reuses the module-level shutdown
+        # service from the run that just ended; shed it if it belongs to a dead
+        # loop, or the new runtime exits at birth / wedges on its Event (#1122).
+        from ciris_engine.logic.utils.shutdown_manager import reset_global_shutdown_service_if_stale
+
+        reset_global_shutdown_service_if_stale()
         if self._initialized:
             return
 
@@ -520,16 +526,20 @@ class CIRISRuntime(ServicePropertyMixin):
 
         # Phase 1 (post-database): CIRISEdge federation runtime.
         # Consumes the persist Engine from the previous step (CIRISEdge#16
-        # cohabitation). Currently best-effort due to Edge v0.9.1's PyO3
-        # cross-crate PyClass identity bug (CIRISEdge#22 — issuecomment-4560383149);
-        # flip to critical=True once Edge v0.9.2+ ships the fix (task #197).
-        # When degraded, `GET /v1/system/federation` returns `{available: false}`.
+        # cohabitation). A failure here is a boot failure: session auth cannot
+        # run without it (#1101). When Edge is DISABLED by env the step is a no-op;
+        # `GET /v1/system/federation` then returns `{available: false}`.
         init_manager.register_step(
             phase=InitializationPhase.DATABASE,
             name="Initialize Edge Runtime",
             handler=self._init_edge_runtime,
             verifier=self._verify_edge_runtime,
-            critical=False,
+            # CRITICAL (CIRISAgent#1101): every `sess:` bearer is judged by the
+            # in-process substrate. With Edge down the API answered 503 to every
+            # session while health stayed green. The step is skipped cleanly when
+            # Edge is disabled by env (pytest / CIRIS_EDGE_DISABLED), and the
+            # PyO3-cohabitation branch still degrades rather than raising.
+            critical=True,
         )
 
         # Phase 2: MEMORY
@@ -1868,11 +1878,34 @@ class CIRISRuntime(ServicePropertyMixin):
 
         logger.debug("Stopping core services...")
         await execute_service_shutdown_sequence(self)
+        await self._release_substrate()
 
         await finalize_shutdown_logging(self)
         await cleanup_runtime_resources(self)
         validate_shutdown_completion(self)
         logger.debug("Shutdown method returning")
+
+    async def _release_substrate(self) -> None:
+        """Stop the node fold and close the Edge transport before Python exits (#1102).
+
+        Order matters: the node (4243) serves on the edge (4242), so the node
+        goes first. Both calls block with the GIL released and are bounded; a
+        timeout is logged, never raised -- the process must still exit, and the
+        next boot's Edge init now names a held port in its own words (#1101).
+        """
+        from ciris_engine.logic.runtime import edge_runtime, node_fold
+
+        for label, fn, budget in (
+            ("node fold", lambda: node_fold.stop_node_fold(timeout_secs=30.0), 35.0),
+            ("edge runtime", lambda: edge_runtime.close_edge_runtime(), 15.0),
+        ):
+            try:
+                result = await asyncio.wait_for(asyncio.to_thread(fn), timeout=budget)
+                logger.info("Substrate release: %s -> %s", label, result)
+            except asyncio.TimeoutError:
+                logger.warning("Substrate release: %s did not finish within %.0fs; ports may stay bound (#1102)", label, budget)
+            except Exception as exc:  # noqa: BLE001 -- shutdown must finish
+                logger.warning("Substrate release: %s raised (continuing): %s", label, exc)
 
     async def _create_startup_node(self) -> None:
         """Create startup node for continuity tracking."""

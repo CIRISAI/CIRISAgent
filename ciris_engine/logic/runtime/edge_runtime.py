@@ -46,6 +46,27 @@ _edge: Optional[Any] = None
 # substrate later verifies".
 _actor_key_id: Optional[str] = None
 _node_key_id: Optional[str] = None
+#: Why the last `initialize_edge_runtime` failed (None when it succeeded or never
+#: ran). Session auth (`sess:` bearers) hard-depends on the in-process substrate;
+#: health and the 503 detail carry this so an Edge outage is never a silent one
+#: (CIRISAgent#1101).
+_init_error: Optional[str] = None
+
+_PORT_IN_USE_MARKERS = ("address already in use", "addrinuse", "os error 98", "os error 48", "errno 98", "errno 48")
+
+
+def _describe_init_failure(exc: BaseException) -> str:
+    """Name the failure in operator terms; port contention gets its own diagnosis."""
+    text = str(exc)
+    if any(m in text.lower() for m in _PORT_IN_USE_MARKERS):
+        listen = os.environ.get("CIRIS_EDGE_LISTEN_ADDR", "0.0.0.0:4242")
+        return (
+            f"Edge transport ports are held by another process ({text}). The listener is {listen} "
+            "(and the node read-API is :4243); the usual holder is a previous ciris-server/agent "
+            "whose Rust transport threads outlived its shutdown (CIRISAgent#1102). Find it with "
+            "`ss -ltnp | grep -E ':(4242|4243)'`, stop it, and boot again."
+        )
+    return text
 
 
 def _edge_disabled() -> bool:
@@ -78,7 +99,7 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
             construction fails (port bind error, identity load failure).
             This is a hard boot blocker — same treatment as persist.
     """
-    global _edge
+    global _edge, _init_error
 
     if _edge_disabled():
         logger.info("Edge runtime init skipped (PYTEST_CURRENT_TEST or CIRIS_EDGE_DISABLED set)")
@@ -382,6 +403,7 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
                 "return available=false."
             )
             return
+        _init_error = f"unexpected TypeError: {e}"
         raise RuntimeError(
             f"Edge runtime initialization failed with unexpected TypeError: {e}. "
             f"Set CIRIS_EDGE_DISABLED=true to skip."
@@ -411,12 +433,14 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
                 get_federation_alias_for_log(),
                 federation_identity_dir,
             )
+        _init_error = _describe_init_failure(e)
         raise RuntimeError(
-            f"Edge runtime initialization failed (REQUIRED foundation dep): {e}. "
+            f"Edge runtime initialization failed (REQUIRED foundation dep): {_init_error}. "
             f"Set CIRIS_EDGE_DISABLED=true to skip in constrained environments."
         ) from e
 
     _edge = edge
+    _init_error = None
 
     global _actor_key_id, _node_key_id
     _node_key_id = node_key_id
@@ -1162,6 +1186,42 @@ def is_available() -> bool:
     return _edge is not None
 
 
+def get_init_error() -> Optional[str]:
+    """Why the Edge runtime is not up, in operator terms; None when it is (or was never asked)."""
+    return _init_error
+
+
+def close_edge_runtime(timeout_seconds: float = 10.0) -> bool:
+    """Gracefully close the Edge runtime at shutdown (CIRISAgent#1102).
+
+    Python exiting while the Rust transport threads still hold :4242/:4243 is the
+    bug: the process outlives its shutdown as a zombie, and the NEXT boot's Edge
+    init fails with EADDRINUSE. `Edge.close()` (edge >= 2.4.0, CIRISEdge#103) is
+    graceful and idempotent: it stops the heartbeat, releases the Reticulum
+    shared-instance lease, and joins the transport. Returns True when a close
+    was performed, False when there was nothing to close or the binding predates
+    `close()`. Never raises: shutdown must finish either way.
+    """
+    global _edge
+    edge = _edge
+    if edge is None:
+        return False
+    close = getattr(edge, "close", None)
+    if close is None:
+        logger.warning("Edge runtime has no close(); transport threads may outlive this process (CIRISAgent#1102)")
+        _edge = None
+        return False
+    try:
+        close()
+        logger.info("Edge runtime closed (transport released)")
+        return True
+    except Exception as exc:  # noqa: BLE001 -- shutdown must finish
+        logger.warning("Edge runtime close() raised (continuing shutdown): %s", exc)
+        return False
+    finally:
+        _edge = None
+
+
 def get_node_key_id() -> Optional[str]:
     """The NODE key id — carriage: transport, replication, consent, de-admission.
 
@@ -1218,7 +1278,8 @@ def reset_edge_runtime() -> None:
     None — a stale identity that survives exactly the teardown meant to remove
     it, and one that only shows up as cross-test bleed.
     """
-    global _edge, _actor_key_id, _node_key_id
+    global _edge, _actor_key_id, _node_key_id, _init_error
     _edge = None
     _actor_key_id = None
     _node_key_id = None
+    _init_error = None

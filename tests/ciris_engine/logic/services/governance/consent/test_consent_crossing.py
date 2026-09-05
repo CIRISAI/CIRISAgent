@@ -8,6 +8,7 @@ names the axis and must reach the caller's log, not vanish.
 
 from __future__ import annotations
 
+import json
 from typing import Any, Dict, List, Optional, Tuple
 from unittest.mock import patch
 
@@ -115,3 +116,108 @@ def test_picker_prefers_the_widest_placement_of_one_claim() -> None:
     older_fed = {"attestation_id": "g-old", "asserted_at": "2026-09-04T09:00:00.000Z", "cohort_scope": "federation"}
     ordered = sorted([original, older_fed, widened], key=att._grant_sort_key, reverse=True)
     assert [r["attestation_id"] for r in ordered] == ["g-fed", "g-self", "g-old"]
+
+
+# --- the other two crossing sites, end to end through the fake engine ----------
+
+
+def _community_patches(engine: FakeEngine, community: Optional[str] = "community-1"):
+    grant = patch.object(att, "build_community_consent_grant")
+    structural = patch.object(att, "build_community_structural")
+    return (
+        patch.object(att, "consent_ceg_attestations_enabled", return_value=True),
+        patch.object(att, "_resolve_engine", return_value=engine),
+        patch.object(att, "_resolve_attesting_key_id", return_value="fedaddr-node"),
+        patch.object(att, "canonical_community_key_id", return_value=community),
+        patch.object(att, "_directed_payload", return_value="{}"),
+        grant,
+        structural,
+    )
+
+
+def test_directed_grant_adopts_the_widened_row_as_its_identity(caplog: Any) -> None:
+    eng = FakeEngine(enter={"outcome": "crossed", "attestation_id": "att-local-1"},
+                     widen={"outcome": "crossed", "attestation_id": "att-fed-7"})
+    patches = _community_patches(eng)
+    with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5] as build, patches[6]:
+        build.return_value.model_dump_json.return_value = "{}"
+        assert att.emit_community_consent_grant() == "att-fed-7"
+    assert [c[0] for c in eng.calls] == ["attestation_upsert_local", "describe_crossing", "enter_mesh", "describe_crossing", "widen_audience"]
+
+
+def test_directed_grant_keeps_the_local_id_when_the_crossing_is_refused(caplog: Any) -> None:
+    eng = FakeEngine(enter={"outcome": "crossed"}, refuse="audience")
+    patches = _community_patches(eng)
+    with caplog.at_level("WARNING"), patches[0], patches[1], patches[2], patches[3], patches[4], patches[5] as build, patches[6]:
+        build.return_value.model_dump_json.return_value = "{}"
+        assert att.emit_community_consent_grant() == "att-local-1"
+    assert any("axis audience refused" in r.getMessage() for r in caplog.records)
+
+
+def test_community_revocation_returns_the_placed_id(caplog: Any) -> None:
+    intent = list(att.RevocationIntent)[0]
+
+    class _Eng(FakeEngine):
+        def attestation_insert_local(self, payload: str) -> str:
+            self.calls.append(("attestation_insert_local", (payload,)))
+            return "att-rev-1"
+
+    eng = _Eng(enter={"outcome": "crossed", "attestation_id": "att-rev-1"},
+               widen={"outcome": "crossed", "attestation_id": "att-rev-fed"})
+    patches = _community_patches(eng)
+    with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6] as build:
+        build.return_value.model_dump_json.return_value = "{}"
+        assert att.emit_community_consent_revocation(intent, "att-fed-7", "user asked") == "att-rev-fed"
+    assert eng.calls[0][0] == "attestation_insert_local"
+
+
+def test_community_revocation_waiting_for_its_actor_keeps_the_local_id_and_warns(caplog: Any) -> None:
+    intent = list(att.RevocationIntent)[0]
+
+    class _Eng(FakeEngine):
+        def attestation_insert_local(self, payload: str) -> str:
+            return "att-rev-1"
+
+    eng = _Eng(enter={"outcome": "awaiting_actor"})
+    patches = _community_patches(eng)
+    with caplog.at_level("WARNING"), patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6] as build:
+        build.return_value.model_dump_json.return_value = "{}"
+        assert att.emit_community_consent_revocation(intent, "att-fed-7", None) == "att-rev-1"
+    assert any("waiting for its actor's signature" in r.getMessage() and "in force" in r.getMessage() for r in caplog.records)
+
+
+def test_log_crossing_reports_a_no_op_outcome_by_name(caplog: Any) -> None:
+    with caplog.at_level("INFO"):
+        att._log_crossing("probe", "att-1", "already_widened", None, waiting_reads_as="n/a")
+    assert any("crossing outcome: already_widened" in r.getMessage() for r in caplog.records)
+
+
+def test_current_grant_picker_prefers_the_widened_copy_of_the_newest_claim() -> None:
+    rows = {"items": [
+        {"attestation_type": "scores", "attestation_id": "g-self", "asserted_at": "2026-09-04T10:00:00.123Z", "cohort_scope": "self"},
+        {"attestation_type": "scores", "attestation_id": "g-fed", "asserted_at": "2026-09-04T10:00:00.123Z", "cohort_scope": "federation"},
+        {"attestation_type": "withdraws", "attestation_id": "w-1", "asserted_at": "2026-09-04T11:00:00.000Z", "cohort_scope": "federation"},
+    ]}
+
+    class _Eng:
+        def list_attestations(self, query: str, cursor: Any, limit: int, key_id: str) -> str:
+            assert "consent" in query or "community" in query or query
+            return json.dumps(rows)
+
+    with patch.object(att, "_resolve_engine", return_value=_Eng()), patch.object(att, "_resolve_attesting_key_id", return_value="fedaddr-node"):
+        assert att.current_community_grant_id() == "g-fed"
+
+
+def test_grant_instant_picker_resolves_the_same_row_as_the_id_picker() -> None:
+    rows = {"items": [
+        {"attestation_type": "scores", "attestation_id": "g-self", "asserted_at": "2026-09-04T10:00:00.123Z", "cohort_scope": "self"},
+        {"attestation_type": "scores", "attestation_id": "g-fed", "asserted_at": "2026-09-04T10:00:00.123Z", "cohort_scope": "federation"},
+        {"attestation_type": "scores", "attestation_id": "g-old", "asserted_at": "2026-09-03T10:00:00.000Z", "cohort_scope": "federation"},
+    ]}
+
+    class _Eng:
+        def list_attestations(self, query: str, cursor: Any, limit: int, key_id: str) -> str:
+            return json.dumps(rows)
+
+    with patch.object(att, "_resolve_engine", return_value=_Eng()), patch.object(att, "_resolve_attesting_key_id", return_value="fedaddr-node"):
+        assert att.current_community_grant_asserted_at() == "2026-09-04T10:00:00.123Z"

@@ -107,3 +107,74 @@ def test_stop_node_fold_calls_shutdown_node_only_when_this_process_started_a_nod
     monkeypatch.setattr(node_fold, "_node_ready", True)
     assert node_fold.stop_node_fold(timeout_secs=7.0) is True
     assert calls == [7.0] and node_fold._node_thread is None and node_fold._node_ready is False
+
+
+# --- the branches that only fire when something is already wrong -------------
+
+
+def test_stop_node_fold_when_ciris_server_is_not_importable(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(sys.modules, "ciris_server", None)  # `import ciris_server` raises ImportError
+    monkeypatch.setattr(node_fold, "_node_thread", object())
+    assert node_fold.stop_node_fold() is None
+
+
+def test_stop_node_fold_when_the_binding_predates_shutdown_node(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(sys.modules, "ciris_server", types.SimpleNamespace())
+    monkeypatch.setattr(node_fold, "_node_thread", object())
+    assert node_fold.stop_node_fold() is None
+
+
+def test_stop_node_fold_never_raises_and_forgets_the_thread(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _boom(timeout_secs: float = 30.0) -> bool:
+        raise RuntimeError("node already gone")
+
+    monkeypatch.setitem(sys.modules, "ciris_server", types.SimpleNamespace(shutdown_node=_boom))
+    monkeypatch.setattr(node_fold, "_node_thread", object())
+    monkeypatch.setattr(node_fold, "_node_ready", True)
+    assert node_fold.stop_node_fold() is False
+    assert node_fold._node_thread is None and node_fold._node_ready is False
+
+
+def test_close_edge_runtime_when_the_binding_has_no_close() -> None:
+    edge_runtime._edge = object()  # pre-2.4.0 edge: nothing to call
+    assert edge_runtime.close_edge_runtime() is False
+    assert not edge_runtime.is_available()
+
+
+def test_the_detail_and_the_warning_never_become_the_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _explode() -> bool:
+        raise RuntimeError("edge module in a bad state")
+
+    monkeypatch.setattr(edge_runtime, "is_available", _explode)
+    assert _identity_unavailable_detail() == "Identity verification unavailable"
+    assert _edge_runtime_warnings() == []
+
+
+@pytest.mark.asyncio
+async def test_release_substrate_is_bounded_and_never_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A hung node stop and a raising edge close both log and let shutdown finish."""
+    import asyncio
+    import time
+
+    from ciris_engine.logic.runtime.ciris_runtime import CIRISRuntime
+
+    def _hangs(timeout_secs: float = 30.0) -> bool:
+        time.sleep(0.3)
+        return True
+
+    def _raises() -> bool:
+        raise RuntimeError("transport gone")
+
+    monkeypatch.setattr(node_fold, "stop_node_fold", _hangs)
+    monkeypatch.setattr(edge_runtime, "close_edge_runtime", _raises)
+
+    # Shrink the budgets so the "hung" branch is exercised in well under a second.
+    orig_wait_for = asyncio.wait_for
+
+    async def _tight(awaitable: Any, timeout: float) -> Any:
+        return await orig_wait_for(awaitable, timeout=0.05)
+
+    monkeypatch.setattr(asyncio, "wait_for", _tight)
+    await CIRISRuntime._release_substrate(object())  # type: ignore[arg-type]  -- only the module functions are used
+    monkeypatch.setattr(asyncio, "wait_for", orig_wait_for)
+    await asyncio.sleep(0.5)  # let the "hung" worker thread finish before the interpreter exits

@@ -749,6 +749,34 @@ def _stale_shared_task_warnings(request: Request) -> list[SystemWarning]:
     ]
 
 
+def _edge_runtime_warnings() -> list[SystemWarning]:
+    """The Edge runtime is down and session auth with it (CIRISAgent#1101).
+
+    Every `sess:` bearer is judged by the in-process substrate. When Edge did
+    not come up, every session answers 503 -- an outage, correctly not a 401 --
+    and until this warning existed health stayed green through it. Disabled by
+    env is not an outage (pytest / CIRIS_EDGE_DISABLED) and is not reported.
+    """
+    try:
+        from ciris_engine.logic.runtime import edge_runtime
+
+        if edge_runtime.is_available() or edge_runtime._edge_disabled():
+            return []
+        why = edge_runtime.get_init_error()
+    except Exception:  # noqa: BLE001 -- health must answer
+        return []
+    return [
+        SystemWarning(
+            code="edge_runtime_unavailable",
+            message=(
+                "Edge runtime not initialized -- session auth (sess: tokens) unavailable, every session answers 503"
+                + (f": {why}" if why else "")
+            ),
+            severity="error",
+        )
+    ]
+
+
 async def collect_system_warnings(request: Request, can_manage: bool = True) -> tuple[bool, list[SystemWarning]]:
     """Collect system-level warnings and check degraded mode.
 
@@ -766,6 +794,7 @@ async def collect_system_warnings(request: Request, can_manage: bool = True) -> 
     warnings.extend(_stale_shared_task_warnings(request))
     warnings.extend(_rejected_wakeup_warnings(request))
     warnings.extend(_claim_persistence_warnings(request))
+    warnings.extend(_edge_runtime_warnings())
     return not has_working_llm, warnings
 
 
@@ -837,6 +866,13 @@ async def get_system_health(
     # This is the gap that went unnoticed across six releases, so the top-level
     # field has to carry it. `critical` rather than `degraded`: an agent that
     # cannot receive or send is not doing a reduced job, it is doing none of it.
+    # An Edge outage takes session auth down with it (#1101): `degraded` with the
+    # reason in the warning, never `healthy`. Not `critical` -- password and
+    # service-token auth still work, so an operator can still get in and read this.
+    if status == "healthy" and any(w.code == "edge_runtime_unavailable" for w in warnings):
+        status = "degraded"
+        degraded_mode = True
+
     if any(w.code in ("adapters_config_stale", "adapters_failed_to_load") and w.severity == "error" for w in warnings):
         if status != "critical":
             logger.error(

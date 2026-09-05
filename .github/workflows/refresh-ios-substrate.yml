@@ -538,12 +538,38 @@ jobs:
           # missing label makes `gh pr create` exit non-zero AFTER the branch
           # is already pushed (the run then looks failed despite a good push).
           # A reviewer can add labels on the PR if desired.
-          gh pr create \
+          # The branch is already pushed; opening the PR is the last, smallest step.
+          # When the repository forbids Actions from creating PRs (Settings →
+          # Actions → General → "Allow GitHub Actions to create and approve pull
+          # requests"), `gh pr create` fails with "GitHub Actions is not permitted
+          # to create or approve pull requests" — and a run whose real work
+          # succeeded then reads as failed (2026-09-05, release/2.10.0, the PR had
+          # to be opened by hand). Say what to click instead of failing.
+          if ! out=$(gh pr create \
             --repo "${{ github.repository }}" \
             --base "${TARGET_BRANCH}" \
             --head "${BRANCH_NAME}" \
             --title "chore(ios): refresh iOS substrate to ciris-server ${S} / verify ${V}" \
-            --body-file "$body_file"
+            --body-file "$body_file" 2>&1); then
+            compare="${{ github.server_url }}/${{ github.repository }}/compare/${TARGET_BRANCH}...${BRANCH_NAME}?expand=1"
+            if printf '%s' "$out" | grep -q "not permitted to create or approve pull requests"; then
+              echo "::warning::The refresh is pushed to ${BRANCH_NAME} but this repository does not let Actions open PRs. Open it here: ${compare} — or allow it under Settings → Actions → General → 'Allow GitHub Actions to create and approve pull requests'."
+              {
+                echo "## iOS substrate refreshed — PR NOT opened"
+                echo
+                echo "The repository forbids GitHub Actions from creating pull requests, so the branch is pushed and waiting:"
+                echo
+                echo "- branch: \`${BRANCH_NAME}\`"
+                echo "- open the PR: ${compare}"
+                echo "- or allow it once: Settings → Actions → General → *Allow GitHub Actions to create and approve pull requests*"
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "$out"
+            echo "::error::gh pr create failed after the branch was pushed (${BRANCH_NAME}); open it by hand: ${compare}"
+            exit 1
+          fi
+          echo "$out"
 
       - name: No-change summary
         if: steps.diff.outputs.changed == 'false'

@@ -783,6 +783,66 @@ class DesktopAppTestRunner:
         else:
             self._log("AI (BYOK): no live model list appeared after retries; leaving provider/text default")
 
+    async def test_reset_device_flow(self) -> bool:
+        """Log out and factory-reset the device through the CLIENT's own UI.
+
+        The second half of the run-without-AI gate (CIRISAgent#1149): after the
+        no-AI pass has reached Interact against a node-only backend, the app is
+        put back to first-run so the ordinary with-AI pass can follow in the
+        same job, on the same home.
+
+        It has to go through the client rather than deleting files, because the
+        client's factory reset is what removes the `.env` -- and that file is
+        where `CIRIS_RUN_WITHOUT_AI=true` lives. Skip it and every later boot
+        keeps handing the process to the node, so the with-AI pass would have no
+        :8080 to talk to. Driving the real button is also the only way this test
+        notices if that reset ever stops clearing the flag.
+
+        Path: btn_menu -> menu_logout -> (Login) btn_login_reset_device ->
+        btn_reset_device_confirm.
+        """
+
+        async def logout():
+            self._log("Opening the nav menu to log out")
+            if not await self.helper.wait_for_element("btn_menu", timeout=20000):
+                await self._dump_tree("reset:btn_menu")
+                raise RuntimeError("btn_menu not found — not on an authenticated screen?")
+            if not await self.helper.click("btn_menu"):
+                raise RuntimeError("Failed to open the nav menu (btn_menu)")
+            if not await self.helper.wait_for_element("menu_logout", timeout=8000):
+                await self._dump_tree("reset:menu_logout")
+                raise RuntimeError("menu_logout not found after opening the nav menu")
+            if not await self.helper.click("menu_logout"):
+                raise RuntimeError("Failed to click menu_logout")
+            await asyncio.sleep(1.5)
+
+        await self.run_test("logout", logout)
+
+        async def reset_device():
+            # The reset link lives in the Login footer and is always on there
+            # (2.9.3, #794 Bug C), so reaching Login is the precondition.
+            self._log("Resetting the device from the Login footer")
+            if not await self.helper.wait_for_element("btn_login_reset_device", timeout=20000):
+                await self._dump_tree("reset:btn_login_reset_device")
+                raise RuntimeError(
+                    "btn_login_reset_device not found — logout did not land on Login, "
+                    "so there is no reset affordance to drive"
+                )
+            if not await self.helper.click("btn_login_reset_device"):
+                raise RuntimeError("Failed to click btn_login_reset_device")
+            if not await self.helper.wait_for_element("btn_reset_device_confirm", timeout=8000):
+                await self._dump_tree("reset:confirm")
+                raise RuntimeError("The reset confirmation dialog did not appear")
+            if not await self.helper.click("btn_reset_device_confirm"):
+                raise RuntimeError("Failed to confirm the device reset")
+            # factoryReset() wipes user state, clears the signing key and DELETES
+            # the .env (which is what clears CIRIS_RUN_WITHOUT_AI), then asks the
+            # app to restart into the wizard. Give it room to do all of that.
+            await asyncio.sleep(5.0)
+
+        await self.run_test("reset_device", reset_device)
+        return all(r.success for r in self.results)
+
     async def test_setup_wizard_flow(
         self,
         username: str = "admin",
@@ -796,6 +856,7 @@ class DesktopAppTestRunner:
         llm_model: Optional[str] = None,
         llm_key_expect_rejected: bool = False,
         llm_require_live_models: bool = False,
+        run_without_ai: bool = False,
     ) -> bool:
         """Drive the first-run setup wizard via the test server.
 
@@ -927,6 +988,30 @@ class DesktopAppTestRunner:
             # the manual-edit path (labelManuallyEdited).
             if await self.helper.is_element_visible("input_fedid_label"):
                 await self.helper.input_text("input_fedid_label", fed_label)
+
+            # 4. THE AI QUESTION — asked here, on YOU, from client 0.5.203
+            # (AiPreferenceSection). It is not a screen of its own: it decides
+            # whether the AI screen exists at all
+            # (SetupState.hasAiStep = hasAgent && !runWithoutAi), so answering it
+            # wrong does not fail here — it fails two steps later as a missing or
+            # unexpected AI screen. Both options are clicked explicitly rather than
+            # trusting the default, so the run states its intent either way.
+            ai_tag = "opt_run_without_ai" if run_without_ai else "opt_run_with_ai"
+            if await self.helper.is_element_visible(ai_tag):
+                self._log(f"AI preference: {ai_tag}")
+                if not await self.helper.click(ai_tag):
+                    raise RuntimeError(f"Failed to click {ai_tag} on YOU")
+            elif run_without_ai:
+                # Only fatal in the without-AI direction: with-AI is the default, so
+                # an older client that lacks the control still does the right thing,
+                # while without-AI silently becoming with-AI would make the whole
+                # run test nothing (CIRISAgent#1149).
+                await self._dump_tree("you_step:ai_preference")
+                raise RuntimeError(
+                    "opt_run_without_ai not found on YOU. This client predates the "
+                    "run-without-AI choice (needs ciris-client >= 0.5.203); without it "
+                    "the wizard would configure an LLM and the run would prove nothing."
+                )
 
             await asyncio.sleep(0.3)
             if not await self.helper.click("btn_next"):
@@ -1063,7 +1148,13 @@ class DesktopAppTestRunner:
                 raise RuntimeError("Failed to click btn_next (finish) on the AI screen")
             await asyncio.sleep(1.0)
 
-        await self.run_test("ai_configuration", ai_step)
+        if run_without_ai:
+            # hasAiStep is false, so JOIN_FEDERATION advances straight to COMPLETE.
+            # Probing for the AI screen here would be a 20s wait for something the
+            # wizard is correct not to show.
+            self._log("Running WITHOUT AI: no AI screen expected (hasAiStep=false)")
+        else:
+            await self.run_test("ai_configuration", ai_step)
 
         # ── Step 5: COMPLETE (best-effort — CompleteStep is in SetupScreen) ──
         async def wait_for_complete():
@@ -1399,6 +1490,7 @@ Examples:
             "desktop-login",
             "desktop-chat",
             "desktop-setup",
+            "desktop-reset",
             "desktop-catchup",
             "desktop-up",
             "federation",
@@ -1467,6 +1559,13 @@ Examples:
         "--fed-label",
         default=None,
         help="Federation ID label for desktop-setup/desktop-catchup (default: generated qa-* name)",
+    )
+    parser.add_argument(
+        "--run-without-ai",
+        action="store_true",
+        help="Answer the wizard's AI question with \"without an AI assistant\" (client >= 0.5.203). "
+        "The AI screen is then not shown, the agent records CIRIS_RUN_WITHOUT_AI=true, and the "
+        "backend becomes a ciris-server node on :4243 (CIRISAgent#1149).",
     )
     parser.add_argument(
         "--no-announce",
@@ -3810,10 +3909,17 @@ async def run_desktop_tests(args: argparse.Namespace) -> int:
                 llm_provider=args.llm_provider,
                 llm_api_key=_byok_key,
                 llm_model=args.llm_model,
+                run_without_ai=getattr(args, "run_without_ai", False),
             )
             runner.print_summary()
             return 0 if success else 1
 
+        elif args.command == "desktop-reset":
+            # Log out + factory reset THROUGH THE CLIENT, so the .env (and with it
+            # CIRIS_RUN_WITHOUT_AI) is cleared the way a user would clear it.
+            success = await runner.test_reset_device_flow()
+            runner.print_summary()
+            return 0 if success else 1
         elif args.command == "desktop-catchup":
             # Catch-up "Add Federation ID" flow (AddFederationIdScreen):
             #   btn_add_federation_id → input_fed_label →

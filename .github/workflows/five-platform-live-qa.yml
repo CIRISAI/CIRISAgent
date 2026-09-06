@@ -594,7 +594,12 @@ jobs:
             # 127.0.0.1:8080 for its backend, so the macOS teardown's kill -9 took the
             # simulator app down with it (run 33706020778: "exited due to SIGKILL |
             # sent by bash"). Owning a port means listening on it, not talking to it.
-            for port in 8080 9091 8091; do
+            # 4242/4243 are the NODE's (transport + read API). They matter now that a
+            # run-without-AI pass leaves a ciris-server node holding them instead of a
+            # main.py agent (CIRISAgent#1149): the with-AI pass that follows boots an
+            # agent whose node fold binds :4243, and an orphan from the previous pass
+            # is EADDRINUSE (CIRISAgent#1101/#1102).
+            for port in 8080 9091 8091 4242 4243; do
               pids=$(lsof -ti "tcp:$port" -sTCP:LISTEN 2>/dev/null || true)
               [ -n "$pids" ] && { echo "  teardown: killing $port ($pids)"; kill -9 $pids 2>/dev/null || true; }
             done
@@ -618,6 +623,47 @@ jobs:
               fi
               extra="$extra --ios-app-path $IOS_APP"
             fi
+
+            # 0. RUN WITHOUT AI — the wizard's OTHER answer (CIRISAgent#1149). The
+            #    product has two shapes and CI only ever drove one. Here the owner
+            #    answers "without an AI assistant" on YOU: the wizard skips the AI
+            #    screen, the agent records CIRIS_RUN_WITHOUT_AI=true, and the backend
+            #    process BECOMES a ciris-server node — :8080 goes away and the client
+            #    follows to :4243. Reaching Interact in that state is the assertion,
+            #    and it needs client >= 0.5.203 to know where to look.
+            python -m tools.qa_runner.modules.web_ui desktop-setup \
+              --platform "$target" --launch $extra \
+              --username qaadmin --password "qa_test_password_12345" \
+              --run-without-ai \
+              --screenshot-on-success "artifacts/shots/$plat-setup-noai.png" \
+              -v || { overall=1; echo "::error::$plat run-without-AI setup failed"; python3 tools/dev/diagnose_gate_failure.py --platform "$plat" --phase setup-noai --logs artifacts "${CIRIS_QA_LOG_DIR:-artifacts/cmdlogs}" || true; }
+
+            python -m tools.qa_runner.modules.web_ui desktop-login \
+              --platform "$target" $extra \
+              --username qaadmin --password "qa_test_password_12345" \
+              --screenshot-on-success "artifacts/shots/$plat-login-noai.png" \
+              -v || { overall=1; echo "::error::$plat run-without-AI login failed — Interact unreachable against a node-only backend"; python3 tools/dev/diagnose_gate_failure.py --platform "$plat" --phase login-noai --logs artifacts "${CIRIS_QA_LOG_DIR:-artifacts/cmdlogs}" || true; }
+
+            # 0b. RESET THROUGH THE CLIENT, not with rm. The client's factory reset is
+            #     what deletes the .env, and the .env is where CIRIS_RUN_WITHOUT_AI
+            #     lives — skip it and every later boot keeps handing the process to the
+            #     node, so the with-AI pass below would have no :8080 to talk to.
+            #     Driving the real button is also how we find out if that reset ever
+            #     stops clearing the flag.
+            python -m tools.qa_runner.modules.web_ui desktop-reset \
+              --platform "$target" $extra \
+              --screenshot-on-success "artifacts/shots/$plat-reset.png" \
+              -v || { overall=1; echo "::error::$plat client reset failed — the with-AI pass starts from an unknown state"; python3 tools/dev/diagnose_gate_failure.py --platform "$plat" --phase reset --logs artifacts "${CIRIS_QA_LOG_DIR:-artifacts/cmdlogs}" || true; }
+
+            # 0c. Reap the node the no-AI pass left behind. `--launch` tears down the
+            #     app and `main.py --adapter api`, but a node-only backend is
+            #     `python -m ciris_server` and holds :4242/:4243, which the agent's own
+            #     node fold is about to want.
+            for port in 4242 4243 8080; do
+              pids=$(lsof -ti "tcp:$port" -sTCP:LISTEN 2>/dev/null || true)
+              [ -n "$pids" ] && { echo "  post-reset: freeing $port ($pids)"; kill -9 $pids 2>/dev/null || true; }
+            done
+            sleep 3
 
             # 1. Setup wizard through the real UI, with a real key.
             # A SHOT AT EVERY STAGE. The capture wrapper runs after main() whatever

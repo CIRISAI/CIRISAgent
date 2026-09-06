@@ -299,3 +299,64 @@ def test_every_stage_asks_for_a_screenshot(raw: str) -> None:
     assert set(blocks) >= {"desktop-setup", "desktop-login", "desktop-chat"}, sorted(blocks)
     for cmd, block in blocks.items():
         assert "--screenshot-on-success" in block, f"{cmd} runs without a screenshot"
+
+
+# --- the run-without-AI pass (CIRISAgent#1149) --------------------------------
+
+
+def _shared_flow_block() -> str:
+    """The run: block that drives every platform through the shared flow."""
+    import yaml
+
+    doc = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    for job in doc["jobs"].values():
+        for step in _steps(job):
+            run = step.get("run", "")
+            if "desktop-reset" in run:
+                return str(run)
+    raise AssertionError("no step drives desktop-reset — the run-without-AI pass is missing")
+
+
+def test_the_gate_drives_both_answers_to_the_ai_question() -> None:
+    """CI drove only the with-AI shape; the product has two."""
+    block = _shared_flow_block()
+    assert "--run-without-ai" in block, "the without-AI answer is never exercised"
+    assert block.count("desktop-setup") >= 2, "both passes must run the wizard"
+
+
+def test_the_no_ai_pass_comes_first_and_is_reset_before_the_with_ai_pass() -> None:
+    """Order is the whole point: no-AI, prove Interact, reset, then the normal flow."""
+    lines = _shared_flow_block().splitlines()
+
+    def line_of(needle: str) -> int:
+        return next(i for i, l in enumerate(lines) if needle in l)
+
+    # `$llm_args` is the with-AI pass: it is the only place a provider and key
+    # are handed to the wizard.
+    noai = line_of("--run-without-ai")
+    reset = line_of("web_ui desktop-reset")
+    with_ai = line_of("$llm_args")
+    assert noai < reset < with_ai, (
+        f"the reset must separate the two passes (no-AI at {noai}, reset at {reset}, with-AI at {with_ai})"
+    )
+
+
+def test_the_reset_goes_through_the_client_not_the_filesystem() -> None:
+    """factoryReset() is what deletes the .env, and the .env holds CIRIS_RUN_WITHOUT_AI."""
+    block = _shared_flow_block()
+    reset_line = next(l for l in block.splitlines() if "desktop-reset" in l)
+    assert "rm " not in reset_line and "del " not in reset_line
+    assert "web_ui desktop-reset" in reset_line
+
+
+def test_the_node_ports_are_reaped_between_passes() -> None:
+    """A node-only backend holds 4242/4243; the agent's fold binds 4243 next (#1101/#1102)."""
+    block = _shared_flow_block()
+    assert "4242 4243" in block, "the node's ports are never freed, so the with-AI pass hits EADDRINUSE"
+
+
+def test_every_no_ai_phase_names_itself_to_the_diagnoser() -> None:
+    """A red must say which pass it came from, not just 'setup failed'."""
+    block = _shared_flow_block()
+    for phase in ("setup-noai", "login-noai", "reset"):
+        assert f"--phase {phase}" in block, f"phase {phase} is not distinguishable in the diagnosis"

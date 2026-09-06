@@ -358,12 +358,16 @@ The app implements automatic recovery from iOS background suspension:
 
 ### Known Issues
 
-**Event Loop Binding Bug**: After restart, asyncio.Event objects from previous loop cause:
+**Event Loop Binding Bug** (FIXED in 2.10.0, CIRISAgent#1122): after an in-process restart,
+`asyncio.Event` objects from the previous loop used to raise
 ```
 RuntimeError: ... is bound to a different event loop
 ```
-
-This happens in ShutdownService. Fix: Reset global asyncio state between iterations.
+in ShutdownService, and the module-level shutdown service still said "shutdown requested"
+from the run that had just ended. The engine now re-creates the event for the running loop
+(carrying a pending request over) and `CIRISRuntime.initialize()` sheds a global shutdown
+service that belongs to a dead loop. No client-side reset is needed; the restart fallback is
+dependable again.
 
 ## Logging System
 

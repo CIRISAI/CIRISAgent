@@ -328,6 +328,39 @@ def _author_federation_consent(path: str) -> None:
     )
 
 
+def stop_node_fold(timeout_secs: float = 30.0) -> Optional[bool]:
+    """Stop the node this process started and wait until :4243 is bindable (#1102).
+
+    Python exiting while the node's tokio threads still hold :4243 (and the edge
+    :4242) is the zombie the next boot trips over with EADDRINUSE. ciris-server
+    >= 0.5.96 exposes `shutdown_node(timeout_secs)`: it stops the node started by
+    `serve_with_python_adapter` and does not return until the port is free
+    (True), or times out (False). Idempotent; None when this process never
+    started a node or the binding predates `shutdown_node`. Never raises.
+    """
+    global _node_thread, _node_ready
+    if _node_thread is None:
+        return None
+    try:
+        import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
+    except Exception:  # noqa: BLE001
+        return None
+    shutdown_node = getattr(ciris_server, "shutdown_node", None)
+    if shutdown_node is None:
+        logger.warning("Node fold: ciris_server.shutdown_node unavailable; :4243 may stay bound after exit (CIRISAgent#1102)")
+        return None
+    try:
+        freed = bool(shutdown_node(timeout_secs=timeout_secs))
+        logger.info("Node fold: shutdown_node() → :4243 bindable=%s", freed)
+        return freed
+    except Exception as exc:  # noqa: BLE001 -- shutdown must finish
+        logger.warning("Node fold: shutdown_node() raised (continuing shutdown): %s", exc)
+        return False
+    finally:
+        _node_thread = None
+        _node_ready = False
+
+
 def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Optional[str] = None) -> None:
     """Boot the node (4243) on the agent's engine/edge, brain proxied to :8080.
 

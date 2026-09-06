@@ -38,6 +38,7 @@ and revocation (withdraws/recants) only function if these emits run.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import hashlib
 import logging
 import os
@@ -235,6 +236,64 @@ def emit_consent_grant(status: ConsentStatus) -> Optional[str]:
         return None
 
 
+# --- v40 tier crossing --------------------------------------------------------
+# `attestation_promote` is gone (persist v39, CIRISAgent#1134/#1144). It re-signed
+# the row with THIS NODE's key and cleared the actor's scrub, so the node became
+# the author of a claim it was only carrying -- and because peers verify against
+# `attesting_key_id`, an agent-attested promoted row was refused at every peer
+# while the call returned True here. Two verbs replace it: `enter_mesh` crosses
+# local -> federation tier over the SAME bytes (the node may only co-scrub), and
+# `widen_audience` writes a `supersedes` the ACTOR signs at a wider audience.
+# The server composes them this way for its own consent, moderation, age and
+# watchlist rows (CIRISServer src/attestation_crossing.rs): enter over the row's
+# own placement, stop on `awaiting_actor`, else widen to `federation` with the
+# producer-authority basis and no stripped members. Three things the issue text
+# under-sells, each handled here: `awaiting_actor` is an Ok that did nothing
+# (read the outcome by NAME); a widening leaves TWO rows and the placed one has
+# a NEW id (return the placed id -- it is what peers can read); every axis of the
+# crossing is cross-checked and refused by its name (let that surface).
+_CROSSING_BASIS_PRODUCER_AUTHORITY = '{"kind": "producer_authority"}'
+_CROSSING_TARGET_FEDERATION = "federation"
+_OUTCOME_PLACED = frozenset({"crossed", "already_in_mesh"})
+
+
+def cross_to_mesh(engine: object, attestation_id: str, *, label: str) -> "tuple[str, Optional[str]]":
+    """Enter the mesh and widen to the federation audience. Returns (outcome, placed_id).
+
+    `outcome` is the name persist reports for the LAST step taken (`crossed` |
+    `already_in_mesh` | `already_widened` | `awaiting_actor`); `placed_id` is the
+    row id peers can read, or None when nothing new was placed. Raises what
+    persist raises: an axis refusal names the axis and must not be hidden.
+    """
+    aid = str(attestation_id)
+    ci_self = engine.describe_crossing(aid, "self", None, _CROSSING_BASIS_PRODUCER_AUTHORITY)  # type: ignore[attr-defined]
+    entered = engine.enter_mesh(aid, ci_self)  # type: ignore[attr-defined]
+    outcome = str(entered.get("outcome", "unknown")) if isinstance(entered, dict) else "unknown"
+    if outcome == "awaiting_actor":
+        # Not an error: the row is attested by a key whose signer this engine does
+        # not hold and it carries no signature from write time. Persist will not
+        # sign it with the node's key. It WAITS; the callers say what that means.
+        return outcome, None
+    ci_fed = engine.describe_crossing(aid, _CROSSING_TARGET_FEDERATION, None, _CROSSING_BASIS_PRODUCER_AUTHORITY)  # type: ignore[attr-defined]
+    widened = engine.widen_audience(aid, ci_fed, [])  # type: ignore[attr-defined]
+    w_outcome = str(widened.get("outcome", "unknown")) if isinstance(widened, dict) else "unknown"
+    placed_raw = widened.get("attestation_id") if isinstance(widened, dict) else None
+    placed = str(placed_raw) if placed_raw and w_outcome in _OUTCOME_PLACED else None
+    return w_outcome, placed
+
+
+def _log_crossing(label: str, attestation_id: str, outcome: str, placed: Optional[str], *, waiting_reads_as: str) -> None:
+    if outcome == "awaiting_actor":
+        logger.warning(
+            "consent-CEG: %s %s is waiting for its actor's signature -- it has NOT reached the mesh; %s",
+            label, attestation_id, waiting_reads_as,
+        )
+    elif placed and placed != str(attestation_id):
+        logger.info("consent-CEG: %s %s placed at federation as %s (%s)", label, attestation_id, placed, outcome)
+    else:
+        logger.info("consent-CEG: %s %s crossing outcome: %s", label, attestation_id, outcome)
+
+
 def emit_consent_revocation(user_id: str, reason: Optional[str] = None, promote: bool = True) -> Optional[str]:
     """Best-effort emit + promote a revocation attestation for an opt-out.
 
@@ -260,14 +319,17 @@ def emit_consent_revocation(user_id: str, reason: Optional[str] = None, promote:
     except Exception as exc:
         logger.warning("consent-CEG: revocation emit failed (non-fatal): %s", exc)
         return None
+    placed: Optional[str] = None
     if promote:
         try:
-            engine.attestation_promote(attestation_id, "federation")  # type: ignore[attr-defined]
-            logger.info("consent-CEG: promoted revocation %s to federation tier", attestation_id)
-        except Exception as exc:
-            # Expected in CLIENT mode (no PQC signer); the local row is enough.
-            logger.debug("consent-CEG: revocation promote deferred (non-fatal): %s", exc)
-    return str(attestation_id)
+            outcome, placed = cross_to_mesh(engine, str(attestation_id), label="revocation")
+            _log_crossing("revocation", str(attestation_id), outcome, placed,
+                          waiting_reads_as='peers keep reading the consent as GRANTED until it does')
+        except Exception as exc:  # noqa: BLE001
+            # Expected in CLIENT mode (no PQC signer): the local row stands. An axis
+            # refusal also lands here and its message names the axis -- keep it visible.
+            logger.warning("consent-CEG: %s crossing deferred (non-fatal): %s", "revocation", exc)
+    return placed or str(attestation_id)
 
 
 # ===========================================================================
@@ -427,6 +489,40 @@ def build_community_structural(
     )
 
 
+_SCOPE_RANK = {"self": 0, "family": 1, "community": 2, "affiliations": 3, "species": 4, "biosphere": 5, "federation": 6}
+
+
+def _grant_sort_key(row: "dict[str, object]") -> "tuple[datetime, int]":
+    """Newest claim first; among rows of ONE claim, the widest placement.
+
+    A widening (persist v40) is a `supersedes` at a wider audience that carries
+    the claim's own `asserted_at` verbatim, so the original self-scoped row and
+    its placed federation copy TIE on the instant. The one peers can read is the
+    wider one, and it is the one `capture_grant_id` and a revocation target must
+    name (CIRISAgent#1144). Persist#798 will fold this on their side; until then
+    the tiebreak is ours.
+    """
+    return _instant(row), _SCOPE_RANK.get(str(row.get("cohort_scope") or "self"), 0)
+
+
+def _instant(row: "dict[str, object]") -> "datetime":
+    """Sort key for a persist row's ``asserted_at``: the INSTANT, never its rendering.
+
+    Persist v39 moved signed instants from microsecond to millisecond resolution
+    (CC 2.6.2), so a corpus that spans the upgrade carries both ``.049840Z`` and
+    ``.049Z`` -- and lexically ``.049840Z`` < ``.049Z`` because ``'8'`` < ``'Z'``.
+    Sorting the string picked a pre-v39 grant asserted LATER as older than a
+    post-v39 grant in the same second (CIRISAgent#1136). Persist's own
+    ``check_instant_binding`` parses tolerantly for the same reason; so do we.
+    An unparseable value sorts last.
+    """
+    raw = str(row.get("asserted_at") or "")
+    try:
+        return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return datetime.min.replace(tzinfo=timezone.utc)
+
+
 def current_community_grant_id() -> Optional[str]:
     """attestation_id of the current community-trust grant, or None.
 
@@ -497,7 +593,7 @@ def current_community_grant_id() -> Optional[str]:
         grants = [r for r in rows if r.get("attestation_type") == "scores"]
         if not grants:
             return None
-        grants.sort(key=lambda r: r.get("asserted_at", ""), reverse=True)
+        grants.sort(key=_grant_sort_key, reverse=True)
         return str(grants[0].get("attestation_id"))
     except Exception as exc:  # pragma: no cover - defensive
         logger.debug("consent-CEG: grant lookup failed: %s", exc)
@@ -530,7 +626,7 @@ def current_community_grant_asserted_at() -> Optional[str]:
         grants = [r for r in rows if r.get("attestation_type") == "scores"]
         if not grants:
             return None
-        grants.sort(key=lambda r: r.get("asserted_at", ""), reverse=True)
+        grants.sort(key=_grant_sort_key, reverse=True)
         asserted_at = grants[0].get("asserted_at")
         return str(asserted_at) if asserted_at else None
     except Exception as exc:  # pragma: no cover - defensive
@@ -592,10 +688,18 @@ def emit_community_consent_grant(granted_at: Optional[str] = None) -> Optional[s
             # Best-effort, mirroring the revocation path: deferred in CLIENT
             # mode (no PQC signer); the local row still gates the seal.
             try:
-                engine.attestation_promote(attestation_id, "federation")  # type: ignore[attr-defined]
-                logger.info("consent-CEG: promoted directed grant %s to federation tier", attestation_id)
+                outcome, placed = cross_to_mesh(engine, str(attestation_id), label="directed grant")
+                _log_crossing("directed grant", str(attestation_id), outcome, placed,
+                              waiting_reads_as='the community cannot see the grant, so traces will seal locally and not replicate')
+                if placed:
+                    # THE COMMUNITY IDENTITY OF THE GRANT IS THE WIDENED ROW'S ID: capture_grant_id
+                    # and the revocation target carry it to peers; the self-scoped original is
+                    # a row they cannot read (CIRISAgent#1144).
+                    attestation_id = placed
             except Exception as exc:  # noqa: BLE001
-                logger.info("consent-CEG: directed grant promote deferred (non-fatal): %s", exc)
+                # Expected in CLIENT mode (no PQC signer): the local row stands. An axis
+                # refusal also lands here and its message names the axis -- keep it visible.
+                logger.warning("consent-CEG: %s crossing deferred (non-fatal): %s", "directed grant", exc)
         else:
             attestation_id = engine.attestation_upsert_local(grant.model_dump_json())  # type: ignore[attr-defined]
             logger.info(
@@ -645,12 +749,17 @@ def emit_community_consent_revocation(
     except Exception as exc:
         logger.warning("consent-CEG: community revocation emit failed (non-fatal): %s", exc)
         return None
+    placed: Optional[str] = None
     if community:
         try:
-            engine.attestation_promote(attestation_id, "federation")  # type: ignore[attr-defined]
-        except Exception as exc:
-            logger.debug("consent-CEG: structural promote deferred (non-fatal): %s", exc)
-    return str(attestation_id)
+            outcome, placed = cross_to_mesh(engine, str(attestation_id), label=f"{intent.value} revocation")
+            _log_crossing(f"{intent.value} revocation", str(attestation_id), outcome, placed,
+                          waiting_reads_as='the community keeps reading the grant as in force')
+        except Exception as exc:  # noqa: BLE001
+            # Expected in CLIENT mode (no PQC signer): the local row stands. An axis
+            # refusal also lands here and its message names the axis -- keep it visible.
+            logger.warning("consent-CEG: %s crossing deferred (non-fatal): %s", f"{intent.value} revocation", exc)
+    return placed or str(attestation_id)
 
 
 def federation_consent_status() -> "dict[str, object]":

@@ -1129,6 +1129,53 @@ class DesktopAppTestRunner:
 
         await self.run_test("claim_settled", claim_settled)
 
+        async def announce_bundle():
+            """The node must be DISCOVERABLE, not merely claimed.
+
+            The wizard announces by default (opt-OUT). Announce re-signs the
+            owner->node binding at federation scope; until then no peer can
+            place this node in any community audience and every room row is
+            withheld at the other side (CIRISAgent#1144 Lesson 1 -- read for a
+            day as a delivery bug). Announce is idempotent, so re-issuing it
+            here with the owner's session is the assertion: from ciris-server
+            0.5.197 it returns the bundle it walked -- 5 rows for an agent
+            node -- and `federation_discoverable`.
+            """
+            import httpx
+
+            from tools.qa_runner.announce_bundle import DEFAULT_NODE_URL, check_announce_bundle
+
+            _args = _LAST_ARGS
+            api_port = getattr(_args, "api_port", None) or 8080
+            username = getattr(_args, "username", None) or "admin"
+            password = getattr(_args, "password", None) or "qa_test_password_12345"
+            node_url = getattr(_args, "node_url", None) or DEFAULT_NODE_URL
+            async with httpx.AsyncClient(timeout=30.0) as http:
+                r = await http.post(
+                    f"http://127.0.0.1:{api_port}/v1/auth/login",
+                    json={"username": username, "password": password},
+                )
+                r.raise_for_status()
+                headers = {"Authorization": f"Bearer {r.json()['access_token']}"}
+                check = await check_announce_bundle(http, node_url, headers)
+            for line in check.render().splitlines():
+                self._log(line)
+            if check.status in ("unreachable", "not_reported"):
+                # Not this node's fault: the node port is not forwarded from a
+                # device, or the server predates the report. Named, not green.
+                self._log(f"announce bundle NOT asserted ({check.status})")
+                return
+            if not check.passed:
+                raise RuntimeError(
+                    "Setup completed with the node NOT federation-discoverable.\n"
+                    f"        {check.message}\n"
+                    "        A node whose owner binding is still self-scoped is P2P-only: peers withhold "
+                    "every community row from it. This is the announce, not delivery."
+                )
+            self._log("node federation-discoverable")
+
+        await self.run_test("announce_bundle", announce_bundle)
+
         return all(r.success for r in self.results)
 
     async def test_catchup_add_fedid_flow(
@@ -1641,6 +1688,12 @@ Examples:
         "--ios-bundle-id",
         default="ai.ciris.mobile",
         help="For --ios: bundle ID to launch (default: ai.ciris.mobile).",
+    )
+    parser.add_argument(
+        "--node-url",
+        default=os.environ.get("CIRIS_NODE_URL"),
+        help="Node read-API base URL for the announce-bundle check (default: http://127.0.0.1:4243; "
+        "on a device the node is not forwarded, so the check reports itself unreachable and is skipped).",
     )
     parser.add_argument(
         "--api-port",

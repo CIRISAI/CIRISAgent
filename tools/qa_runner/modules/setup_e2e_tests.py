@@ -10,6 +10,7 @@ Based on KMP SetupViewModel patterns - supports both BYOK and future Node flows.
 
 import asyncio
 import logging
+import json
 import os
 import shutil
 import time
@@ -21,6 +22,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import httpx
 
 from ..config import QAConfig, QAModule, QATestCase
+from tools.qa_runner.announce_bundle import DEFAULT_NODE_URL, check_announce_bundle
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +75,12 @@ class SetupE2EReport:
     results: List[SetupE2EResult] = field(default_factory=list)
     setup_completed: bool = False
     login_verified: bool = False
+    #: CIRISAgent#1144 Lesson 1 -- the announce bundle as the node reported it
+    #: (None when the server predates the report or the node was unreachable).
+    federation_key_id: Optional[str] = None
+    node_claimed: bool = False
+    announce_bundle: Optional[Dict[str, Any]] = None
+    federation_discoverable: Optional[bool] = None
 
     @property
     def success(self) -> bool:
@@ -109,9 +117,9 @@ class SetupE2ETestModule:
         self.admin_password = "E2E_Admin_Password_67890!"
 
         # LLM configuration - prefer live provider if available
-        self.llm_provider = "groq"  # Default to Groq (fast, free tier)
+        self.llm_provider = "openrouter"  # The QA default (CLAUDE.md model matrix)
         self.llm_api_key: Optional[str] = None
-        self.llm_model = "llama-3.3-70b-versatile"
+        self.llm_model = "qwen/qwen3.6-35b-a3b"
         self.llm_base_url: Optional[str] = None
 
         # Try to load a real API key
@@ -119,8 +127,8 @@ class SetupE2ETestModule:
 
     def _load_llm_config(self) -> None:
         """Load LLM configuration from available API keys."""
-        # Priority order: groq (fast), openrouter (many models), anthropic, openai
-        provider_priority = ["groq", "openrouter", "anthropic", "openai", "together", "google"]
+        # Priority order follows the CLAUDE.md model matrix: OpenRouter/Qwen default; Groq (Scout) and Together supported
+        provider_priority = ["openrouter", "groq", "anthropic", "openai", "together", "google"]
 
         for provider in provider_priority:
             api_key = _load_api_key(provider)
@@ -130,7 +138,7 @@ class SetupE2ETestModule:
 
                 # Set default models per provider
                 if provider == "groq":
-                    self.llm_model = "llama-3.3-70b-versatile"
+                    self.llm_model = "meta-llama/llama-4-scout-17b-16e-instruct"
                 elif provider == "openrouter":
                     self.llm_model = "qwen/qwen3.6-35b-a3b"
                 elif provider == "anthropic":
@@ -138,7 +146,7 @@ class SetupE2ETestModule:
                 elif provider == "openai":
                     self.llm_model = "gpt-4o-mini"
                 elif provider == "together":
-                    self.llm_model = "meta-llama/Llama-3.3-70B-Instruct-Turbo"
+                    self.llm_model = "google/gemma-4-31B-it"
                 elif provider == "google":
                     self.llm_model = "gemini-2.0-flash-exp"
 
@@ -209,11 +217,23 @@ class SetupE2ETestModule:
                 # Step 6: Load models (live API)
                 await self._test_load_models()
 
+            # Step 6b/6c: the wizard's order -- mint the owner's federation ID and
+            # self-claim the node with its one-time PIN BEFORE completing setup.
+            # Both are open during first-run (no ROOT yet, loopback-only) and
+            # owner-gated after; the PIN is minted only while the node is unowned
+            # (CIRISAgent#1144 Lesson 1: an unclaimed node cannot announce).
+            await self._test_mint_federation_id()
+            await self._test_claim_ownership()
+
             # Step 7: Complete setup
             await self._test_complete_setup()
 
             # Step 8: Verify login
             await self._test_verify_login()
+
+            # Step 8b: the announce bundle -- is the node discoverable on the
+            # federation? (#1144 Lesson 1: an un-announced node is P2P-only)
+            await self._test_announce_bundle()
 
             # Step 9: Verify system operational
             await self._test_system_operational()
@@ -592,6 +612,177 @@ class SetupE2ETestModule:
             duration_ms = (time.perf_counter() - start) * 1000
             await self._record_step(step, False, duration_ms, "Exception occurred", error=str(e))
 
+    async def _test_mint_federation_id(self) -> None:
+        """Test: mint the owner's federation ID, as the wizard's mint step does.
+
+        Announcing is the OWNER stating their ownership at a federation-wide
+        audience, which needs the owner's signing key on this node. The wizard
+        mints it (`POST /v1/self/identity`: open during first-run, owner-gated
+        once the node is owned, idempotent) before it claims and completes;
+        without it the claim has no fed-ID to bind and every announce answers
+        503. Sent through the brain (8080), which proxies it to the node -- the
+        same path client >= 0.5.196 uses.
+        """
+        start = time.perf_counter()
+        step = "mint_federation_id"
+
+        try:
+            response = await self.client.post(
+                f"{self.base_url}/v1/self/identity", json={"label": self.test_username}, timeout=60.0
+            )
+            duration_ms = (time.perf_counter() - start) * 1000
+            if response.status_code != 200:
+                await self._record_step(
+                    step, False, duration_ms, f"Status code: {response.status_code}", error=response.text[:300]
+                )
+                return
+            data = response.json()
+            key_id = str(data.get("key_id", ""))
+            self.report.federation_key_id = key_id or None
+            await self._record_step(
+                step,
+                bool(key_id),
+                duration_ms,
+                f"Federation ID minted: {key_id} ({data.get('hardware_type', '?')})" if key_id else "No key_id in mint response",
+                details={"key_id": key_id, "hardware_type": data.get("hardware_type"), "fedcode_prefix": str(data.get("fedcode", ""))[:24]},
+            )
+        except Exception as e:  # noqa: BLE001
+            duration_ms = (time.perf_counter() - start) * 1000
+            await self._record_step(step, False, duration_ms, "Exception occurred", error=str(e))
+
+    async def _test_claim_ownership(self) -> None:
+        """Test: self-claim the local node with its one-time PIN, as the wizard does.
+
+        The node mints a claim PIN at boot while it is UNOWNED and writes it to
+        `<node home>/claim_pin` (the node's home is the backend's CIRIS_HOME).
+        The wizard reads that file and posts `POST /v1/setup/claim-remote`
+        with the node's own NodeCode; that writes the owner->node binding the
+        announce later widens. Without it the node completes setup UNCLAIMED
+        and answers 409 to every announce (CIRISAgent#1144 Lesson 1).
+        """
+        start = time.perf_counter()
+        step = "claim_ownership"
+        node_url = os.environ.get("CIRIS_NODE_URL") or DEFAULT_NODE_URL
+
+        # The PIN: the node's home is the backend's CIRIS_HOME; a run that does
+        # not export it puts the backend's home in the repo checkout (server.py).
+        homes = [os.environ.get("CIRIS_HOME"), str(Path(__file__).resolve().parents[3]), os.path.expanduser("~/ciris")]
+        pin_paths = [Path(h) / "claim_pin" for h in homes if h]
+        pin: Optional[str] = None
+        pin_file: Optional[Path] = None
+        for candidate in pin_paths:
+            try:
+                raw = candidate.read_text(encoding="utf-8").strip()
+            except OSError:
+                continue
+            if raw.startswith("{"):
+                try:
+                    obj = json.loads(raw)
+                    raw = str(obj.get("pin") or obj.get("claim_pin") or "")
+                except ValueError:
+                    raw = ""
+            if raw:
+                pin, pin_file = raw, candidate
+                break
+        if pin is None:
+            duration_ms = (time.perf_counter() - start) * 1000
+            await self._record_step(
+                step,
+                False,
+                duration_ms,
+                "No claim PIN readable -- the node minted none (already ROOT-owned: setup ran against a "
+                "database that already has an owner) or wrote it to a home this runner is not looking at",
+                error=f"looked in: {', '.join(str(p) for p in pin_paths)}",
+            )
+            return
+
+        try:
+            # The node's own NodeCode (served on the federation surface, proxied by the brain).
+            r = await self.client.get(f"{self.base_url}/v1/federation/node-code", timeout=30.0)
+            if r.status_code != 200:
+                r = await self.client.get(f"{node_url}/v1/federation/node-code", timeout=30.0)
+            r.raise_for_status()
+            body = r.json()
+            payload = body.get("data", body) if isinstance(body, dict) else {}
+            node_code = str(payload.get("node_code") or payload.get("code") or "")
+            if not node_code:
+                raise RuntimeError(f"no node_code in {str(body)[:200]}")
+
+            claim = {
+                "node_code": node_code,
+                "claim_pin": pin,
+                "cohort_scope": "self",
+                # A self-claim's NodeCode may carry no transport hint; the target IS this node.
+                "target_url": node_url,
+                "owner_username": self.test_username,
+                "owner_password": self.test_password,
+            }
+            # claim-remote is a NODE route; the brain's own /v1/setup router shadows
+            # the prefix, so it is posted to the node directly.
+            response = await self.client.post(f"{node_url}/v1/setup/claim-remote", json=claim, timeout=120.0)
+            duration_ms = (time.perf_counter() - start) * 1000
+            if response.status_code != 200:
+                await self._record_step(
+                    step, False, duration_ms, f"Status code: {response.status_code}", error=response.text[:400]
+                )
+                return
+            data = response.json()
+            self.report.node_claimed = True
+            await self._record_step(
+                step,
+                True,
+                duration_ms,
+                f"Node self-claimed (PIN from {pin_file}): owner={data.get('owner') or data.get('responsible_user_key_id')}",
+                details={"pin_file": str(pin_file), "node_code_prefix": node_code[:24], "response_keys": sorted(data.keys()) if isinstance(data, dict) else []},
+            )
+        except Exception as e:  # noqa: BLE001
+            duration_ms = (time.perf_counter() - start) * 1000
+            await self._record_step(step, False, duration_ms, "Exception occurred", error=str(e))
+
+    async def _test_announce_bundle(self) -> None:
+        """Test: the node's announce bundle is complete and federation-visible.
+
+        Setup-complete binds owner->node at `cohort_scope: self`; until the
+        owner announces, no peer can place this node in ANY community audience
+        (CIRISAgent#1144 Lesson 1). The announce is idempotent and, from
+        ciris-server 0.5.197, returns the bundle it walked. Asserted here with
+        the session verify_login obtained: `federation_discoverable` and
+        `bundle_expected == 5` (owner key, node key, owner->node binding,
+        owner->agent binding, agent key).
+        """
+        start = time.perf_counter()
+        step = "announce_bundle"
+
+        if not self.report.login_verified:
+            await self._record_step(step, False, 0, "Skipped - login not verified (no owner session to announce with)")
+            return
+
+        node_url = os.environ.get("CIRIS_NODE_URL") or DEFAULT_NODE_URL
+        try:
+            check = await check_announce_bundle(self.client, node_url, dict(self.client.headers))
+        except Exception as e:  # noqa: BLE001
+            duration_ms = (time.perf_counter() - start) * 1000
+            await self._record_step(step, False, duration_ms, "Exception occurred", error=str(e))
+            return
+        duration_ms = (time.perf_counter() - start) * 1000
+
+        self.report.announce_bundle = check.details()
+        self.report.federation_discoverable = check.discoverable
+        for line in check.render().splitlines():
+            logger.info(f"[E2E] {line}")
+
+        if check.asserted:
+            await self._record_step(step, check.passed, duration_ms, check.message, details=check.details())
+        elif check.status == "not_reported":
+            # The announce itself succeeded; only the report is missing. Not a
+            # failure of THIS node -- a floor the pin has not reached yet.
+            await self._record_step(step, True, duration_ms, check.message, details=check.details())
+        else:
+            # unreachable / unauthorized / error: the bundle could NOT be asserted.
+            # Say so in the runner's words rather than passing a check that did
+            # not run (the gate lesson: a skipped assertion is not a green one).
+            await self._record_step(step, False, duration_ms, check.message, error=check.status, details=check.details())
+
     async def _test_system_operational(self) -> None:
         """Test: Verify system is operational after setup."""
         start = time.perf_counter()
@@ -602,7 +793,16 @@ class SetupE2ETestModule:
             return
 
         try:
-            response = await self.client.get(f"{self.base_url}/v1/system/health")
+            # Right after setup-complete the processor is still starting and health
+            # says `critical` for a few seconds; wait it out (bounded) before judging.
+            response = await self.client.get(f"{self.base_url}/v1/system/health", timeout=10.0)
+            for _attempt in range(20):
+                if response.status_code == 200:
+                    _p = response.json().get("data", response.json())
+                    if _p.get("status") not in ("critical", "initializing", "starting"):
+                        break
+                await asyncio.sleep(3)
+                response = await self.client.get(f"{self.base_url}/v1/system/health", timeout=10.0)
             duration_ms = (time.perf_counter() - start) * 1000
 
             if response.status_code != 200:
@@ -612,8 +812,16 @@ class SetupE2ETestModule:
                 return
 
             data = response.json()
-            healthy = data.get("data", {}).get("healthy", data.get("healthy", False))
-            services = data.get("data", {}).get("services_online", data.get("services_online", 0))
+            payload = data.get("data", data)
+            # /v1/system/health says `status: "healthy"` and lists per-service
+            # {available, healthy} counts; it has never carried a `healthy` bool,
+            # so reading one reported "not healthy" on a healthy system.
+            healthy = payload.get("status") == "healthy" or bool(payload.get("healthy", False))
+            per_service = payload.get("services", {}) or {}
+            services = payload.get("services_online") or sum(
+                int(v.get("healthy", 0)) for v in per_service.values() if isinstance(v, dict)
+            )
+            unhealthy = [k for k, v in per_service.items() if isinstance(v, dict) and v.get("healthy", 0) < v.get("available", 0)]
 
             if healthy:
                 await self._record_step(
@@ -625,7 +833,12 @@ class SetupE2ETestModule:
                 )
             else:
                 await self._record_step(
-                    step, False, duration_ms, "System not healthy", details={"healthy": healthy, "services": services}
+                    step,
+                    False,
+                    duration_ms,
+                    f"System not healthy: status={payload.get('status')!r}"
+                    + (f", degraded: {', '.join(unhealthy)}" if unhealthy else ""),
+                    details={"healthy": healthy, "status": payload.get("status"), "services": services, "degraded": unhealthy},
                 )
 
         except Exception as e:

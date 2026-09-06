@@ -6,6 +6,7 @@ the old shutdown_manager location. The functionality is now provided by
 the ShutdownService.
 """
 
+import asyncio
 import logging
 from typing import Any, Callable, Optional
 
@@ -33,6 +34,36 @@ def reset_global_shutdown_service() -> None:
         _global_shutdown_service._emergency_mode = False
         logger.info("Global shutdown service reset for new event loop")
     _global_shutdown_service = None
+
+
+def reset_global_shutdown_service_if_stale() -> bool:
+    """Reset the global service when it belongs to a PREVIOUS event loop (#1122).
+
+    An in-process runtime restart (mobile resume, the `.restart_signal` path)
+    starts a new loop in the same process. The module-level service survives
+    with `_shutdown_requested=True` from the run that just ended and an Event
+    bound to the dead loop, so the restarted runtime either sees "shutdown
+    requested" at birth and exits, or raises `bound to a different event loop`
+    when it waits. Called from `CIRISRuntime.initialize()`; a no-op when there
+    is no global service or it already belongs to the running loop. Returns
+    True when a reset happened. Must be called from a running loop.
+    """
+    global _global_shutdown_service
+    service = _global_shutdown_service
+    if service is None:
+        return False
+    loop = asyncio.get_running_loop()
+    bound = getattr(service, "_event_loop", None)
+    if bound is None or bound is loop:
+        return False
+    logger.warning(
+        "Global shutdown service belongs to a previous event loop (requested=%s, reason=%r) -- "
+        "resetting for the restarted runtime (CIRISAgent#1122)",
+        getattr(service, "_shutdown_requested", None),
+        getattr(service, "_shutdown_reason", None),
+    )
+    reset_global_shutdown_service()
+    return True
 
 
 # Keep original function definition for type hints
@@ -123,4 +154,5 @@ __all__ = [
     "wait_for_global_shutdown_async",
     "execute_async_handlers",
     "reset_global_shutdown_service",
+    "reset_global_shutdown_service_if_stale",
 ]

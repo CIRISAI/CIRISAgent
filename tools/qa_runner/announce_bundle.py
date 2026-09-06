@@ -12,8 +12,8 @@ from ciris-server 0.5.197, walks the bundle a peer needs and returns it:
     bundle_expected         3 for a fabric node, 5 with one agent
     federation_discoverable every expected row is federation-visible
 
-Assert `federation_discoverable` and `bundle_expected == 5` at setup-complete
-and put the bundle in the report. Every non-ok outcome names WHICH side is
+Assert at setup-complete that every row a peer walks is federation-visible
+and that the bundle is as large as the node says it must be; put it in the report. Every non-ok outcome names WHICH side is
 short, in the runner's own words, so a red here never reads as delivery.
 """
 
@@ -24,8 +24,14 @@ from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 import httpx
 
-#: An agent node's bundle: owner key, node key, owner->node binding,
-#: owner->agent (stewardship) binding, agent key.
+#: The rows a peer walks on EVERY node: owner key, node key, owner->node binding.
+#: A node whose agent signs with a SEPARATE key adds owner->agent (stewardship)
+#: binding + agent key per such key; the shipped agent shape is single-key, so
+#: its bundle is these three (ciris-server 0.5.198, CIRISServer#541).
+_CORE_ROLES = frozenset({"owner_key", "node_key", "owner_binding"})
+
+#: Kept for callers that still name it; the assertion trusts the server's
+#: `bundle_expected` (3 + 2 per separate agent key), not this number.
 AGENT_NODE_BUNDLE_ROWS = 5
 
 #: Cohort scopes, narrowest to widest (persist v40 crossing scopes).
@@ -109,7 +115,6 @@ async def check_announce_bundle(
     node_url: str = DEFAULT_NODE_URL,
     headers: Optional[Mapping[str, str]] = None,
     *,
-    expected_rows: int = AGENT_NODE_BUNDLE_ROWS,
     timeout: float = 30.0,
 ) -> AnnounceBundleCheck:
     """POST the (idempotent) announce and classify what came back.
@@ -182,14 +187,20 @@ async def check_announce_bundle(
         rows=rows,
         promoted_attestation_id=str(promoted) if promoted else None,
     )
-    # WHAT A PEER ACTUALLY WALKS. The server enumerates every live owner-authored
-    # `delegates_to` onto an agent key as its own agent. On a single-key node
-    # (node key == agent key) the owner->node binding IS the owner->agent
-    # binding, and a widening leaves the pre-promotion `self` row live beside
-    # the federation one -- so the raw report counts the same agent twice and
-    # calls the node undiscoverable on a row no peer ever receives (CC 5.2 keeps
-    # `self` rows home). Collapse per (role, key) to the widest placement and
-    # judge THAT; the server's own verdict is kept beside it, never hidden.
+    # WHAT A PEER ACTUALLY WALKS. Collapse per (role, key) to the widest placement
+    # and judge THAT, keeping the server's own verdict beside it:
+    #   * 0.5.197 enumerated every live owner-authored `delegates_to` as its own
+    #     agent, so on a single-key node (node key == agent key) the widening's
+    #     pre-promotion `self` row was counted as a second agent -- expected 7,
+    #     federation_discoverable false, for a node every peer could walk
+    #     (CIRISServer#541). A peer never receives a `self` row (CC 5.2).
+    #   * 0.5.198 collapses per agent key at the widest placement and, on that
+    #     same single-key shape, reports a THREE-row bundle: owner key, node key,
+    #     owner->node binding -- the node key IS the agent key, so there is no
+    #     separate stewardship row to announce. `bundle_expected` is the
+    #     server's count of what a peer needs (3, +2 per SEPARATE agent key) and
+    #     is trusted; what is asserted here is that every collapsed row is
+    #     federation-visible and that the three roles a peer walks are present.
     widest: Dict[Tuple[str, str], AnnouncedRow] = {}
     for r in rows:
         k = (r.role, r.key_id)
@@ -198,41 +209,42 @@ async def check_announce_bundle(
             widest[k] = r
     effective_rows = list(widest.values())
     shadowed = [r for r in rows if widest[(r.role, r.key_id)] is not r]
-    effective_discoverable = all(
-        r.cohort_scope in (None, "federation") for r in effective_rows
-    ) and len(effective_rows) >= expected_rows
+    roles = {r.role for r in effective_rows}
+    core_missing = sorted(_CORE_ROLES - roles)
+    narrow = [r for r in effective_rows if r.cohort_scope not in (None, "federation")]
+    effective_discoverable = not core_missing and not narrow and len(effective_rows) >= min(expected, 3)
     check.effective_discoverable = effective_discoverable
     check.shadowed_rows = [r.render() for r in shadowed]
 
     shortfalls: List[str] = []
-    if len(effective_rows) < expected_rows:
-        missing = sorted({"owner_key", "node_key", "owner_binding", "agent_binding", "agent_key"} - {r.role for r in effective_rows})
-        shortfalls.append(
-            f"{len(effective_rows)} distinct rows, not {expected_rows}: missing {', '.join(missing) or 'a row the node did not enumerate'}"
-        )
-    narrow = [r for r in effective_rows if r.cohort_scope not in (None, "federation")]
+    if core_missing:
+        shortfalls.append(f"missing {', '.join(core_missing)}: a peer cannot walk owner -> node")
     if narrow:
-        shortfalls.append(
-            "not federation-visible: " + ", ".join(f"{r.role}@{r.cohort_scope}" for r in narrow)
-        )
+        shortfalls.append("not federation-visible: " + ", ".join(f"{r.role}@{r.cohort_scope}" for r in narrow))
+    if not shadowed and len(effective_rows) < expected:
+        # The server expected more rows than it could enumerate (nothing was
+        # merely double-counted): something it counts on is genuinely absent.
+        shortfalls.append(f"{len(effective_rows)} of the {expected} rows the node expects are present")
     if shortfalls:
         check.status = "incomplete"
         check.message = "; ".join(shortfalls) + " -- this node is P2P-only: peers cannot place it in any community audience"
         return check
 
-    note = ""
-    if shadowed or expected != expected_rows or not discoverable:
+    notes: List[str] = []
+    if shadowed or expected != len(effective_rows) or not discoverable:
         bindings = [r for r in shadowed if r.attestation_id]
         keys = [r for r in shadowed if not r.attestation_id]
-        note = (
-            f" [server reports bundle_expected={expected}, federation_discoverable={str(discoverable).lower()}: "
+        notes.append(
+            f"server reports bundle_expected={expected}, federation_discoverable={str(discoverable).lower()}: "
             f"{len(bindings)} superseded {'/'.join(sorted({r.cohort_scope or '-' for r in bindings})) or '-'}-scoped binding(s) "
             f"and {len(keys)} duplicate key row(s) counted as an extra agent -- a peer never receives a self row; "
-            "CIRISServer#541 announce_bundle double-count]"
+            "CIRISServer#541 announce_bundle double-count (fixed in 0.5.198)"
         )
+    if "agent_binding" not in roles:
+        notes.append("single-key node: the node key is the agent key, so there is no separate stewardship row (3-row bundle)")
     check.message = (
-        f"{len(effective_rows)}/{expected_rows} distinct rows federation-visible"
+        f"{len(effective_rows)}/{expected} rows federation-visible"
         + (" (re-announce: binding already at federation scope)" if promoted is None else f" (owner binding promoted: {promoted})")
-        + note
+        + (" [" + "; ".join(notes) + "]" if notes else "")
     )
     return check

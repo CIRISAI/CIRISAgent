@@ -40,7 +40,7 @@ async def test_complete_bundle_is_ok_and_posts_the_owner_session_to_the_node() -
     check = await check_announce_bundle(c, "http://127.0.0.1:4243", {"Authorization": "Bearer t"})
     assert check.status == "ok" and check.passed and check.asserted
     assert c.seen["url"] == "http://127.0.0.1:4243/v1/federation/announce" and c.seen["auth"] == "Bearer t"  # type: ignore[attr-defined]
-    assert "re-announce" in check.message and len(check.rows) == 5
+    assert "re-announce" in check.message and len(check.rows) == 5 and "5/5 rows" in check.message
 
 
 @pytest.mark.asyncio
@@ -68,15 +68,32 @@ async def test_superseded_self_row_beside_the_federation_one_is_still_discoverab
     assert check.expected == 7 and check.discoverable is False          # the server's verdict, kept
     assert len(check.shadowed_rows) == 2 and any("att-orig" in r for r in check.shadowed_rows)
     assert "1 superseded self-scoped binding(s) and 1 duplicate key row(s)" in check.message
-    assert "double-count" in check.message and "bundle_expected=7" in check.message
+    assert "double-count" in check.message and "bundle_expected=7" in check.message and "5/7 rows" in check.message
 
 
 @pytest.mark.asyncio
-async def test_fabric_count_means_no_agent_in_the_bundle() -> None:
+async def test_single_key_node_three_row_bundle_is_complete() -> None:
+    """0.5.198: the node key IS the agent key, so the bundle is owner key, node key, binding."""
     c = _client(200, {"bundle": _ROWS_OK[:3], "bundle_expected": 3, "federation_discoverable": True})
     check = await check_announce_bundle(c, "http://127.0.0.1:4243", {})
-    assert check.status == "incomplete" and "3 distinct rows, not 5" in check.message
-    assert "missing agent_binding, agent_key" in check.message
+    assert check.status == "ok" and check.passed and check.effective_discoverable is True
+    assert "3/3 rows federation-visible" in check.message and "single-key node" in check.message
+
+
+@pytest.mark.asyncio
+async def test_a_missing_core_row_is_incomplete() -> None:
+    rows = [r for r in _ROWS_OK[:3] if r["role"] != "owner_binding"]
+    c = _client(200, {"bundle": rows, "bundle_expected": 3, "federation_discoverable": False})
+    check = await check_announce_bundle(c, "http://127.0.0.1:4243", {})
+    assert check.status == "incomplete" and "missing owner_binding" in check.message
+
+
+@pytest.mark.asyncio
+async def test_rows_the_node_expects_but_cannot_enumerate_are_incomplete() -> None:
+    """expected 5 (a separate agent key) but only the three core rows present, nothing shadowed."""
+    c = _client(200, {"bundle": _ROWS_OK[:3], "bundle_expected": 5, "federation_discoverable": False})
+    check = await check_announce_bundle(c, "http://127.0.0.1:4243", {})
+    assert check.status == "incomplete" and "3 of the 5 rows the node expects are present" in check.message
 
 
 @pytest.mark.asyncio

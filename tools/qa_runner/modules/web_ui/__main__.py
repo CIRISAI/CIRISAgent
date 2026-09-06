@@ -803,15 +803,30 @@ class DesktopAppTestRunner:
         """
 
         async def logout():
-            self._log("Opening the nav menu to log out")
-            if not await self.helper.wait_for_element("btn_menu", timeout=20000):
-                await self._dump_tree("reset:btn_menu")
-                raise RuntimeError("btn_menu not found — not on an authenticated screen?")
-            if not await self.helper.click("btn_menu"):
-                raise RuntimeError("Failed to open the nav menu (btn_menu)")
-            if not await self.helper.wait_for_element("menu_logout", timeout=8000):
+            # LOGOUT LIVES UNDER GOVERNANCE, not the generic menu. The nav has
+            # several categories, each its own opener and dropdown; `btn_menu`
+            # opens ADVANCED and `menu_logout` is inside the GOVERNANCE one
+            # (CIRISApp.kt: expanded = activeCategory == NavCategory.GOVERNANCE).
+            # Clicking the wrong opener still "succeeds" as a click and then times
+            # out on an item that was never going to render -- which is exactly how
+            # this failed the first time it ran.
+            openers = ("btn_governance_menu", "btn_menu")
+            opened = None
+            for tag in openers:
+                if await self.helper.is_element_visible(tag):
+                    self._log(f"Opening the nav menu to log out ({tag})")
+                    if await self.helper.click(tag) and await self.helper.wait_for_optional_element(
+                        "menu_logout", timeout=6000
+                    ):
+                        opened = tag
+                        break
+                    self._log(f"{tag} did not reveal menu_logout; trying the next opener")
+            if opened is None:
                 await self._dump_tree("reset:menu_logout")
-                raise RuntimeError("menu_logout not found after opening the nav menu")
+                raise RuntimeError(
+                    "menu_logout not reachable from " + " or ".join(openers) + ". Either the app is not "
+                    "on an authenticated screen, or the logout item moved to another nav category."
+                )
             if not await self.helper.click("menu_logout"):
                 raise RuntimeError("Failed to click menu_logout")
             await asyncio.sleep(1.5)

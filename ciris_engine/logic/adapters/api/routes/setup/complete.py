@@ -1300,24 +1300,63 @@ def _log_setup_debug_info(setup: SetupCompleteRequest) -> bool:
 
 
 async def _node_only_restart(runtime: Any) -> None:
-    """After a run-without-AI setup, stop the agent runtime so the process becomes the node.
+    """After a run-without-AI setup, become the node -- here, not via the runtime's shutdown.
 
     Registered with ``BackgroundTasks``, so Starlette runs it AFTER the
     setup-complete response has been sent. That ordering is the contract the
-    client asked for (CIRISAgent#1149): the 200 always arrives first, and a
-    dropped connection on ``/v1/setup/complete`` stays a real failure rather
-    than something the client has to read as success.
+    client asked for (CIRISAgent#1149/#1151): the 200 always arrives first, and
+    a dropped connection on ``/v1/setup/complete`` stays a real failure.
 
-    ``main.py``'s final exit then sees the recorded flag and execs
-    ``python -m ciris_server --headless --home ... --key-id ...`` in place, so
-    :8080 goes away and the node's read API answers on :4243.
+    WHY THIS DOES THE WORK ITSELF. The first version asked the runtime to shut
+    down and let ``main.py``'s exit path exec into the node. That is correct
+    only while the runtime is RUNNING, and the moment this feature fires is
+    exactly the moment it is not: during first-run the runtime is parked waiting
+    for the wizard, nothing awaits its shutdown event, and an end-to-end run
+    showed ``RUNTIME SHUTDOWN REQUESTED`` logged and then :8080 still serving
+    nine minutes later. So the hand-off happens here, and ``main.py``'s exit
+    path stays as the second door for a setup re-run against a live runtime.
+
+    :8080 is told to stop accepting BEFORE the exec, so a client that has not
+    yet re-pointed gets connection-refused -- positive evidence -- rather than a
+    socket that accepts and never answers. Its task is deliberately not awaited:
+    this coroutine is itself one of that server's in-flight requests.
     """
+    from ciris_engine import node_only
+
+    cfg = node_only.node_only_config()
+    if cfg is None:
+        logger.error(
+            "[RUN-WITHOUT-AI] the flag was just written but does not read back from the home's .env; "
+            "staying on the agent runtime rather than handing off blind"
+        )
+        return
+
+    for adapter in getattr(runtime, "adapters", None) or []:
+        server = getattr(adapter, "_server", None)
+        if server is not None:
+            server.should_exit = True
+            logger.info(
+                "[RUN-WITHOUT-AI] asked %s to stop accepting on :8080; a client that has not moved yet "
+                "will get connection-refused rather than a hang",
+                type(adapter).__name__,
+            )
+
+    # Let the response finish leaving the transport before the process image is
+    # replaced. The bytes are already written; this is the drain, not a guess at
+    # how long the client needs.
+    await asyncio.sleep(0.25)
+
     logger.info(
-        "[RUN-WITHOUT-AI] setup-complete response sent; stopping the agent runtime. main.py's exit replaces "
-        "this process (pid=%d) with the ciris-server node; :8080 goes away and the client moves to :4243",
+        "[RUN-WITHOUT-AI] setup complete; replacing this process (pid=%d) with the ciris-server node. "
+        ":8080 goes away and the client moves to :4243",
         os.getpid(),
     )
-    runtime.request_shutdown("Run without AI: restarting as a ciris-server node (no agent runtime)")
+    if not node_only.exec_into_node(cfg):
+        logger.error(
+            "[RUN-WITHOUT-AI] exec into the node FAILED; the agent runtime is left without its API server. "
+            "Asking it to shut down so the next boot starts the node from the recorded flag."
+        )
+        runtime.request_shutdown("Run without AI: exec into the ciris-server node failed")
 
 
 async def _schedule_runtime_resume(runtime: Any) -> None:

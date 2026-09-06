@@ -10,6 +10,7 @@ from unittest.mock import patch
 import pytest
 from pydantic import ValidationError
 
+from ciris_engine import node_only
 from ciris_engine.logic.adapters.api.routes.setup import complete
 from ciris_engine.logic.adapters.api.routes.setup.models import SetupCompleteRequest
 
@@ -66,19 +67,53 @@ def test_the_flag_is_written_even_when_the_alias_cannot_be_resolved() -> None:
 
 
 def test_the_restart_is_a_background_task_so_the_response_lands_first() -> None:
-    """Starlette runs BackgroundTasks after the response is sent -- that is the whole guarantee."""
+    """Starlette runs BackgroundTasks after the response is sent -- that is the ordering guarantee."""
     import inspect
 
     from fastapi import BackgroundTasks
 
     sig = inspect.signature(complete.complete_setup)
-    assert "background_tasks" in sig.parameters, "the handler must take BackgroundTasks for the ordering to hold"
+    assert "background_tasks" in sig.parameters
     assert sig.parameters["background_tasks"].annotation is BackgroundTasks
 
+
+def _runtime_with_server():
+    server = type("S", (), {"should_exit": False})()
+    adapter = type("A", (), {"_server": server})()
+    runtime = type("R", (), {"adapters": [adapter], "request_shutdown": lambda self, reason: None})()
+    return runtime, server
+
+
+def test_the_handover_stops_8080_then_execs_into_the_node() -> None:
+    """The runtime is PARKED during first-run, so this must not delegate to its shutdown."""
+    runtime, server = _runtime_with_server()
+    cfg = node_only.NodeOnlyConfig(home="/h", key_id="k")
+    with patch.object(complete, "asyncio", wraps=asyncio) as _aio, patch(
+        "ciris_engine.node_only.node_only_config", return_value=cfg
+    ), patch("ciris_engine.node_only.exec_into_node", return_value=True) as execd:
+        _aio.sleep = lambda s: asyncio.sleep(0)
+        asyncio.run(complete._node_only_restart(runtime))
+    assert server.should_exit is True, ":8080 must stop accepting so a stale client gets refused, not a hang"
+    execd.assert_called_once_with(cfg)
+
+
+def test_a_failed_exec_falls_back_to_asking_the_runtime_to_stop() -> None:
     reasons: List[str] = []
-    runtime = type("R", (), {"request_shutdown": lambda self, reason: reasons.append(reason)})()
-    tasks = BackgroundTasks()
-    tasks.add_task(complete._node_only_restart, runtime)
-    assert reasons == [], "nothing runs at registration time; the response is still being sent"
-    asyncio.run(tasks())
-    assert len(reasons) == 1 and "Run without AI" in reasons[0] and "node" in reasons[0]
+    runtime, _ = _runtime_with_server()
+    runtime.request_shutdown = lambda reason: reasons.append(reason)  # type: ignore[method-assign]
+    with patch.object(complete, "asyncio", wraps=asyncio) as _aio, patch(
+        "ciris_engine.node_only.node_only_config", return_value=node_only.NodeOnlyConfig(home="/h", key_id=None)
+    ), patch("ciris_engine.node_only.exec_into_node", return_value=False):
+        _aio.sleep = lambda s: asyncio.sleep(0)
+        asyncio.run(complete._node_only_restart(runtime))
+    assert reasons and "exec into the ciris-server node failed" in reasons[0]
+
+
+def test_a_flag_that_does_not_read_back_does_not_hand_off_blind() -> None:
+    runtime, server = _runtime_with_server()
+    with patch("ciris_engine.node_only.node_only_config", return_value=None), patch(
+        "ciris_engine.node_only.exec_into_node"
+    ) as execd:
+        asyncio.run(complete._node_only_restart(runtime))
+    execd.assert_not_called()
+    assert server.should_exit is False

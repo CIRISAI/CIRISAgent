@@ -70,14 +70,26 @@ def test_run_headless_hands_argv_to_the_wheel_and_never_returns(monkeypatch: pyt
 def test_exec_into_node_replaces_the_process_with_the_node(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: List[Any] = []
     monkeypatch.setattr(os, "execv", lambda path, argv: calls.append((path, argv)))
-    node_only.exec_into_node(node_only.NodeOnlyConfig(home="/h", key_id=None))
+    assert node_only.exec_into_node(node_only.NodeOnlyConfig(home="/h", key_id=None)) is True
     assert calls == [(sys.executable, [sys.executable, "-m", "ciris_server", "--headless", "--home", "/h"])]
+
+
+def test_a_failed_exec_is_named_and_falls_through(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    def _boom(path: str, argv: List[str]) -> None:
+        raise OSError("exec format error")
+
+    monkeypatch.setattr(os, "execv", _boom)
+    assert node_only.exec_into_node(node_only.NodeOnlyConfig(home="/h", key_id="k")) is False
+    err = capsys.readouterr().err
+    assert "[RUN-WITHOUT-AI]" in err and "exec failed" in err and "next boot" in err
 
 
 def test_run_desktop_starts_the_node_on_our_identity_then_the_client_then_tears_down(monkeypatch: pytest.MonkeyPatch) -> None:
     events: List[Any] = []
 
     class _Proc:
+        pid = 4321
+
         def poll(self) -> None:
             return None
 
@@ -109,3 +121,76 @@ def test_run_desktop_starts_the_node_on_our_identity_then_the_client_then_tears_
         "terminate",
         "wait",
     ]
+
+
+# --- the story is on stdout/stderr, greppable by one prefix -------------------
+
+
+def test_the_decision_says_where_it_came_from_and_what_it_means(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    monkeypatch.delenv(node_only.ENV_FLAG, raising=False)
+    monkeypatch.delenv(node_only.ENV_KEY_ID, raising=False)
+    home = _home_with_env(tmp_path, "CIRIS_RUN_WITHOUT_AI=true\nCIRIS_NODE_KEY_ID=alias-1\n")
+    cfg = node_only.node_only_config(home)
+    assert cfg is not None and cfg.source == str(tmp_path / ".env")
+    out = capsys.readouterr()
+    assert "[RUN-WITHOUT-AI] the owner chose to run without AI" in out.out
+    assert f"decided_by={tmp_path / '.env'}" in out.out and "key_id=alias-1" in out.out and "node_logs=" in out.out
+    assert out.err == "", "nothing is wrong, so nothing on stderr"
+
+
+def test_a_missing_alias_is_shouted_on_stderr(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    monkeypatch.delenv(node_only.ENV_FLAG, raising=False)
+    monkeypatch.delenv(node_only.ENV_KEY_ID, raising=False)
+    home = _home_with_env(tmp_path, "CIRIS_RUN_WITHOUT_AI=true\n")
+    assert node_only.node_only_config(home) is not None
+    err = capsys.readouterr().err
+    assert "CIRIS_NODE_KEY_ID" in err and "NOT the identity the wizard claimed" in err
+
+
+def test_the_environment_veto_is_explained(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    home = _home_with_env(tmp_path, "CIRIS_RUN_WITHOUT_AI=true\n")
+    monkeypatch.setenv(node_only.ENV_FLAG, "false")
+    assert node_only.node_only_config(home) is None
+    assert "overrides" in capsys.readouterr().out
+
+
+def test_silence_when_nobody_asked(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    monkeypatch.delenv(node_only.ENV_FLAG, raising=False)
+    home = _home_with_env(tmp_path, "CIRIS_CONFIGURED=true\n")
+    assert node_only.node_only_config(home) is None
+    out = capsys.readouterr()
+    assert out.out == "" and out.err == ""
+
+
+def test_a_missing_wheel_exits_2_with_the_pip_line(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    monkeypatch.setitem(sys.modules, "ciris_server", None)  # import raises ImportError
+    with pytest.raises(SystemExit) as exc:
+        node_only.run_headless(node_only.NodeOnlyConfig(home="/h", key_id="k"))
+    assert exc.value.code == 2
+    err = capsys.readouterr().err
+    assert "pip install ciris-server" in err and "CIRIS_RUN_WITHOUT_AI=false" in err
+
+
+def test_run_desktop_narrates_each_step(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    class _Proc:
+        pid = 99
+
+        def poll(self) -> None:
+            return None
+
+        def terminate(self) -> None:
+            pass
+
+        def wait(self, timeout: float = 0) -> int:
+            return 0
+
+    fake_cli = SimpleNamespace(_spawn_headless_node=lambda args: _Proc(), _wait_for_node_health=lambda url, proc, timeout=60.0: True)
+    fake_launcher = SimpleNamespace(launch_desktop_app=lambda server_url: 0)
+    monkeypatch.setitem(sys.modules, "ciris_server", SimpleNamespace(cli=fake_cli, desktop_launcher=fake_launcher))
+    monkeypatch.setitem(sys.modules, "ciris_server.cli", fake_cli)
+    monkeypatch.setitem(sys.modules, "ciris_server.desktop_launcher", fake_launcher)
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    assert node_only.run_desktop(node_only.NodeOnlyConfig(home="/h", key_id="k")) == 0
+    out = capsys.readouterr().out
+    for phrase in ("starting the node as a child", "node pid=99", "read API is up", "launching the desktop client against http://localhost:4243", "desktop client exited with code 0", "node stopped"):
+        assert phrase in out, phrase

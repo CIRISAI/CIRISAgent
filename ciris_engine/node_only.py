@@ -12,16 +12,21 @@ client".
 
 This module therefore imports nothing from the engine. It reads one file and
 calls into ``ciris_server.cli`` / ``ciris_server.desktop_launcher``, the same
-helpers a bare ``ciris-server`` command uses (desktop-first launcher,
-CIRISServer wheel >= 0.5.19x).
+helpers a bare ``ciris-server`` command uses.
 
-The environment always wins over the file: ``CIRIS_RUN_WITHOUT_AI=false`` in
-the process environment re-enables the brain for one run without touching the
-wizard's choice (a QA harness, an operator debugging a node).
+TROUBLESHOOTING. Every decision and hand-off is announced on stdout and the
+``ciris.node_only`` logger with the prefix ``[RUN-WITHOUT-AI]``: where the
+flag came from (which file, or the environment), the home and key alias in
+use, the exact node command, where the node's own logs are, the health wait,
+the client URL, and every exit code. ``grep RUN-WITHOUT-AI`` is the whole
+story. The environment always wins over the file: ``CIRIS_RUN_WITHOUT_AI=false``
+in the process environment re-enables the brain for one run without touching
+the wizard's choice (a QA harness, an operator debugging a node).
 """
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from dataclasses import dataclass
@@ -30,14 +35,26 @@ from typing import Dict, List, NoReturn, Optional
 ENV_FLAG = "CIRIS_RUN_WITHOUT_AI"
 ENV_KEY_ID = "CIRIS_NODE_KEY_ID"
 NODE_PORT = 4243
+PREFIX = "[RUN-WITHOUT-AI]"
 _TRUE = ("true", "1", "yes", "on")
 _FALSE = ("false", "0", "no", "off")
+
+logger = logging.getLogger("ciris.node_only")
+
+
+def _say(msg: str, *, error: bool = False) -> None:
+    """One line, two places: the console the launcher runs in, and the logger."""
+    line = f"{PREFIX} {msg}"
+    print(line, file=sys.stderr if error else sys.stdout, flush=True)
+    (logger.error if error else logger.info)(line)
 
 
 @dataclass(frozen=True)
 class NodeOnlyConfig:
     home: str
     key_id: Optional[str]
+    #: Where the decision came from, for the log: "environment" or the .env path.
+    source: str = "environment"
 
     def node_args(self) -> List[str]:
         args = ["--home", self.home]
@@ -48,6 +65,14 @@ class NodeOnlyConfig:
     @property
     def server_url(self) -> str:
         return f"http://localhost:{NODE_PORT}"
+
+    @property
+    def node_log_dir(self) -> str:
+        return os.path.join(self.home, "logs")
+
+    def describe(self) -> str:
+        key = self.key_id or "NONE -> the wheel's default label; this is a DIFFERENT node identity than the wizard claimed"
+        return f"home={self.home} key_id={key} decided_by={self.source} node_logs={self.node_log_dir}"
 
 
 def ciris_home() -> str:
@@ -86,16 +111,37 @@ def read_env_file(path: str) -> Dict[str, str]:
 
 
 def node_only_config(home: Optional[str] = None) -> Optional[NodeOnlyConfig]:
-    """The node-only configuration when the owner chose to run without AI, else None."""
+    """The node-only configuration when the owner chose to run without AI, else None.
+
+    Quiet when the answer is "no" and nothing asked for it; says why when the
+    file asked for it but the environment vetoed, and says everything when the
+    answer is "yes".
+    """
     home = home or ciris_home()
-    file_values = read_env_file(os.path.join(home, ".env"))
+    env_path = os.path.join(home, ".env")
+    file_values = read_env_file(env_path)
     env_flag = os.environ.get(ENV_FLAG, "").strip().lower()
+    file_flag = file_values.get(ENV_FLAG, "").strip().lower()
     if env_flag in _FALSE:
+        if file_flag in _TRUE:
+            _say(f"{ENV_FLAG}=false in the environment overrides {env_path} ({ENV_FLAG}={file_flag}) -- running the brain for this one run")
         return None
-    if env_flag not in _TRUE and file_values.get(ENV_FLAG, "").strip().lower() not in _TRUE:
+    if env_flag in _TRUE:
+        source = "environment"
+    elif file_flag in _TRUE:
+        source = env_path
+    else:
         return None
     key_id = os.environ.get(ENV_KEY_ID) or file_values.get(ENV_KEY_ID) or None
-    return NodeOnlyConfig(home=home, key_id=(key_id.strip() if key_id else None))
+    cfg = NodeOnlyConfig(home=home, key_id=(key_id.strip() if key_id else None), source=source)
+    _say(f"the owner chose to run without AI: this process is ciris-server and the client, nothing else ({cfg.describe()})")
+    if not cfg.key_id:
+        _say(
+            f"no {ENV_KEY_ID} in {env_path} or the environment: the node will boot on the wheel's default key label, "
+            "which is NOT the identity the wizard claimed. Set it to the node's keystore alias to fix.",
+            error=True,
+        )
+    return cfg
 
 
 def node_command(cfg: NodeOnlyConfig) -> List[str]:
@@ -105,27 +151,56 @@ def node_command(cfg: NodeOnlyConfig) -> List[str]:
     return [sys.executable, "-m", "ciris_server", "--headless", *cfg.node_args()]
 
 
+def _wheel_or_die() -> None:
+    try:
+        import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]  # noqa: F401
+    except ImportError as exc:
+        _say(
+            f"the ciris-server wheel is not importable ({exc}). Run without AI needs it: `pip install ciris-server`. "
+            f"Or set {ENV_FLAG}=false in the environment to run the brain instead.",
+            error=True,
+        )
+        raise SystemExit(2) from exc
+
+
 def run_headless(cfg: NodeOnlyConfig) -> NoReturn:
     """Serve the node in THIS process and never return (server mode, mobile)."""
-    print(f"Run without AI: starting ciris-server node only (home={cfg.home}, key={cfg.key_id or 'default'})")
+    _wheel_or_die()
     sys.argv = ["ciris-server", "--headless", *cfg.node_args()]
+    _say(f"serving the node in-process (pid={os.getpid()}): argv={sys.argv} read API={cfg.server_url}")
     from ciris_server.cli import main as node_main  # type: ignore[import-not-found, import-untyped, unused-ignore]
 
-    node_main()
+    try:
+        node_main()
+    except SystemExit as exc:
+        _say(f"node exited with code {exc.code}")
+        raise
+    except Exception as exc:  # noqa: BLE001 -- name it before dying
+        _say(f"node crashed: {type(exc).__name__}: {exc} -- see {cfg.node_log_dir}", error=True)
+        raise
+    _say("node returned; exiting 0")
     raise SystemExit(0)
 
 
-def exec_into_node(cfg: NodeOnlyConfig) -> NoReturn:
+def exec_into_node(cfg: NodeOnlyConfig) -> bool:
     """Replace this process with the headless node (the post-setup restart).
 
     The wizard ran on the brain; the owner chose no AI; the brain is done. The
     same pid keeps serving so a launcher waiting on it (``ciris-agent``) sees
-    one process, and the node's read API comes up on :4243.
+    one process, and the node's read API comes up on :4243. Returns False if
+    the exec itself failed (the caller then exits normally and the NEXT boot
+    hands off instead); on success it never returns.
     """
     cmd = node_command(cfg)
+    _say(f"replacing this process (pid={os.getpid()}) with the node in place: {cmd} -- the read API comes up on {cfg.server_url}; node logs in {cfg.node_log_dir}")
     sys.stdout.flush()
     sys.stderr.flush()
-    os.execv(cmd[0], cmd)
+    try:
+        os.execv(cmd[0], cmd)
+    except OSError as exc:
+        _say(f"exec failed ({exc}); exiting normally -- the next boot will start the node from the recorded flag", error=True)
+        return False
+    return True  # pragma: no cover -- execv does not return
 
 
 def run_desktop(cfg: NodeOnlyConfig) -> int:
@@ -138,33 +213,42 @@ def run_desktop(cfg: NodeOnlyConfig) -> int:
     import subprocess
     import time
 
+    _wheel_or_die()
     from ciris_server.cli import (  # type: ignore[import-not-found, import-untyped, unused-ignore]
         _spawn_headless_node,
         _wait_for_node_health,
     )
 
-    print(f"Run without AI: starting ciris-server node (home={cfg.home}, key={cfg.key_id or 'default'})...")
+    _say(f"starting the node as a child: {node_command(cfg)}")
     node_proc = _spawn_headless_node(cfg.node_args())
+    _say(f"node pid={node_proc.pid}; node logs in {cfg.node_log_dir}")
     time.sleep(2.0)
     early = node_proc.poll()
     if early is not None:
-        print(f"ERROR: ciris-server node exited with code {early} before serving", file=sys.stderr)
+        _say(f"node exited with code {early} within 2s of starting -- see {cfg.node_log_dir} (usual causes: {NODE_PORT - 1}/{NODE_PORT} already bound, unreadable home, missing key material)", error=True)
         return early if early != 0 else 1
     try:
-        if not _wait_for_node_health(cfg.server_url, node_proc, timeout=60.0):
+        _say(f"waiting for the node's read API at {cfg.server_url}/health (60s)")
+        if _wait_for_node_health(cfg.server_url, node_proc, timeout=60.0):
+            _say("node read API is up")
+        else:
             late = node_proc.poll()
             if late is not None:
-                print(f"ERROR: ciris-server node exited with code {late}", file=sys.stderr)
+                _say(f"node exited with code {late} while waiting for its read API -- see {cfg.node_log_dir}", error=True)
                 return late if late != 0 else 1
-            print("WARNING: node not answering health checks yet; launching the client anyway.")
+            _say("node not answering health checks after 60s; launching the client anyway, it will retry", error=True)
         from ciris_server.desktop_launcher import launch_desktop_app  # type: ignore[import-not-found, import-untyped, unused-ignore]
 
-        print("\nLaunching CIRIS Desktop (node only)...")
-        return int(launch_desktop_app(server_url=cfg.server_url))
+        _say(f"launching the desktop client against {cfg.server_url} (CIRIS_API_URL)")
+        rc = int(launch_desktop_app(server_url=cfg.server_url))
+        _say(f"desktop client exited with code {rc}")
+        return rc
     finally:
-        print("\nShutting down node...")
+        _say(f"stopping the node (pid={node_proc.pid})")
         node_proc.terminate()
         try:
             node_proc.wait(timeout=10)
+            _say("node stopped")
         except subprocess.TimeoutExpired:
             node_proc.kill()
+            _say("node did not stop within 10s; killed", error=True)

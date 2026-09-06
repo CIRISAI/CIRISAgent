@@ -682,10 +682,11 @@ def _handle_final_exit() -> None:
 
     _node_only = node_only.node_only_config()
     if _node_only is not None:
-        logger.info("[EXIT] Run without AI: replacing this process with the ciris-server node")
+        logger.info("[EXIT] Run without AI: replacing this process with the ciris-server node (see [RUN-WITHOUT-AI] lines)")
         for _h in logging.getLogger().handlers:
             _h.flush()
-        node_only.exec_into_node(_node_only)
+        if not node_only.exec_into_node(_node_only):
+            logger.error("[EXIT] Run without AI: exec failed; exiting normally -- start `ciris-agent` again to boot the node")
 
     if "--adapter" in sys.argv and "api" in sys.argv and "--timeout" in sys.argv:
         logger.debug("EXITING NOW VIA os._exit(0) AT API mode subprocess tests")

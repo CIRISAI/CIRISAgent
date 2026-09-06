@@ -1117,7 +1117,16 @@ def _write_run_without_ai(f: Any) -> None:
         logger.warning("[SETUP] could not resolve the node key alias for node-only boots: %s", exc)
     if key_id:
         f.write(f"{ENV_KEY_ID}={key_id}\n")
-    logger.info("[SETUP] Run without AI recorded: %s=true, %s=%s", ENV_FLAG, ENV_KEY_ID, key_id or "<default>")
+    logger.info(
+        "[RUN-WITHOUT-AI] recorded in the home's .env: %s=true %s=%s -- from now on every boot is ciris-server "
+        "and the client (no brain); the read API will be on :%d. Set %s=false in the environment to run the brain once.",
+        ENV_FLAG, ENV_KEY_ID, key_id or "<unresolved: the node will use the wheel's default label>", 4243, ENV_FLAG,
+    )
+    if not key_id:
+        logger.error(
+            "[RUN-WITHOUT-AI] the node key alias could not be resolved at setup-complete; node-only boots will "
+            "NOT serve the identity this wizard claimed until %s is set in .env", ENV_KEY_ID
+        )
 
 
 def _write_mobile_local_llm_config(f: Any, setup: SetupCompleteRequest) -> None:
@@ -1301,7 +1310,11 @@ async def _schedule_node_only_restart(runtime: Any) -> None:
 
     async def _restart() -> None:
         await asyncio.sleep(0.5)
-        logger.info("[Setup] Run without AI: shutting the brain down; this process becomes the ciris-server node")
+        logger.info(
+            "[RUN-WITHOUT-AI] setup complete; shutting the brain down. main.py's exit replaces this process "
+            "(pid=%d) with the ciris-server node; :8080 goes away and the client reconnects to :4243",
+            os.getpid(),
+        )
         runtime.request_shutdown("Run without AI: restarting as a ciris-server node (no brain)")
 
     task = asyncio.create_task(_restart())

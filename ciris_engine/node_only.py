@@ -36,8 +36,15 @@ ENV_FLAG = "CIRIS_RUN_WITHOUT_AI"
 ENV_KEY_ID = "CIRIS_NODE_KEY_ID"
 NODE_PORT = 4243
 PREFIX = "[RUN-WITHOUT-AI]"
-_TRUE = ("true", "1", "yes", "on")
-_FALSE = ("false", "0", "no", "off")
+#: The truthy spellings, IDENTICAL on both sides of the wire on purpose. The
+#: client parses this same key out of the same file (CIRISClient 0.5.203,
+#: CIRISAgent#1151) and the two must never disagree about what "true" looks
+#: like: a value one side accepts and the other does not sends the agent to one
+#: port and the client to the other, which presents as a dead app. This is also
+#: what `CIRIS_SERVICES_DISABLED` has always accepted (service_initializer.py,
+#: llm_providers.py) -- one convention, three readers.
+_TRUE = ("true", "1", "yes")
+_FALSE = ("false", "0", "no")
 
 logger = logging.getLogger("ciris.node_only")
 
@@ -124,10 +131,14 @@ def node_only_config(home: Optional[str] = None) -> Optional[NodeOnlyConfig]:
     file_flag = file_values.get(ENV_FLAG, "").strip().lower()
     if env_flag in _FALSE:
         if file_flag in _TRUE:
-            _say(f"{ENV_FLAG}=false in the environment overrides {env_path} ({ENV_FLAG}={file_flag}) -- running the brain for this one run")
+            _say(f"{ENV_FLAG}=false in the environment overrides {env_path} ({ENV_FLAG}=true) -- running the agent runtime for this one run")
+            _warn_client_will_disagree(env_path, agent_port=8080, client_port=NODE_PORT)
         return None
     if env_flag in _TRUE:
         source = "environment"
+        if file_flag not in _TRUE:
+            _say(f"{ENV_FLAG}=true comes from the environment, not {env_path}")
+            _warn_client_will_disagree(env_path, agent_port=NODE_PORT, client_port=8080)
     elif file_flag in _TRUE:
         source = env_path
     else:
@@ -142,6 +153,25 @@ def node_only_config(home: Optional[str] = None) -> Optional[NodeOnlyConfig]:
             error=True,
         )
     return cfg
+
+
+def _warn_client_will_disagree(env_path: str, *, agent_port: int, client_port: int) -> None:
+    """The environment override desynchronizes the client, in EITHER direction.
+
+    The client decides its endpoint by reading ``CIRIS_RUN_WITHOUT_AI`` from
+    this same file (CIRISClient 0.5.203) -- it cannot see this process's
+    environment. So an environment value that disagrees with the file puts the
+    two on different ports, and the app shows a spinner against a port nothing
+    is listening on. That makes this override a HEADLESS affordance: fine for
+    ``ciris-agent --server`` or a QA harness, wrong whenever a client is
+    watching. Said loudly rather than discovered on a device.
+    """
+    _say(
+        f"the environment disagrees with {env_path}: this process will serve :{agent_port}, but a client reading "
+        f"that file will look for :{client_port} and find nothing. Use this override only with no client attached "
+        f"(`ciris-agent --server`, QA); to change it for real, edit {ENV_FLAG} in the file.",
+        error=True,
+    )
 
 
 def node_command(cfg: NodeOnlyConfig) -> List[str]:

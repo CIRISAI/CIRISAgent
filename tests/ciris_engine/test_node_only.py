@@ -194,3 +194,37 @@ def test_run_desktop_narrates_each_step(monkeypatch: pytest.MonkeyPatch, capsys:
     out = capsys.readouterr().out
     for phrase in ("starting the node as a child", "node pid=99", "read API is up", "launching the desktop client against http://localhost:4243", "desktop client exited with code 0", "node stopped"):
         assert phrase in out, phrase
+
+
+# --- the two sides must agree about the flag, and disagreement must be loud ----
+
+
+@pytest.mark.parametrize("value", ["true", "TRUE", "True", "1", "yes", "YES", '"true"', " true "])
+def test_every_truthy_spelling_the_client_accepts_is_accepted_here(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, value: str) -> None:
+    monkeypatch.delenv(node_only.ENV_FLAG, raising=False)
+    home = _home_with_env(tmp_path, f"CIRIS_RUN_WITHOUT_AI={value}\n")
+    assert node_only.node_only_config(home) is not None, f"{value!r} must mean true on both sides"
+
+
+@pytest.mark.parametrize("value", ["on", "ON", "enabled", "y", "t", ""])
+def test_spellings_the_client_does_not_accept_are_not_accepted_here(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, value: str) -> None:
+    """A value one side takes and the other does not is a dead app: agent on one port, client on the other."""
+    monkeypatch.delenv(node_only.ENV_FLAG, raising=False)
+    home = _home_with_env(tmp_path, f"CIRIS_RUN_WITHOUT_AI={value}\n")
+    assert node_only.node_only_config(home) is None, f"{value!r} is not truthy for the client, so it must not be truthy here"
+
+
+def test_an_environment_veto_warns_that_the_client_will_look_elsewhere(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    home = _home_with_env(tmp_path, "CIRIS_RUN_WITHOUT_AI=true\n")
+    monkeypatch.setenv(node_only.ENV_FLAG, "false")
+    assert node_only.node_only_config(home) is None
+    err = capsys.readouterr().err
+    assert "will serve :8080" in err and "look for :4243" in err and "no client attached" in err
+
+
+def test_an_environment_opt_in_warns_the_same_way(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    home = _home_with_env(tmp_path, "CIRIS_CONFIGURED=true\n")
+    monkeypatch.setenv(node_only.ENV_FLAG, "true")
+    assert node_only.node_only_config(home) is not None
+    err = capsys.readouterr().err
+    assert "will serve :4243" in err and "look for :8080" in err

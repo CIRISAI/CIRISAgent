@@ -40,6 +40,18 @@ def main() -> None:
             server_mode = True
             break
 
+    # "Run without AI" (CIRISAgent#1149): the owner chose a node with no brain.
+    # Asked before anything from the engine is imported; if set, the process
+    # is ciris-server and the client and nothing else.
+    from ciris_engine import node_only
+
+    wants_help = any(arg in ("--help", "-h", "--version") for arg in sys.argv[1:])
+    cfg = None if wants_help else node_only.node_only_config()
+    if cfg is not None:
+        if server_mode:
+            node_only.run_headless(cfg)
+        sys.exit(node_only.run_desktop(cfg))
+
     if server_mode:
         # Delegate to main.py for server/adapter modes
         _run_server_mode()
@@ -304,6 +316,11 @@ def _run_server_mode() -> None:
 
 def server() -> None:
     """Entry point for ciris-server command (headless API server)."""
+    from ciris_engine import node_only
+
+    cfg = node_only.node_only_config()
+    if cfg is not None:
+        node_only.run_headless(cfg)
     # Insert --adapter api if not specified
     if "--adapter" not in sys.argv and "-a" not in sys.argv:
         sys.argv.insert(1, "--adapter")
@@ -313,6 +330,14 @@ def server() -> None:
 
 def desktop() -> None:
     """Entry point for ciris-desktop command."""
+    from ciris_engine import node_only
+
+    cfg = node_only.node_only_config()
+    if cfg is not None:
+        # UI only, against a node assumed running (the wheel's `ciris-desktop` contract).
+        from ciris_server.desktop_launcher import launch_desktop_app  # type: ignore[import-not-found, import-untyped, unused-ignore]
+
+        sys.exit(int(launch_desktop_app(server_url=cfg.server_url)))
     from ciris_engine.desktop_launcher import main as desktop_main
 
     desktop_main()

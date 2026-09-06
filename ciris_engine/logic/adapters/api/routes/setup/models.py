@@ -6,7 +6,7 @@ This module contains all request/response schemas used by the setup endpoints.
 import os
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from ciris_engine.config.model_capabilities import ModelCapabilities
 
@@ -364,8 +364,10 @@ class SetupCompleteRequest(BaseModel):
     """Request to complete setup."""
 
     # Primary LLM Configuration
-    llm_provider: str = Field(..., description="LLM provider ID")
-    llm_api_key: str = Field(..., description="LLM API key")
+    # Required unless `run_without_ai` (validator below): a completion that has
+    # no provider no longer has to send two empty strings to satisfy the schema.
+    llm_provider: Optional[str] = Field(None, description="LLM provider ID (required unless run_without_ai)")
+    llm_api_key: Optional[str] = Field(None, description="LLM API key (may be empty for keyless providers)")
     llm_base_url: Optional[str] = Field(None, description="LLM base URL")
     llm_model: Optional[str] = Field(None, description="LLM model name")
 
@@ -452,6 +454,14 @@ class SetupCompleteRequest(BaseModel):
             "than degrading."
         ),
     )
+
+    @model_validator(mode="after")
+    def _llm_required_unless_run_without_ai(self) -> "SetupCompleteRequest":
+        if self.run_without_ai:
+            return self
+        if not (self.llm_provider or "").strip():
+            raise ValueError("llm_provider is required unless run_without_ai is true")
+        return self
 
     # Node Connection (set by "Connect to Node" device auth flow)
     node_url: Optional[str] = Field(None, description="CIRISNode URL (e.g., https://node.ciris.ai)")

@@ -1086,6 +1086,7 @@ def _write_llm_availability_config(f: Any, setup: SetupCompleteRequest) -> None:
     f.write("CIRIS_SERVICES_DISABLED=true\n")
     if setup.run_without_ai:
         logger.info("[SETUP] Owner chose to run without AI — CIRIS_SERVICES_DISABLED=true")
+        _write_run_without_ai(f)
     else:
         logger.warning(
             "[SETUP] No usable LLM provider (provider=%r, key_set=%s) — writing "
@@ -1093,6 +1094,30 @@ def _write_llm_availability_config(f: Any, setup: SetupCompleteRequest) -> None:
             setup.llm_provider,
             bool((setup.llm_api_key or "").strip()),
         )
+
+
+def _write_run_without_ai(f: Any) -> None:
+    """Record the explicit choice so every later boot is ciris-server and the client (CIRISAgent#1149).
+
+    ``CIRIS_SERVICES_DISABLED`` only keeps llm_service optional inside the
+    brain; this flag means there is no brain at all. The node's keystore alias
+    is written beside it so the node-only boot serves the SAME identity the
+    wizard just claimed -- the wheel's own desktop default (``ciris-client``)
+    would mint a second one.
+    """
+    from ciris_engine.node_only import ENV_FLAG, ENV_KEY_ID
+
+    f.write(f"{ENV_FLAG}=true\n")
+    key_id: Optional[str] = None
+    try:
+        from ciris_engine.logic.runtime.node_fold import _resolve_key_id
+
+        key_id = _resolve_key_id()
+    except Exception as exc:  # noqa: BLE001 -- the flag must still be written
+        logger.warning("[SETUP] could not resolve the node key alias for node-only boots: %s", exc)
+    if key_id:
+        f.write(f"{ENV_KEY_ID}={key_id}\n")
+    logger.info("[SETUP] Run without AI recorded: %s=true, %s=%s", ENV_FLAG, ENV_KEY_ID, key_id or "<default>")
 
 
 def _write_mobile_local_llm_config(f: Any, setup: SetupCompleteRequest) -> None:
@@ -1161,16 +1186,16 @@ def _save_setup_config(setup: SetupCompleteRequest) -> Path:
     Returns:
         Path where config was saved
     """
-    llm_base_url = _get_provider_base_url(setup.llm_provider, setup.llm_base_url) or ""
+    llm_base_url = _get_provider_base_url(setup.llm_provider or "", setup.llm_base_url) or ""
 
     # For local providers, use "local" as placeholder API key if none provided
     # mobile_local provider doesn't need an API key - it runs on-device
-    llm_api_key = setup.llm_api_key
+    llm_api_key = setup.llm_api_key or ""
     if not llm_api_key and setup.llm_provider in ("local", "local_inference", "mobile_local"):
         llm_api_key = "local"
 
     config_path = create_env_file(
-        llm_provider=setup.llm_provider,
+        llm_provider=setup.llm_provider or "",
         llm_api_key=llm_api_key,
         llm_base_url=llm_base_url,
         llm_model=setup.llm_model or "",
@@ -1263,6 +1288,25 @@ def _log_setup_debug_info(setup: SetupCompleteRequest) -> bool:
     # Under self-custody (FSD-002), agent generates its own key - Portal never sends private keys
 
     return will_link_oauth
+
+
+async def _schedule_node_only_restart(runtime: Any) -> None:
+    """After a run-without-AI setup, end the brain so the process becomes the node.
+
+    The response goes out first; then the runtime is asked to shut down with a
+    reason that names the choice. ``main.py``'s final exit sees the recorded
+    flag and execs ``python -m ciris_server --headless --home ... --key-id ...``
+    in place (CIRISAgent#1149). The client reconnects to the node on :4243.
+    """
+
+    async def _restart() -> None:
+        await asyncio.sleep(0.5)
+        logger.info("[Setup] Run without AI: shutting the brain down; this process becomes the ciris-server node")
+        runtime.request_shutdown("Run without AI: restarting as a ciris-server node (no brain)")
+
+    task = asyncio.create_task(_restart())
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
 
 
 async def _schedule_runtime_resume(runtime: Any) -> None:
@@ -1548,7 +1592,13 @@ async def complete_setup(setup: SetupCompleteRequest, request: Request) -> Succe
 
         # Resume initialization from first-run mode to start agent processor
         logger.info("Setup complete - resuming initialization to start agent processor")
-        await _schedule_runtime_resume(runtime)
+        if setup.run_without_ai:
+            # No brain to resume: the wizard is done and the owner chose a node
+            # with no AI. Shut the runtime down; main.py's exit path replaces the
+            # process with the ciris-server node (CIRISAgent#1149).
+            await _schedule_node_only_restart(runtime)
+        else:
+            await _schedule_runtime_resume(runtime)
 
         return SuccessResponse(
             data={

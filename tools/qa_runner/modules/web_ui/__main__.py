@@ -963,9 +963,44 @@ class DesktopAppTestRunner:
             failure only surfaced one step later as a confusing "the consent screen
             has no toggles". Order fixed, and the skip made loud.
             """
-            self._log(f"YOU: band={age_band}, username={username}, fed-ID label={fed_label}")
+            self._log(
+                f"YOU: without_ai={run_without_ai}, band={age_band}, username={username}, "
+                f"fed-ID label={fed_label}"
+            )
 
-            # 1. AGE — first, required, and never silently skipped.
+            # 0. THE AI QUESTION — FIRST, because that is where the screen puts it.
+            # Client 0.5.203 renders AiPreferenceSection ABOVE age/account/fed-ID
+            # (0.5.202 had no such section), and it is answered first here for two
+            # reasons: it is the order a person meets the screen in, and choosing
+            # "without an AI assistant" recomposes YOU — answering it after filling
+            # the fields below would risk driving a screen that is about to change
+            # under the automation.
+            #
+            # It is not a step of its own. It sets
+            # SetupState.hasAiStep = hasAgent && !runWithoutAi, so this answer
+            # decides whether the AI SCREEN exists two steps later; a wrong answer
+            # surfaces there, not here. Both options are clicked explicitly rather
+            # than trusting the `runWithoutAi = false` default, so the run states
+            # its intent either way.
+            ai_tag = "opt_run_without_ai" if run_without_ai else "opt_run_with_ai"
+            if await self.helper.wait_for_optional_element(ai_tag, timeout=8000):
+                self._log(f"AI preference: {ai_tag}")
+                if not await self.helper.click(ai_tag):
+                    raise RuntimeError(f"Failed to click {ai_tag} on YOU")
+                await asyncio.sleep(0.3)
+            elif run_without_ai:
+                # Fatal only in the without-AI direction: with-AI is the default, so
+                # an older client that lacks the control still does the right thing,
+                # while without-AI silently becoming with-AI would make the whole run
+                # test nothing (CIRISAgent#1149).
+                await self._dump_tree("you_step:ai_preference")
+                raise RuntimeError(
+                    "opt_run_without_ai not found on YOU. This client predates the "
+                    "run-without-AI choice (needs ciris-client >= 0.5.203); without it "
+                    "the wizard would configure an LLM and the run would prove nothing."
+                )
+
+            # 1. AGE — required, and never silently skipped.
             band_tag = f"age_band_{age_band}"
             if not await self.helper.wait_for_element(band_tag, timeout=10000):
                 await self._dump_tree("you_step:age")
@@ -988,30 +1023,6 @@ class DesktopAppTestRunner:
             # the manual-edit path (labelManuallyEdited).
             if await self.helper.is_element_visible("input_fedid_label"):
                 await self.helper.input_text("input_fedid_label", fed_label)
-
-            # 4. THE AI QUESTION — asked here, on YOU, from client 0.5.203
-            # (AiPreferenceSection). It is not a screen of its own: it decides
-            # whether the AI screen exists at all
-            # (SetupState.hasAiStep = hasAgent && !runWithoutAi), so answering it
-            # wrong does not fail here — it fails two steps later as a missing or
-            # unexpected AI screen. Both options are clicked explicitly rather than
-            # trusting the default, so the run states its intent either way.
-            ai_tag = "opt_run_without_ai" if run_without_ai else "opt_run_with_ai"
-            if await self.helper.is_element_visible(ai_tag):
-                self._log(f"AI preference: {ai_tag}")
-                if not await self.helper.click(ai_tag):
-                    raise RuntimeError(f"Failed to click {ai_tag} on YOU")
-            elif run_without_ai:
-                # Only fatal in the without-AI direction: with-AI is the default, so
-                # an older client that lacks the control still does the right thing,
-                # while without-AI silently becoming with-AI would make the whole
-                # run test nothing (CIRISAgent#1149).
-                await self._dump_tree("you_step:ai_preference")
-                raise RuntimeError(
-                    "opt_run_without_ai not found on YOU. This client predates the "
-                    "run-without-AI choice (needs ciris-client >= 0.5.203); without it "
-                    "the wizard would configure an LLM and the run would prove nothing."
-                )
 
             await asyncio.sleep(0.3)
             if not await self.helper.click("btn_next"):

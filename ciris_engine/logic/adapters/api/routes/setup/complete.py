@@ -1311,7 +1311,7 @@ async def _schedule_node_only_restart(runtime: Any) -> None:
     async def _restart() -> None:
         await asyncio.sleep(0.5)
         logger.info(
-            "[RUN-WITHOUT-AI] setup complete; shutting the brain down. main.py's exit replaces this process "
+            "[RUN-WITHOUT-AI] setup complete; stopping the agent runtime. main.py's exit replaces this process "
             "(pid=%d) with the ciris-server node; :8080 goes away and the client reconnects to :4243",
             os.getpid(),
         )

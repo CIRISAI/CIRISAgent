@@ -164,7 +164,7 @@ def _wheel_or_die() -> None:
 
 
 def run_headless(cfg: NodeOnlyConfig) -> NoReturn:
-    """Serve the node in THIS process and never return (server mode, mobile)."""
+    """Serve the node in THIS process and never return (``--server`` mode, and mobile)."""
     _wheel_or_die()
     sys.argv = ["ciris-server", "--headless", *cfg.node_args()]
     _say(f"serving the node in-process (pid={os.getpid()}): argv={sys.argv} read API={cfg.server_url}")

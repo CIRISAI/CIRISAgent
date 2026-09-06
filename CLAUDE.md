@@ -497,7 +497,7 @@ The `ciris-agent` command is the **unified entry point** that starts both the Py
 ciris-agent
 
 # Server-only modes (headless)
-ciris-agent --server              # API server only (headless brain)
+ciris-agent --server              # API server only (the agent runtime, no desktop UI)
 ciris-agent --adapter api         # Same as --server
 ciris-agent --adapter discord     # Discord bot mode
 
@@ -506,7 +506,7 @@ ciris-agent --adapter discord     # Discord bot mode
 # used to install those two names as well, and since ciris-agent depends on
 # ciris-server, pip wrote ours last and the desktop client's node spawn
 # (`ciris-server --home ... --key-id ...`) hit an agent that does not
-# understand --home. The headless brain is `ciris-agent --server`.
+# understand --home. The agent's own headless mode is `ciris-agent --server`.
 
 # Run without AI (CIRISAgent#1149): when the wizard records
 # `CIRIS_RUN_WITHOUT_AI=true` in the home's .env, every entry point above hands

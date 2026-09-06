@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
 
 from ciris_engine.logic.config.db_paths import get_sqlite_db_full_path
 from ciris_engine.logic.setup.wizard import create_env_file
@@ -1299,27 +1299,25 @@ def _log_setup_debug_info(setup: SetupCompleteRequest) -> bool:
     return will_link_oauth
 
 
-async def _schedule_node_only_restart(runtime: Any) -> None:
-    """After a run-without-AI setup, end the brain so the process becomes the node.
+async def _node_only_restart(runtime: Any) -> None:
+    """After a run-without-AI setup, stop the agent runtime so the process becomes the node.
 
-    The response goes out first; then the runtime is asked to shut down with a
-    reason that names the choice. ``main.py``'s final exit sees the recorded
-    flag and execs ``python -m ciris_server --headless --home ... --key-id ...``
-    in place (CIRISAgent#1149). The client reconnects to the node on :4243.
+    Registered with ``BackgroundTasks``, so Starlette runs it AFTER the
+    setup-complete response has been sent. That ordering is the contract the
+    client asked for (CIRISAgent#1149): the 200 always arrives first, and a
+    dropped connection on ``/v1/setup/complete`` stays a real failure rather
+    than something the client has to read as success.
+
+    ``main.py``'s final exit then sees the recorded flag and execs
+    ``python -m ciris_server --headless --home ... --key-id ...`` in place, so
+    :8080 goes away and the node's read API answers on :4243.
     """
-
-    async def _restart() -> None:
-        await asyncio.sleep(0.5)
-        logger.info(
-            "[RUN-WITHOUT-AI] setup complete; stopping the agent runtime. main.py's exit replaces this process "
-            "(pid=%d) with the ciris-server node; :8080 goes away and the client reconnects to :4243",
-            os.getpid(),
-        )
-        runtime.request_shutdown("Run without AI: restarting as a ciris-server node (no brain)")
-
-    task = asyncio.create_task(_restart())
-    _background_tasks.add(task)
-    task.add_done_callback(_background_tasks.discard)
+    logger.info(
+        "[RUN-WITHOUT-AI] setup-complete response sent; stopping the agent runtime. main.py's exit replaces "
+        "this process (pid=%d) with the ciris-server node; :8080 goes away and the client moves to :4243",
+        os.getpid(),
+    )
+    runtime.request_shutdown("Run without AI: restarting as a ciris-server node (no agent runtime)")
 
 
 async def _schedule_runtime_resume(runtime: Any) -> None:
@@ -1428,7 +1426,9 @@ async def _try_get_ingress_user(request: Request) -> tuple[Optional[str], Option
 
 
 @router.post("/complete", responses=RESPONSES_400_403_500, dependencies=[SetupOnlyDep])
-async def complete_setup(setup: SetupCompleteRequest, request: Request) -> SuccessResponse[Dict[str, str]]:
+async def complete_setup(
+    setup: SetupCompleteRequest, request: Request, background_tasks: BackgroundTasks
+) -> SuccessResponse[Dict[str, str]]:
     """Complete initial setup.
 
     Saves configuration and creates initial admin user.
@@ -1606,10 +1606,14 @@ async def complete_setup(setup: SetupCompleteRequest, request: Request) -> Succe
         # Resume initialization from first-run mode to start agent processor
         logger.info("Setup complete - resuming initialization to start agent processor")
         if setup.run_without_ai:
-            # No brain to resume: the wizard is done and the owner chose a node
-            # with no AI. Shut the runtime down; main.py's exit path replaces the
-            # process with the ciris-server node (CIRISAgent#1149).
-            await _schedule_node_only_restart(runtime)
+            # No runtime to resume: the wizard is done and the owner chose a node
+            # with no AI. Handed to FastAPI as a BACKGROUND TASK, which Starlette
+            # runs only after this response has been sent -- so the client always
+            # receives its 200 before :8080 goes away, and never has to treat a
+            # dropped connection as success (CIRISAgent#1149, the client's
+            # handover question). main.py's exit path then replaces the process
+            # with the ciris-server node.
+            background_tasks.add_task(_node_only_restart, runtime)
         else:
             await _schedule_runtime_resume(runtime)
 

@@ -65,17 +65,20 @@ def test_the_flag_is_written_even_when_the_alias_cannot_be_resolved() -> None:
     assert "CIRIS_RUN_WITHOUT_AI=true" in text and "CIRIS_NODE_KEY_ID" not in text
 
 
-def test_node_only_restart_ends_the_brain_after_the_response() -> None:
+def test_the_restart_is_a_background_task_so_the_response_lands_first() -> None:
+    """Starlette runs BackgroundTasks after the response is sent -- that is the whole guarantee."""
+    import inspect
+
+    from fastapi import BackgroundTasks
+
+    sig = inspect.signature(complete.complete_setup)
+    assert "background_tasks" in sig.parameters, "the handler must take BackgroundTasks for the ordering to hold"
+    assert sig.parameters["background_tasks"].annotation is BackgroundTasks
+
     reasons: List[str] = []
     runtime = type("R", (), {"request_shutdown": lambda self, reason: reasons.append(reason)})()
-
-    async def _go() -> None:
-        before = set(complete._background_tasks)
-        await complete._schedule_node_only_restart(runtime)
-        scheduled = [task for task in complete._background_tasks if task not in before]
-        assert len(scheduled) == 1, "exactly one restart task is scheduled"
-        assert reasons == [], "the response goes out before the brain is asked to stop"
-        await asyncio.wait_for(scheduled[0], timeout=5.0)
-
-    asyncio.run(_go())
-    assert reasons and "Run without AI" in reasons[0] and "node" in reasons[0]
+    tasks = BackgroundTasks()
+    tasks.add_task(complete._node_only_restart, runtime)
+    assert reasons == [], "nothing runs at registration time; the response is still being sent"
+    asyncio.run(tasks())
+    assert len(reasons) == 1 and "Run without AI" in reasons[0] and "node" in reasons[0]

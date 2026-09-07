@@ -84,6 +84,12 @@ class ElementInfo:
     center_x: int
     center_y: int
     text: Optional[str] = None
+    #: ciris-client 0.5.206+ reports whether the element is ON SCREEN, which is
+    #: NOT the same as being in the tree: `testableClickable` registers with no
+    #: DisposableEffect, so /tree lists everything ever composed. We were
+    #: dropping this field on parse and then asking "is it in the tree?" while
+    #: calling it "is it visible?". None = an older client that does not send it.
+    visible: Optional[bool] = None
 
 
 class DesktopAppHelper:
@@ -184,6 +190,7 @@ class DesktopAppHelper:
                     center_x=elem["centerX"],
                     center_y=elem["centerY"],
                     text=elem.get("text"),
+                    visible=elem.get("visible"),
                 )
             )
         return elements
@@ -208,77 +215,79 @@ class DesktopAppHelper:
             center_x=data["centerX"],
             center_y=data["centerY"],
             text=data.get("text"),
+            visible=data.get("visible"),
         )
 
-    async def scroll_into_view(self, test_tag: str, attempts: int = 6, amount: int = 300) -> bool:
-        """Scroll a composed-but-off-screen element into view. Best effort.
+    async def scroll_into_view(self, test_tag: str, per_direction: int = 12, amount: int = 300) -> bool:
+        """Scroll a composed-but-off-screen element onto the screen. Best effort.
 
         From ciris-client 0.5.206 a positioned element must also be ON SCREEN for
         /wait, /click and /input to accept it (CIRISClient#33). That is the right
         rule -- it is what turns a coordinate gamble into a refusal -- but it means
         anything below the fold of a long form is undrivable until something
-        scrolls. The wizard's YOU step is exactly that: 0.5.203 put the AI question
-        above age/account/fed-ID, and `age_band_adult` fell off the bottom.
-
-        Returns True if the element reports visible afterwards. Never raises: the
-        caller's own wait produces the real, message-carrying failure.
+        scrolls.
 
         PLATFORM HISTORY. 0.5.206 had no Android /scroll route at all, so this was
         a no-op there (CIRISClient#33); 0.5.207 added it. 0.5.208 then answered 200
         without moving anything, because dispatch went to the most recently composed
-        scrollable rather than one with overflow (CIRISClient#44) -- accepted and
-        useless, and indistinguishable from success over HTTP. The fix makes a 200
-        mean the screen MOVED and carries the offsets, so both are now legible here.
+        scrollable rather than one with overflow (CIRISClient#44). The fix makes a
+        200 mean the screen MOVED and carries the offsets, and a refusal name why.
+
+        EXHAUST ONE DIRECTION, THEN THE OTHER -- do not split the budget up front.
+        The previous version fixed half the attempts to each direction, so on a
+        3142px form it went 900px down and then turned around, never reaching a
+        field near the bottom. The refusal contract makes a fixed split
+        unnecessary: `already at the bottom` ends the downward phase exactly when
+        there is no more travel, so the budget is spent on real movement instead of
+        being rationed against a direction we may not need at all.
+
+        Returns True once the element reports ON SCREEN. Never raises: the caller's
+        own wait produces the real, message-carrying failure.
         """
         if not self._client:
             return False
-        # BOTH DIRECTIONS. "Off screen" does not say which way, and the wizard's
-        # YOU step can be scrolled past its own controls: the refusal that started
-        # this listed `age_band_declined`, `btn_next` and both AI options as
-        # drivable while `age_band_adult` was not, which is not the shape of a
-        # simple below-the-fold form. Down first (the common case), then up.
-        directions = ("down",) * (attempts // 2) + ("up",) * (attempts - attempts // 2)
-        for direction in directions:
-            try:
-                resp = await self._client.post(
-                    "/scroll", json={"testTag": test_tag, "direction": direction, "amount": amount}
-                )
-            except Exception:  # noqa: BLE001 -- a missing endpoint is not this call's problem to raise
-                return False
-            # ONLY 200 MEANS IT SCROLLED (ciris-client 0.5.207). A refusal is a 404
-            # carrying a reason -- an unroutable endpoint on that platform, or a tag
-            # the app will not scroll to -- and treating it as "scrolled, look
-            # again" would spend the whole budget re-asking a question already
-            # answered. Surface the reason: it is the app telling us why, and the
-            # caller's own failure will not repeat it.
-            if resp.status_code != 200:
-                reason = ""
+        if await self.is_element_visible(test_tag):
+            return True
+        for direction in ("down", "up"):
+            for _ in range(per_direction):
                 try:
-                    body = resp.json()
-                    reason = str(body.get("error") or body.get("reason") or "")
-                except Exception:  # noqa: BLE001
-                    reason = (resp.text or "").strip()[:160]
-                print(
-                    f"    (scroll refused for '{test_tag}': HTTP {resp.status_code}"
-                    + (f" — {reason}" if reason else "")
-                    + ")"
-                )
-                return False
-            # A 200 CARRIES WHAT IT DID (CIRISClient#44): "down:300 moved 0→300 of
-            # 1400". Print it. The whole cost of #44 was that an accepted-but-inert
-            # scroll looked identical to a working one until a later step failed for
-            # an apparently unrelated reason; with the offsets in the log, a run that
-            # reports `moved 0→0 of 0` says so at the moment it happens.
-            moved = ""
-            try:
-                moved = str((resp.json() or {}).get("text") or "").strip()
-            except Exception:  # noqa: BLE001
+                    resp = await self._client.post(
+                        "/scroll", json={"testTag": test_tag, "direction": direction, "amount": amount}
+                    )
+                except Exception:  # noqa: BLE001 -- a missing endpoint is not this call's problem to raise
+                    return False
+                # ONLY 200 MEANS IT SCROLLED (ciris-client 0.5.207+). A refusal is a
+                # 404 carrying a reason -- no overflow, already at the end, or an
+                # unroutable endpoint on that platform -- and each of those means
+                # THIS direction is finished. Surface it: it is the app telling us
+                # why, and the caller's own failure will not repeat it.
+                if resp.status_code != 200:
+                    reason = ""
+                    try:
+                        body = resp.json()
+                        reason = str(body.get("error") or body.get("reason") or "")
+                    except Exception:  # noqa: BLE001
+                        reason = (resp.text or "").strip()[:160]
+                    print(
+                        f"    (scroll {direction} for '{test_tag}' refused: HTTP {resp.status_code}"
+                        + (f" — {reason}" if reason else "")
+                        + ")"
+                    )
+                    break
+                # A 200 CARRIES WHAT IT DID (CIRISClient#44): "down:300 moved
+                # 0→300 of 1400". The whole cost of #44 was that an accepted-but-
+                # inert scroll looked identical to a working one until a later step
+                # failed for an apparently unrelated reason.
                 moved = ""
-            if moved:
-                print(f"    (scroll '{test_tag}' {direction}: {moved})")
-            await asyncio.sleep(0.25)
-            if await self.is_element_visible(test_tag):
-                return True
+                try:
+                    moved = str((resp.json() or {}).get("text") or "").strip()
+                except Exception:  # noqa: BLE001
+                    moved = ""
+                if moved:
+                    print(f"    (scroll '{test_tag}' {direction}: {moved})")
+                await asyncio.sleep(0.25)
+                if await self.is_element_visible(test_tag):
+                    return True
         return False
 
     async def click(self, test_tag: str, timeout: Optional[int] = None) -> bool:
@@ -576,9 +585,27 @@ class DesktopAppHelper:
             await asyncio.sleep(self.config.poll_interval_ms / 1000.0)
 
     async def is_element_visible(self, test_tag: str) -> bool:
-        """Check if an element is currently visible."""
+        """Is the element ON SCREEN — not merely composed.
+
+        THIS USED TO RETURN `elem is not None`, which is "does the app remember
+        composing this", and under registry-never-forgets that is true forever.
+        The cost was not theoretical: scroll_into_view checks this after each
+        scroll to decide whether to stop, so it ALWAYS stopped after the first
+        one. On Android's YOU step that meant scrolling 300px of a 3142px form
+        and reporting success, which then surfaced as /input refusing an element
+        we had just declared visible (run #34157933301).
+
+        `visible` is reported by ciris-client 0.5.206+. When it is absent -- an
+        older client -- fall back to geometry rather than to presence: a
+        zero-sized rect is not on screen either, and that is the shape the
+        zero-width age bands had (CIRISClient#42).
+        """
         elem = await self.get_element(test_tag)
-        return elem is not None
+        if elem is None:
+            return False
+        if elem.visible is not None:
+            return bool(elem.visible)
+        return elem.width > 0 and elem.height > 0
 
     async def get_element_list(self) -> Dict[str, ElementInfo]:
         """Get all elements as a dict keyed by testTag."""

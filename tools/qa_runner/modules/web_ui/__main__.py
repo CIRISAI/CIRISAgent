@@ -280,10 +280,10 @@ class DesktopAppTestRunner:
         # and false of Windows desktop, and this step-by-step flow never had the
         # probe at all.
         async def reveal_local_login():
-            if await self.helper.is_element_visible("input_username"):
+            if await self.helper.is_element_present("input_username"):
                 self._log("Login screen shows the credential form directly")
                 return
-            if not await self.helper.is_element_visible("btn_local_login"):
+            if not await self.helper.is_element_present("btn_local_login"):
                 await self._dump_tree("reveal_local_login")
                 raise RuntimeError("Login screen has neither input_username nor btn_local_login")
             self._log("Login screen is a provider chooser — selecting local login")
@@ -832,7 +832,7 @@ class DesktopAppTestRunner:
             then timed out; presence there is not drivability, so the mobile route
             is taken on its own terms rather than probed for.
             """
-            if await self.helper.is_element_visible("btn_nav_drawer_open"):
+            if await self.helper.is_element_present("btn_nav_drawer_open"):
                 self._log("mobile chrome: drawer -> Settings -> btn_logout")
                 if not await self.helper.click("btn_nav_drawer_open"):
                     raise RuntimeError("Failed to open the nav drawer (btn_nav_drawer_open)")
@@ -982,11 +982,11 @@ class DesktopAppTestRunner:
                 if screen == "Setup":
                     return
                 if screen == "Login" and not clicked_local:
-                    if await self.helper.is_element_visible("btn_local_login"):
+                    if await self.helper.is_element_present("btn_local_login"):
                         self._log("first run starts at the Login chooser — selecting local signup")
                         await self.helper.click("btn_local_login")
                         clicked_local = True
-                    elif await self.helper.is_element_visible("input_username"):
+                    elif await self.helper.is_element_present("input_username"):
                         # Already configured: this is a login screen, not first
                         # run. Caller's problem, but say which it was.
                         break
@@ -1058,7 +1058,7 @@ class DesktopAppTestRunner:
             # off-screen element is refused rather than clicked by coordinate.
             # Scroll first; the wait below still produces the real failure if the
             # band genuinely is not there.
-            if not await self.helper.is_element_visible(band_tag):
+            if not await self.helper.is_element_present(band_tag):
                 await self.helper.scroll_into_view(band_tag)
             if not await self.helper.wait_for_element(band_tag, timeout=10000):
                 await self._dump_tree("you_step:age")
@@ -1068,7 +1068,7 @@ class DesktopAppTestRunner:
 
             # 2. ACCOUNT — local username/password render only for non-OAuth
             # signup (showLocalUserFields()), so probe rather than assume.
-            if await self.helper.is_element_visible("input_username"):
+            if await self.helper.is_element_present("input_username"):
                 await self.helper.input_text("input_username", username)
                 await self.helper.input_text("input_password", password)
                 await self.helper.input_text("input_password_confirm", password)
@@ -1079,7 +1079,7 @@ class DesktopAppTestRunner:
             # username / OAuth id and is only overridden when the user edits it.
             # Setting it explicitly keeps runs identifiable and still exercises
             # the manual-edit path (labelManuallyEdited).
-            if await self.helper.is_element_visible("input_fedid_label"):
+            if await self.helper.is_element_present("input_fedid_label"):
                 await self.helper.input_text("input_fedid_label", fed_label)
 
             await asyncio.sleep(0.3)
@@ -1110,8 +1110,8 @@ class DesktopAppTestRunner:
             # on every platform -- and a real refusal (required field unsatisfied)
             # still produces no such control, so the failure is still caught.
             deadline = asyncio.get_event_loop().time() + 30.0
-            while await self.helper.is_element_visible(band_tag):
-                if await self.helper.is_element_visible("toggle_announce_ownership"):
+            while await self.helper.is_element_present(band_tag):
+                if await self.helper.is_element_present("toggle_announce_ownership"):
                     break   # JOIN FEDERATION is on screen: YOU advanced
                 if asyncio.get_event_loop().time() > deadline:
                     await self._dump_tree("you_step:did-not-advance")
@@ -1195,7 +1195,7 @@ class DesktopAppTestRunner:
                     expect_key_rejected=llm_key_expect_rejected,
                     require_live_models=llm_require_live_models,
                 )
-            elif await self.helper.is_element_visible("btn_use_free_ai"):
+            elif await self.helper.is_element_present("btn_use_free_ai"):
                 # CIRIS-hosted proxy option (OAuth path) — no key entry needed.
                 self._log("AI: choosing CIRIS-hosted option (btn_use_free_ai)")
                 if not await self.helper.click("btn_use_free_ai"):
@@ -1247,7 +1247,7 @@ class DesktopAppTestRunner:
                 if screen and screen != "Setup":
                     self._log(f"Left wizard → {screen}")
                     return
-                if not await self.helper.is_element_visible("btn_next"):
+                if not await self.helper.is_element_present("btn_next"):
                     self._log("On COMPLETE step (btn_next gone)")
                     return
                 await asyncio.sleep(0.5)
@@ -1464,25 +1464,25 @@ class DesktopAppTestRunner:
         # → Nodes surface (nav_epistemic_nodes) → btn_add_federation_id.
         async def reach_entry():
             self._log("Looking for btn_add_federation_id (Manage Nodes surface)")
-            if await self.helper.is_element_visible("btn_add_federation_id"):
+            if await self.helper.is_element_present("btn_add_federation_id"):
                 return
             # Expand the Manage group if the Nodes row isn't visible yet.
-            if not await self.helper.is_element_visible("nav_epistemic_nodes"):
-                if await self.helper.is_element_visible("nav_group_manage"):
+            if not await self.helper.is_element_present("nav_epistemic_nodes"):
+                if await self.helper.is_element_present("nav_group_manage"):
                     self._log("Expanding sidebar group nav_group_manage")
                     await self.helper.click("nav_group_manage")
                     try:
                         await self.helper.wait_for_element("nav_epistemic_nodes", timeout=3000)
                     except Exception:  # noqa: BLE001
                         pass
-            if await self.helper.is_element_visible("nav_epistemic_nodes"):
+            if await self.helper.is_element_present("nav_epistemic_nodes"):
                 self._log("Clicking nav_epistemic_nodes")
                 await self.helper.click("nav_epistemic_nodes")
                 try:
                     await self.helper.wait_for_element("btn_add_federation_id", timeout=5000)
                 except Exception:  # noqa: BLE001
                     pass
-                if await self.helper.is_element_visible("btn_add_federation_id"):
+                if await self.helper.is_element_present("btn_add_federation_id"):
                     return
             # Fallback: scan the element tree for any Manage-Nodes-ish nav row.
             elements = await self.helper.get_elements()
@@ -1495,7 +1495,7 @@ class DesktopAppTestRunner:
                 self._log(f"trying nav candidate: {tag}")
                 await self.helper.click(tag)
                 await asyncio.sleep(0.5)
-                if await self.helper.is_element_visible("btn_add_federation_id"):
+                if await self.helper.is_element_present("btn_add_federation_id"):
                     return
             raise RuntimeError(
                 "btn_add_federation_id not reachable — navigate to the Manage "
@@ -1536,7 +1536,7 @@ class DesktopAppTestRunner:
 
         async def trace_gated_off():
             self._log("Asserting toggle_trace_opt_in hidden while announce OFF (catch-up)")
-            if await self.helper.is_element_visible("toggle_trace_opt_in"):
+            if await self.helper.is_element_present("toggle_trace_opt_in"):
                 raise RuntimeError("toggle_trace_opt_in visible before announce ON (catch-up gating broken)")
 
         await self.run_test("catchup_trace_gated_off", trace_gated_off)
@@ -1646,6 +1646,7 @@ Examples:
             "desktop-catchup",
             "desktop-up",
             "federation",
+            "flow",
             "e2e",
             "setup",
             "interact",
@@ -1939,6 +1940,20 @@ Examples:
         "--ios-bundle-id",
         default="ai.ciris.mobile",
         help="For --ios: bundle ID to launch (default: ai.ciris.mobile).",
+    )
+    parser.add_argument(
+        "--spec",
+        action="append",
+        default=None,
+        metavar="PATH",
+        help="For `flow`: a flow spec (.yaml) or a directory of them. Repeatable. "
+        "Default: tools/qa_runner/flows.",
+    )
+    parser.add_argument(
+        "--artifacts",
+        default="artifacts",
+        help="For `flow`: where per-step screenshots and the JSON report are written "
+        "(default: artifacts).",
     )
     parser.add_argument(
         "--node-url",
@@ -3844,6 +3859,75 @@ async def _ios_complete_setup_if_needed(
     return False
 
 
+async def run_flow_specs(args: argparse.Namespace) -> int:
+    """Drive declarative UI flows — CIRISClient#39's canonical form, test direction.
+
+    The whole point is that the assertions live in data next to the screens they
+    drive, so a screen reorder cannot land without its flow moving in the same PR.
+    This function only wires the pieces: connect, check the version floor, run each
+    spec, report to the console AND to artifacts/flows/*.json.
+    """
+    from .flow_spec import FlowRunner, FlowSpec, SpecError, check_client_floor, discover
+    from .platforms import build_platform
+
+    paths = args.spec or ["tools/qa_runner/flows"]
+    try:
+        spec_files = discover(paths)
+    except SpecError as exc:
+        print(f"[FAIL] {exc}")
+        return 1
+    if not spec_files:
+        print(f"[FAIL] no flow specs found in {paths}")
+        return 1
+
+    # LOAD EVERYTHING FIRST. A spec that does not parse should be reported before
+    # an emulator is driven for ten minutes, not after.
+    specs = []
+    for path in spec_files:
+        try:
+            specs.append(FlowSpec.load(path))
+        except SpecError as exc:
+            print(f"[FAIL] {exc}")
+            return 1
+
+    client_version = None
+    try:
+        import importlib.metadata as _md
+
+        client_version = _md.version("ciris-client")
+    except Exception:  # noqa: BLE001 -- absence is not a refusal, see check_client_floor
+        client_version = None
+
+    server_url = f"http://localhost:{args.desktop_port}"
+    helper = DesktopAppHelper(DesktopAppConfig(server_url=server_url))
+    platform = build_platform(args)
+    artifacts = Path(args.artifacts)
+
+    if not await helper.start():
+        print(f"[FAIL] the test server is not usable: nothing answered at {server_url}")
+        return 1
+
+    overall = 0
+    try:
+        for spec in specs:
+            refusal = check_client_floor(spec.client_floor, client_version)
+            if refusal:
+                print(f"\n FLOW {spec.flow} — REFUSED\n   {refusal}")
+                overall = 1
+                continue
+            runner = FlowRunner(helper, platform=platform, artifacts=artifacts)
+            ok = await runner.run(spec)
+            report = runner.write_report(spec)
+            print(f"\n  {runner.summary(spec)}")
+            if report:
+                print(f"  report: {report}")
+            if not ok:
+                overall = 1
+    finally:
+        await helper.stop()
+    return overall
+
+
 async def run_federation_walk(args: argparse.Namespace) -> int:
     """Walk the federation Network screens via the test-automation server.
 
@@ -4107,6 +4191,11 @@ async def main() -> int:
     # Federation Network screen walk-test
     if args.command == "federation":
         return await run_federation_walk(args)
+
+    # Declarative UI flows (CIRISClient#39's canonical form). See
+    # tools/qa_runner/flows/README.md.
+    if args.command == "flow":
+        return await run_flow_specs(args)
 
     # Node-client first-run setup wizard: --launch brings up backend in
     # FIRST-RUN mode + desktop app sitting on the Setup wizard, then drives it.

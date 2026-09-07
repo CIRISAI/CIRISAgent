@@ -584,6 +584,25 @@ class DesktopAppHelper:
 
             await asyncio.sleep(self.config.poll_interval_ms / 1000.0)
 
+    async def is_element_present(self, test_tag: str) -> bool:
+        """Is the element COMPOSED — does this build/screen have it at all.
+
+        TWO PREDICATES, TWO NAMES. Until 42e1d172a this method's body WAS
+        is_element_visible, and every call site in the harness was written
+        against it: "does the login screen show the form or a button", "does
+        this build render the fed-ID field", "are we still on the YOU step while
+        the age band exists". Those are presence questions, and a control that
+        has merely scrolled off the screen must still answer yes — the first
+        Android run after the split typed no fed-ID label at all, because the
+        field was composed below the fold and the guard now read "not on screen"
+        (run #34162161554: "Enter a name for your federation ID to continue").
+
+        Only scroll_into_view and the CSD flow runner need the on-screen answer.
+        Everything else asks this. A click or input on a present-but-off-screen
+        element self-recovers by scrolling; a guard that skips it does not.
+        """
+        return await self.get_element(test_tag) is not None
+
     async def is_element_visible(self, test_tag: str) -> bool:
         """Is the element ON SCREEN — not merely composed.
 
@@ -703,8 +722,8 @@ class DesktopAppHelper:
         # was not, and it sent the step-by-step desktop-login flow down a path
         # that assumed the form was always present.
         is_mobile_login = False
-        if not await self.is_element_visible("input_username"):
-            if await self.is_element_visible("btn_local_login"):
+        if not await self.is_element_present("input_username"):
+            if await self.is_element_present("btn_local_login"):
                 is_mobile_login = True
                 await self.click("btn_local_login")
                 # Wait briefly for the local-credentials panel to render
@@ -785,8 +804,8 @@ class DesktopAppHelper:
             group_tag = screen_groups.get(screen_name)
             root_tag = screen_roots.get(screen_name)
 
-            if not await self.is_element_visible(menu_tag):
-                if group_tag is not None and await self.is_element_visible(group_tag):
+            if not await self.is_element_present(menu_tag):
+                if group_tag is not None and await self.is_element_present(group_tag):
                     await self.click(group_tag)
                     try:
                         await self.wait_for_element(menu_tag, timeout=2000)

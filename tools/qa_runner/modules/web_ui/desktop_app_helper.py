@@ -317,8 +317,22 @@ class DesktopAppHelper:
         )
         data = _json(response)
         if not data.get("success", False):
-            error = data.get("error", "unknown error")
-            raise RuntimeError(f"Input '{test_tag}' failed: {error} (response: {data})")
+            error = str(data.get("error", "unknown error"))
+            # Same recovery as click(): from 0.5.206 /input refuses a positioned
+            # element that is off screen, and a login form below the fold is as
+            # ordinary as a wizard step. Scroll once, retry, and let anything else
+            # surface unchanged.
+            if "off screen" in error.lower() and await self.scroll_into_view(test_tag):
+                response = await self._client.post(
+                    "/input",
+                    json={"testTag": test_tag, "text": text, "clearFirst": clear_first},
+                )
+                data = _json(response)
+                if not data.get("success", False):
+                    error = str(data.get("error", "unknown error"))
+                    raise RuntimeError(f"Input '{test_tag}' failed after scrolling: {error} (response: {data})")
+            else:
+                raise RuntimeError(f"Input '{test_tag}' failed: {error} (response: {data})")
         if self.config.input_settle_s:
             await asyncio.sleep(self.config.input_settle_s)
         if verify and not _looks_secret(test_tag):
@@ -404,7 +418,21 @@ class DesktopAppHelper:
         )
         data = _json(response)
         if not data.get("success", False):
-            error = data.get("error", "unknown error")
+            error = str(data.get("error", "unknown error"))
+            # OFF SCREEN IS THE ONE RECOVERABLE TIMEOUT (0.5.206). The element is
+            # there and composed; it is simply below the fold, which for a long
+            # form is the normal case rather than an error. Scroll once and ask
+            # again — every other timeout means what it says and is raised with
+            # the app's own message, which now names what IS drivable.
+            if "off screen" in error.lower() and await self.scroll_into_view(test_tag):
+                retry_ms = min(timeout_ms, 5000)
+                retry = await self._client.post(
+                    "/wait",
+                    json={"testTag": test_tag, "timeoutMs": retry_ms},
+                    timeout=retry_ms / 1000.0 + 5,
+                )
+                if _json(retry).get("success", False):
+                    return True
             raise RuntimeError(f"Wait for element '{test_tag}' timed out after {timeout_ms}ms: {error}")
         return True
 

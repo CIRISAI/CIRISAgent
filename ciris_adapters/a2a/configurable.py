@@ -89,7 +89,7 @@ class A2AConfigurableAdapter:
                     "step_type": "input",
                     "title": "Performance Settings (Optional)",
                     "description": "Configure timeout and performance options",
-                    "optional": True,
+                    "required": False,
                     "fields": [
                         {
                             "name": "timeout",

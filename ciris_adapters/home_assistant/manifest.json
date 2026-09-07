@@ -100,7 +100,7 @@
         "description": "Choose which cameras to use for event detection (optional)",
         "options_method": "get_config_options",
         "depends_on": ["oauth"],
-        "optional": true
+        "required": false
       },
       {
         "step_id": "confirm",

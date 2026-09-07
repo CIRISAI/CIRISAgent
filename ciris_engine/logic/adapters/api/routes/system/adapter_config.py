@@ -296,10 +296,10 @@ async def start_adapter_configuration(
         if not manifest:
             raise HTTPException(status_code=404, detail=f"Adapter '{adapter_type}' not found")
 
-        # Get current step (respects start_step_id if specified)
-        current_step = None
-        if manifest.steps and session.current_step_index < len(manifest.steps):
-            current_step = manifest.steps[session.current_step_index]
+        # Get current step (respects start_step_id, and skips steps whose
+        # `condition` does not hold -- through the service, so this is the
+        # SAME evaluator that execute_step uses, not a second one).
+        current_step = config_service.current_step(session)
 
         response = ConfigurationSessionResponse(
             session_id=session.session_id,
@@ -368,10 +368,8 @@ async def get_configuration_status(
         if not manifest:
             raise HTTPException(status_code=500, detail=f"Manifest for '{session.adapter_type}' not found")
 
-        # Get current step
-        current_step = None
-        if session.current_step_index < len(manifest.steps):
-            current_step = manifest.steps[session.current_step_index]
+        # Get current step, conditions evaluated (see start_configuration)
+        current_step = config_service.current_step(session)
 
         response = ConfigurationStatusResponse(
             session_id=session.session_id,
@@ -463,9 +461,8 @@ async def get_session_status(
         if manifest and manifest.steps:
             steps = manifest.steps
             total_steps = len(steps)
-            if session.current_step_index < len(steps):
-                # Use the ConfigurationStep directly from the manifest
-                current_step = steps[session.current_step_index]
+            # Through the service, conditions evaluated (see start_configuration)
+            current_step = config_service.current_step(session)
 
         response = ConfigurationSessionResponse(
             session_id=session.session_id,

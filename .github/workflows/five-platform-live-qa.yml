@@ -599,10 +599,11 @@ jobs:
             # main.py agent (CIRISAgent#1149): the with-AI pass that follows boots an
             # agent whose node fold binds :4243, and an orphan from the previous pass
             # is EADDRINUSE (CIRISAgent#1101/#1102).
-            for port in 8080 9091 8091 4242 4243; do
-              pids=$(lsof -ti "tcp:$port" -sTCP:LISTEN 2>/dev/null || true)
-              [ -n "$pids" ] && { echo "  teardown: killing $port ($pids)"; kill -9 $pids 2>/dev/null || true; }
-            done
+            # NOT `lsof`: it does not exist on Windows Git Bash, so every probe here
+            # failed into its `|| true` and this loop silently did nothing on one of
+            # the three runners. free_ports.py finds holders per-platform and then
+            # PROVES the port is free by binding it (CIRISAgent#1102).
+            python3 tools/dev/free_ports.py 8080 9091 8091 4242 4243 --timeout 30 --label teardown || true
 
             export CIRIS_HOME="${RUNNER_TEMP}/ciris-$plat"
             mkdir -p "$CIRIS_HOME"
@@ -667,27 +668,18 @@ jobs:
             # transport threads outlive a hard kill, and the graceful release added in
             # 2.10.0 is bypassed when the launcher kills -9. The port being free is
             # observable, so observe it instead of guessing at a duration.
-            for port in 4242 4243 8080; do
-              pids=$(lsof -ti "tcp:$port" -sTCP:LISTEN 2>/dev/null || true)
-              [ -n "$pids" ] && { echo "  post-reset: freeing $port ($pids)"; kill -9 $pids 2>/dev/null || true; }
-            done
-            held=""
-            for attempt in $(seq 1 30); do
-              held=""
-              for port in 4242 4243 8080; do
-                if lsof -ti "tcp:$port" -sTCP:LISTEN >/dev/null 2>&1; then held="$held $port"; fi
-              done
-              [ -z "$held" ] && break
-              sleep 2
-            done
-            if [ -n "$held" ]; then
+            # THIS LOOP USED TO LIE ON WINDOWS. It probed with `lsof`, which Git Bash
+            # does not have, so `held` was always empty and it printed "free after 2s"
+            # having verified nothing. Run #34147279506 is the proof: that line printed
+            # while the no-AI leg's node still held :4242, and the next backend died on
+            #   ReticulumTransport::new: ... (os error 10048)
+            # An absent process listing is not evidence of a free port — free_ports.py
+            # settles it by binding, which no missing tool can answer wrongly.
+            if ! python3 tools/dev/free_ports.py 4242 4243 8080 --timeout 60 --label post-reset; then
               # Say it here rather than letting the next backend fail with an error that
               # reads like a product fault.
-              echo "::error::$plat ports still held after 60s:$held — the next backend will fail Edge init (CIRISAgent#1102)"
-              for port in $held; do lsof -i "tcp:$port" 2>/dev/null | head -3 || true; done
+              echo "::error::$plat ports still held after 60s — the next backend will fail Edge init (CIRISAgent#1102)"
               overall=1
-            else
-              echo "  post-reset: 4242/4243/8080 free after $((attempt * 2))s"
             fi
 
             # 1. Setup wizard through the real UI, with a real key.

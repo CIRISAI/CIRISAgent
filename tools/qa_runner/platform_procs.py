@@ -95,6 +95,33 @@ def pids_listening_on(port: int) -> List[int]:
         return []
 
 
+def kill_pids(pids: "List[int]") -> int:
+    """Hard-kill `pids`. Returns how many kills were issued. Never raises.
+
+    `os.kill(SIGKILL)` does not exist on Windows, where the equivalent is
+    `taskkill /F /PID`. Same tolerance rule as the rest of this module: a
+    cleanup helper that raises turns "something was left behind" into "the
+    suite cannot start".
+    """
+    sent = 0
+    for pid in pids:
+        try:
+            if IS_WINDOWS:
+                subprocess.run(
+                    ["taskkill", "/F", "/T", "/PID", str(pid)],
+                    capture_output=True, timeout=_TIMEOUT,
+                )
+            else:
+                import os
+                import signal
+
+                os.kill(pid, signal.SIGKILL)
+            sent += 1
+        except (FileNotFoundError, subprocess.SubprocessError, OSError, ProcessLookupError):
+            continue
+    return sent
+
+
 def desktop_process_pattern() -> str:
     """The desktop app's process name for the CURRENT platform.
 

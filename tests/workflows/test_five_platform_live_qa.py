@@ -186,8 +186,17 @@ def test_each_platform_starts_from_a_clean_host(raw: str) -> None:
     interaction as the iOS result. A false green on the platform least likely to
     be checked by eye.
     """
-    assert "teardown: killing" in raw, "no per-platform teardown"
     teardown = raw.split("TEAR DOWN THE PREVIOUS PLATFORM FIRST")[1][:700]
+    # The teardown must PROVE the ports free, not merely try to kill something.
+    # The lsof loop this replaced checked nothing on Windows (no lsof in Git
+    # Bash, every probe fell into `|| true`) and printed "free" regardless —
+    # run #34147279506 booted the next backend into EADDRINUSE behind that line.
+    # free_ports.py finds holders per platform and then binds the port, which no
+    # missing tool can answer wrongly. Asserting the tool by name is asserting
+    # that property; asserting lsof is absent is asserting the regression stays
+    # out.
+    assert "free_ports.py" in teardown, "no per-platform teardown (free_ports.py not invoked)"
+    assert "lsof -ti" not in teardown, "teardown regressed to lsof, which is absent on Windows"
     for port in ("8080", "9091"):
         assert port in teardown, f"teardown does not clear :{port}"
 

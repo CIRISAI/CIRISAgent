@@ -95,18 +95,7 @@ jobs:
     needs: [ios-bundle]
     # ios-bundle failing (or skipped on a non-iOS dispatch) must not skip the
     # gate: the mac leg falls back to fetching the substrate itself.
-    #
-    # SKIP A RUNNER WITH NO WORK. `platforms` was filtered per-leg INSIDE the run
-    # step, so a `platforms: linux android` dispatch still booted the macOS and
-    # Windows runners to do nothing -- 45 minutes of macOS time per dispatch, and,
-    # once client_preview_tag existed, a hard failure: a preview that ships no
-    # macosx wheel cannot be vendored on a mac that had no reason to start.
-    if: >-
-      ${{ !cancelled() && (
-        inputs.platforms == '' || inputs.platforms == 'all' ||
-        contains(format(' {0} ', inputs.platforms), format(' {0} ', matrix.first)) ||
-        contains(format(' {0} ', inputs.platforms), format(' {0} ', matrix.second))
-      ) }}
+    if: ${{ !cancelled() }}
     name: ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 75
@@ -119,8 +108,6 @@ jobs:
           - label: linux-android
             os: ubuntu-latest
             platforms: "linux android"
-            first: linux
-            second: android
           - label: macos-ios
             # macos-15, NOT macos-14. The macos-14 image carries only Xcode 15.4,
             # while Homebrew's xcodegen (2.45.4) emits pbxproj format 77:
@@ -131,16 +118,9 @@ jobs:
             # and matches the generator, so the build here is the build that ships.
             os: macos-15
             platforms: "macos ios"
-            first: macos
-            second: ios
           - label: windows
             os: windows-latest
             platforms: "windows"
-            first: windows
-            # Duplicated on purpose. An undefined `second` renders as the empty
-            # string, and contains(' linux android ', ' ') is TRUE — the guard
-            # would never skip this leg, which is exactly backwards.
-            second: windows
 
     env:
       CIRIS_TEST_MODE: "true"
@@ -183,6 +163,26 @@ jobs:
         run: |
           set -euo pipefail
           PREVIEW='${{ inputs.client_preview_tag }}'
+          REQUESTED='${{ inputs.platforms || 'all' }}'
+          MINE='${{ matrix.platforms }}'
+          # A PREVIEW NEED NOT COVER EVERY PLATFORM. This one ships no macosx
+          # wheel, and a `platforms: linux android` dispatch still boots the macOS
+          # runner (the per-leg filter lives further down, inside the run step), so
+          # the mac vendored a wheel for work it was never going to do and failed
+          # the job. If none of THIS runner's platforms were asked for, there is
+          # nothing to vendor. NOT a job-level `if`: the matrix context is not
+          # available there, which is what invalidated the workflow file in
+          # 0216ed4ad.
+          if [ -n "$PREVIEW" ] && [ "$REQUESTED" != "all" ]; then
+            wanted=0
+            for plat in $MINE; do
+              echo " $REQUESTED " | grep -q " $plat " && wanted=1
+            done
+            if [ "$wanted" = 0 ]; then
+              echo "no requested platform on this runner ($MINE); skipping the preview vendor"
+              exit 0
+            fi
+          fi
           if [ -n "$PREVIEW" ]; then
             # A preview build is a PRERELEASE on a non-`v<version>` tag whose version
             # carries a PEP 440 local segment (0.5.208+preview.gNNNNNNN). PyPI refuses

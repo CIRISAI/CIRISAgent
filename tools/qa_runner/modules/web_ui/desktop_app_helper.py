@@ -236,7 +236,24 @@ class DesktopAppHelper:
                 )
             except Exception:  # noqa: BLE001 -- a missing endpoint is not this call's problem to raise
                 return False
-            if resp.status_code == 404:
+            # ONLY 200 MEANS IT SCROLLED (ciris-client 0.5.207). A refusal is a 404
+            # carrying a reason -- an unroutable endpoint on that platform, or a tag
+            # the app will not scroll to -- and treating it as "scrolled, look
+            # again" would spend the whole budget re-asking a question already
+            # answered. Surface the reason: it is the app telling us why, and the
+            # caller's own failure will not repeat it.
+            if resp.status_code != 200:
+                reason = ""
+                try:
+                    body = resp.json()
+                    reason = str(body.get("error") or body.get("reason") or "")
+                except Exception:  # noqa: BLE001
+                    reason = (resp.text or "").strip()[:160]
+                print(
+                    f"    (scroll refused for '{test_tag}': HTTP {resp.status_code}"
+                    + (f" — {reason}" if reason else "")
+                    + ")"
+                )
                 return False
             await asyncio.sleep(0.25)
             if await self.is_element_visible(test_tag):

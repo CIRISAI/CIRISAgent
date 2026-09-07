@@ -1044,6 +1044,13 @@ class DesktopAppTestRunner:
 
             # 1. AGE — required, and never silently skipped.
             band_tag = f"age_band_{age_band}"
+            # The AI question sits ABOVE age/account/fed-ID from 0.5.203, so on a
+            # short window the bands fall below the fold — and from 0.5.206 an
+            # off-screen element is refused rather than clicked by coordinate.
+            # Scroll first; the wait below still produces the real failure if the
+            # band genuinely is not there.
+            if not await self.helper.is_element_visible(band_tag):
+                await self.helper.scroll_into_view(band_tag)
             if not await self.helper.wait_for_element(band_tag, timeout=10000):
                 await self._dump_tree("you_step:age")
                 raise RuntimeError(f"{band_tag} not found — YOU cannot advance without an age band")

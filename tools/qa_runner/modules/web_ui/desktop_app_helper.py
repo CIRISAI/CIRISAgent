@@ -210,6 +210,39 @@ class DesktopAppHelper:
             text=data.get("text"),
         )
 
+    async def scroll_into_view(self, test_tag: str, attempts: int = 6, amount: int = 300) -> bool:
+        """Scroll a composed-but-off-screen element into view. Best effort.
+
+        From ciris-client 0.5.206 a positioned element must also be ON SCREEN for
+        /wait, /click and /input to accept it (CIRISClient#33). That is the right
+        rule -- it is what turns a coordinate gamble into a refusal -- but it means
+        anything below the fold of a long form is undrivable until something
+        scrolls. The wizard's YOU step is exactly that: 0.5.203 put the AI question
+        above age/account/fed-ID, and `age_band_adult` fell off the bottom.
+
+        Returns True if the element reports visible afterwards. Never raises: the
+        caller's own wait produces the real, message-carrying failure.
+
+        NOTE: /scroll is served by the desktop and iOS test servers but NOT the
+        Android one in 0.5.206, so on Android this is a no-op and a long form stays
+        undrivable. Reported upstream; see CIRISClient#33.
+        """
+        if not self._client:
+            return False
+        for _ in range(attempts):
+            try:
+                resp = await self._client.post(
+                    "/scroll", json={"testTag": test_tag, "direction": "down", "amount": amount}
+                )
+            except Exception:  # noqa: BLE001 -- a missing endpoint is not this call's problem to raise
+                return False
+            if resp.status_code == 404:
+                return False
+            await asyncio.sleep(0.25)
+            if await self.is_element_visible(test_tag):
+                return True
+        return False
+
     async def click(self, test_tag: str, timeout: Optional[int] = None) -> bool:
         """
         Click an element by testTag.
@@ -231,7 +264,18 @@ class DesktopAppHelper:
         )
         data = _json(response)
         if not data.get("success", False):
-            error = data.get("error", "unknown error")
+            error = str(data.get("error", "unknown error"))
+            # OFF SCREEN IS RECOVERABLE, AND THE APP SAYS SO. From 0.5.206 /click
+            # refuses a positioned element that is not on screen rather than firing
+            # a handler nobody could have reached. Scroll to it once and retry;
+            # anything else is a real failure and goes straight up.
+            if "off screen" in error.lower():
+                if await self.scroll_into_view(test_tag):
+                    response = await self._client.post("/click", json={"testTag": test_tag})
+                    data = _json(response)
+                    if data.get("success", False):
+                        return True
+                    error = str(data.get("error", "unknown error"))
             raise RuntimeError(f"Click '{test_tag}' failed: {error} (response: {data})")
         return True
 

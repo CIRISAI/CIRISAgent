@@ -221,6 +221,32 @@ def exec_into_node(cfg: NodeOnlyConfig) -> bool:
     the exec itself failed (the caller then exits normally and the NEXT boot
     hands off instead); on success it never returns.
     """
+    # NOT INSIDE AN EMBEDDED RUNTIME. On Android (Chaquopy) and iOS (BeeWare)
+    # this Python is a thread of the host app, and sys.executable is the host's
+    # own binary -- on Android, /system/bin/app_process64. execv of that with
+    # `-m ciris_server` is not a Python invocation at all: it REPLACED the app's
+    # process image with a malformed launch, the app died, and the client's
+    # runtime service restarted it (run #34165538262: pid 5883 exec'd
+    # app_process64, pid 6241 booted node-only five seconds later). The next boot
+    # then does the right thing on its own -- main.py reads the recorded flag and
+    # serves the node in-process (run_headless) -- so the only job here is to END
+    # this runtime legibly and let the host bring it back. There is no separate
+    # process to become. Deliberate, logged, and the same observable outcome the
+    # accident produced; the clean contract (the client restarts its own runtime
+    # once run_without_ai is recorded) is CIRISClient#43's mobile half.
+    from ciris_engine.logic.utils.platform_detection import get_platform_name, is_desktop
+
+    if not is_desktop():
+        _say(
+            f"embedded runtime ({get_platform_name()}): this Python is the host app's, not a process of its own, "
+            f"so there is nothing to exec into. :8080 has stopped; exiting so the host restarts the runtime, "
+            f"which boots node-only from the recorded flag and serves {cfg.server_url} in-process. "
+            f"(sys.executable={sys.executable!r} is the host binary, not a Python -- exec'ing it replaced the app.)"
+        )
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(0)
+
     cmd = node_command(cfg)
     _say(f"replacing this process (pid={os.getpid()}) with the node in place: {cmd} -- the read API comes up on {cfg.server_url}; node logs in {cfg.node_log_dir}")
     sys.stdout.flush()

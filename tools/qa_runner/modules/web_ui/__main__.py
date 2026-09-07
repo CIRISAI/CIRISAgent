@@ -2649,6 +2649,19 @@ async def run_android_up(args: argparse.Namespace) -> int:
             "       backend-state assertions in the walk-test will fail; walk continues."
         )
 
+    # THE NODE'S READ API TOO. On a run-without-AI leg :8080 is meant to go
+    # away and :4243 is where the node answers; without this forward the host
+    # cannot see it, so the hand-off attribution read "BOTH backends
+    # unreachable -- the hand-off did not land" on a device where the node was
+    # simply not forwarded (run #34165538262). Best-effort, like 8080: a device
+    # that cannot forward it degrades to "not observable", never to a false
+    # verdict.
+    forward_node = _adb(["forward", "tcp:4243", "tcp:4243"], serial=serial, timeout=10)
+    if forward_node.returncode == 0:
+        print(f"  forward: host:4243 → {serial}:4243 (node read API, run-without-AI)")
+    else:
+        print(f"  ⚠️  adb forward 4243→4243 failed: {forward_node.stderr.strip()} -- node not observable from the host")
+
     # 5. Poll /health.
     print("[4/5] Waiting for AndroidTestAutomationServer to come up…")
     server_url = f"http://localhost:{args.desktop_port}"
@@ -4068,7 +4081,10 @@ async def run_desktop_tests(args: argparse.Namespace) -> int:
         # client bug and a process kill, which run 33704781359 could not settle.
         if platform in ("android", "ios"):
             backend_url = f"http://localhost:{getattr(args, 'port', 8080)}"
-            print(f"  -> {await attribute_device_failure(server_url, backend_url)}")
+            node_url = None
+            if getattr(args, "run_without_ai", False):
+                node_url = getattr(args, "node_url", None) or "http://127.0.0.1:4243"
+            print(f"  -> {await attribute_device_failure(server_url, backend_url, node_url)}")
         if platform == "android":
             print("\nAndroid: the app is launched with `--es CIRIS_TEST_MODE true` and")
             print("  `setprop debug.CIRIS_TEST_MODE true`, and a debug build should set")

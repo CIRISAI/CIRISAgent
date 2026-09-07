@@ -360,3 +360,13 @@ def test_every_no_ai_phase_names_itself_to_the_diagnoser() -> None:
     block = _shared_flow_block()
     for phase in ("setup-noai", "login-noai", "reset"):
         assert f"--phase {phase}" in block, f"phase {phase} is not distinguishable in the diagnosis"
+
+
+def test_the_gate_waits_for_the_node_ports_rather_than_sleeping() -> None:
+    """A `sleep 3` let macOS boot into EADDRINUSE — the port being free is observable (#1102)."""
+    block = _shared_flow_block()
+    assert "ports still held after" in block, "nothing reports ports that never free"
+    reset_at = next(i for i, l in enumerate(block.splitlines()) if "web_ui desktop-reset" in l)
+    tail = "\n".join(block.splitlines()[reset_at:])
+    assert "sleep 3\n" not in tail, "the post-reset wait is time-based again"
+    assert "lsof -ti" in tail and "break" in tail, "the wait must observe the ports, not guess"

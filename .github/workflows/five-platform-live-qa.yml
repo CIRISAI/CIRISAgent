@@ -659,11 +659,36 @@ jobs:
             #     app and `main.py --adapter api`, but a node-only backend is
             #     `python -m ciris_server` and holds :4242/:4243, which the agent's own
             #     node fold is about to want.
+            # WAIT FOR THE PORTS, DO NOT SLEEP AND HOPE. A `sleep 3` here let the macOS
+            # leg boot its next backend into
+            #   "Edge runtime initialization failed (REQUIRED foundation dep):
+            #    Edge transport ports are held by another process"
+            # which is CIRISAgent#1102 reproducing in CI: the previous backend's Rust
+            # transport threads outlive a hard kill, and the graceful release added in
+            # 2.10.0 is bypassed when the launcher kills -9. The port being free is
+            # observable, so observe it instead of guessing at a duration.
             for port in 4242 4243 8080; do
               pids=$(lsof -ti "tcp:$port" -sTCP:LISTEN 2>/dev/null || true)
               [ -n "$pids" ] && { echo "  post-reset: freeing $port ($pids)"; kill -9 $pids 2>/dev/null || true; }
             done
-            sleep 3
+            held=""
+            for attempt in $(seq 1 30); do
+              held=""
+              for port in 4242 4243 8080; do
+                if lsof -ti "tcp:$port" -sTCP:LISTEN >/dev/null 2>&1; then held="$held $port"; fi
+              done
+              [ -z "$held" ] && break
+              sleep 2
+            done
+            if [ -n "$held" ]; then
+              # Say it here rather than letting the next backend fail with an error that
+              # reads like a product fault.
+              echo "::error::$plat ports still held after 60s:$held — the next backend will fail Edge init (CIRISAgent#1102)"
+              for port in $held; do lsof -i "tcp:$port" 2>/dev/null | head -3 || true; done
+              overall=1
+            else
+              echo "  post-reset: 4242/4243/8080 free after $((attempt * 2))s"
+            fi
 
             # 1. Setup wizard through the real UI, with a real key.
             # A SHOT AT EVERY STAGE. The capture wrapper runs after main() whatever

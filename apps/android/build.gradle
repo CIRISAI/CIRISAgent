@@ -543,6 +543,15 @@ Tag: cp310-cp310-android_24_armeabi_v7a
 // against and the client inside the Python wheel are the same build. Hard-coding
 // it here would be a fifth pin site to forget.
 def cirisClientVersion = {
+    // PREVIEW ESCAPE HATCH, same variable fetch_client_artifacts.py honours. A
+    // CIRISClient preview is published under a version carrying a PEP 440 local
+    // segment (0.5.208+preview.g7058419), so the .aar on disk is named for THAT
+    // and not for the pin. Without this the fetch lands the preview .aar and the
+    // build then asks for `ciris-client-0.5.208.aar`, which is not there:
+    //   Could not find :ciris-client-0.5.208:
+    // Unset -- every ordinary build -- this reads the pin exactly as before.
+    def override = System.getenv("CIRIS_CLIENT_VERSION")
+    if (override != null && !override.trim().isEmpty()) return override.trim()
     def req = new File(rootDir, "../requirements.txt")
     def line = req.readLines().find { it.startsWith("ciris-client==") }
     if (line == null) throw new GradleException("no ciris-client== pin in requirements.txt")

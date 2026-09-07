@@ -803,42 +803,57 @@ class DesktopAppTestRunner:
         """
 
         async def logout():
-            # LOGOUT LIVES UNDER GOVERNANCE, not the generic menu. The nav has
-            # several categories, each its own opener and dropdown; `btn_menu`
-            # opens ADVANCED and `menu_logout` is inside the GOVERNANCE one
-            # (CIRISApp.kt: expanded = activeCategory == NavCategory.GOVERNANCE).
-            # Clicking the wrong opener still "succeeds" as a click and then times
-            # out on an item that was never going to render -- which is exactly how
-            # this failed the first time it ran.
-            # MOBILE PUTS THE NAV BEHIND A DRAWER. On Android the Interact tree
-            # contains `menu_logout` AND `btn_login_reset_device` while neither is
-            # reachable: `/tree` reports every element ever composed (no
-            # DisposableEffect on the registration), so presence there is not
-            # drivability. The drawer has to be opened first, and only then do the
-            # category menus exist to click. Desktop has no drawer, so this is a
-            # best-effort first move rather than a requirement.
-            if await self.helper.is_element_visible("btn_nav_drawer_open"):
-                self._log("mobile: opening the nav drawer before looking for logout")
-                await self.helper.click("btn_nav_drawer_open")
-                await asyncio.sleep(0.6)
+            """Log out — by two different routes, because the chrome differs.
 
-            openers = ("btn_governance_menu", "btn_menu")
-            opened = None
-            for tag in openers:
-                if await self.helper.is_element_visible(tag):
-                    self._log(f"Opening the nav menu to log out ({tag})")
-                    if await self.helper.click(tag) and await self.helper.wait_for_optional_element(
-                        "menu_logout", timeout=6000
-                    ):
-                        opened = tag
-                        break
-                    self._log(f"{tag} did not reveal menu_logout; trying the next opener")
-            if opened is None:
-                await self._dump_tree("reset:menu_logout")
+            DESKTOP keeps the top-bar dropdowns: `btn_governance_menu` opens the
+            category that holds `menu_logout` (`btn_menu` opens ADVANCED, which
+            does not).
+
+            MOBILE HAS NO `menu_logout` AT ALL. The 2.9.4 rewire replaced that
+            chrome with the EpistemicSidebar, and its own header says so: "Existing
+            QA scripts that drove the old top-bar dropdown menu (`menu_*` testTags)
+            will need updating to the new `nav_epistemic_*` testTags ... the old
+            chrome is fully replaced." Logout lives on the Settings surface as
+            `btn_logout`, reached through the drawer:
+                btn_nav_drawer_open -> nav_epistemic_agent_settings -> btn_logout
+
+            The desktop tags DO still appear in a mobile `/tree` — the registration
+            has no DisposableEffect, so the registry reports every element ever
+            composed. That is why the first version of this looked reachable and
+            then timed out; presence there is not drivability, so the mobile route
+            is taken on its own terms rather than probed for.
+            """
+            if await self.helper.is_element_visible("btn_nav_drawer_open"):
+                self._log("mobile chrome: drawer -> Settings -> btn_logout")
+                if not await self.helper.click("btn_nav_drawer_open"):
+                    raise RuntimeError("Failed to open the nav drawer (btn_nav_drawer_open)")
+                await asyncio.sleep(0.6)
+                if not await self.helper.wait_for_element("nav_epistemic_agent_settings", timeout=8000):
+                    await self._dump_tree("reset:nav_settings")
+                    raise RuntimeError("nav_epistemic_agent_settings not in the drawer — the sidebar surfaces moved")
+                if not await self.helper.click("nav_epistemic_agent_settings"):
+                    raise RuntimeError("Failed to open Settings from the drawer")
+                await asyncio.sleep(1.0)
+                if not await self.helper.wait_for_element("btn_logout", timeout=10000):
+                    await self._dump_tree("reset:btn_logout")
+                    raise RuntimeError("btn_logout not on the Settings surface")
+                if not await self.helper.click("btn_logout"):
+                    raise RuntimeError("Failed to click btn_logout")
+                await asyncio.sleep(1.5)
+                return
+
+            self._log("desktop chrome: btn_governance_menu -> menu_logout")
+            if not await self.helper.wait_for_element("btn_governance_menu", timeout=20000):
+                await self._dump_tree("reset:btn_governance_menu")
                 raise RuntimeError(
-                    "menu_logout not reachable from " + " or ".join(openers) + ". Either the app is not "
-                    "on an authenticated screen, or the logout item moved to another nav category."
+                    "btn_governance_menu not found and no nav drawer either — the app is not on an "
+                    "authenticated screen, or the chrome changed again."
                 )
+            if not await self.helper.click("btn_governance_menu"):
+                raise RuntimeError("Failed to open the governance menu")
+            if not await self.helper.wait_for_element("menu_logout", timeout=8000):
+                await self._dump_tree("reset:menu_logout")
+                raise RuntimeError("menu_logout not under btn_governance_menu — the item moved categories")
             if not await self.helper.click("menu_logout"):
                 raise RuntimeError("Failed to click menu_logout")
             await asyncio.sleep(1.5)

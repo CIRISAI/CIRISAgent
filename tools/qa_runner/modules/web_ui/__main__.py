@@ -1178,6 +1178,17 @@ class DesktopAppTestRunner:
             # hasAiStep is false, so JOIN_FEDERATION advances straight to COMPLETE.
             # Probing for the AI screen here would be a 20s wait for something the
             # wizard is correct not to show.
+            #
+            # BUT AN ABSENT AI SCREEN PROVES NOTHING ON ITS OWN. hasAiStep is
+            # `hasAgent && !runWithoutAi`, so the screen is also absent when the
+            # client resolved clientMode=NODE — which is exactly what happens on a
+            # fresh home before the node is folded and reachable. The first run of
+            # this pass (34067627803) went green that way: the AI screen was
+            # skipped, the wizard completed, and the agent's own log said
+            # `No usable LLM provider (provider='openai', key_set=False)` — the
+            # accidental-no-key branch, not the deliberate one. run_without_ai
+            # never reached the agent, nothing handed off, and the pass tested
+            # nothing while reporting success.
             self._log("Running WITHOUT AI: no AI screen expected (hasAiStep=false)")
         else:
             await self.run_test("ai_configuration", ai_step)
@@ -1245,6 +1256,52 @@ class DesktopAppTestRunner:
             self._log("node ownership claimed")
 
         await self.run_test("claim_settled", claim_settled)
+
+        if run_without_ai:
+
+            async def without_ai_took_effect():
+                """The OWNER'S CHOICE must have reached the agent, not just the UI.
+
+                Asserted on the agent's own recorded state rather than on the
+                wizard's appearance, because the wizard can skip the AI screen for
+                a reason that has nothing to do with the choice (clientMode=NODE on
+                a fresh home). Without this the pass is green whenever the screen
+                happens to be absent — which is how its first run passed while
+                run_without_ai never left the client (CIRISAgent#1149).
+
+                The evidence is the home's .env: `CIRIS_RUN_WITHOUT_AI=true` is
+                written ONLY by the deliberate branch. The accidental
+                "no usable provider" branch writes CIRIS_SERVICES_DISABLED and
+                nothing else, and that difference is the whole point.
+                """
+                import os
+                from pathlib import Path
+
+                home = Path(os.environ.get("CIRIS_HOME") or (Path.home() / "ciris"))
+                env_path = home / ".env"
+                try:
+                    body = env_path.read_text(encoding="utf-8", errors="replace")
+                except OSError as exc:
+                    raise RuntimeError(f"cannot read {env_path} to confirm the choice was recorded: {exc}") from exc
+
+                flag = [l.strip() for l in body.splitlines() if l.strip().startswith("CIRIS_RUN_WITHOUT_AI=")]
+                if not flag:
+                    disabled = "CIRIS_SERVICES_DISABLED=true" in body
+                    raise RuntimeError(
+                        "The wizard skipped the AI screen but the agent never recorded the choice: "
+                        f"no CIRIS_RUN_WITHOUT_AI in {env_path}.\n"
+                        "        The agent saw run_without_ai=false and took the accidental-no-key "
+                        "branch"
+                        + (" (CIRIS_SERVICES_DISABLED=true is present, which is that branch's signature)" if disabled else "")
+                        + ".\n"
+                        "        So the screen was absent for another reason — most likely "
+                        "clientMode=NODE on a fresh home, where hasAgent is false and hasAiStep is "
+                        "false regardless of the choice.\n"
+                        "        Nothing handed off to the node; :8080 is still the backend."
+                    )
+                self._log(f"the choice reached the agent: {flag[0]}")
+
+            await self.run_test("without_ai_recorded", without_ai_took_effect)
 
         async def announce_bundle():
             """The node must be DISCOVERABLE, not merely claimed.

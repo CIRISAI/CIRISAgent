@@ -221,31 +221,35 @@ def exec_into_node(cfg: NodeOnlyConfig) -> bool:
     the exec itself failed (the caller then exits normally and the NEXT boot
     hands off instead); on success it never returns.
     """
-    # NOT INSIDE AN EMBEDDED RUNTIME. On Android (Chaquopy) and iOS (BeeWare)
-    # this Python is a thread of the host app, and sys.executable is the host's
-    # own binary -- on Android, /system/bin/app_process64. execv of that with
-    # `-m ciris_server` is not a Python invocation at all: it REPLACED the app's
-    # process image with a malformed launch, the app died, and the client's
-    # runtime service restarted it (run #34165538262: pid 5883 exec'd
-    # app_process64, pid 6241 booted node-only five seconds later). The next boot
-    # then does the right thing on its own -- main.py reads the recorded flag and
-    # serves the node in-process (run_headless) -- so the only job here is to END
-    # this runtime legibly and let the host bring it back. There is no separate
-    # process to become. Deliberate, logged, and the same observable outcome the
-    # accident produced; the clean contract (the client restarts its own runtime
-    # once run_without_ai is recorded) is CIRISClient#43's mobile half.
+    # NOT INSIDE AN EMBEDDED RUNTIME -- AND NOT BY EXITING EITHER. On Android
+    # (Chaquopy) and iOS (BeeWare) this Python is a thread of the host app and
+    # sys.executable is the host's own binary; on Android, /system/bin/app_process64.
+    # execv of that with `-m ciris_server` is not a Python invocation: it REPLACED
+    # the app's process image, the app died, and Android's foreground-service
+    # restart brought it back (run #34165538262, pids 5883 -> 6241). It worked as
+    # a crash. The first correction -- exit deliberately and let the host restart
+    # us -- is WORSE on iOS, where exit(0) is the app vanishing mid-setup with no
+    # relaunch (CIRISClient#43). And the host cannot restart the interpreter
+    # either: Chaquopy initialises CPython once per process, so a service-level
+    # restart would re-enter mobile_main in an interpreter still holding this
+    # runtime's loop, threads and Edge transport -- CIRISAgent#1152's shape.
+    #
+    # So the agent never ends a process it does not own, on any platform. Here
+    # it records nothing new (the flag is already in the home's .env), :8080 has
+    # been told to stop, and it RETURNS. The next boot serves the node in-process
+    # from the recorded flag (main.py -> run_headless). Serving it in-process in
+    # THIS session -- the client's preferred shape (1) -- is gated on the parked
+    # runtime actually releasing Edge and persist on shutdown, which is #1152.
     from ciris_engine.logic.utils.platform_detection import get_platform_name, is_desktop
 
     if not is_desktop():
         _say(
-            f"embedded runtime ({get_platform_name()}): this Python is the host app's, not a process of its own, "
-            f"so there is nothing to exec into. :8080 has stopped; exiting so the host restarts the runtime, "
-            f"which boots node-only from the recorded flag and serves {cfg.server_url} in-process. "
-            f"(sys.executable={sys.executable!r} is the host binary, not a Python -- exec'ing it replaced the app.)"
+            f"embedded runtime ({get_platform_name()}): this Python is the host app's, so there is no process "
+            f"to exec into and none to exit. :8080 has stopped and the flag is recorded; the node serves "
+            f"{cfg.server_url} from the NEXT boot of the runtime (main.py reads the flag). In-session hand-off "
+            f"on this platform is gated on the parked runtime releasing Edge/persist (CIRISAgent#1152)."
         )
-        sys.stdout.flush()
-        sys.stderr.flush()
-        os._exit(0)
+        return False
 
     cmd = node_command(cfg)
     _say(f"replacing this process (pid={os.getpid()}) with the node in place: {cmd} -- the read API comes up on {cfg.server_url}; node logs in {cfg.node_log_dir}")

@@ -1352,6 +1352,21 @@ async def _node_only_restart(runtime: Any) -> None:
         os.getpid(),
     )
     if not node_only.exec_into_node(cfg):
+        from ciris_engine.logic.utils.platform_detection import is_desktop
+
+        if not is_desktop():
+            # Not a failure: an embedded runtime has no process to become and must
+            # not end the host's (CIRISClient#43). The flag is recorded, :8080 has
+            # stopped, and the node starts on the runtime's next boot. Do NOT ask
+            # the parked runtime to shut down here -- while parked it ignores the
+            # request (CIRISAgent#1152), and a log line claiming a shutdown that
+            # never happens is the exact vacuous shape this feature has already
+            # produced once.
+            logger.info(
+                "[RUN-WITHOUT-AI] embedded runtime: hand-off deferred to the runtime's next boot; "
+                "the flag is recorded and :8080 has stopped. In-session hand-off here is gated on #1152."
+            )
+            return
         logger.error(
             "[RUN-WITHOUT-AI] exec into the node FAILED; the agent runtime is left without its API server. "
             "Asking it to shut down so the next boot starts the node from the recorded flag."

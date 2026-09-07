@@ -1026,7 +1026,9 @@ async def describe_test_server(server_url: str = "http://localhost:8091") -> str
     return f"{server_url}/health ok, testMode enabled"
 
 
-async def attribute_device_failure(server_url: str, backend_url: str) -> str:
+async def attribute_device_failure(
+    server_url: str, backend_url: str, node_url: Optional[str] = None
+) -> str:
     """Which layer died: the automation server, or the whole app process?
 
     On Android the automation port is reached through an adb forward, and adb
@@ -1048,6 +1050,13 @@ async def attribute_device_failure(server_url: str, backend_url: str) -> str:
                           stopped. Client-side (the automation surface).
       backend is gone  -> the process itself died; look for an OOM/low-memory
                           kill in logcat, not for an accept-loop bug.
+
+    THAT SECOND INFERENCE IS FALSE UNDER run-without-AI (CIRISAgent#1149). There
+    the agent API on :8080 is SUPPOSED to be gone: setup/complete hands the
+    process over to a ciris-server node on :4243, so "the sibling port is dead"
+    is the feature working, not evidence of a process kill. Pass `node_url` and
+    the node is probed before any death is declared — a live node means the
+    handover succeeded and the ports say nothing about whether the app survived.
     """
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
@@ -1063,6 +1072,30 @@ async def attribute_device_failure(server_url: str, backend_url: str) -> str:
             f"the app PROCESS IS ALIVE — the embedded backend at {backend_url} still "
             f"answers ({detail}), so only the automation server on {server_url} stopped. "
             "Look at the automation surface, not at a process death."
+        )
+    if node_url:
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                nr = await client.get(f"{node_url.rstrip('/')}/v1/identity")
+            node_up = nr.status_code < 500
+            node_detail = f"HTTP {nr.status_code}"
+        except Exception as exc:  # noqa: BLE001
+            node_up = False
+            node_detail = type(exc).__name__
+        if node_up:
+            return (
+                f"the agent API at {backend_url} is gone BY DESIGN — this is a run-without-AI "
+                f"leg and the node at {node_url} answers ({node_detail}), so the hand-off "
+                f"succeeded. The ports cannot tell you whether the app process survived; only "
+                f"{server_url} stopped answering. Look at the client: after the hand-off it must "
+                f"drive the NODE, and a client still polling {backend_url} will spin forever."
+            )
+        return (
+            f"BOTH backends are unreachable — the agent API at {backend_url} ({detail}) and the "
+            f"node at {node_url} ({node_detail}). On a run-without-AI leg the agent API is meant "
+            f"to be gone, so the node being gone too is the real failure: the hand-off did not "
+            f"land. Check the [RUN-WITHOUT-AI] lines in the agent log for the exec, then the "
+            f"node's own log."
         )
     return (
         f"the app PROCESS IS GONE — the embedded backend at {backend_url} is also "

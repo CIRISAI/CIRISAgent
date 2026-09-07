@@ -187,7 +187,16 @@ class DesktopAppTestRunner:
         try:
             server_url = str(getattr(getattr(self.helper, "_client", None), "base_url", "") or "").rstrip("/")
             api_port = getattr(args, "port", None) or 8080
-            verdict = await attribute_device_failure(server_url or "http://localhost:9091", f"http://127.0.0.1:{api_port}")
+            # On a run-without-AI leg :8080 is gone BY DESIGN — the agent hands the
+            # process to a ciris-server node on :4243. Hand the node URL over so the
+            # verdict does not report the feature working as a process death
+            # (CIRISAgent#1149).
+            node_url = None
+            if args is not None and getattr(args, "run_without_ai", False):
+                node_url = getattr(args, "node_url", None) or "http://127.0.0.1:4243"
+            verdict = await attribute_device_failure(
+                server_url or "http://localhost:9091", f"http://127.0.0.1:{api_port}", node_url
+            )
         except Exception as exc:  # noqa: BLE001
             verdict = f"(could not attribute the dead server: {type(exc).__name__}: {exc})"
         if args is not None and getattr(args, "ios", False):
@@ -1372,9 +1381,21 @@ class DesktopAppTestRunner:
             username = getattr(_args, "username", None) or "admin"
             password = getattr(_args, "password", None) or "qa_test_password_12345"
             node_url = getattr(_args, "node_url", None) or DEFAULT_NODE_URL
+            # WHERE TO AUTHENTICATE. Normally the agent proxies /v1/auth/* to the
+            # node, so logging in on :8080 is the same session either way. On a
+            # run-without-AI leg there IS no :8080 — setup/complete replaced the
+            # agent process with the node (CIRISAgent#1149) — so the login has to
+            # go straight to the node, which owns /v1/auth/login itself. Keying
+            # this off the flag rather than off a failed connect keeps a genuinely
+            # dead agent on a with-AI leg loud instead of silently rerouted.
+            login_base = (
+                node_url.rstrip("/")
+                if getattr(_args, "run_without_ai", False)
+                else f"http://127.0.0.1:{api_port}"
+            )
             async with httpx.AsyncClient(timeout=30.0) as http:
                 r = await http.post(
-                    f"http://127.0.0.1:{api_port}/v1/auth/login",
+                    f"{login_base}/v1/auth/login",
                     json={"username": username, "password": password},
                 )
                 r.raise_for_status()

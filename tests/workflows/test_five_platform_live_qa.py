@@ -186,7 +186,12 @@ def test_each_platform_starts_from_a_clean_host(raw: str) -> None:
     interaction as the iOS result. A false green on the platform least likely to
     be checked by eye.
     """
-    teardown = raw.split("TEAR DOWN THE PREVIOUS PLATFORM FIRST")[1][:700]
+    # Bounded by the step's next structural line, not by a character count: the
+    # rationale comment above the invocation is long and grew when the mechanism
+    # changed, and a fixed window that once held the whole loop now holds only
+    # the comment -- the assertion then failed on a teardown that was present.
+    after = raw.split("TEAR DOWN THE PREVIOUS PLATFORM FIRST")[1]
+    teardown = after[: after.find("export CIRIS_HOME")] if "export CIRIS_HOME" in after else after[:2000]
     # The teardown must PROVE the ports free, not merely try to kill something.
     # The lsof loop this replaced checked nothing on Windows (no lsof in Git
     # Bash, every probe fell into `|| true`) and printed "free" regardless —
@@ -378,4 +383,11 @@ def test_the_gate_waits_for_the_node_ports_rather_than_sleeping() -> None:
     reset_at = next(i for i, l in enumerate(block.splitlines()) if "web_ui desktop-reset" in l)
     tail = "\n".join(block.splitlines()[reset_at:])
     assert "sleep 3\n" not in tail, "the post-reset wait is time-based again"
-    assert "lsof -ti" in tail and "break" in tail, "the wait must observe the ports, not guess"
+    # OBSERVE, DO NOT GUESS -- and observe by the one method no missing tool can
+    # fake. The lsof loop this once asserted printed "free after 2s" on Windows
+    # having probed nothing (no lsof in Git Bash; run #34147279506 then booted
+    # into os error 10048). free_ports.py proves a port free by BINDING it and
+    # bounds the wait with --timeout, so the property is asserted by naming the
+    # tool and its bound, and the regression is kept out by name.
+    assert "free_ports.py" in tail and "--timeout" in tail, "the wait must observe the ports (bind test), not guess"
+    assert "lsof -ti" not in tail, "the wait regressed to lsof, which is absent on Windows"

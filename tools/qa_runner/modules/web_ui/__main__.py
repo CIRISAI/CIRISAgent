@@ -810,6 +810,18 @@ class DesktopAppTestRunner:
             # Clicking the wrong opener still "succeeds" as a click and then times
             # out on an item that was never going to render -- which is exactly how
             # this failed the first time it ran.
+            # MOBILE PUTS THE NAV BEHIND A DRAWER. On Android the Interact tree
+            # contains `menu_logout` AND `btn_login_reset_device` while neither is
+            # reachable: `/tree` reports every element ever composed (no
+            # DisposableEffect on the registration), so presence there is not
+            # drivability. The drawer has to be opened first, and only then do the
+            # category menus exist to click. Desktop has no drawer, so this is a
+            # best-effort first move rather than a requirement.
+            if await self.helper.is_element_visible("btn_nav_drawer_open"):
+                self._log("mobile: opening the nav drawer before looking for logout")
+                await self.helper.click("btn_nav_drawer_open")
+                await asyncio.sleep(0.6)
+
             openers = ("btn_governance_menu", "btn_menu")
             opened = None
             for tag in openers:
@@ -1276,6 +1288,20 @@ class DesktopAppTestRunner:
                 """
                 import os
                 from pathlib import Path
+
+                # DESKTOP ONLY, AND SAID OUT LOUD. On Android and iOS the agent's
+                # home lives on the DEVICE, so $CIRIS_HOME on the runner is not it —
+                # reading it there reported "cannot read ... .env" and turned a real
+                # question into a harness error. The desktop legs carry this
+                # assertion; mobile reports that it did not run, because a check
+                # that cannot see the answer must not imply one either way.
+                platform = getattr(_LAST_ARGS, "platform", "desktop") or "desktop"
+                if platform != "desktop":
+                    self._log(
+                        f"NOT ASSERTED on {platform}: the agent's home is on the device, so the runner "
+                        "cannot read its .env. The desktop legs assert this."
+                    )
+                    return
 
                 home = Path(os.environ.get("CIRIS_HOME") or (Path.home() / "ciris"))
                 env_path = home / ".env"

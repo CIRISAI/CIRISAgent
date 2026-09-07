@@ -95,7 +95,18 @@ jobs:
     needs: [ios-bundle]
     # ios-bundle failing (or skipped on a non-iOS dispatch) must not skip the
     # gate: the mac leg falls back to fetching the substrate itself.
-    if: ${{ !cancelled() }}
+    #
+    # SKIP A RUNNER WITH NO WORK. `platforms` was filtered per-leg INSIDE the run
+    # step, so a `platforms: linux android` dispatch still booted the macOS and
+    # Windows runners to do nothing -- 45 minutes of macOS time per dispatch, and,
+    # once client_preview_tag existed, a hard failure: a preview that ships no
+    # macosx wheel cannot be vendored on a mac that had no reason to start.
+    if: >-
+      ${{ !cancelled() && (
+        inputs.platforms == '' || inputs.platforms == 'all' ||
+        contains(format(' {0} ', inputs.platforms), format(' {0} ', matrix.first)) ||
+        contains(format(' {0} ', inputs.platforms), format(' {0} ', matrix.second))
+      ) }}
     name: ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 75
@@ -108,6 +119,8 @@ jobs:
           - label: linux-android
             os: ubuntu-latest
             platforms: "linux android"
+            first: linux
+            second: android
           - label: macos-ios
             # macos-15, NOT macos-14. The macos-14 image carries only Xcode 15.4,
             # while Homebrew's xcodegen (2.45.4) emits pbxproj format 77:
@@ -118,9 +131,16 @@ jobs:
             # and matches the generator, so the build here is the build that ships.
             os: macos-15
             platforms: "macos ios"
+            first: macos
+            second: ios
           - label: windows
             os: windows-latest
             platforms: "windows"
+            first: windows
+            # Duplicated on purpose. An undefined `second` renders as the empty
+            # string, and contains(' linux android ', ' ') is TRUE — the guard
+            # would never skip this leg, which is exactly backwards.
+            second: windows
 
     env:
       CIRIS_TEST_MODE: "true"
@@ -169,9 +189,24 @@ jobs:
             # those by design, so `pip download ciris-client==` cannot reach it -- the
             # wheels come from the release itself. Version is derived from the asset
             # name rather than typed twice.
+            # ONE WHEEL, THE PLATFORM'S OWN. `--pattern 'ciris_client-*.whl'` pulls
+            # all of them (any + manylinux + win_amd64) and vendor_desktop_jar.py
+            # requires exactly one -- it extracts a PLATFORM-SPECIFIC uber-jar
+            # (CIRIS-linux-x64-*.jar), so "any of them" is not a valid answer. The
+            # pip path this replaces only ever downloads the wheel matching the
+            # host, and this must behave the same.
+            case "${RUNNER_OS}" in
+              Linux)   WHEEL_PAT='ciris_client-*manylinux*.whl' ;;
+              Windows) WHEEL_PAT='ciris_client-*win_amd64*.whl' ;;
+              macOS)   WHEEL_PAT='ciris_client-*macosx*.whl' ;;
+              *)       echo "::error::unknown RUNNER_OS ${RUNNER_OS}"; exit 1 ;;
+            esac
             gh release download "$PREVIEW" --repo CIRISAI/CIRISClient \
-              --pattern 'ciris_client-*.whl' --dir "${RUNNER_TEMP}/clientwheel"
-            CLIENT_VERSION=$(ls "${RUNNER_TEMP}/clientwheel" | sed -n 's/^ciris_client-\(.*\)-py3-none-any\.whl$/\1/p' | head -1)
+              --pattern "$WHEEL_PAT" --dir "${RUNNER_TEMP}/clientwheel" || {
+                echo "::error::$PREVIEW has no wheel matching $WHEEL_PAT — a preview that omits this platform cannot be tested on it"
+                exit 1
+              }
+            CLIENT_VERSION=$(ls "${RUNNER_TEMP}/clientwheel" | sed -n 's/^ciris_client-\(.*\)-py3-none-.*\.whl$/\1/p' | head -1)
             [ -n "$CLIENT_VERSION" ] || { echo "::error::could not derive a version from $PREVIEW assets"; exit 1; }
             echo "CIRIS_CLIENT_VERSION=$CLIENT_VERSION" >> "$GITHUB_ENV"
             echo "CIRIS_CLIENT_RELEASE_TAG=$PREVIEW" >> "$GITHUB_ENV"
@@ -197,9 +232,7 @@ jobs:
           # "fix" the deliberate mismatch by reinstalling the pin.
           if [ -n '${{ inputs.client_preview_tag }}' ]; then
             python -m pip install --force-reinstall --no-deps \
-              "$(ls ${RUNNER_TEMP}/clientwheel/ciris_client-*manylinux*.whl \
-                    ${RUNNER_TEMP}/clientwheel/ciris_client-*win_amd64*.whl \
-                    ${RUNNER_TEMP}/clientwheel/ciris_client-*any.whl 2>/dev/null | head -1)"
+              "$(ls ${RUNNER_TEMP}/clientwheel/ciris_client-*.whl | head -1)"
             python -c "import ciris_client, importlib.metadata as m; print('client in use:', m.version('ciris-client'))"
           fi
 

@@ -1,0 +1,16 @@
+flow: capacity_attestations
+title: Federation capacity attestations on Health & Reputation
+description: >-
+  CIRISClient#45 replaced FederationAttestationsGate with a live section. The
+  point of the change is that the data is real, so the assertion is on
+  `federation_capacity_live` and not merely on the card: a gate placeholder
+  would satisfy the card tag alone.
+client: ">=0.5.208"
+
+steps:
+  - step_id: attestations_section
+    title: The capacity attestations section is live, not gated
+    requires:
+      screen: HealthReputation
+    expect:
+      visible: [card_federation_capacity_attestations, federation_capacity_live]

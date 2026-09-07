@@ -229,10 +229,16 @@ class DesktopAppHelper:
         """
         if not self._client:
             return False
-        for _ in range(attempts):
+        # BOTH DIRECTIONS. "Off screen" does not say which way, and the wizard's
+        # YOU step can be scrolled past its own controls: the refusal that started
+        # this listed `age_band_declined`, `btn_next` and both AI options as
+        # drivable while `age_band_adult` was not, which is not the shape of a
+        # simple below-the-fold form. Down first (the common case), then up.
+        directions = ("down",) * (attempts // 2) + ("up",) * (attempts - attempts // 2)
+        for direction in directions:
             try:
                 resp = await self._client.post(
-                    "/scroll", json={"testTag": test_tag, "direction": "down", "amount": amount}
+                    "/scroll", json={"testTag": test_tag, "direction": direction, "amount": amount}
                 )
             except Exception:  # noqa: BLE001 -- a missing endpoint is not this call's problem to raise
                 return False

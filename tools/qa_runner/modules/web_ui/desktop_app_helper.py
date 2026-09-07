@@ -223,9 +223,12 @@ class DesktopAppHelper:
         Returns True if the element reports visible afterwards. Never raises: the
         caller's own wait produces the real, message-carrying failure.
 
-        NOTE: /scroll is served by the desktop and iOS test servers but NOT the
-        Android one in 0.5.206, so on Android this is a no-op and a long form stays
-        undrivable. Reported upstream; see CIRISClient#33.
+        PLATFORM HISTORY. 0.5.206 had no Android /scroll route at all, so this was
+        a no-op there (CIRISClient#33); 0.5.207 added it. 0.5.208 then answered 200
+        without moving anything, because dispatch went to the most recently composed
+        scrollable rather than one with overflow (CIRISClient#44) -- accepted and
+        useless, and indistinguishable from success over HTTP. The fix makes a 200
+        mean the screen MOVED and carries the offsets, so both are now legible here.
         """
         if not self._client:
             return False
@@ -261,6 +264,18 @@ class DesktopAppHelper:
                     + ")"
                 )
                 return False
+            # A 200 CARRIES WHAT IT DID (CIRISClient#44): "down:300 moved 0→300 of
+            # 1400". Print it. The whole cost of #44 was that an accepted-but-inert
+            # scroll looked identical to a working one until a later step failed for
+            # an apparently unrelated reason; with the offsets in the log, a run that
+            # reports `moved 0→0 of 0` says so at the moment it happens.
+            moved = ""
+            try:
+                moved = str((resp.json() or {}).get("text") or "").strip()
+            except Exception:  # noqa: BLE001
+                moved = ""
+            if moved:
+                print(f"    (scroll '{test_tag}' {direction}: {moved})")
             await asyncio.sleep(0.25)
             if await self.is_element_visible(test_tag):
                 return True

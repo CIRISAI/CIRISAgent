@@ -48,6 +48,11 @@ on:
         required: false
         default: true
         type: boolean
+      client_preview_tag:
+        description: "CIRISClient PRERELEASE tag to test instead of the requirements.txt pin (e.g. preview-scroll-dispatch). Empty = the pin."
+        required: false
+        default: ""
+        type: string
   # Nightly rather than per-PR: it boots emulators and spends real LLM tokens, so
   # it is too slow and too costly to gate every push. The release path is what
   # needs it, and a nightly failure lands before the next tag.
@@ -150,10 +155,31 @@ jobs:
       # globs at runtime.
       - name: Vendor the CIRIS Desktop UberJar from the client wheel
         shell: bash
+        env:
+          # Only needed on the preview path, where the wheels come from a
+          # CIRISClient release rather than PyPI. Same cross-repo public read the
+          # fetch_client_artifacts.py steps already do with this token.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          CLIENT_VERSION=$(grep -oE '^ciris-client==[0-9.]+' requirements.txt | cut -d= -f3)
-          python -m pip download "ciris-client==${CLIENT_VERSION}" --no-deps -d "${RUNNER_TEMP}/clientwheel"
+          PREVIEW='${{ inputs.client_preview_tag }}'
+          if [ -n "$PREVIEW" ]; then
+            # A preview build is a PRERELEASE on a non-`v<version>` tag whose version
+            # carries a PEP 440 local segment (0.5.208+preview.gNNNNNNN). PyPI refuses
+            # those by design, so `pip download ciris-client==` cannot reach it -- the
+            # wheels come from the release itself. Version is derived from the asset
+            # name rather than typed twice.
+            gh release download "$PREVIEW" --repo CIRISAI/CIRISClient \
+              --pattern 'ciris_client-*.whl' --dir "${RUNNER_TEMP}/clientwheel"
+            CLIENT_VERSION=$(ls "${RUNNER_TEMP}/clientwheel" | sed -n 's/^ciris_client-\(.*\)-py3-none-any\.whl$/\1/p' | head -1)
+            [ -n "$CLIENT_VERSION" ] || { echo "::error::could not derive a version from $PREVIEW assets"; exit 1; }
+            echo "CIRIS_CLIENT_VERSION=$CLIENT_VERSION" >> "$GITHUB_ENV"
+            echo "CIRIS_CLIENT_RELEASE_TAG=$PREVIEW" >> "$GITHUB_ENV"
+            echo "::warning::TESTING A CLIENT PREVIEW: $CLIENT_VERSION from tag $PREVIEW, NOT the requirements.txt pin"
+          else
+            CLIENT_VERSION=$(grep -oE '^ciris-client==[0-9.]+' requirements.txt | cut -d= -f3)
+            python -m pip download "ciris-client==${CLIENT_VERSION}" --no-deps -d "${RUNNER_TEMP}/clientwheel"
+          fi
           python3 tools/dev/vendor_desktop_jar.py "${RUNNER_TEMP}/clientwheel" ciris_engine/desktop_app "$CLIENT_VERSION"
 
       # Install the WHEEL, not the checkout: `pip install .` exercises a source
@@ -166,6 +192,16 @@ jobs:
           python -m build --wheel --outdir dist
           python -m pip install "$(ls dist/*.whl | head -1)"
           python -m pip install requests httpx
+          # The agent wheel Requires the PINNED client, so the line above just pulled
+          # it from PyPI. Put the preview back on top -- --no-deps so pip does not
+          # "fix" the deliberate mismatch by reinstalling the pin.
+          if [ -n '${{ inputs.client_preview_tag }}' ]; then
+            python -m pip install --force-reinstall --no-deps \
+              "$(ls ${RUNNER_TEMP}/clientwheel/ciris_client-*manylinux*.whl \
+                    ${RUNNER_TEMP}/clientwheel/ciris_client-*win_amd64*.whl \
+                    ${RUNNER_TEMP}/clientwheel/ciris_client-*any.whl 2>/dev/null | head -1)"
+            python -c "import ciris_client, importlib.metadata as m; print('client in use:', m.version('ciris-client'))"
+          fi
 
       # ── Linux desktop needs a display. `/screenshot` is AWT Robot, which
       # photographs a SCREEN; without one there is nothing to photograph and the

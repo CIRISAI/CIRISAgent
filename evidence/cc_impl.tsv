@@ -244,12 +244,26 @@ decimal_id	claim_id	repo	path#symbol	status
 # success redirect CARRIES THE FRESHLY MINTED API KEY, so an unvalidated
 # redirect_uri is direct credential exfiltration to an attacker-chosen domain.
 # Enforced at both oauth_login (:723) and oauth_callback (:1525).
-# MOVED TO THE SUBSTRATE (CIRISAgent#1028/#1029, ciris-server 0.5.170). The agent's
-# `routes/auth.py` was deleted — this property is now implemented and tested in
-# Rust, where the node owns identity, and reached from here through the
-# `/v1/auth/*` proxy. The claim did not go away with our copy of the code; its
-# evidence moved. Agent-side behavioural coverage rides in `qa_runner auth`,
-# which exercises the node's surface through the proxy rather than a TestClient.
+# MOVED TO THE SUBSTRATE (CIRISAgent#1028/#1029, ciris-server 0.5.170), AND THE
+# CONTROL CHANGED SHAPE ON THE WAY — read this before treating the claim text
+# above as a description of what runs today. The agent's `routes/auth.py` was
+# deleted; the surviving control is `src/auth/oauth.rs#is_safe_redirect`, which
+# is a SCHEME check, not a hostname allowlist: relative paths pass, `https://`
+# passes for ANY public host, `http://` passes only for loopback. There is no
+# configured allowlist anywhere in CIRISServer (searched at main, 2026-09-07) —
+# so the "public hostname is not on the configured allowlist" half of the claim
+# above did NOT move; it stopped existing.
+# What DID improve is the thing that made the old gap severe. The success
+# redirect no longer carries a live bearer: it carries `ciris_code`, a 256-bit
+# single-use redemption code with a 60s TTL (`WebExchangeStore::mint`/`redeem`),
+# and the session is handed over only in the body of POST /v1/auth/oauth/exchange
+# (CIRISServer#439). So the residual exposure is narrower and time-boxed rather
+# than closed: an attacker-chosen https destination still receives a credential-
+# equivalent it can redeem within 60s. Raised on CIRISServer#536; this row stays
+# `substrate` with no symbol until that lane decides whether to restore the
+# allowlist or re-word the claim to what is_safe_redirect actually guarantees.
+# Agent-side behavioural coverage rides in `qa_runner auth`, which exercises the
+# node's surface through the proxy rather than a TestClient.
 8.8.7	CLM-await-oauth-redirect-allowlist	—	—	substrate
 # Native Apple sign-in tokens are verified against Apple's published JWKS with alg
 # pinned to RS256, aud restricted to the configured app IDs, iss pinned to Apple,

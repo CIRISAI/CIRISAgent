@@ -55,13 +55,33 @@ def test_the_oslog_window_covers_the_whole_bring_up_budget() -> None:
 
 
 def test_the_teardown_only_kills_listeners() -> None:
-    """lsof without -sTCP:LISTEN returns clients too; the simulator app is one."""
+    """Owning a port means LISTENING on it, not talking to it.
+
+    lsof without -sTCP:LISTEN returns clients too, and the iOS simulator app is
+    one: it polls 127.0.0.1:8080 for its backend, so a teardown that killed by
+    port took the app under test down with it (run 33706020778, "exited due to
+    SIGKILL | sent by bash").
+
+    The teardown no longer shells out to lsof in the workflow; it calls
+    tools/dev/free_ports.py, which finds holders through
+    platform_procs.pids_listening_on. So the property is asserted where the
+    code is, on BOTH paths that function has -- the POSIX one must pass
+    -sTCP:LISTEN, and the Windows one (netstat -ano, where the old line was
+    never executed at all) must select the LISTENING state -- and the workflow
+    is asserted to invoke that tool rather than a raw port kill.
+    """
+    import inspect
+
+    from tools.qa_runner import platform_procs
+
     y = WORKFLOW.read_text(encoding="utf-8")
-    for line in y.splitlines():
-        if "lsof -ti" in line and "tcp:$port" in line:
-            assert "-sTCP:LISTEN" in line, f"port teardown would kill clients as well as listeners: {line.strip()}"
-            return
-    raise AssertionError("port-teardown lsof line not found")
+    assert "free_ports.py" in y, "the port teardown does not go through free_ports.py"
+    assert not any("lsof -ti" in line and "tcp:$port" in line for line in y.splitlines()), (
+        "a raw lsof port kill is back in the workflow; it is absent on Windows and kills clients without -sTCP:LISTEN"
+    )
+    src = inspect.getsource(platform_procs.pids_listening_on)
+    assert "-sTCP:LISTEN" in src, "POSIX path would return clients as well as listeners"
+    assert '"LISTENING"' in src, "Windows path would return every socket on the port, not only listeners"
 
 
 def test_the_launcher_runs_unbuffered() -> None:

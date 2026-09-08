@@ -1452,7 +1452,26 @@ class DesktopAppTestRunner:
                     )
                     r.raise_for_status()
                     headers = {"Authorization": f"Bearer {r.json()['access_token']}"}
-                    check = await check_announce_bundle(http, node_url, headers)
+                    try:
+                        check = await check_announce_bundle(http, node_url, headers)
+                    except httpx.TransportError as first:
+                        # ANNOUNCE IS IDEMPOTENT, AND THE NODE MAY RE-COMPOSE UNDER IT.
+                        # On macOS (run #34228782947) the node's log shows the announce
+                        # WRITE succeeding at 13:12:26 and the node re-composing at
+                        # 13:12:27 ("takes effect on next boot", and the boot is
+                        # immediate) -- the in-flight response was lost, and a client
+                        # that reads a dropped response as failure reports a
+                        # discoverable node as NOT discoverable. Filed upstream; until
+                        # it is settled, one retry after the re-compose settles is the
+                        # honest reading: the re-announce is a no-op that returns the
+                        # bundle the write produced.
+                        self._log(
+                            f"node at {node_url} dropped the announce response "
+                            f"({type(first).__name__}); it re-composes after announce-self "
+                            f"(CIRISServer issue filed) -- retrying once in 5s (announce is idempotent)"
+                        )
+                        await asyncio.sleep(5.0)
+                        check = await check_announce_bundle(http, node_url, headers)
                 except httpx.TransportError as exc:
                     raise RuntimeError(
                         f"the NODE at {login_base} dropped the connection during login/announce: "

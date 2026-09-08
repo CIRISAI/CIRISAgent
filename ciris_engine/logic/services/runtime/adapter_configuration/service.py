@@ -224,9 +224,9 @@ class AdapterConfigurationService:
             return False
         actual = collected[field]
         if "equals" in cond:
-            return actual == cond["equals"]
+            return bool(actual == cond["equals"])
         if "not_equals" in cond:
-            return actual != cond["not_equals"]
+            return bool(actual != cond["not_equals"])
         if "values" in cond:
             return actual in (cond["values"] or [])
         # A predicate with no recognised operator is a manifest error, and a

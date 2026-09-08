@@ -668,7 +668,21 @@ class DesktopAppTestRunner:
         await self.helper.click(f"menu_provider_{provider}")
         await asyncio.sleep(0.3)
 
-        # 2. API key.
+        # 2. API key -- WAIT FOR THE FIELD, do not assume it. On a device that
+        #    can run on-device inference the wizard defaults to it
+        #    ("[AI] defaulting to on-device inference (device is capable)"), and
+        #    choosing a BYOK provider recomposes the form; the key field appears
+        #    a beat after the click. A fixed 0.3s let macOS type into a field
+        #    that did not exist yet ("Element not found: input_api_key") while
+        #    the screenshot showed the field rendered with "API key is required"
+        #    (run #34181104589). Windows CI cannot run on-device inference, shows
+        #    the BYOK form at once, and passed -- a platform-conditional race.
+        if not await self.helper.wait_for_element("input_api_key", timeout=8000):
+            raise RuntimeError(
+                "input_api_key never composed after choosing the provider -- on a device that "
+                "defaults to on-device inference the BYOK form is recomposed on provider choice; "
+                "if it is still absent after 8s the provider click did not take"
+            )
         if not await self.helper.input_text("input_api_key", api_key):
             raise RuntimeError("Failed to enter API key (input_api_key)")
         await asyncio.sleep(0.3)

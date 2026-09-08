@@ -2816,6 +2816,27 @@ async def run_desktop_up(args: argparse.Namespace) -> int:
 
     kill_processes_matching(desktop_process_pattern())
     # CIRIS-linux handled by desktop_process_pattern() above; pkill is POSIX-only.
+    # THE APP'S CHILDREN OUTLIVE THE APP. On a no-AI session ciris-client 0.5.209
+    # resolves :4243, finds the exec'd node not yet bound, and launches a
+    # ciris-server of its own ("Launching local ciris-server node..."); its revive
+    # loop keeps doing so. Killing the JVM by name leaves that child alive, and on
+    # Linux one booted at 12:08:12, eight seconds before our with-AI agent, which
+    # then died on "Edge transport ports are held by another process" (run
+    # #34223901074). Kill the node processes AFTER the app that spawns them, then
+    # prove the ports free by binding -- the same authority the workflow's
+    # teardown uses, because an absent process listing is not evidence.
+    for pat in ("ciris_server", "ciris-server"):
+        kill_processes_matching(pat)
+    import subprocess as _sp
+
+    _free = _sp.run(
+        [sys.executable, "tools/dev/free_ports.py", "4242", "4243", str(args.port), "--timeout", "30", "--label", "bring-up"],
+        capture_output=True, text=True, timeout=60, cwd=str(Path(__file__).resolve().parents[4]),
+    )
+    print(_free.stdout.rstrip() or "  bring-up: free_ports produced no output")
+    if _free.returncode != 0:
+        print(" [FAIL] ports still held after the bring-up kill; the backend would fail Edge init")
+        return 1
     time.sleep(1)
     _wipe_dev_data()
 
@@ -2966,6 +2987,27 @@ async def run_desktop_first_run_up(args: argparse.Namespace) -> int:
 
     kill_processes_matching(desktop_process_pattern())
     # CIRIS-linux handled by desktop_process_pattern() above; pkill is POSIX-only.
+    # THE APP'S CHILDREN OUTLIVE THE APP. On a no-AI session ciris-client 0.5.209
+    # resolves :4243, finds the exec'd node not yet bound, and launches a
+    # ciris-server of its own ("Launching local ciris-server node..."); its revive
+    # loop keeps doing so. Killing the JVM by name leaves that child alive, and on
+    # Linux one booted at 12:08:12, eight seconds before our with-AI agent, which
+    # then died on "Edge transport ports are held by another process" (run
+    # #34223901074). Kill the node processes AFTER the app that spawns them, then
+    # prove the ports free by binding -- the same authority the workflow's
+    # teardown uses, because an absent process listing is not evidence.
+    for pat in ("ciris_server", "ciris-server"):
+        kill_processes_matching(pat)
+    import subprocess as _sp
+
+    _free = _sp.run(
+        [sys.executable, "tools/dev/free_ports.py", "4242", "4243", str(args.port), "--timeout", "30", "--label", "bring-up"],
+        capture_output=True, text=True, timeout=60, cwd=str(Path(__file__).resolve().parents[4]),
+    )
+    print(_free.stdout.rstrip() or "  bring-up: free_ports produced no output")
+    if _free.returncode != 0:
+        print(" [FAIL] ports still held after the bring-up kill; the backend would fail Edge init")
+        return 1
     time.sleep(1)
     _wipe_dev_data()
     # _wipe_dev_data rewrites ~/ciris/.env with CIRIS_CONFIGURED="true" (for

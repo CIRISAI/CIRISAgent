@@ -33,6 +33,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
@@ -55,6 +56,15 @@ def resolve_version() -> str:
     host resolved 0.5.188 here while the tree wanted 0.5.192, which would have
     silently built the APK against a four-release-old client.
     """
+    # PREVIEW ESCAPE HATCH. CIRISClient can now cut a preview build for a branch
+    # (a prerelease tagged something other than `v<version>`, carrying a PEP 440
+    # local segment like `0.5.208+preview.g7058419` that PyPI refuses by design).
+    # Testing one against this gate needs a version that is not in requirements.txt
+    # and a tag that is not `v<version>`, so both are overridable -- and ONLY by an
+    # explicit environment variable, so the default remains "the pin, always".
+    override = os.environ.get("CIRIS_CLIENT_VERSION", "").strip()
+    if override:
+        return override
     req = (ROOT / "requirements.txt").read_text(encoding="utf-8")
     m = re.search(r"^ciris-client==([0-9.]+)", req, re.MULTILINE)
     if not m:
@@ -63,8 +73,9 @@ def resolve_version() -> str:
 
 
 def asset_url(version: str, name: str) -> str:
+    tag = os.environ.get("CIRIS_CLIENT_RELEASE_TAG", "").strip() or f"v{version}"
     out = subprocess.run(
-        ["gh", "release", "view", f"v{version}", "--repo", REPO, "--json", "assets"],
+        ["gh", "release", "view", tag, "--repo", REPO, "--json", "assets"],
         capture_output=True,
         text=True,
         check=False,
@@ -75,7 +86,7 @@ def asset_url(version: str, name: str) -> str:
         # only exist as release assets, are not. Say which channel is missing --
         # "release not found" alone reads as "the version does not exist".
         raise SystemExit(
-            f"{REPO} has no GitHub release v{version}.\n"
+            f"{REPO} has no GitHub release {tag}.\n"
             f"  The PyPI wheels for {version} may already be published -- they are a\n"
             f"  DIFFERENT channel. The .aar and .xcframework exist only as release\n"
             f"  assets, so Android and iOS cannot be built against {version} until the\n"
@@ -84,7 +95,7 @@ def asset_url(version: str, name: str) -> str:
     for asset in json.loads(out.stdout)["assets"]:
         if asset["name"] == name:
             return asset["url"]
-    raise SystemExit(f"{REPO} v{version} has no asset named {name}")
+    raise SystemExit(f"{REPO} {tag} has no asset named {name}")
 
 
 def download(url: str, dest: Path) -> Path:

@@ -675,6 +675,18 @@ def _handle_final_exit() -> None:
     sys.stdout.flush()
     sys.stderr.flush()
     logger.info(f"[EXIT] CIRIS agent exiting cleanly (PID={os.getpid()})")
+    # The wizard just recorded "Run without AI" (CIRISAgent#1149): the brain is
+    # done for good. Become the node in place -- same pid, so `ciris-agent`
+    # keeps waiting on one process -- and let the client reconnect to :4243.
+    from ciris_engine import node_only
+
+    _node_only = node_only.node_only_config()
+    if _node_only is not None:
+        logger.info("[EXIT] Run without AI: replacing this process with the ciris-server node (see [RUN-WITHOUT-AI] lines)")
+        for _h in logging.getLogger().handlers:
+            _h.flush()
+        if not node_only.exec_into_node(_node_only):
+            logger.error("[EXIT] Run without AI: exec failed; exiting normally -- start `ciris-agent` again to boot the node")
 
     if "--adapter" in sys.argv and "api" in sys.argv and "--timeout" in sys.argv:
         logger.debug("EXITING NOW VIA os._exit(0) AT API mode subprocess tests")
@@ -804,6 +816,16 @@ def main(
     num_rounds: Optional[int],
 ) -> None:
     """Unified CIRIS agent entry point."""
+    # "Run without AI" (CIRISAgent#1149): with the flag recorded by the wizard,
+    # this process is a ciris-server node and nothing else. Decided before any
+    # logging or runtime import; CIRIS_RUN_WITHOUT_AI=false in the environment
+    # overrides the file for one run.
+    from ciris_engine import node_only
+
+    _node_only = node_only.node_only_config()
+    if _node_only is not None:
+        node_only.run_headless(_node_only)
+
     # Setup basic console logging first (without file logging)
     # File logging will be set up later once TimeService is available
     setup_basic_logging(

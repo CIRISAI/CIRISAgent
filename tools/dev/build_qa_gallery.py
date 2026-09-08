@@ -80,6 +80,55 @@ def _find_reports(root: Path) -> Dict[str, bool]:
     return results
 
 
+class FlowStep(NamedTuple):
+    step_id: str
+    title: str
+    status: str      # pass | fail | skipped
+    phase: str
+    detail: str
+    image: Optional[Path]
+
+
+class FlowTile(NamedTuple):
+    flow: str
+    title: str
+    platform: str
+    passed: bool
+    steps: List[FlowStep]
+
+
+def _find_flows(root: Path) -> List[FlowTile]:
+    """CSD flows: one tile per (flow, platform), one row per step, each with its shot.
+
+    These come from `python -m tools.qa_runner.modules.web_ui flow` — the
+    executable half of a CSD (FSD/CSD_STANDARD.md). The report names the
+    screenshot per step, so a failing step shows the screen it failed on, next to
+    the predicate that failed. That is the "results in the UI" half of the
+    standard; the console line is the other half.
+    """
+    tiles: List[FlowTile] = []
+    for report in sorted(root.rglob("flows/*.json")):
+        try:
+            data = json.loads(report.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        # The artifact directory is live-qa-<platform-label>; that is the only
+        # place the platform is recorded, so read it from the path.
+        platform = next((seg.replace("live-qa-", "") for seg in report.parts if seg.startswith("live-qa-")), "?")
+        steps = []
+        for st in data.get("steps", []):
+            shot = st.get("screenshot")
+            img = None
+            if shot:
+                cand = report.parent.parent / "shots" / Path(shot).name
+                img = cand if cand.exists() else None
+            steps.append(FlowStep(st.get("step_id", "?"), st.get("title", ""), st.get("status", "?"),
+                                  st.get("phase", ""), st.get("detail", ""), img))
+        tiles.append(FlowTile(data.get("flow", report.stem), data.get("title", ""), platform,
+                              bool(data.get("passed")), steps))
+    return tiles
+
+
 def _tiles(root: Path) -> List[Tile]:
     shots = _find_shots(root)
     reports = _find_reports(root)
@@ -118,7 +167,7 @@ def _embed(path: Path) -> str:
     return base64.b64encode(path.read_bytes()).decode("ascii")
 
 
-def _render(tiles: List[Tile], run_url: str = "") -> str:
+def _render(tiles: List[Tile], run_url: str = "", flows: Optional[List[FlowTile]] = None) -> str:
     cards = []
     for t in tiles:
         if t.passed is True:
@@ -143,6 +192,29 @@ def _render(tiles: List[Tile], run_url: str = "") -> str:
         <p class="detail">{html.escape(t.detail)}</p>
       </figure>"""
         )
+
+    flow_cards = []
+    for f in (flows or []):
+        rows = []
+        for st in f.steps:
+            cls = {"pass": "pass", "fail": "fail"}.get(st.status, "absent")
+            img = (f'<img src="data:image/png;base64,{_embed(st.image)}" alt="{html.escape(st.step_id)}">'
+                   if st.image and st.image.exists() else "")
+            why = f" — <code>{html.escape(st.phase)}</code>: {html.escape(st.detail)}" if st.status != "pass" and st.detail else ""
+            rows.append(f'<li class="step {cls}"><span class="badge {cls}">{st.status.upper()}</span> '
+                        f'<b>{html.escape(st.step_id)}</b> {html.escape(st.title)}{why}{img}</li>')
+        cls = "pass" if f.passed else "fail"
+        flow_cards.append(
+            f"""      <figure class="card flow {cls}">
+        <figcaption>
+          <span class="name">{html.escape(f.flow)} · {html.escape(PRETTY.get(f.platform, f.platform))}</span>
+          <span class="badge {cls}">{"PASS" if f.passed else "FAIL"}</span>
+        </figcaption>
+        <p class="detail">{html.escape(f.title)}</p>
+        <ol class="steps">{"".join(rows)}</ol>
+      </figure>"""
+        )
+    flows_section = ("\n    <h2>CSD flows</h2>\n" + "\n".join(flow_cards)) if flow_cards else ""
 
     passed = sum(1 for t in tiles if t.passed is True)
     ran = sum(1 for t in tiles if t.passed is not None)
@@ -181,6 +253,9 @@ def _render(tiles: List[Tile], run_url: str = "") -> str:
              font-size:.85rem; background:repeating-linear-gradient(45deg,
              transparent,transparent 8px,rgba(128,128,128,.07) 8px,rgba(128,128,128,.07) 16px); }}
   .detail {{ margin:0; padding:.6rem .85rem; font-size:.82rem; color:var(--muted); }}
+  .card.flow ol.steps{{list-style:none;padding:0;margin:0}}
+  .card.flow li.step{{padding:.4rem 0;border-top:1px solid #ddd}}
+  .card.flow li.step img{{display:block;max-width:100%;margin-top:.4rem}}
 </style>
 </head>
 <body>
@@ -191,6 +266,7 @@ def _render(tiles: List[Tile], run_url: str = "") -> str:
 </header>
 <div class="grid">
 {chr(10).join(cards)}
+{flows_section}
 </div>
 </body>
 </html>
@@ -229,7 +305,7 @@ def main() -> int:
 
     tiles = _tiles(args.root)
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(_render(tiles), encoding="utf-8")
+    args.out.write_text(_render(tiles, flows=_find_flows(args.root)), encoding="utf-8")
 
     table = _summary(tiles)
     print(table)

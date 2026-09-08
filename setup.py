@@ -195,9 +195,16 @@ setup(
     },
     entry_points={
         "console_scripts": [
-            "ciris-agent=ciris_engine.cli:main",  # Desktop app (default) or server mode
-            "ciris-server=ciris_engine.cli:server",  # Headless API server
-            "ciris-desktop=ciris_engine.cli:desktop",  # Desktop app launcher
+            # ONE command. `ciris-server` and `ciris-desktop` belong to the
+            # ciris-server wheel (the node): the desktop client spawns
+            # `ciris-server --home ... --key-id ...` and fails fast when that
+            # starts an agent instead of the node. This package used to install
+            # both names too, so whichever distribution pip wrote last won --
+            # and ciris-agent depends on ciris-server, so ours won, and the
+            # client's node spawn hit Click's unknown-argument error on --home.
+            # The headless brain is `ciris-agent --server`; the desktop launcher
+            # is a bare `ciris-agent`.
+            "ciris-agent=ciris_engine.cli:main",  # Desktop app (default) or --server
         ],
         # Adapter discovery entry points - eliminates hardcoded KNOWN_MODULAR_SERVICES list
         # Each entry point maps adapter_name -> module path for manifest loading

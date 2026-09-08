@@ -186,8 +186,22 @@ def test_each_platform_starts_from_a_clean_host(raw: str) -> None:
     interaction as the iOS result. A false green on the platform least likely to
     be checked by eye.
     """
-    assert "teardown: killing" in raw, "no per-platform teardown"
-    teardown = raw.split("TEAR DOWN THE PREVIOUS PLATFORM FIRST")[1][:700]
+    # Bounded by the step's next structural line, not by a character count: the
+    # rationale comment above the invocation is long and grew when the mechanism
+    # changed, and a fixed window that once held the whole loop now holds only
+    # the comment -- the assertion then failed on a teardown that was present.
+    after = raw.split("TEAR DOWN THE PREVIOUS PLATFORM FIRST")[1]
+    teardown = after[: after.find("export CIRIS_HOME")] if "export CIRIS_HOME" in after else after[:2000]
+    # The teardown must PROVE the ports free, not merely try to kill something.
+    # The lsof loop this replaced checked nothing on Windows (no lsof in Git
+    # Bash, every probe fell into `|| true`) and printed "free" regardless —
+    # run #34147279506 booted the next backend into EADDRINUSE behind that line.
+    # free_ports.py finds holders per platform and then binds the port, which no
+    # missing tool can answer wrongly. Asserting the tool by name is asserting
+    # that property; asserting lsof is absent is asserting the regression stays
+    # out.
+    assert "free_ports.py" in teardown, "no per-platform teardown (free_ports.py not invoked)"
+    assert "lsof -ti" not in teardown, "teardown regressed to lsof, which is absent on Windows"
     for port in ("8080", "9091"):
         assert port in teardown, f"teardown does not clear :{port}"
 
@@ -299,3 +313,81 @@ def test_every_stage_asks_for_a_screenshot(raw: str) -> None:
     assert set(blocks) >= {"desktop-setup", "desktop-login", "desktop-chat"}, sorted(blocks)
     for cmd, block in blocks.items():
         assert "--screenshot-on-success" in block, f"{cmd} runs without a screenshot"
+
+
+# --- the run-without-AI pass (CIRISAgent#1149) --------------------------------
+
+
+def _shared_flow_block() -> str:
+    """The run: block that drives every platform through the shared flow."""
+    import yaml
+
+    doc = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    for job in doc["jobs"].values():
+        for step in _steps(job):
+            run = step.get("run", "")
+            if "desktop-reset" in run:
+                return str(run)
+    raise AssertionError("no step drives desktop-reset — the run-without-AI pass is missing")
+
+
+def test_the_gate_drives_both_answers_to_the_ai_question() -> None:
+    """CI drove only the with-AI shape; the product has two."""
+    block = _shared_flow_block()
+    assert "--run-without-ai" in block, "the without-AI answer is never exercised"
+    assert block.count("desktop-setup") >= 2, "both passes must run the wizard"
+
+
+def test_the_no_ai_pass_comes_first_and_is_reset_before_the_with_ai_pass() -> None:
+    """Order is the whole point: no-AI, prove Interact, reset, then the normal flow."""
+    lines = _shared_flow_block().splitlines()
+
+    def line_of(needle: str) -> int:
+        return next(i for i, l in enumerate(lines) if needle in l)
+
+    # `$llm_args` is the with-AI pass: it is the only place a provider and key
+    # are handed to the wizard.
+    noai = line_of("--run-without-ai")
+    reset = line_of("web_ui desktop-reset")
+    with_ai = line_of("$llm_args")
+    assert noai < reset < with_ai, (
+        f"the reset must separate the two passes (no-AI at {noai}, reset at {reset}, with-AI at {with_ai})"
+    )
+
+
+def test_the_reset_goes_through_the_client_not_the_filesystem() -> None:
+    """factoryReset() is what deletes the .env, and the .env holds CIRIS_RUN_WITHOUT_AI."""
+    block = _shared_flow_block()
+    reset_line = next(l for l in block.splitlines() if "desktop-reset" in l)
+    assert "rm " not in reset_line and "del " not in reset_line
+    assert "web_ui desktop-reset" in reset_line
+
+
+def test_the_node_ports_are_reaped_between_passes() -> None:
+    """A node-only backend holds 4242/4243; the agent's fold binds 4243 next (#1101/#1102)."""
+    block = _shared_flow_block()
+    assert "4242 4243" in block, "the node's ports are never freed, so the with-AI pass hits EADDRINUSE"
+
+
+def test_every_no_ai_phase_names_itself_to_the_diagnoser() -> None:
+    """A red must say which pass it came from, not just 'setup failed'."""
+    block = _shared_flow_block()
+    for phase in ("setup-noai", "login-noai", "reset"):
+        assert f"--phase {phase}" in block, f"phase {phase} is not distinguishable in the diagnosis"
+
+
+def test_the_gate_waits_for_the_node_ports_rather_than_sleeping() -> None:
+    """A `sleep 3` let macOS boot into EADDRINUSE — the port being free is observable (#1102)."""
+    block = _shared_flow_block()
+    assert "ports still held after" in block, "nothing reports ports that never free"
+    reset_at = next(i for i, l in enumerate(block.splitlines()) if "web_ui desktop-reset" in l)
+    tail = "\n".join(block.splitlines()[reset_at:])
+    assert "sleep 3\n" not in tail, "the post-reset wait is time-based again"
+    # OBSERVE, DO NOT GUESS -- and observe by the one method no missing tool can
+    # fake. The lsof loop this once asserted printed "free after 2s" on Windows
+    # having probed nothing (no lsof in Git Bash; run #34147279506 then booted
+    # into os error 10048). free_ports.py proves a port free by BINDING it and
+    # bounds the wait with --timeout, so the property is asserted by naming the
+    # tool and its bound, and the regression is kept out by name.
+    assert "free_ports.py" in tail and "--timeout" in tail, "the wait must observe the ports (bind test), not guess"
+    assert "lsof -ti" not in tail, "the wait regressed to lsof, which is absent on Windows"

@@ -182,10 +182,10 @@ class FederationWalkTest:
         loop = asyncio.get_event_loop()
         deadline = loop.time() + (timeout_ms / 1000.0)
         while loop.time() < deadline:
-            if not await self.helper.is_element_visible(tag):
+            if not await self.helper.is_element_present(tag):
                 return True
             await asyncio.sleep(0.2)
-        return not await self.helper.is_element_visible(tag)
+        return not await self.helper.is_element_present(tag)
 
     # ─── Diagnostic capture ───────────────────────────────────────
     async def _capture_diagnostic(self) -> DiagnosticSnapshot:
@@ -234,7 +234,7 @@ class FederationWalkTest:
         except Exception:  # noqa: BLE001
             pass
         # Fallback: if the hub root is already visible we're done
-        return await self.helper.is_element_visible(NETWORK_HUB)
+        return await self.helper.is_element_present(NETWORK_HUB)
 
     async def _back_to_hub(self) -> bool:
         """Best-effort back-nav to the Network hub between screen visits.
@@ -249,7 +249,7 @@ class FederationWalkTest:
         # Try the system back button (common testTag) then re-verify hub root.
         for back_tag in ("btn_back", "btn_top_back", "btn_nav_back"):
             try:
-                if await self.helper.is_element_visible(back_tag):
+                if await self.helper.is_element_present(back_tag):
                     await self._try_click(back_tag)
                     await asyncio.sleep(0.25)
                     break
@@ -257,7 +257,7 @@ class FederationWalkTest:
                 continue
         # Re-verify hub root visible — if not, route through the sidebar
         # (the canonical path post-2.9.4).
-        if await self.helper.is_element_visible(NETWORK_HUB):
+        if await self.helper.is_element_present(NETWORK_HUB):
             return True
         return await self._navigate_to_hub()
 
@@ -305,7 +305,7 @@ class FederationWalkTest:
         )
 
         # Ensure hub is showing (or recover)
-        if not await self.helper.is_element_visible(NETWORK_HUB):
+        if not await self.helper.is_element_present(NETWORK_HUB):
             if not await self._navigate_to_hub():
                 r.status = WalkStatus.SKIP
                 r.reason = "could not return to hub before walk"
@@ -313,7 +313,7 @@ class FederationWalkTest:
                 return r
 
         # Click the nav tile (must be present on the hub)
-        if not await self.helper.is_element_visible(screen.nav_tile):
+        if not await self.helper.is_element_present(screen.nav_tile):
             r.status = WalkStatus.FAIL
             r.reason = f"nav tile missing on hub: {screen.nav_tile}"
             r.missing_tags = [screen.nav_tile]
@@ -361,7 +361,7 @@ class FederationWalkTest:
 
         # Click each clickable target
         for target in screen.clickable_targets:
-            if not await self.helper.is_element_visible(target):
+            if not await self.helper.is_element_present(target):
                 r.missing_tags.append(target)
                 continue
             if await self._try_click(target):
@@ -373,7 +373,7 @@ class FederationWalkTest:
 
         # Refresh (one click) if defined
         if screen.refresh is not None:
-            if not await self.helper.is_element_visible(screen.refresh):
+            if not await self.helper.is_element_present(screen.refresh):
                 r.missing_tags.append(screen.refresh)
             elif await self._try_click(screen.refresh):
                 r.refresh_clicked = True
@@ -413,7 +413,7 @@ class FederationWalkTest:
             root_tag=screen.root,
         )
         # Navigate to Peers first
-        if not await self.helper.is_element_visible(NETWORK_HUB):
+        if not await self.helper.is_element_present(NETWORK_HUB):
             if not await self._navigate_to_hub():
                 r.status = WalkStatus.SKIP
                 r.reason = "could not return to hub for peer-detail walk"
@@ -469,7 +469,7 @@ class FederationWalkTest:
                 r.text_probe_values[probe] = elem.text or ""
 
         for target in screen.clickable_targets:
-            if not await self.helper.is_element_visible(target):
+            if not await self.helper.is_element_present(target):
                 r.missing_tags.append(target)
                 continue
             if await self._try_click(target):
@@ -479,7 +479,7 @@ class FederationWalkTest:
                 r.failed_targets.append(target)
 
         if screen.refresh is not None:
-            if not await self.helper.is_element_visible(screen.refresh):
+            if not await self.helper.is_element_present(screen.refresh):
                 r.missing_tags.append(screen.refresh)
             elif await self._try_click(screen.refresh):
                 r.refresh_clicked = True
@@ -511,7 +511,7 @@ class FederationWalkTest:
         self._log("mode flow")
         result = ModeFlowResult()
 
-        if not await self.helper.is_element_visible(NETWORK_HUB):
+        if not await self.helper.is_element_present(NETWORK_HUB):
             if not await self._navigate_to_hub():
                 result.status = WalkStatus.SKIP
                 result.reason = "hub not reachable for mode-flow"
@@ -554,7 +554,7 @@ class FederationWalkTest:
                 return
             # Dialog may appear; click confirm if so (best-effort)
             await asyncio.sleep(0.3)
-            if await self.helper.is_element_visible(BTN_MODE_CONFIRM):
+            if await self.helper.is_element_present(BTN_MODE_CONFIRM):
                 await self._try_click(BTN_MODE_CONFIRM)
             await self._poll_until_mode("proxy", timeout_s=3.0)
         result.proxy_selected = True
@@ -764,7 +764,7 @@ class FederationWalkTest:
         result = AddPeerFlowResult()
 
         # Get to Peers
-        if not await self.helper.is_element_visible(NETWORK_HUB):
+        if not await self.helper.is_element_present(NETWORK_HUB):
             if not await self._navigate_to_hub():
                 result.status = WalkStatus.SKIP
                 result.reason = "hub not reachable for add-peer flow"
@@ -788,7 +788,7 @@ class FederationWalkTest:
             return
 
         # Open dialog
-        if not await self.helper.is_element_visible(BTN_ADD_PEER):
+        if not await self.helper.is_element_present(BTN_ADD_PEER):
             result.status = WalkStatus.FAIL
             result.reason = f"add-peer button missing: {BTN_ADD_PEER}"
             result.missing_tags = [BTN_ADD_PEER]
@@ -854,7 +854,7 @@ class FederationWalkTest:
         # Cancel — Compose ModalBottomSheet dismiss animation + state
         # propagation can run noticeably longer than the default ~500ms
         # element-poll budget, so give the sheet up to 3s to disappear.
-        if not await self.helper.is_element_visible(BTN_ADD_PEER_CANCEL):
+        if not await self.helper.is_element_present(BTN_ADD_PEER_CANCEL):
             result.missing_tags.append(BTN_ADD_PEER_CANCEL)
         else:
             if await self._try_click(BTN_ADD_PEER_CANCEL):

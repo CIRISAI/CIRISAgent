@@ -84,6 +84,12 @@ class ElementInfo:
     center_x: int
     center_y: int
     text: Optional[str] = None
+    #: ciris-client 0.5.206+ reports whether the element is ON SCREEN, which is
+    #: NOT the same as being in the tree: `testableClickable` registers with no
+    #: DisposableEffect, so /tree lists everything ever composed. We were
+    #: dropping this field on parse and then asking "is it in the tree?" while
+    #: calling it "is it visible?". None = an older client that does not send it.
+    visible: Optional[bool] = None
 
 
 class DesktopAppHelper:
@@ -184,6 +190,7 @@ class DesktopAppHelper:
                     center_x=elem["centerX"],
                     center_y=elem["centerY"],
                     text=elem.get("text"),
+                    visible=elem.get("visible"),
                 )
             )
         return elements
@@ -208,7 +215,80 @@ class DesktopAppHelper:
             center_x=data["centerX"],
             center_y=data["centerY"],
             text=data.get("text"),
+            visible=data.get("visible"),
         )
+
+    async def scroll_into_view(self, test_tag: str, per_direction: int = 12, amount: int = 300) -> bool:
+        """Scroll a composed-but-off-screen element onto the screen. Best effort.
+
+        From ciris-client 0.5.206 a positioned element must also be ON SCREEN for
+        /wait, /click and /input to accept it (CIRISClient#33). That is the right
+        rule -- it is what turns a coordinate gamble into a refusal -- but it means
+        anything below the fold of a long form is undrivable until something
+        scrolls.
+
+        PLATFORM HISTORY. 0.5.206 had no Android /scroll route at all, so this was
+        a no-op there (CIRISClient#33); 0.5.207 added it. 0.5.208 then answered 200
+        without moving anything, because dispatch went to the most recently composed
+        scrollable rather than one with overflow (CIRISClient#44). The fix makes a
+        200 mean the screen MOVED and carries the offsets, and a refusal name why.
+
+        EXHAUST ONE DIRECTION, THEN THE OTHER -- do not split the budget up front.
+        The previous version fixed half the attempts to each direction, so on a
+        3142px form it went 900px down and then turned around, never reaching a
+        field near the bottom. The refusal contract makes a fixed split
+        unnecessary: `already at the bottom` ends the downward phase exactly when
+        there is no more travel, so the budget is spent on real movement instead of
+        being rationed against a direction we may not need at all.
+
+        Returns True once the element reports ON SCREEN. Never raises: the caller's
+        own wait produces the real, message-carrying failure.
+        """
+        if not self._client:
+            return False
+        if await self.is_element_visible(test_tag):
+            return True
+        for direction in ("down", "up"):
+            for _ in range(per_direction):
+                try:
+                    resp = await self._client.post(
+                        "/scroll", json={"testTag": test_tag, "direction": direction, "amount": amount}
+                    )
+                except Exception:  # noqa: BLE001 -- a missing endpoint is not this call's problem to raise
+                    return False
+                # ONLY 200 MEANS IT SCROLLED (ciris-client 0.5.207+). A refusal is a
+                # 404 carrying a reason -- no overflow, already at the end, or an
+                # unroutable endpoint on that platform -- and each of those means
+                # THIS direction is finished. Surface it: it is the app telling us
+                # why, and the caller's own failure will not repeat it.
+                if resp.status_code != 200:
+                    reason = ""
+                    try:
+                        body = resp.json()
+                        reason = str(body.get("error") or body.get("reason") or "")
+                    except Exception:  # noqa: BLE001
+                        reason = (resp.text or "").strip()[:160]
+                    print(
+                        f"    (scroll {direction} for '{test_tag}' refused: HTTP {resp.status_code}"
+                        + (f" — {reason}" if reason else "")
+                        + ")"
+                    )
+                    break
+                # A 200 CARRIES WHAT IT DID (CIRISClient#44): "down:300 moved
+                # 0→300 of 1400". The whole cost of #44 was that an accepted-but-
+                # inert scroll looked identical to a working one until a later step
+                # failed for an apparently unrelated reason.
+                moved = ""
+                try:
+                    moved = str((resp.json() or {}).get("text") or "").strip()
+                except Exception:  # noqa: BLE001
+                    moved = ""
+                if moved:
+                    print(f"    (scroll '{test_tag}' {direction}: {moved})")
+                await asyncio.sleep(0.25)
+                if await self.is_element_visible(test_tag):
+                    return True
+        return False
 
     async def click(self, test_tag: str, timeout: Optional[int] = None) -> bool:
         """
@@ -231,7 +311,18 @@ class DesktopAppHelper:
         )
         data = _json(response)
         if not data.get("success", False):
-            error = data.get("error", "unknown error")
+            error = str(data.get("error", "unknown error"))
+            # OFF SCREEN IS RECOVERABLE, AND THE APP SAYS SO. From 0.5.206 /click
+            # refuses a positioned element that is not on screen rather than firing
+            # a handler nobody could have reached. Scroll to it once and retry;
+            # anything else is a real failure and goes straight up.
+            if "off screen" in error.lower():
+                if await self.scroll_into_view(test_tag):
+                    response = await self._client.post("/click", json={"testTag": test_tag})
+                    data = _json(response)
+                    if data.get("success", False):
+                        return True
+                    error = str(data.get("error", "unknown error"))
             raise RuntimeError(f"Click '{test_tag}' failed: {error} (response: {data})")
         return True
 
@@ -273,8 +364,22 @@ class DesktopAppHelper:
         )
         data = _json(response)
         if not data.get("success", False):
-            error = data.get("error", "unknown error")
-            raise RuntimeError(f"Input '{test_tag}' failed: {error} (response: {data})")
+            error = str(data.get("error", "unknown error"))
+            # Same recovery as click(): from 0.5.206 /input refuses a positioned
+            # element that is off screen, and a login form below the fold is as
+            # ordinary as a wizard step. Scroll once, retry, and let anything else
+            # surface unchanged.
+            if "off screen" in error.lower() and await self.scroll_into_view(test_tag):
+                response = await self._client.post(
+                    "/input",
+                    json={"testTag": test_tag, "text": text, "clearFirst": clear_first},
+                )
+                data = _json(response)
+                if not data.get("success", False):
+                    error = str(data.get("error", "unknown error"))
+                    raise RuntimeError(f"Input '{test_tag}' failed after scrolling: {error} (response: {data})")
+            else:
+                raise RuntimeError(f"Input '{test_tag}' failed: {error} (response: {data})")
         if self.config.input_settle_s:
             await asyncio.sleep(self.config.input_settle_s)
         if verify and not _looks_secret(test_tag):
@@ -360,7 +465,21 @@ class DesktopAppHelper:
         )
         data = _json(response)
         if not data.get("success", False):
-            error = data.get("error", "unknown error")
+            error = str(data.get("error", "unknown error"))
+            # OFF SCREEN IS THE ONE RECOVERABLE TIMEOUT (0.5.206). The element is
+            # there and composed; it is simply below the fold, which for a long
+            # form is the normal case rather than an error. Scroll once and ask
+            # again — every other timeout means what it says and is raised with
+            # the app's own message, which now names what IS drivable.
+            if "off screen" in error.lower() and await self.scroll_into_view(test_tag):
+                retry_ms = min(timeout_ms, 5000)
+                retry = await self._client.post(
+                    "/wait",
+                    json={"testTag": test_tag, "timeoutMs": retry_ms},
+                    timeout=retry_ms / 1000.0 + 5,
+                )
+                if _json(retry).get("success", False):
+                    return True
             raise RuntimeError(f"Wait for element '{test_tag}' timed out after {timeout_ms}ms: {error}")
         return True
 
@@ -465,10 +584,47 @@ class DesktopAppHelper:
 
             await asyncio.sleep(self.config.poll_interval_ms / 1000.0)
 
+    async def is_element_present(self, test_tag: str) -> bool:
+        """Is the element COMPOSED — does this build/screen have it at all.
+
+        TWO PREDICATES, TWO NAMES. Until 42e1d172a this method's body WAS
+        is_element_visible, and every call site in the harness was written
+        against it: "does the login screen show the form or a button", "does
+        this build render the fed-ID field", "are we still on the YOU step while
+        the age band exists". Those are presence questions, and a control that
+        has merely scrolled off the screen must still answer yes — the first
+        Android run after the split typed no fed-ID label at all, because the
+        field was composed below the fold and the guard now read "not on screen"
+        (run #34162161554: "Enter a name for your federation ID to continue").
+
+        Only scroll_into_view and the CSD flow runner need the on-screen answer.
+        Everything else asks this. A click or input on a present-but-off-screen
+        element self-recovers by scrolling; a guard that skips it does not.
+        """
+        return await self.get_element(test_tag) is not None
+
     async def is_element_visible(self, test_tag: str) -> bool:
-        """Check if an element is currently visible."""
+        """Is the element ON SCREEN — not merely composed.
+
+        THIS USED TO RETURN `elem is not None`, which is "does the app remember
+        composing this", and under registry-never-forgets that is true forever.
+        The cost was not theoretical: scroll_into_view checks this after each
+        scroll to decide whether to stop, so it ALWAYS stopped after the first
+        one. On Android's YOU step that meant scrolling 300px of a 3142px form
+        and reporting success, which then surfaced as /input refusing an element
+        we had just declared visible (run #34157933301).
+
+        `visible` is reported by ciris-client 0.5.206+. When it is absent -- an
+        older client -- fall back to geometry rather than to presence: a
+        zero-sized rect is not on screen either, and that is the shape the
+        zero-width age bands had (CIRISClient#42).
+        """
         elem = await self.get_element(test_tag)
-        return elem is not None
+        if elem is None:
+            return False
+        if elem.visible is not None:
+            return bool(elem.visible)
+        return elem.width > 0 and elem.height > 0
 
     async def get_element_list(self) -> Dict[str, ElementInfo]:
         """Get all elements as a dict keyed by testTag."""
@@ -566,8 +722,8 @@ class DesktopAppHelper:
         # was not, and it sent the step-by-step desktop-login flow down a path
         # that assumed the form was always present.
         is_mobile_login = False
-        if not await self.is_element_visible("input_username"):
-            if await self.is_element_visible("btn_local_login"):
+        if not await self.is_element_present("input_username"):
+            if await self.is_element_present("btn_local_login"):
                 is_mobile_login = True
                 await self.click("btn_local_login")
                 # Wait briefly for the local-credentials panel to render
@@ -648,8 +804,8 @@ class DesktopAppHelper:
             group_tag = screen_groups.get(screen_name)
             root_tag = screen_roots.get(screen_name)
 
-            if not await self.is_element_visible(menu_tag):
-                if group_tag is not None and await self.is_element_visible(group_tag):
+            if not await self.is_element_present(menu_tag):
+                if group_tag is not None and await self.is_element_present(group_tag):
                     await self.click(group_tag)
                     try:
                         await self.wait_for_element(menu_tag, timeout=2000)
@@ -931,7 +1087,9 @@ async def describe_test_server(server_url: str = "http://localhost:8091") -> str
     return f"{server_url}/health ok, testMode enabled"
 
 
-async def attribute_device_failure(server_url: str, backend_url: str) -> str:
+async def attribute_device_failure(
+    server_url: str, backend_url: str, node_url: Optional[str] = None
+) -> str:
     """Which layer died: the automation server, or the whole app process?
 
     On Android the automation port is reached through an adb forward, and adb
@@ -953,6 +1111,13 @@ async def attribute_device_failure(server_url: str, backend_url: str) -> str:
                           stopped. Client-side (the automation surface).
       backend is gone  -> the process itself died; look for an OOM/low-memory
                           kill in logcat, not for an accept-loop bug.
+
+    THAT SECOND INFERENCE IS FALSE UNDER run-without-AI (CIRISAgent#1149). There
+    the agent API on :8080 is SUPPOSED to be gone: setup/complete hands the
+    process over to a ciris-server node on :4243, so "the sibling port is dead"
+    is the feature working, not evidence of a process kill. Pass `node_url` and
+    the node is probed before any death is declared — a live node means the
+    handover succeeded and the ports say nothing about whether the app survived.
     """
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
@@ -968,6 +1133,30 @@ async def attribute_device_failure(server_url: str, backend_url: str) -> str:
             f"the app PROCESS IS ALIVE — the embedded backend at {backend_url} still "
             f"answers ({detail}), so only the automation server on {server_url} stopped. "
             "Look at the automation surface, not at a process death."
+        )
+    if node_url:
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                nr = await client.get(f"{node_url.rstrip('/')}/v1/identity")
+            node_up = nr.status_code < 500
+            node_detail = f"HTTP {nr.status_code}"
+        except Exception as exc:  # noqa: BLE001
+            node_up = False
+            node_detail = type(exc).__name__
+        if node_up:
+            return (
+                f"the agent API at {backend_url} is gone BY DESIGN — this is a run-without-AI "
+                f"leg and the node at {node_url} answers ({node_detail}), so the hand-off "
+                f"succeeded. The ports cannot tell you whether the app process survived; only "
+                f"{server_url} stopped answering. Look at the client: after the hand-off it must "
+                f"drive the NODE, and a client still polling {backend_url} will spin forever."
+            )
+        return (
+            f"BOTH backends are unreachable — the agent API at {backend_url} ({detail}) and the "
+            f"node at {node_url} ({node_detail}). On a run-without-AI leg the agent API is meant "
+            f"to be gone, so the node being gone too is the real failure: the hand-off did not "
+            f"land. Check the [RUN-WITHOUT-AI] lines in the agent log for the exec, then the "
+            f"node's own log."
         )
     return (
         f"the app PROCESS IS GONE — the embedded backend at {backend_url} is also "

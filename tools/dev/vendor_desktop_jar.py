@@ -36,7 +36,15 @@ def freshness_tail(client_version: str) -> str:
     contains "0.5.192" therefore fails on every correct build. Compare on the
     `minor.patch` tail, which is shared and still moves on every release -- so a
     jar left over from an earlier client is still caught.
+
+    A PEP 440 LOCAL SEGMENT IS NOT PART OF THE PRODUCT VERSION. A preview build
+    is `0.5.208+preview.g7058419`, and upstream still names its jar
+    `CIRIS-linux-x64-1.5.208.jar` -- correctly, because `+local` identifies the
+    BUILD, not the release it is built from. Comparing against the segment made
+    every preview look stale. Strip it, and the check still does its real job:
+    a jar from an earlier RELEASE is caught exactly as before.
     """
+    client_version = client_version.split("+", 1)[0]
     parts = client_version.split(".")
     return ".".join(parts[1:]) if len(parts) > 2 else client_version
 

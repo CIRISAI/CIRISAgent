@@ -139,3 +139,59 @@ class TestCLIEntryPoint:
 
         # Restore original sys.path
         sys.path = original_path
+
+
+class TestRunWithoutAI:
+    """With the wizard's flag recorded, every entry point is ciris-server and the client (CIRISAgent#1149)."""
+
+    def _cfg(self):
+        from ciris_engine import node_only
+
+        return node_only.NodeOnlyConfig(home="/h", key_id="k")
+
+    def test_desktop_default_hands_off_to_the_node_and_client(self, monkeypatch):
+        import ciris_engine.cli as cli
+
+        monkeypatch.setattr(sys, "argv", ["ciris-agent"])
+        with patch("ciris_engine.node_only.node_only_config", return_value=self._cfg()), patch(
+            "ciris_engine.node_only.run_desktop", return_value=0
+        ) as run_desktop, patch("ciris_engine.cli._run_desktop_mode") as brain, patch(
+            "ciris_engine.cli._run_server_mode"
+        ) as server:
+            with pytest.raises(SystemExit) as exc:
+                cli.main()
+            assert exc.value.code == 0
+            run_desktop.assert_called_once()
+            brain.assert_not_called()
+            server.assert_not_called()
+
+    def test_server_mode_hands_off_to_a_headless_node(self, monkeypatch):
+        import ciris_engine.cli as cli
+
+        monkeypatch.setattr(sys, "argv", ["ciris-agent", "--server"])
+        with patch("ciris_engine.node_only.node_only_config", return_value=self._cfg()), patch(
+            "ciris_engine.node_only.run_headless", side_effect=SystemExit(0)
+        ) as headless, patch("ciris_engine.cli._run_server_mode") as server:
+            with pytest.raises(SystemExit):
+                cli.main()
+            headless.assert_called_once()
+            server.assert_not_called()
+
+    def test_help_is_never_hijacked_by_the_flag(self, monkeypatch):
+        import ciris_engine.cli as cli
+
+        monkeypatch.setattr(sys, "argv", ["ciris-agent", "--help"])
+        with patch("ciris_engine.node_only.node_only_config") as cfg, patch("ciris_engine.cli._run_server_mode") as server:
+            cli.main()
+            cfg.assert_not_called()
+            server.assert_called_once()
+
+    def test_without_the_flag_nothing_changes(self, monkeypatch):
+        import ciris_engine.cli as cli
+
+        monkeypatch.setattr(sys, "argv", ["ciris-agent"])
+        with patch("ciris_engine.node_only.node_only_config", return_value=None), patch(
+            "ciris_engine.cli._run_desktop_mode"
+        ) as brain:
+            cli.main()
+            brain.assert_called_once()

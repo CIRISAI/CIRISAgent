@@ -1097,6 +1097,16 @@ def main():
     logger.info("CIRIS Mobile - Full On-Device Runtime (LLM Remote)")
     setup_android_environment()
 
+    # "Run without AI" (CIRISAgent#1149): the owner chose a node with no brain.
+    # The node serves in this thread on the wizard's home and key alias; no
+    # runtime, no API adapter, no LLM. The client talks to the node on :4243.
+    from ciris_engine import node_only
+
+    _node_only = node_only.node_only_config()
+    if _node_only is not None:
+        logger.info("Run without AI: starting ciris-server node only (no runtime)")
+        node_only.run_headless(_node_only)
+
     # Run code integrity and heavy imports IN PARALLEL
     # This reduces startup time by ~2.5s by overlapping I/O-bound hashing
     # with import-time module loading

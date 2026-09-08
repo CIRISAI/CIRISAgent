@@ -1,0 +1,39 @@
+flow: environment_card
+title: Environment page from the Local Community layer hub
+description: >-
+  CIRISClient#45 made Screen.EnvironmentInfo reachable from the LOCAL_COMMUNITY
+  layer hub and wired its back navigation. Both directions are asserted: an
+  entry that cannot be left is a trap, and it is the half that usually ships
+  broken because nobody drives it twice.
+client: ">=0.5.208"
+
+steps:
+  - step_id: local_community_hub
+    title: The Local Community hub shows the environment card
+    requires:
+      screen: LayerLocalCommunity
+    expect:
+      visible: [card_local_community_environment, btn_open_environment]
+
+  - step_id: open_environment
+    title: Opening the card reaches the Environment page
+    do:
+      - click: btn_open_environment
+    expect:
+      screen: EnvironmentInfo
+
+  # THE RETURN LEG IS NOT WRITTEN YET, DELIBERATELY. CIRISClient#45 says back
+  # navigation from EnvironmentInfo to LayerLocalCommunity was wired, but it does
+  # not name the tag, and this file must not contain a tag nobody has confirmed.
+  # Guessing one is the exact defect CIRISClient#39 was opened about: the click
+  # would succeed against something, and the flow would fail twenty seconds later
+  # on an element that was never going to render. Asked on #45; the step lands
+  # here, unchanged in shape, the moment the tag is named:
+  #
+  #   - step_id: back_to_local_community
+  #     title: Back returns to the Local Community hub, not to the root
+  #     do:
+  #       - click: <the back tag>
+  #     expect:
+  #       screen: LayerLocalCommunity
+  #       visible: [card_local_community_environment]

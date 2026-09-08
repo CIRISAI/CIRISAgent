@@ -48,6 +48,11 @@ on:
         required: false
         default: true
         type: boolean
+      client_preview_tag:
+        description: "CIRISClient PRERELEASE tag to test instead of the requirements.txt pin (e.g. preview-scroll-dispatch). Empty = the pin."
+        required: false
+        default: ""
+        type: string
   # Nightly rather than per-PR: it boots emulators and spends real LLM tokens, so
   # it is too slow and too costly to gate every push. The release path is what
   # needs it, and a nightly failure lands before the next tag.
@@ -144,16 +149,83 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      # REFUSE TO TEST A SUBSTRATE THE PHONES WILL NOT RUN. requirements.txt is
+      # one of several ciris-server pin sites: apps/android/build.gradle installs
+      # its own exact pin into the APK, and the iOS bundle is refreshed from the
+      # requirements pin by a separate job. Bumping requirements.txt alone shipped
+      # 0.5.203 to the desktops and 0.5.199 to Android, and the Android leg then
+      # died on the bug 0.5.203 had fixed (run #34223901074) -- forty minutes to
+      # learn what this says in two seconds. The fix hint names the lockstep tool.
+      - name: Substrate pins agree (requirements.txt vs apps/android/build.gradle)
+        shell: bash
+        run: python3 tools/dev/check_version_alignment.py
+
       # The desktop app ships as the uber-jar INSIDE the pinned ciris-client
       # wheel and must land in ciris_engine/desktop_app/ BEFORE the wheel is
       # built — that is what setup.py packages and what desktop_launcher.py
       # globs at runtime.
       - name: Vendor the CIRIS Desktop UberJar from the client wheel
         shell: bash
+        env:
+          # Only needed on the preview path, where the wheels come from a
+          # CIRISClient release rather than PyPI. Same cross-repo public read the
+          # fetch_client_artifacts.py steps already do with this token.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          CLIENT_VERSION=$(grep -oE '^ciris-client==[0-9.]+' requirements.txt | cut -d= -f3)
-          python -m pip download "ciris-client==${CLIENT_VERSION}" --no-deps -d "${RUNNER_TEMP}/clientwheel"
+          PREVIEW='${{ inputs.client_preview_tag }}'
+          REQUESTED='${{ inputs.platforms || 'all' }}'
+          MINE='${{ matrix.platforms }}'
+          # A PREVIEW NEED NOT COVER EVERY PLATFORM. This one ships no macosx
+          # wheel, and a `platforms: linux android` dispatch still boots the macOS
+          # runner (the per-leg filter lives further down, inside the run step), so
+          # the mac vendored a wheel for work it was never going to do and failed
+          # the job. If none of THIS runner's platforms were asked for, there is
+          # nothing to vendor. NOT a job-level `if`: the matrix context is not
+          # available there, which is what invalidated the workflow file in
+          # 0216ed4ad.
+          if [ -n "$PREVIEW" ] && [ "$REQUESTED" != "all" ]; then
+            wanted=0
+            for plat in $MINE; do
+              echo " $REQUESTED " | grep -q " $plat " && wanted=1
+            done
+            if [ "$wanted" = 0 ]; then
+              echo "no requested platform on this runner ($MINE); skipping the preview vendor"
+              exit 0
+            fi
+          fi
+          if [ -n "$PREVIEW" ]; then
+            # A preview build is a PRERELEASE on a non-`v<version>` tag whose version
+            # carries a PEP 440 local segment (0.5.208+preview.gNNNNNNN). PyPI refuses
+            # those by design, so `pip download ciris-client==` cannot reach it -- the
+            # wheels come from the release itself. Version is derived from the asset
+            # name rather than typed twice.
+            # ONE WHEEL, THE PLATFORM'S OWN. `--pattern 'ciris_client-*.whl'` pulls
+            # all of them (any + manylinux + win_amd64) and vendor_desktop_jar.py
+            # requires exactly one -- it extracts a PLATFORM-SPECIFIC uber-jar
+            # (CIRIS-linux-x64-*.jar), so "any of them" is not a valid answer. The
+            # pip path this replaces only ever downloads the wheel matching the
+            # host, and this must behave the same.
+            case "${RUNNER_OS}" in
+              Linux)   WHEEL_PAT='ciris_client-*manylinux*.whl' ;;
+              Windows) WHEEL_PAT='ciris_client-*win_amd64*.whl' ;;
+              macOS)   WHEEL_PAT='ciris_client-*macosx*.whl' ;;
+              *)       echo "::error::unknown RUNNER_OS ${RUNNER_OS}"; exit 1 ;;
+            esac
+            gh release download "$PREVIEW" --repo CIRISAI/CIRISClient \
+              --pattern "$WHEEL_PAT" --dir "${RUNNER_TEMP}/clientwheel" || {
+                echo "::error::$PREVIEW has no wheel matching $WHEEL_PAT — a preview that omits this platform cannot be tested on it"
+                exit 1
+              }
+            CLIENT_VERSION=$(ls "${RUNNER_TEMP}/clientwheel" | sed -n 's/^ciris_client-\(.*\)-py3-none-.*\.whl$/\1/p' | head -1)
+            [ -n "$CLIENT_VERSION" ] || { echo "::error::could not derive a version from $PREVIEW assets"; exit 1; }
+            echo "CIRIS_CLIENT_VERSION=$CLIENT_VERSION" >> "$GITHUB_ENV"
+            echo "CIRIS_CLIENT_RELEASE_TAG=$PREVIEW" >> "$GITHUB_ENV"
+            echo "::warning::TESTING A CLIENT PREVIEW: $CLIENT_VERSION from tag $PREVIEW, NOT the requirements.txt pin"
+          else
+            CLIENT_VERSION=$(grep -oE '^ciris-client==[0-9.]+' requirements.txt | cut -d= -f3)
+            python -m pip download "ciris-client==${CLIENT_VERSION}" --no-deps -d "${RUNNER_TEMP}/clientwheel"
+          fi
           python3 tools/dev/vendor_desktop_jar.py "${RUNNER_TEMP}/clientwheel" ciris_engine/desktop_app "$CLIENT_VERSION"
 
       # Install the WHEEL, not the checkout: `pip install .` exercises a source
@@ -166,6 +238,14 @@ jobs:
           python -m build --wheel --outdir dist
           python -m pip install "$(ls dist/*.whl | head -1)"
           python -m pip install requests httpx
+          # The agent wheel Requires the PINNED client, so the line above just pulled
+          # it from PyPI. Put the preview back on top -- --no-deps so pip does not
+          # "fix" the deliberate mismatch by reinstalling the pin.
+          if [ -n '${{ inputs.client_preview_tag }}' ]; then
+            python -m pip install --force-reinstall --no-deps \
+              "$(ls ${RUNNER_TEMP}/clientwheel/ciris_client-*.whl | head -1)"
+            python -c "import ciris_client, importlib.metadata as m; print('client in use:', m.version('ciris-client'))"
+          fi
 
       # ── Linux desktop needs a display. `/screenshot` is AWT Robot, which
       # photographs a SCREEN; without one there is nothing to photograph and the
@@ -594,10 +674,16 @@ jobs:
             # 127.0.0.1:8080 for its backend, so the macOS teardown's kill -9 took the
             # simulator app down with it (run 33706020778: "exited due to SIGKILL |
             # sent by bash"). Owning a port means listening on it, not talking to it.
-            for port in 8080 9091 8091; do
-              pids=$(lsof -ti "tcp:$port" -sTCP:LISTEN 2>/dev/null || true)
-              [ -n "$pids" ] && { echo "  teardown: killing $port ($pids)"; kill -9 $pids 2>/dev/null || true; }
-            done
+            # 4242/4243 are the NODE's (transport + read API). They matter now that a
+            # run-without-AI pass leaves a ciris-server node holding them instead of a
+            # main.py agent (CIRISAgent#1149): the with-AI pass that follows boots an
+            # agent whose node fold binds :4243, and an orphan from the previous pass
+            # is EADDRINUSE (CIRISAgent#1101/#1102).
+            # NOT `lsof`: it does not exist on Windows Git Bash, so every probe here
+            # failed into its `|| true` and this loop silently did nothing on one of
+            # the three runners. free_ports.py finds holders per-platform and then
+            # PROVES the port is free by binding it (CIRISAgent#1102).
+            python3 tools/dev/free_ports.py 8080 9091 8091 4242 4243 --timeout 30 --label teardown || true
 
             export CIRIS_HOME="${RUNNER_TEMP}/ciris-$plat"
             mkdir -p "$CIRIS_HOME"
@@ -617,6 +703,63 @@ jobs:
                 continue
               fi
               extra="$extra --ios-app-path $IOS_APP"
+            fi
+
+            # 0. RUN WITHOUT AI — the wizard's OTHER answer (CIRISAgent#1149). The
+            #    product has two shapes and CI only ever drove one. Here the owner
+            #    answers "without an AI assistant" on YOU: the wizard skips the AI
+            #    screen, the agent records CIRIS_RUN_WITHOUT_AI=true, and the backend
+            #    process BECOMES a ciris-server node — :8080 goes away and the client
+            #    follows to :4243. Reaching Interact in that state is the assertion,
+            #    and it needs client >= 0.5.203 to know where to look.
+            python -m tools.qa_runner.modules.web_ui desktop-setup \
+              --platform "$target" --launch $extra \
+              --username qaadmin --password "qa_test_password_12345" \
+              --run-without-ai \
+              --screenshot-on-success "artifacts/shots/$plat-setup-noai.png" \
+              -v || { overall=1; echo "::error::$plat run-without-AI setup failed"; python3 tools/dev/diagnose_gate_failure.py --platform "$plat" --phase setup-noai --logs artifacts "${CIRIS_QA_LOG_DIR:-artifacts/cmdlogs}" || true; }
+
+            python -m tools.qa_runner.modules.web_ui desktop-login \
+              --platform "$target" $extra \
+              --username qaadmin --password "qa_test_password_12345" \
+              --screenshot-on-success "artifacts/shots/$plat-login-noai.png" \
+              -v || { overall=1; echo "::error::$plat run-without-AI login failed — Interact unreachable against a node-only backend"; python3 tools/dev/diagnose_gate_failure.py --platform "$plat" --phase login-noai --logs artifacts "${CIRIS_QA_LOG_DIR:-artifacts/cmdlogs}" || true; }
+
+            # 0b. RESET THROUGH THE CLIENT, not with rm. The client's factory reset is
+            #     what deletes the .env, and the .env is where CIRIS_RUN_WITHOUT_AI
+            #     lives — skip it and every later boot keeps handing the process to the
+            #     node, so the with-AI pass below would have no :8080 to talk to.
+            #     Driving the real button is also how we find out if that reset ever
+            #     stops clearing the flag.
+            python -m tools.qa_runner.modules.web_ui desktop-reset \
+              --platform "$target" $extra \
+              --screenshot-on-success "artifacts/shots/$plat-reset.png" \
+              -v || { overall=1; echo "::error::$plat client reset failed — the with-AI pass starts from an unknown state"; python3 tools/dev/diagnose_gate_failure.py --platform "$plat" --phase reset --logs artifacts "${CIRIS_QA_LOG_DIR:-artifacts/cmdlogs}" || true; }
+
+            # 0c. Reap the node the no-AI pass left behind. `--launch` tears down the
+            #     app and `main.py --adapter api`, but a node-only backend is
+            #     `python -m ciris_server` and holds :4242/:4243, which the agent's own
+            #     node fold is about to want.
+            # WAIT FOR THE PORTS, DO NOT SLEEP AND HOPE. A `sleep 3` here let the macOS
+            # leg boot its next backend into
+            #   "Edge runtime initialization failed (REQUIRED foundation dep):
+            #    Edge transport ports are held by another process"
+            # which is CIRISAgent#1102 reproducing in CI: the previous backend's Rust
+            # transport threads outlive a hard kill, and the graceful release added in
+            # 2.10.0 is bypassed when the launcher kills -9. The port being free is
+            # observable, so observe it instead of guessing at a duration.
+            # THIS LOOP USED TO LIE ON WINDOWS. It probed with `lsof`, which Git Bash
+            # does not have, so `held` was always empty and it printed "free after 2s"
+            # having verified nothing. Run #34147279506 is the proof: that line printed
+            # while the no-AI leg's node still held :4242, and the next backend died on
+            #   ReticulumTransport::new: ... (os error 10048)
+            # An absent process listing is not evidence of a free port — free_ports.py
+            # settles it by binding, which no missing tool can answer wrongly.
+            if ! python3 tools/dev/free_ports.py 4242 4243 8080 --timeout 60 --label post-reset; then
+              # Say it here rather than letting the next backend fail with an error that
+              # reads like a product fault.
+              echo "::error::$plat ports still held after 60s — the next backend will fail Edge init (CIRISAgent#1102)"
+              overall=1
             fi
 
             # 1. Setup wizard through the real UI, with a real key.

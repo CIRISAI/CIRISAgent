@@ -100,7 +100,16 @@ concurrency:
   # mode on every PR run; a dispatched refresh that COMMITS shares the branch
   # but not the work, and with one group the gate's call cancelled the dispatch
   # eight seconds into its checkout (2026-09-05, release/2.10.0).
-  group: refresh-ios-substrate-${{ inputs.target_branch || github.ref }}-${{ inputs.upload_only && 'upload' || 'commit' }}
+  # ...and PER RUN for upload-only callers. Per-branch-per-mode was still one
+  # group for every upload-only caller on a branch, and there are two: the
+  # five-platform gate's bundle job and compose-gate's ios-refresh. A push that
+  # bumps the server pin fires compose-gate at the same moment the gate is
+  # dispatched, and the later one cancelled the earlier one's bundle -- the
+  # gate's iOS leg then had no substrate at all and failed as "no /health
+  # within 120s" (run #34223901074). Every upload-only caller needs its OWN
+  # bundle, so there is nothing to serialise between them: key the group on the
+  # calling run. The commit path keeps the per-branch mutex, which is a real one.
+  group: refresh-ios-substrate-${{ inputs.target_branch || github.ref }}-${{ inputs.upload_only && format('upload-{0}', github.run_id) || 'commit' }}
   cancel-in-progress: true
 
 jobs:

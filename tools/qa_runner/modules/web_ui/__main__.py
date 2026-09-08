@@ -4157,6 +4157,14 @@ async def run_flow_specs(args: argparse.Namespace) -> int:
         return 1
 
     overall = 0
+    # A flow whose FIRST step's `requires` does not hold never ran: its screen
+    # is not what this client shows (FSD/CSD_STANDARD.md §5: "this flow cannot
+    # start here" and "this element is broken" are different bugs with
+    # different owners). Reported loudly, in the JSON and in the gallery, and
+    # returned as exit 2 so the caller can warn instead of failing a leg on a
+    # surface the pinned client does not carry yet (CIRISClient#45 is unmerged
+    # as of 2026-09-08). A flow that started and then failed is exit 1.
+    cannot_start: list = []
     try:
         for spec in specs:
             refusal = check_client_floor(spec.client_floor, client_version)
@@ -4184,9 +4192,19 @@ async def run_flow_specs(args: argparse.Namespace) -> int:
             if report:
                 print(f"  report: {report}")
             if not ok:
-                overall = 1
+                first = runner.results[0] if runner.results else None
+                if len(runner.results) == 1 and first is not None and first.phase == "requires":
+                    cannot_start.append((spec.flow, first.detail))
+                else:
+                    overall = 1
     finally:
         await helper.stop()
+    if cannot_start:
+        print(f"\n {len(cannot_start)} flow(s) could not start on ciris-client {client_version or '?'}:")
+        for flow, why in cannot_start:
+            print(f"   {flow}: {why}")
+        if overall == 0:
+            return 2
     return overall
 
 

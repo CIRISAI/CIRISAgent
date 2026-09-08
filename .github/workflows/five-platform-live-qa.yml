@@ -840,11 +840,22 @@ jobs:
             #     flows agree; this is where the flows are actually run. A flow the
             #     client cannot satisfy (version floor, refused scroll, absent tag)
             #     fails the leg -- the flow says what it expected and what it saw.
+            #     Exit 2 = every failing flow stopped at its FIRST precondition: the
+            #     pinned client does not show that screen (CIRISClient#45 unmerged),
+            #     so the flow never ran. That is a warning naming the flows, not a
+            #     red leg -- the JSON and the gallery still carry it. Exit 1 = a
+            #     flow started and then failed: the leg is red.
             if [ "$target" = "desktop" ]; then
+              flow_rc=0
               python -m tools.qa_runner.modules.web_ui flow \
                 --platform "$target" $extra \
                 --spec tools/qa_runner/flows --artifacts artifacts \
-                -v || { overall=1; echo "::error::$plat CSD flows failed -- see artifacts/flows/*.json and artifacts/shots/flow-*.png"; }
+                -v || flow_rc=$?
+              if [ "$flow_rc" = 1 ]; then
+                overall=1; echo "::error::$plat CSD flows failed -- see artifacts/flows/*.json and artifacts/shots/flow-*.png"
+              elif [ "$flow_rc" != 0 ]; then
+                echo "::warning::$plat CSD flows could not start on this client (their screens are not in the pinned ciris-client) -- see artifacts/flows/*.json"
+              fi
             fi
 
             # RECORD THE RESULT OURSELVES. `--json-report` is FEDERATION-ONLY:

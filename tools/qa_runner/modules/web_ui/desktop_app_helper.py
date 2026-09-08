@@ -657,15 +657,22 @@ class DesktopAppHelper:
                 err = await self.navigate_to_surface(parent, timeout_ms=timeout_ms)
                 if err:
                     return f"{screen_name} sits under {parent}, which could not be reached: {err}"
+        # THE SIDEBAR SCROLLS. On a 1200x800 desktop the Commons and Client group
+        # headers sit below the fold (run 34255952177: present in /tree, not on
+        # screen), and a row inside an opened group can be off-screen the same
+        # way. Bring each thing on screen before asking whether it is there.
+        if not await self.is_element_visible(tag):
+            await self.scroll_into_view(tag)
         if not await self.is_element_visible(tag):
             groups = sorted(e.test_tag for e in await self.get_elements() if e.test_tag.startswith("nav_group_"))
             for group in groups:
-                if not await self.is_element_visible(group):
+                if not await self.scroll_into_view(group):
                     continue
                 await self.click(group)
                 await asyncio.sleep(0.3)
-                if await self.is_element_visible(tag):
+                if await self.scroll_into_view(tag):
                     break
+                await self.scroll_into_view(group)
                 await self.click(group)  # wrong group: restore it, or the next toggle inverts
                 await asyncio.sleep(0.2)
             else:

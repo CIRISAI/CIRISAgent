@@ -413,9 +413,10 @@ def test_the_csd_flows_run_on_the_logged_in_client(raw: str) -> None:
     (FSD/CSD_STANDARD.md) and fail the leg when a flow does not hold."""
     i = raw.find("modules.web_ui flow")
     assert i > 0, "the CSD flow runner is not invoked by the gate"
-    block = raw[i : i + 400]
+    block = raw[i : i + 900]
     assert "--spec tools/qa_runner/flows" in block and "--artifacts artifacts" in block
-    assert "overall=1" in block, "a failed flow must fail the leg, not merely print"
+    assert '[ "$flow_rc" = 1 ]' in block and "overall=1" in block, "a flow that ran and failed must fail the leg"
+    assert "::warning::" in block, "a flow that cannot start on this client is reported, not silently green"
 
 
 def test_a_preview_reinstall_is_skipped_where_nothing_was_vendored(raw: str) -> None:

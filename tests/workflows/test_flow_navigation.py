@@ -68,6 +68,9 @@ class _FakeSidebar(DesktopAppHelper):
     async def wait_for_screen(self, name: str, timeout=None) -> bool:  # type: ignore[override]
         return self.screen == name
 
+    async def scroll_into_view(self, tag: str, **kw) -> bool:  # type: ignore[override]
+        return await self.is_element_visible(tag)
+
 
 @pytest.mark.asyncio
 async def test_a_collapsed_group_is_opened_only_until_the_row_appears_and_wrong_ones_are_restored() -> None:

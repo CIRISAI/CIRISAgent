@@ -289,6 +289,11 @@ class FlowRunner:
             if actual != cond.screen:
                 return f"{label}: expected screen {cond.screen!r}, on {actual!r}"
         for tag in cond.visible:
+            # THE RUNNER SCROLLS (FSD/CSD_STANDARD.md §3.3): a card below the fold
+            # of a long screen is composed and reachable, not missing. Only a tag
+            # that stays off screen after the scroll budget is "not on screen".
+            if not await self.helper.is_element_visible(tag):
+                await self.helper.scroll_into_view(tag)
             if not await self.helper.is_element_visible(tag):
                 return f"{label}: {tag!r} is not on screen"
         for tag in cond.absent:

@@ -143,4 +143,8 @@ rendered in the five-platform gallery; a row in `artifacts/flows/constitutional_
   against `/v1/accord/halt-status` on a known fixture, and it is the single most
   important assertion this CSD does not yet make. Track with CIRISServer#536 (4.2).
 * Either ceremony. Their own CSDs.
-* The hop to `Constitutional`. Started by precondition.
+* ~~The hop to `Constitutional`.~~ The runner reaches it before the flow starts:
+  `Constitutional` is a child of `LayerGlobalCommons` in the sidebar
+  (EpistemicNav.kt), so the parent is reached first (`nav_epistemic_layer_global_commons`,
+  which expands it) and then `nav_epistemic_constitutional`; `constitutional_screen`'s
+  `requires` asserts arrival.

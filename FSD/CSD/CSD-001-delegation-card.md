@@ -169,5 +169,7 @@ rendered in the five-platform gallery; a row in `artifacts/flows/delegation_card
   they say. A `text:` predicate needs a known fixture (a node with one inbound and
   one outbound grant) before it can be written honestly.
 * The grant ceremony behind `btn_delegation_manage_grants`. Its own CSD.
-* The navigation hop **to** `LayerFamily`. The flow starts there by precondition;
-  the sidebar tag that reaches it is not named in #45 and is not guessed here.
+* ~~The navigation hop **to** `LayerFamily`.~~ The runner reaches it through the
+  sidebar before the flow starts — `nav_epistemic_layer_family`, which is the
+  client's own rule (EpistemicSidebar.kt `navTag`: surface id `layer-family`,
+  EpistemicNav.kt), not a guess — and `family_hub`'s `requires` asserts arrival.

@@ -166,6 +166,12 @@ A CSD's QA section is short because the flow is most of it. It states:
      screenshot path, drivable set).
    A precondition failure is reported as one. *"This flow cannot start here"* and
    *"this element is broken"* are different bugs with different owners.
+   **The hop to the starting screen is the runner's, not the flow's.** Before a
+   flow runs, the runner walks to its first step's `requires: screen:` through the
+   sidebar, by the client's own tag rule (`nav_epistemic_<surface>` /
+   `nav_group_<group>`, EpistemicSidebar.kt; child surfaces via their parent). A
+   flow never encodes that hop, so a sidebar reorder is one fix in the runner,
+   not one per flow — and the first step's `requires` still asserts arrival.
 4. **Acceptance**, in the house shape: **Functional** (what a person can do),
    **Tests** (what the flow asserts), and **Untested and must be established** —
    the honest list of what the flow does *not* prove. A CSD with an empty last list

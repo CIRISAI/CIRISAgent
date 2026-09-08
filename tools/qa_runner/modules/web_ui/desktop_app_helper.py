@@ -8,6 +8,7 @@ Replaces browser-based testing with native Compose Desktop automation.
 """
 
 import asyncio
+import re
 import json
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -90,6 +91,29 @@ class ElementInfo:
     #: dropping this field on parse and then asking "is it in the tree?" while
     #: calling it "is it visible?". None = an older client that does not send it.
     visible: Optional[bool] = None
+
+
+
+def _surface_id(screen_name: str) -> str:
+    """`LayerLocalCommunity` -> `layer-local-community` (EpistemicNav.kt surface ids)."""
+    return re.sub(r"(?<!^)(?=[A-Z])", "-", screen_name).lower()
+
+
+def surface_tag(screen_name: str) -> str:
+    """The sidebar row tag for a screen, by EpistemicSidebar.kt's own rule."""
+    return "nav_epistemic_" + _surface_id(screen_name).replace("-", "_")
+
+
+#: Child surfaces are rendered only while their parent row is expanded
+#: (EpistemicNav.kt: LayerFamily.children = [Delegation];
+#: LayerGlobalCommunities.children = [Participate];
+#: LayerGlobalCommons.children = [EnvironmentGraph, Constitutional]).
+NESTED_SURFACE_PARENT = {
+    "delegation": "LayerFamily",
+    "participate": "LayerGlobalCommunities",
+    "environment-graph": "LayerGlobalCommons",
+    "constitutional": "LayerGlobalCommons",
+}
 
 
 class DesktopAppHelper:
@@ -602,6 +626,55 @@ class DesktopAppHelper:
         element self-recovers by scrolling; a guard that skips it does not.
         """
         return await self.get_element(test_tag) is not None
+
+    async def navigate_to_surface(self, screen_name: str, timeout_ms: int = 8000) -> Optional[str]:
+        """Reach `screen_name` through the EpistemicSidebar. None on success, else why not.
+
+        This is how a CSD flow gets to its starting screen: the flow's first
+        `requires: screen:` names where it starts, and this walks there so the
+        flow never encodes the hop (FSD/CSD_STANDARD.md §5). Every tag used is
+        the client's OWN rule, not a guess -- EpistemicSidebar.kt derives the row
+        tag as `nav_epistemic_<surface id, '-' -> '_'>` and the group toggle as
+        `nav_group_<group.id>`; `/screen` reports the Kotlin class name, and the
+        surface id is that name in kebab case (EpistemicNav.kt: `LayerFamily` is
+        `layer-family`). Groups other than the active one start COLLAPSED, and a
+        toggle on an expanded group collapses it, so a group is opened only
+        until the row appears and closed again if it was the wrong one. A child
+        surface (Constitutional under LayerGlobalCommons) is rendered only while
+        its parent is expanded; the parent is reached first, which expands it.
+        """
+        current = await self.get_screen()
+        if current == screen_name:
+            return None
+        tag = surface_tag(screen_name)
+        # Mobile chrome keeps the sidebar in a drawer.
+        if not await self.is_element_visible(tag) and await self.is_element_visible("btn_nav_drawer_open"):
+            await self.click("btn_nav_drawer_open")
+            await asyncio.sleep(0.5)
+        if not await self.is_element_visible(tag):
+            parent = NESTED_SURFACE_PARENT.get(_surface_id(screen_name))
+            if parent and parent != current:
+                err = await self.navigate_to_surface(parent, timeout_ms=timeout_ms)
+                if err:
+                    return f"{screen_name} sits under {parent}, which could not be reached: {err}"
+        if not await self.is_element_visible(tag):
+            groups = sorted(e.test_tag for e in await self.get_elements() if e.test_tag.startswith("nav_group_"))
+            for group in groups:
+                if not await self.is_element_visible(group):
+                    continue
+                await self.click(group)
+                await asyncio.sleep(0.3)
+                if await self.is_element_visible(tag):
+                    break
+                await self.click(group)  # wrong group: restore it, or the next toggle inverts
+                await asyncio.sleep(0.2)
+            else:
+                return f"{tag!r} is not on screen after opening each sidebar group ({groups or 'no nav_group_* rows'})"
+        if not await self.click(tag):
+            return f"click on {tag!r} did not succeed"
+        if not await self.wait_for_screen(screen_name, timeout=timeout_ms):
+            return f"clicked {tag!r} but the screen is {await self.get_screen()!r}, not {screen_name!r}"
+        return None
 
     async def is_element_visible(self, test_tag: str) -> bool:
         """Is the element ON SCREEN — not merely composed.

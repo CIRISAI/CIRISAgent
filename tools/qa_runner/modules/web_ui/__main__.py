@@ -4164,6 +4164,19 @@ async def run_flow_specs(args: argparse.Namespace) -> int:
                 print(f"\n FLOW {spec.flow} — REFUSED\n   {refusal}")
                 overall = 1
                 continue
+            # REACH THE STARTING SCREEN FIRST. A flow states where it starts
+            # (its first step's `requires: screen:`) and never encodes the hop;
+            # the sidebar walk is the harness's job, by the client's own tag
+            # rule (desktop_app_helper.navigate_to_surface). The step's own
+            # `requires` then asserts arrival, so a hop that did not land is
+            # reported as "this flow cannot start here", with the drivable set.
+            start = spec.steps[0].requires.screen if spec.steps else None
+            if start:
+                nav_err = await helper.navigate_to_surface(start)
+                if nav_err:
+                    print(f"\n FLOW {spec.flow} — could not reach its starting screen {start!r}: {nav_err}")
+                else:
+                    print(f"\n FLOW {spec.flow} — on {start!r} via the sidebar")
             runner = FlowRunner(helper, platform=platform, artifacts=artifacts)
             ok = await runner.run(spec)
             report = runner.write_report(spec)

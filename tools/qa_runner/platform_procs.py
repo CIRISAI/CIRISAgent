@@ -21,6 +21,7 @@ strictly worse than the mess it was tidying.
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 import tempfile
@@ -86,11 +87,28 @@ def pids_listening_on(port: int) -> List[int]:
                         except ValueError:
                             pass
             return sorted(set(pids))
+        try:
+            r = subprocess.run(
+                ["lsof", "-tiTCP:" + str(port), "-sTCP:LISTEN"],
+                capture_output=True, text=True, timeout=_TIMEOUT,
+            )
+            pids = sorted({int(x) for x in r.stdout.split() if x.strip().isdigit()})
+            if pids:
+                return pids
+        except (FileNotFoundError, subprocess.SubprocessError, OSError, ValueError):
+            pass
+        # `ss` where lsof is absent or answered nothing: minimal Linux images ship
+        # iproute2 and not lsof, and an empty answer from either one is
+        # indistinguishable from "nothing is listening" to the caller -- which is
+        # exactly the confusion this module's docstring warns about.
         r = subprocess.run(
-            ["lsof", "-tiTCP:" + str(port), "-sTCP:LISTEN"],
+            ["ss", "-ltnpH", "sport", "=", f":{port}"],
             capture_output=True, text=True, timeout=_TIMEOUT,
         )
-        return sorted({int(x) for x in r.stdout.split() if x.strip().isdigit()})
+        pids = set()
+        for m in re.finditer(r"pid=(\d+)", r.stdout):
+            pids.add(int(m.group(1)))
+        return sorted(pids)
     except (FileNotFoundError, subprocess.SubprocessError, OSError, ValueError):
         return []
 

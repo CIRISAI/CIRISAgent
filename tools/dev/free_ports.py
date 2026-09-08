@@ -59,6 +59,40 @@ def bindable(port: int) -> bool:
     return True
 
 
+def bindable_reuse(port: int) -> bool:
+    """Can we bind `port` WITH ``SO_REUSEADDR`` — i.e. can the next server bind it?
+
+    `bindable()` above deliberately refuses SO_REUSEADDR so a socket in TIME_WAIT
+    cannot read as free. That is the right strictness for "is the previous backend
+    gone", and the wrong answer for "can the next one start": every server we run
+    (uvicorn, the ciris-server node) sets SO_REUSEADDR itself, so a port whose only
+    obstruction is TIME_WAIT is available to them.
+
+    The two answers together are what distinguishes the two states, and the
+    distinction is not academic -- it cost the android leg of run 34291675402.
+    Killing the linux backend left :8080 and :4243 in TIME_WAIT for the kernel's
+    60 s; the strict probe read them as held, no listener existed to name (the
+    log said "holder unknown"), the 30 s window expired, and the guard skipped
+    android as though a stale backend were still serving. Nothing was serving.
+    """
+    # LOOPBACK ONLY, and deliberately: this probe answers "can the next server
+    # bind", and every server we start here binds 127.0.0.1 (uvicorn on :8080,
+    # the node's read API on :4243). The wildcard is NOT probed because a
+    # loopback socket in TIME_WAIT refuses a 0.0.0.0 bind even with
+    # SO_REUSEADDR, which would put us straight back to failing on residue.
+    # A LIVE listener still fails this probe -- SO_REUSEADDR does not permit a
+    # second listener on an overlapping address -- so the guard keeps its teeth.
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        s.bind(("127.0.0.1", port))
+    except OSError:
+        return False
+    finally:
+        s.close()
+    return True
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("ports", nargs="+", type=int)
@@ -66,15 +100,18 @@ def main() -> int:
     ap.add_argument("--label", default="teardown", help="prefix for log lines")
     args = ap.parse_args()
 
-    for port in args.ports:
-        pids = pids_listening_on(port)
-        if pids:
-            print(f"  {args.label}: freeing {port} ({', '.join(map(str, pids))})")
-            kill_pids(pids)
-
     deadline = time.monotonic() + args.timeout
     held: list[int] = []
     while True:
+        # KILL ON EVERY PASS, not once at the start. The desktop client supervises
+        # its backend and revives it (`[backend] reviving, attempt N/5`), so a
+        # single kill can be undone a second later by a process that was not in
+        # the first listing.
+        for port in args.ports:
+            pids = pids_listening_on(port)
+            if pids:
+                print(f"  {args.label}: freeing {port} ({', '.join(map(str, pids))})")
+                kill_pids(pids)
         held = [p for p in args.ports if not bindable(p)]
         if not held or time.monotonic() >= deadline:
             break
@@ -84,8 +121,23 @@ def main() -> int:
         print(f"  {args.label}: {', '.join(map(str, args.ports))} verified free (bind test)")
         return 0
 
-    print(f"  {args.label}: STILL HELD after {args.timeout:.0f}s: {', '.join(map(str, held))}")
-    for port in held:
+    # STRICTLY HELD IS NOT THE SAME AS OCCUPIED. Separate the two before failing:
+    # a port with no listener that a SO_REUSEADDR bind accepts is TIME_WAIT
+    # residue from the backend we just killed, and the next server -- which sets
+    # SO_REUSEADDR -- will bind it. Failing on that is how a clean teardown was
+    # reported as "a stale backend is still serving".
+    listening = [p for p in held if pids_listening_on(p) or not bindable_reuse(p)]
+    draining = [p for p in held if p not in listening]
+    if draining:
+        print(
+            f"  {args.label}: {', '.join(map(str, draining))} in TIME_WAIT (no listener; SO_REUSEADDR bind "
+            "accepted) -- the next server will bind these"
+        )
+    if not listening:
+        return 0
+
+    print(f"  {args.label}: STILL HELD after {args.timeout:.0f}s: {', '.join(map(str, listening))}")
+    for port in listening:
         pids = pids_listening_on(port)
         print(f"    :{port} -> {'pids ' + ', '.join(map(str, pids)) if pids else 'holder unknown (no process listing available)'}")
     return 1

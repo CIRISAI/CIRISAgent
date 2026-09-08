@@ -228,3 +228,40 @@ def test_an_environment_opt_in_warns_the_same_way(tmp_path: Path, monkeypatch: p
     assert node_only.node_only_config(home) is not None
     err = capsys.readouterr().err
     assert "will serve :4243" in err and "look for :8080" in err
+
+
+# ---- CIRISAgent#1158 review (Codex P2): resolve the .env where the wizard put it ----
+
+
+def test_a_source_checkout_is_the_home_like_the_wizard_says(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`get_ciris_home()` makes a git checkout the home in dev mode; the wizard writes
+    the flag there, so the early CLI check must look there too (not ~/ciris)."""
+    monkeypatch.delenv("CIRIS_HOME", raising=False)
+    monkeypatch.delenv("ANDROID_DATA", raising=False)
+    (tmp_path / ".git").mkdir()
+    monkeypatch.chdir(tmp_path)
+    assert node_only.ciris_home() == str(tmp_path)
+    monkeypatch.setenv("CIRIS_HOME", str(tmp_path / "explicit"))
+    assert node_only.ciris_home() == str(tmp_path / "explicit"), "CIRIS_HOME still outranks dev-mode"
+
+
+def test_a_plain_cwd_is_not_the_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("CIRIS_HOME", raising=False)
+    monkeypatch.chdir(tmp_path)  # no .git here
+    assert node_only.ciris_home() == os.path.join(os.path.expanduser("~"), "ciris")
+
+
+def test_config_dir_override_relocates_the_env_file_only(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """first_run.get_default_config_path honours CIRIS_CONFIG_DIR first; the
+    node-only check reads the same file, while --home stays the home."""
+    monkeypatch.delenv(node_only.ENV_FLAG, raising=False)
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    (cfg_dir / ".env").write_text("CIRIS_RUN_WITHOUT_AI=true\nCIRIS_NODE_KEY_ID=k-cfg\n")
+    home = str(tmp_path / "home")
+    monkeypatch.setenv("CIRIS_CONFIG_DIR", str(cfg_dir))
+    cfg = node_only.node_only_config(home)
+    assert cfg is not None and cfg.key_id == "k-cfg" and cfg.home == home
+    assert cfg.source == str(cfg_dir / ".env")
+    monkeypatch.delenv("CIRIS_CONFIG_DIR")
+    assert node_only.node_only_config(home) is None, "without the override the home's (absent) .env decides"

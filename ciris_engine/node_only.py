@@ -83,17 +83,35 @@ class NodeOnlyConfig:
 
 
 def ciris_home() -> str:
-    """The home the wizard wrote to: managed ``/app``, ``$CIRIS_HOME``, else ``~/ciris``.
+    """The home the wizard wrote to: managed ``/app``, ``$CIRIS_HOME``, a source
+    checkout's cwd, else ``~/ciris``.
 
-    Mirrors ``path_resolution.get_ciris_home()`` and the wheel's
-    ``_default_user_home()`` without importing either.
+    Mirrors ``path_resolution.get_ciris_home()`` (same precedence, including its
+    dev-mode rule: a ``.git`` in the cwd makes the checkout the home) and the
+    wheel's ``_default_user_home()`` without importing either -- this runs before
+    the CLI decides whether to import the engine at all. Diverging from the
+    wizard here is not a cosmetic bug: the wizard writes the flag where IT
+    resolves, and a resolver that looks elsewhere launches the desktop shell
+    against an :8080 that its own child then abandons for :4243.
     """
     if os.path.isdir("/app/agent") or os.path.isdir("/app/.ciris_manager"):
         return "/app"
     env = os.environ.get("CIRIS_HOME")
     if env:
         return os.path.expanduser(env)
+    if "ANDROID_DATA" not in os.environ and os.path.isdir(os.path.join(os.getcwd(), ".git")):
+        return os.getcwd()
     return os.path.join(os.path.expanduser("~"), "ciris")
+
+
+def env_file_path(home: str) -> str:
+    """Where the wizard put ``.env``: ``$CIRIS_CONFIG_DIR/.env`` when that override
+    is set (``first_run.get_default_config_path`` honours it first), else ``<home>/.env``.
+    """
+    override = os.environ.get("CIRIS_CONFIG_DIR")
+    if override:
+        return os.path.join(os.path.expanduser(override), ".env")
+    return os.path.join(home, ".env")
 
 
 def read_env_file(path: str) -> Dict[str, str]:
@@ -125,7 +143,7 @@ def node_only_config(home: Optional[str] = None) -> Optional[NodeOnlyConfig]:
     answer is "yes".
     """
     home = home or ciris_home()
-    env_path = os.path.join(home, ".env")
+    env_path = env_file_path(home)
     file_values = read_env_file(env_path)
     env_flag = os.environ.get(ENV_FLAG, "").strip().lower()
     file_flag = file_values.get(ENV_FLAG, "").strip().lower()

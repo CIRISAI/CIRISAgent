@@ -391,3 +391,37 @@ def test_the_gate_waits_for_the_node_ports_rather_than_sleeping() -> None:
     # tool and its bound, and the regression is kept out by name.
     assert "free_ports.py" in tail and "--timeout" in tail, "the wait must observe the ports (bind test), not guess"
     assert "lsof -ti" not in tail, "the wait regressed to lsof, which is absent on Windows"
+
+
+# ---- CIRISAgent#1158 review (Codex) --------------------------------------------
+
+
+def test_a_listener_that_survives_teardown_fails_the_leg(raw: str) -> None:
+    """free_ports.py is the proof the platform starts clean; `|| true` after it
+    would let the next app boot into EADDRINUSE or probe a stale backend green."""
+    i = raw.find("--label teardown")
+    assert i > 0
+    line = raw[raw.rfind("\n", 0, i) : raw.find("\n", i)]
+    assert "|| true" not in line, "the teardown's verdict is discarded"
+    assert "if ! python3 tools/dev/free_ports.py" in line
+    after = raw[i : i + 600]
+    assert "overall=1" in after and "continue" in after, "a survived listener must fail and skip the platform"
+
+
+def test_the_csd_flows_run_on_the_logged_in_client(raw: str) -> None:
+    """check_csd.py proves documents and flows agree; the gate must RUN them
+    (FSD/CSD_STANDARD.md) and fail the leg when a flow does not hold."""
+    i = raw.find("modules.web_ui flow")
+    assert i > 0, "the CSD flow runner is not invoked by the gate"
+    block = raw[i : i + 400]
+    assert "--spec tools/qa_runner/flows" in block and "--artifacts artifacts" in block
+    assert "overall=1" in block, "a failed flow must fail the leg, not merely print"
+
+
+def test_a_preview_reinstall_is_skipped_where_nothing_was_vendored(raw: str) -> None:
+    """A subset dispatch boots every runner; the one with no requested platform
+    vendors nothing and must not fail expanding an empty clientwheel/ glob."""
+    i = raw.find("--force-reinstall --no-deps")
+    assert i > 0
+    around = raw[i - 600 : i + 200]
+    assert 'if [ -n "$preview_wheel" ]' in around, "the reinstall must be guarded on a vendored wheel"

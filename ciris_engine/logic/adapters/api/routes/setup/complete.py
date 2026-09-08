@@ -1096,6 +1096,35 @@ def _write_llm_availability_config(f: Any, setup: SetupCompleteRequest) -> None:
         )
 
 
+def _retract_run_without_ai(config_path: Optional[Path]) -> None:
+    """Undo ``_write_run_without_ai`` after a post-save failure.
+
+    The flag is written by ``_save_and_reload_config`` BEFORE the fallible half
+    of setup (audit bootstrap, persist engine, admin users, auth reload). If any
+    of those raise, the client gets an error -- but a flag left in the file means
+    the NEXT launch bypasses the setup runtime and boots the standalone node,
+    with no admin account and no wizard to retry. Same shape as the signing-key
+    rollback above it: remove the file so the next start is a clean first run,
+    and clear the process copy so this process's own exit path
+    (``main.py`` -> ``node_only_config``) does not act on it either.
+    """
+    from ciris_engine.node_only import ENV_FLAG, ENV_KEY_ID
+
+    for key in (ENV_FLAG, ENV_KEY_ID):
+        os.environ.pop(key, None)
+    if config_path is None:
+        return
+    try:
+        config_path.unlink(missing_ok=True)
+        logger.warning(
+            "[RUN-WITHOUT-AI] setup failed after %s was written -- removed it so the next start is a clean "
+            "first run, not a node-only boot with no admin account",
+            config_path,
+        )
+    except OSError as exc:
+        logger.error("[RUN-WITHOUT-AI] could not remove %s after a failed setup: %s", config_path, exc)
+
+
 def _write_run_without_ai(f: Any) -> None:
     """Record the explicit choice so every later boot is ciris-server and the client (CIRISAgent#1149).
 
@@ -1511,6 +1540,7 @@ async def complete_setup(
     # Validate passwords and potentially generate for OAuth users
     setup.admin_password = _validate_setup_passwords(setup, is_oauth_user)
 
+    config_path: Optional[Path] = None
     try:
         # Save configuration and reload environment variables
         config_path = _save_and_reload_config(setup)
@@ -1683,4 +1713,6 @@ async def complete_setup(
 
     except Exception as e:
         logger.error(f"Setup completion failed: {e}", exc_info=True)
+        if setup.run_without_ai:
+            _retract_run_without_ai(config_path)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))

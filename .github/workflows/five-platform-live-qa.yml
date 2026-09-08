@@ -241,10 +241,18 @@ jobs:
           # The agent wheel Requires the PINNED client, so the line above just pulled
           # it from PyPI. Put the preview back on top -- --no-deps so pip does not
           # "fix" the deliberate mismatch by reinstalling the pin.
+          # Only where the vendor step actually fetched one: a subset dispatch
+          # (`platforms: linux android`) boots the macOS runner too, and its vendor
+          # step exits early with nothing in clientwheel/ -- expanding the glob
+          # there under `set -u` failed the job that was meant to be skipped.
           if [ -n '${{ inputs.client_preview_tag }}' ]; then
-            python -m pip install --force-reinstall --no-deps \
-              "$(ls ${RUNNER_TEMP}/clientwheel/ciris_client-*.whl | head -1)"
-            python -c "import ciris_client, importlib.metadata as m; print('client in use:', m.version('ciris-client'))"
+            preview_wheel=$(ls "${RUNNER_TEMP}"/clientwheel/ciris_client-*.whl 2>/dev/null | head -1 || true)
+            if [ -n "$preview_wheel" ]; then
+              python -m pip install --force-reinstall --no-deps "$preview_wheel"
+              python -c "import ciris_client, importlib.metadata as m; print('client in use:', m.version('ciris-client'))"
+            else
+              echo "no preview wheel vendored on this runner (no requested platform here); leaving the pinned client"
+            fi
           fi
 
       # ── Linux desktop needs a display. `/screenshot` is AWT Robot, which
@@ -683,7 +691,16 @@ jobs:
             # failed into its `|| true` and this loop silently did nothing on one of
             # the three runners. free_ports.py finds holders per-platform and then
             # PROVES the port is free by binding it (CIRISAgent#1102).
-            python3 tools/dev/free_ports.py 8080 9091 8091 4242 4243 --timeout 30 --label teardown || true
+            # AND ITS ANSWER IS BINDING. This call is the proof the platform starts
+            # clean; discarding its exit code (`|| true`) would let the next app boot
+            # into EADDRINUSE, or -- worse on the shared macOS/iOS runner -- let its
+            # probes answer against the previous platform's listeners and read green.
+            if ! python3 tools/dev/free_ports.py 8080 9091 8091 4242 4243 --timeout 30 --label teardown; then
+              overall=1
+              echo "::error::$plat: a listener from the previous platform survived teardown -- skipping $plat rather than testing it against a stale backend"
+              echo "::endgroup::"
+              continue
+            fi
 
             export CIRIS_HOME="${RUNNER_TEMP}/ciris-$plat"
             mkdir -p "$CIRIS_HOME"
@@ -802,6 +819,21 @@ jobs:
               --username qaadmin --password "qa_test_password_12345" \
               --screenshot-on-success "artifacts/shots/$plat.png" \
               -v || { chat_rc=1; overall=1; echo "::error::$plat interact failed"; python3 tools/dev/diagnose_gate_failure.py --platform "$plat" --phase interact --logs artifacts artifacts/logs artifacts/cmdlogs "${CIRIS_QA_LOG_DIR:-artifacts/cmdlogs}" --probe-provider || true; }
+
+            # 3b. THE CSD FLOWS (FSD/CSD_STANDARD.md). The same YAML the CSDs embed
+            #     is driven here against the logged-in client: navigation, card,
+            #     interactions, expectations before/after each step, screenshots
+            #     per step and a JSON report per flow (artifacts/flows/*.json, read
+            #     by the gallery). check_csd.py only proves the documents and the
+            #     flows agree; this is where the flows are actually run. A flow the
+            #     client cannot satisfy (version floor, refused scroll, absent tag)
+            #     fails the leg -- the flow says what it expected and what it saw.
+            if [ "$target" = "desktop" ]; then
+              python -m tools.qa_runner.modules.web_ui flow \
+                --platform "$target" $extra \
+                --spec tools/qa_runner/flows --artifacts artifacts \
+                -v || { overall=1; echo "::error::$plat CSD flows failed -- see artifacts/flows/*.json and artifacts/shots/flow-*.png"; }
+            fi
 
             # RECORD THE RESULT OURSELVES. `--json-report` is FEDERATION-ONLY:
             # the global parser accepts it and only the `federation` command

@@ -135,6 +135,29 @@ class TestSetupAndroidEnvironment:
         assert os.environ.get("OPENAI_API_KEY") == "test-key-12345"
         assert os.environ.get("OPENAI_API_BASE") == "http://test.api"
 
+    def test_process_run_mode_override_survives_the_env_file(self, tmp_path, monkeypatch):
+        """CIRISAgent#1158 review (Codex P2): CIRIS_RUN_WITHOUT_AI=false in the
+        process environment vetoes a recorded true for one run (node_only.py). The
+        .env is loaded with override=True, which replaced the process value before
+        node_only_config() read it -- the override worked on desktop only."""
+        ciris_home = tmp_path / "ciris"
+        ciris_home.mkdir()
+        (ciris_home / "data").mkdir()
+        (ciris_home / ".env").write_text("CIRIS_RUN_WITHOUT_AI=true\nCIRIS_NODE_KEY_ID=from-file\nOPENAI_API_KEY=k\n")
+        monkeypatch.setenv("ANDROID_DATA", str(tmp_path / "data"))
+        monkeypatch.delenv("CIRIS_HOME", raising=False)
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.setenv("CIRIS_RUN_WITHOUT_AI", "false")
+        monkeypatch.delenv("CIRIS_NODE_KEY_ID", raising=False)
+        with patch("ciris_engine.logic.utils.path_resolution.ensure_ciris_home_env", return_value=ciris_home):
+            with patch("ciris_engine.logic.utils.path_resolution.get_data_dir", return_value=ciris_home / "data"):
+                with patch("ciris_engine.logic.utils.path_resolution.get_logs_dir", return_value=ciris_home / "logs"):
+                    mobile_main = _reload_mobile_main()
+                    mobile_main.setup_android_environment()
+        assert os.environ.get("CIRIS_RUN_WITHOUT_AI") == "false", "the process override must win"
+        assert os.environ.get("CIRIS_NODE_KEY_ID") == "from-file", "keys the process did not set still come from the file"
+        assert os.environ.get("OPENAI_API_KEY") == "k"
+
     def test_android_environment_handles_missing_env_file(self, tmp_path, monkeypatch, caplog):
         """Test graceful handling when .env file is missing."""
         # Create mock CIRIS home WITHOUT .env file

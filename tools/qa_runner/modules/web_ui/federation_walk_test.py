@@ -225,6 +225,11 @@ class FederationWalkTest:
 
     async def _navigate_to_hub(self) -> bool:
         """Open Network hub via standard nav; tolerate either path."""
+        # ON SCREEN, not merely composed: the client's registry never forgets a
+        # tag, so once the hub has been shown `screen_network_hub` stays PRESENT
+        # while any other screen is active. A navigation that failed would still
+        # read as success under the presence predicate. Presence is kept only for
+        # controls that may be below the fold (tiles, refresh buttons).
         # Try the high-level navigate_to first (uses menu pattern); if the
         # menu doesn't list Network yet, fall back to direct hub-root probe.
         try:
@@ -234,7 +239,7 @@ class FederationWalkTest:
         except Exception:  # noqa: BLE001
             pass
         # Fallback: if the hub root is already visible we're done
-        return await self.helper.is_element_present(NETWORK_HUB)
+        return await self.helper.is_element_visible(NETWORK_HUB)
 
     async def _back_to_hub(self) -> bool:
         """Best-effort back-nav to the Network hub between screen visits.
@@ -249,7 +254,7 @@ class FederationWalkTest:
         # Try the system back button (common testTag) then re-verify hub root.
         for back_tag in ("btn_back", "btn_top_back", "btn_nav_back"):
             try:
-                if await self.helper.is_element_present(back_tag):
+                if await self.helper.is_element_visible(back_tag):
                     await self._try_click(back_tag)
                     await asyncio.sleep(0.25)
                     break
@@ -257,7 +262,7 @@ class FederationWalkTest:
                 continue
         # Re-verify hub root visible — if not, route through the sidebar
         # (the canonical path post-2.9.4).
-        if await self.helper.is_element_present(NETWORK_HUB):
+        if await self.helper.is_element_visible(NETWORK_HUB):
             return True
         return await self._navigate_to_hub()
 
@@ -305,7 +310,7 @@ class FederationWalkTest:
         )
 
         # Ensure hub is showing (or recover)
-        if not await self.helper.is_element_present(NETWORK_HUB):
+        if not await self.helper.is_element_visible(NETWORK_HUB):
             if not await self._navigate_to_hub():
                 r.status = WalkStatus.SKIP
                 r.reason = "could not return to hub before walk"
@@ -413,7 +418,7 @@ class FederationWalkTest:
             root_tag=screen.root,
         )
         # Navigate to Peers first
-        if not await self.helper.is_element_present(NETWORK_HUB):
+        if not await self.helper.is_element_visible(NETWORK_HUB):
             if not await self._navigate_to_hub():
                 r.status = WalkStatus.SKIP
                 r.reason = "could not return to hub for peer-detail walk"
@@ -511,7 +516,7 @@ class FederationWalkTest:
         self._log("mode flow")
         result = ModeFlowResult()
 
-        if not await self.helper.is_element_present(NETWORK_HUB):
+        if not await self.helper.is_element_visible(NETWORK_HUB):
             if not await self._navigate_to_hub():
                 result.status = WalkStatus.SKIP
                 result.reason = "hub not reachable for mode-flow"
@@ -764,7 +769,7 @@ class FederationWalkTest:
         result = AddPeerFlowResult()
 
         # Get to Peers
-        if not await self.helper.is_element_present(NETWORK_HUB):
+        if not await self.helper.is_element_visible(NETWORK_HUB):
             if not await self._navigate_to_hub():
                 result.status = WalkStatus.SKIP
                 result.reason = "hub not reachable for add-peer flow"

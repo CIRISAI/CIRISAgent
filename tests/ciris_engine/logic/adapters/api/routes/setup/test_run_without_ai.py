@@ -117,3 +117,33 @@ def test_a_flag_that_does_not_read_back_does_not_hand_off_blind() -> None:
         asyncio.run(complete._node_only_restart(runtime))
     execd.assert_not_called()
     assert server.should_exit is False
+
+
+# ---- CIRISAgent#1158 review (Codex P1): a failed setup must not leave the flag behind ----
+
+
+def test_a_failed_setup_retracts_the_flag_from_file_and_process(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    env = tmp_path / ".env"
+    env.write_text("CIRIS_CONFIGURED=true\nCIRIS_RUN_WITHOUT_AI=true\nCIRIS_NODE_KEY_ID=k1\n")
+    monkeypatch.setenv(node_only.ENV_FLAG, "true")
+    monkeypatch.setenv(node_only.ENV_KEY_ID, "k1")
+    complete._retract_run_without_ai(env)
+    assert not env.exists(), "the next start must be a clean first run, not a node-only boot with no admin"
+    import os
+
+    assert node_only.ENV_FLAG not in os.environ and node_only.ENV_KEY_ID not in os.environ, (
+        "this process's own exit path reads the environment and would still hand off to the node"
+    )
+    complete._retract_run_without_ai(None)  # nothing written yet: must not raise
+
+
+def test_the_failure_handler_retracts_only_for_the_node_only_choice() -> None:
+    """Source-level guard (the route needs a live app to drive): the outer handler
+    calls the retraction, and only when the owner chose to run without AI."""
+    import inspect
+
+    src = inspect.getsource(complete.complete_setup)
+    handler = src[src.rfind("except Exception as e:") :]
+    assert "_retract_run_without_ai(config_path)" in handler
+    assert "if setup.run_without_ai:" in handler
+    assert "config_path: Optional[Path] = None" in src, "config_path must exist even when the save itself raised"

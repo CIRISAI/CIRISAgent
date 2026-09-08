@@ -435,3 +435,17 @@ def test_ios_reset_cleanup_frees_the_automation_port(raw: str) -> None:
     before = raw[i - 700 : i]
     assert 'reset_ports="4242 4243 8080"' in before
     assert '[ "$target" = "ios" ] && reset_ports="$reset_ports 9091"' in before
+
+
+def test_the_per_platform_script_is_plain_text(spec: Dict[str, Any]) -> None:
+    """A `run:` body containing `${{ }}` is one expression, capped at 21000
+    characters by GitHub; crossing it invalidates the whole file and the only
+    symptom is a push-event run with no jobs (9293c53a9). Keep the big script
+    expression-free: matrix/inputs reach it through `env:`."""
+    for job in spec["jobs"].values():
+        for step in _steps(job):
+            if step.get("id") == "qa":
+                assert "${{" not in step["run"], "the per-platform script must not contain expressions"
+                assert "MATRIX_PLATFORMS" in (step.get("env") or {})
+                return
+    raise AssertionError("the qa step is missing")

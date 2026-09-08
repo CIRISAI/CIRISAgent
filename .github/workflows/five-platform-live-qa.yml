@@ -149,6 +149,17 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      # REFUSE TO TEST A SUBSTRATE THE PHONES WILL NOT RUN. requirements.txt is
+      # one of several ciris-server pin sites: apps/android/build.gradle installs
+      # its own exact pin into the APK, and the iOS bundle is refreshed from the
+      # requirements pin by a separate job. Bumping requirements.txt alone shipped
+      # 0.5.203 to the desktops and 0.5.199 to Android, and the Android leg then
+      # died on the bug 0.5.203 had fixed (run #34223901074) -- forty minutes to
+      # learn what this says in two seconds. The fix hint names the lockstep tool.
+      - name: Substrate pins agree (requirements.txt vs apps/android/build.gradle)
+        shell: bash
+        run: python3 tools/dev/check_version_alignment.py
+
       # The desktop app ships as the uber-jar INSIDE the pinned ciris-client
       # wheel and must land in ciris_engine/desktop_app/ BEFORE the wheel is
       # built — that is what setup.py packages and what desktop_launcher.py

@@ -193,3 +193,23 @@ def test_schema_has_one_key_per_axis() -> None:
     # depends_on is a list of step ids, nothing else
     assert "List" in str(ConfigurationStep.model_fields["depends_on"].annotation)
     assert "Dict" not in str(ConfigurationStep.model_fields["depends_on"].annotation)
+
+
+# ---- CIRISAgent#1158 review (Codex P1): the retired spelling is READ, never written ----
+
+
+def test_an_out_of_tree_manifest_with_field_id_still_loads(caplog: pytest.LogCaptureFixture) -> None:
+    """The in-tree lint above rejects `field_id`; ingestion must not, or an
+    adapter authored before #1154 vanishes from discover_services() with one
+    error line. It is read as `name` and the author is told."""
+    from ciris_engine.schemas.runtime.manifest import ConfigurationFieldDefinition
+
+    with caplog.at_level("WARNING"):
+        f = ConfigurationFieldDefinition.model_validate({"field_id": "api_key", "type": "string"})
+    assert f.name == "api_key"
+    assert "field_id" not in (f.model_extra or {}), "the retired key must not survive as an extra"
+    assert "retired key `field_id`" in caplog.text and "migrate_interactive_config" in caplog.text
+    both = ConfigurationFieldDefinition.model_validate({"name": "a", "field_id": "b"})
+    assert both.name == "a", "when both are present the canonical key wins"
+    with pytest.raises(Exception):
+        ConfigurationFieldDefinition.model_validate({"type": "string"})  # neither: still a nameless field

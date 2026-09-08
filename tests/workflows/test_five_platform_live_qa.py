@@ -425,3 +425,13 @@ def test_a_preview_reinstall_is_skipped_where_nothing_was_vendored(raw: str) -> 
     assert i > 0
     around = raw[i - 600 : i + 200]
     assert 'if [ -n "$preview_wheel" ]' in around, "the reinstall must be guarded on a vendored wheel"
+
+
+def test_ios_reset_cleanup_frees_the_automation_port(raw: str) -> None:
+    """The reset relaunches the simulator app, whose :9091 test server binds
+    first; the next --launch refuses while :9091 has an owner (Codex P2)."""
+    i = raw.find("--label post-reset")
+    assert i > 0
+    before = raw[i - 700 : i]
+    assert 'reset_ports="4242 4243 8080"' in before
+    assert '[ "$target" = "ios" ] && reset_ports="$reset_ports 9091"' in before

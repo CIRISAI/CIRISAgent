@@ -772,7 +772,13 @@ jobs:
             #   ReticulumTransport::new: ... (os error 10048)
             # An absent process listing is not evidence of a free port — free_ports.py
             # settles it by binding, which no missing tool can answer wrongly.
-            if ! python3 tools/dev/free_ports.py 4242 4243 8080 --timeout 60 --label post-reset; then
+            # iOS ALSO NEEDS 9091: the reset relaunches the simulator app, whose test
+            # server binds :9091 before the slower backend listeners, and the next
+            # `--launch` (run_ios_simulator_up) refuses to proceed while :9091 has an
+            # owner. Desktop's `--launch` tears its own app down, so it is not listed.
+            reset_ports="4242 4243 8080"
+            [ "$target" = "ios" ] && reset_ports="$reset_ports 9091"
+            if ! python3 tools/dev/free_ports.py $reset_ports --timeout 60 --label post-reset; then
               # Say it here rather than letting the next backend fail with an error that
               # reads like a product fault.
               echo "::error::$plat ports still held after 60s — the next backend will fail Edge init (CIRISAgent#1102)"

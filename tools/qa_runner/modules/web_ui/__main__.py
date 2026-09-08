@@ -250,6 +250,22 @@ class DesktopAppTestRunner:
         if not self.helper:
             raise RuntimeError("Test runner not started")
 
+        # A SESSION MAY ALREADY EXIST. After the run-without-AI hand-off the
+        # client (0.5.212+, CIRISClient#48) auto-logs in against the node and
+        # lands on Interact; waiting 30 s for a Login screen that will never
+        # come marked a correct hand-off as failed. The assertion this leg
+        # exists for is the CREDENTIAL login against that backend, so log out
+        # and drive it rather than accepting the auto-login as the answer.
+        async def release_auto_login():
+            screen = await self.helper.get_screen()
+            if screen != "Interact":
+                self._log(f"no prior session (screen={screen}); the credential login is driven from here")
+                return
+            self._log("the post-setup auto-login already established a session — logging out to exercise the credential login")
+            await self._logout()
+
+        await self.run_test("release_auto_login", release_auto_login)
+
         # Wait for login screen
         async def wait_for_login():
             self._log("Waiting for login screen...")
@@ -806,6 +822,63 @@ class DesktopAppTestRunner:
         else:
             self._log("AI (BYOK): no live model list appeared after retries; leaving provider/text default")
 
+    async def _logout(self) -> None:
+        """Log out — by two different routes, because the chrome differs.
+
+        DESKTOP keeps the top-bar dropdowns: `btn_governance_menu` opens the
+        category that holds `menu_logout` (`btn_menu` opens ADVANCED, which
+        does not).
+
+        MOBILE HAS NO `menu_logout` AT ALL. The 2.9.4 rewire replaced that
+        chrome with the EpistemicSidebar, and its own header says so: "Existing
+        QA scripts that drove the old top-bar dropdown menu (`menu_*` testTags)
+        will need updating to the new `nav_epistemic_*` testTags ... the old
+        chrome is fully replaced." Logout lives on the Settings surface as
+        `btn_logout`, reached through the drawer:
+            btn_nav_drawer_open -> nav_epistemic_agent_settings -> btn_logout
+
+        The desktop tags DO still appear in a mobile `/tree` — the registration
+        has no DisposableEffect, so the registry reports every element ever
+        composed. That is why the first version of this looked reachable and
+        then timed out; presence there is not drivability, so the mobile route
+        is taken on its own terms rather than probed for.
+        """
+        if await self.helper.is_element_present("btn_nav_drawer_open"):
+            self._log("mobile chrome: drawer -> Settings -> btn_logout")
+            if not await self.helper.click("btn_nav_drawer_open"):
+                raise RuntimeError("Failed to open the nav drawer (btn_nav_drawer_open)")
+            await asyncio.sleep(0.6)
+            if not await self.helper.wait_for_element("nav_epistemic_agent_settings", timeout=8000):
+                await self._dump_tree("reset:nav_settings")
+                raise RuntimeError("nav_epistemic_agent_settings not in the drawer — the sidebar surfaces moved")
+            if not await self.helper.click("nav_epistemic_agent_settings"):
+                raise RuntimeError("Failed to open Settings from the drawer")
+            await asyncio.sleep(1.0)
+            if not await self.helper.wait_for_element("btn_logout", timeout=10000):
+                await self._dump_tree("reset:btn_logout")
+                raise RuntimeError("btn_logout not on the Settings surface")
+            if not await self.helper.click("btn_logout"):
+                raise RuntimeError("Failed to click btn_logout")
+            await asyncio.sleep(1.5)
+            return
+
+        self._log("desktop chrome: btn_governance_menu -> menu_logout")
+        if not await self.helper.wait_for_element("btn_governance_menu", timeout=20000):
+            await self._dump_tree("reset:btn_governance_menu")
+            raise RuntimeError(
+                "btn_governance_menu not found and no nav drawer either — the app is not on an "
+                "authenticated screen, or the chrome changed again."
+            )
+        if not await self.helper.click("btn_governance_menu"):
+            raise RuntimeError("Failed to open the governance menu")
+        if not await self.helper.wait_for_element("menu_logout", timeout=8000):
+            await self._dump_tree("reset:menu_logout")
+            raise RuntimeError("menu_logout not under btn_governance_menu — the item moved categories")
+        if not await self.helper.click("menu_logout"):
+            raise RuntimeError("Failed to click menu_logout")
+        await asyncio.sleep(1.5)
+
+
     async def test_reset_device_flow(self) -> bool:
         """Log out and factory-reset the device through the CLIENT's own UI.
 
@@ -826,60 +899,7 @@ class DesktopAppTestRunner:
         """
 
         async def logout():
-            """Log out — by two different routes, because the chrome differs.
-
-            DESKTOP keeps the top-bar dropdowns: `btn_governance_menu` opens the
-            category that holds `menu_logout` (`btn_menu` opens ADVANCED, which
-            does not).
-
-            MOBILE HAS NO `menu_logout` AT ALL. The 2.9.4 rewire replaced that
-            chrome with the EpistemicSidebar, and its own header says so: "Existing
-            QA scripts that drove the old top-bar dropdown menu (`menu_*` testTags)
-            will need updating to the new `nav_epistemic_*` testTags ... the old
-            chrome is fully replaced." Logout lives on the Settings surface as
-            `btn_logout`, reached through the drawer:
-                btn_nav_drawer_open -> nav_epistemic_agent_settings -> btn_logout
-
-            The desktop tags DO still appear in a mobile `/tree` — the registration
-            has no DisposableEffect, so the registry reports every element ever
-            composed. That is why the first version of this looked reachable and
-            then timed out; presence there is not drivability, so the mobile route
-            is taken on its own terms rather than probed for.
-            """
-            if await self.helper.is_element_present("btn_nav_drawer_open"):
-                self._log("mobile chrome: drawer -> Settings -> btn_logout")
-                if not await self.helper.click("btn_nav_drawer_open"):
-                    raise RuntimeError("Failed to open the nav drawer (btn_nav_drawer_open)")
-                await asyncio.sleep(0.6)
-                if not await self.helper.wait_for_element("nav_epistemic_agent_settings", timeout=8000):
-                    await self._dump_tree("reset:nav_settings")
-                    raise RuntimeError("nav_epistemic_agent_settings not in the drawer — the sidebar surfaces moved")
-                if not await self.helper.click("nav_epistemic_agent_settings"):
-                    raise RuntimeError("Failed to open Settings from the drawer")
-                await asyncio.sleep(1.0)
-                if not await self.helper.wait_for_element("btn_logout", timeout=10000):
-                    await self._dump_tree("reset:btn_logout")
-                    raise RuntimeError("btn_logout not on the Settings surface")
-                if not await self.helper.click("btn_logout"):
-                    raise RuntimeError("Failed to click btn_logout")
-                await asyncio.sleep(1.5)
-                return
-
-            self._log("desktop chrome: btn_governance_menu -> menu_logout")
-            if not await self.helper.wait_for_element("btn_governance_menu", timeout=20000):
-                await self._dump_tree("reset:btn_governance_menu")
-                raise RuntimeError(
-                    "btn_governance_menu not found and no nav drawer either — the app is not on an "
-                    "authenticated screen, or the chrome changed again."
-                )
-            if not await self.helper.click("btn_governance_menu"):
-                raise RuntimeError("Failed to open the governance menu")
-            if not await self.helper.wait_for_element("menu_logout", timeout=8000):
-                await self._dump_tree("reset:menu_logout")
-                raise RuntimeError("menu_logout not under btn_governance_menu — the item moved categories")
-            if not await self.helper.click("menu_logout"):
-                raise RuntimeError("Failed to click menu_logout")
-            await asyncio.sleep(1.5)
+            await self._logout()
 
         await self.run_test("logout", logout)
 
@@ -903,9 +923,55 @@ class DesktopAppTestRunner:
             # factoryReset() wipes user state, clears the signing key and DELETES
             # the .env (which is what clears CIRIS_RUN_WITHOUT_AI), then asks the
             # app to restart into the wizard. Give it room to do all of that.
-            await asyncio.sleep(5.0)
+            await asyncio.sleep(1.0)  # the outcome is asserted in reset_took_effect
 
         await self.run_test("reset_device", reset_device)
+
+        async def reset_took_effect():
+            # A click that was acknowledged is not a reset that happened: the next
+            # step (`desktop-setup --launch`) rewrites the same .env itself, so a
+            # reset that silently stopped clearing the flag would still read green.
+            # 1. The app restarted into first run: the Login CHOOSER (signup
+            #    affordance), not the credential form of a configured install.
+            deadline = time.time() + 30
+            first_run = False
+            while time.time() < deadline:
+                screen = await self.helper.get_screen() or ""
+                if screen == "Login" and await self.helper.is_element_visible("btn_local_login"):
+                    first_run = True
+                    break
+                if screen == "Setup":
+                    first_run = True
+                    break
+                await asyncio.sleep(0.5)
+            if not first_run:
+                await self._dump_tree("reset:first_run")
+                raise RuntimeError("the app did not restart into first run within 30s of confirming the reset")
+            self._log("the app restarted into first run")
+            # 2. The recorded choice is gone. DESKTOP ONLY: on a device the home is
+            #    on the device and the runner cannot read it; say so rather than
+            #    imply either answer.
+            import os
+            from pathlib import Path
+
+            platform = getattr(_LAST_ARGS, "platform", "desktop") or "desktop"
+            if platform != "desktop":
+                self._log(f"NOT ASSERTED on {platform}: the .env lives on the device; the desktop legs assert its removal")
+                return
+            env_path = Path(os.environ.get("CIRIS_HOME") or (Path.home() / "ciris")) / ".env"
+            deadline = time.time() + 20
+            while time.time() < deadline:
+                try:
+                    body = env_path.read_text(encoding="utf-8", errors="replace")
+                except OSError:
+                    self._log(f"{env_path} is gone — the recorded choice went with it")
+                    return
+                if "CIRIS_RUN_WITHOUT_AI=" not in body and "CIRIS_CONFIGURED=" not in body:
+                    self._log(f"{env_path} no longer records a configured install")
+                    return
+                await asyncio.sleep(0.5)
+            raise RuntimeError(f"{env_path} still records the install 20s after the reset was confirmed (factory reset stopped clearing it)")
+        await self.run_test("reset_took_effect", reset_took_effect)
         return all(r.success for r in self.results)
 
     async def test_setup_wizard_flow(

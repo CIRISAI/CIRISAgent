@@ -8,7 +8,8 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Literal, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field
+import logging
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.types import JSONDict
@@ -178,6 +179,28 @@ class ConfigurationFieldDefinition(BaseModel):
     readonly: bool = Field(False, description="Shown but not editable")
 
     model_config = ConfigDict(extra="allow", defer_build=True)  # Allow additional field-specific properties
+
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_legacy_field_id(cls, data: Any) -> Any:
+        """Read the retired spelling; never write it.
+
+        The tree uses one spelling (`name`, enforced by the manifest lint), but
+        an out-of-tree adapter authored against the pre-#1154 schema still says
+        `field_id`. Rejecting it here would make `discover_services()` drop that
+        adapter with one error line at boot -- a silent removal from the
+        operator's point of view. Normalise on the way in and say so, so the
+        adapter keeps working and its author learns the spelling changed.
+        """
+        if isinstance(data, dict) and "name" not in data and "field_id" in data:
+            data = dict(data)
+            data["name"] = data.pop("field_id")
+            logging.getLogger(__name__).warning(
+                "interactive_config field %r uses the retired key `field_id`; read as `name`. "
+                "Run tools/dev/migrate_interactive_config.py on this manifest (CIRISClient#39).",
+                data["name"],
+            )
+        return data
 
 
 class ConfigurationStep(BaseModel):

@@ -286,7 +286,14 @@ class ServerManager:
             # (run #34177749800, macOS). 0.5.208 ignored the flag, which is the
             # only reason this never showed. Strip the recorded answer and its
             # key id; nothing else in the file is this mode's business.
-            env_path = os.path.join(self.config.project_root, ".env")
+            # THE BACKEND'S HOME, NOT THE CHECKOUT. start_env pins CIRIS_HOME to
+            # project_root with setdefault, so an exported CIRIS_HOME (the gate
+            # exports ${RUNNER_TEMP}/ciris-<plat>) wins and the agent writes its
+            # .env THERE. The first version of this strip looked in project_root
+            # and found nothing (run #34179671711: no "Stripped" line), which is
+            # the wrong-file shape the per-launch-log fix had just closed.
+            effective_home = os.environ.get("CIRIS_HOME") or self.config.project_root
+            env_path = os.path.join(effective_home, ".env")
             if os.path.exists(env_path):
                 with open(env_path, "r", encoding="utf-8", errors="replace") as f:
                     lines = f.readlines()

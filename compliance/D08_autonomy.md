@@ -2,7 +2,9 @@
 
 > Human-centric design + informational self-determination
 
-**Seed reference**: `SEED_DIMENSIONS.yaml` v1.0, dimension `D08` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
+**Kinds of change (RATCHET 11+1)**: manner — Record: indirect
+
+**Seed reference**: `SEED_DIMENSIONS.yaml` v1.1, dimension `D08` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
 **Accord principle**: autonomy
 **Attestation density**: MH=7 · EU=15 · IEEE=21 · ASEAN=8 · total=51
 
@@ -26,6 +28,15 @@
 ## Wire primitives
 
 - `autonomy:*`
+
+
+## Named sub-leaves
+
+*(Named so a reviewer walking a framework's requirement list finds them; no new D-id — a promoted leaf allocates D28+.)*
+
+- `autonomy:informational_self_determination` — folded from EU HLEG requirement 3 'privacy & data governance'; ASEAN §B.4 (the wire_form above)
+    Status: named sub-leaf of the autonomy:* family so a reviewer walking HLEG's seven finds it; not a separate dimension
+    Promotion trigger: EU AI Act Art. 10 (data governance) as a fifth batch; a promoted leaf allocates D28+ per stable_id_rule
 
 ## Convergence note
 

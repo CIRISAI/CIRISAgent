@@ -2,7 +2,9 @@
 
 > Agent-side faculty layer — optimization veto, epistemic humility, coherence, alētheia
 
-**Seed reference**: `SEED_DIMENSIONS.yaml` v1.0, dimension `D12` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
+**Kinds of change (RATCHET 11+1)**: manner · identity · priorities · confidence · process · premises — Record: indirect
+
+**Seed reference**: `SEED_DIMENSIONS.yaml` v1.1, dimension `D12` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
 **Accord principle**: integrity
 **Attestation density**: MH=9 · EU=3 · IEEE=9 · ASEAN=3 · total=24
 

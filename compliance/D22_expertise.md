@@ -2,7 +2,9 @@
 
 > Declared competence in domain (named-expert attestation)
 
-**Seed reference**: `SEED_DIMENSIONS.yaml` v1.0, dimension `D22` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
+**Kinds of change (RATCHET 11+1)**: facts · confidence — Record: direct
+
+**Seed reference**: `SEED_DIMENSIONS.yaml` v1.1, dimension `D22` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
 **Accord principle**: integrity
 **Attestation density**: MH=1 · EU=1 · IEEE=10 · ASEAN=0 · total=12
 

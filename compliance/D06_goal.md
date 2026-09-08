@@ -2,7 +2,9 @@
 
 > Multi-scale belonging composite — self/family/community/affiliations/species/planet
 
-**Seed reference**: `SEED_DIMENSIONS.yaml` v1.0, dimension `D06` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
+**Kinds of change (RATCHET 11+1)**: priorities · premises — Record: indirect
+
+**Seed reference**: `SEED_DIMENSIONS.yaml` v1.1, dimension `D06` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
 **Accord principle**: beneficence
 **Attestation density**: MH=34 · EU=6 · IEEE=13 · ASEAN=7 · total=60
 

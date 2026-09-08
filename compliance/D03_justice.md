@@ -2,7 +2,9 @@
 
 > Vulnerability-priority + fairness; tie-breaking modifier `justice:lexical_vulnerability_priority` (v1.3 CST closure) is four-source-corroborated
 
-**Seed reference**: `SEED_DIMENSIONS.yaml` v1.0, dimension `D03` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
+**Kinds of change (RATCHET 11+1)**: rules · priorities — Record: indirect
+
+**Seed reference**: `SEED_DIMENSIONS.yaml` v1.1, dimension `D03` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
 **Accord principle**: justice
 **Attestation density**: MH=19 · EU=22 · IEEE=30 · ASEAN=9 · total=80
 

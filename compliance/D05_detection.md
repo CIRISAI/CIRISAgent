@@ -2,7 +2,9 @@
 
 > LensCore F-3 / RATCHET family — aggregate-correlation / structural-injustice / drift detection
 
-**Seed reference**: `SEED_DIMENSIONS.yaml` v1.0, dimension `D05` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
+**Kinds of change (RATCHET 11+1)**: structure · model — Record: indirect
+
+**Seed reference**: `SEED_DIMENSIONS.yaml` v1.1, dimension `D05` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
 **Accord principle**: justice
 **Attestation density**: MH=54 · EU=15 · IEEE=41 · ASEAN=16 · total=126
 

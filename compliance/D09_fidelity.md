@@ -2,7 +2,9 @@
 
 > Faithful disclosure / faithful representation across lifecycle
 
-**Seed reference**: `SEED_DIMENSIONS.yaml` v1.0, dimension `D09` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
+**Kinds of change (RATCHET 11+1)**: facts — Record: direct
+
+**Seed reference**: `SEED_DIMENSIONS.yaml` v1.1, dimension `D09` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
 **Accord principle**: fidelity
 **Attestation density**: MH=8 · EU=15 · IEEE=16 · ASEAN=26 · total=65
 

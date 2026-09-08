@@ -2,7 +2,9 @@
 
 > CIRISEdge encryption key boundary attestation (cryptographic trust scoping)
 
-**Seed reference**: `SEED_DIMENSIONS.yaml` v1.0, dimension `D26` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
+**Kinds of change (RATCHET 11+1)**: identity · structure — Record: indirect
+
+**Seed reference**: `SEED_DIMENSIONS.yaml` v1.1, dimension `D26` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
 **Accord principle**: integrity
 **Attestation density**: MH=0 · EU=2 · IEEE=7 · ASEAN=2 · total=11
 

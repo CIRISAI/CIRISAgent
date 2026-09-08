@@ -92,6 +92,22 @@ def render_auto_section(dim: dict, batches_by_id: dict, seed: dict, seed_version
     parts.append(f"# {dim['id']} — `{dim['prefix']}` ({dim['tier']})")
     parts.append("")
     parts.append(f"> {dim['gloss']}")
+    if dim.get("kind") == "structural":
+        sp = dim.get("structural_property") or {}
+        leaves = ", ".join(f"`{l}`" for l in sp.get("registry_leaves") or [])
+        parts.append("")
+        parts.append(
+            f"**Kind**: structural property ({sp.get('mechanism', '?')}) — not a namespace family; "
+            f"nothing is emitted under a prefix for this dimension. "
+            + (f"Resolves to the CC 3.1 registry leaves {leaves}. " if leaves else "")
+            + (f"The v1.0 label `{dim['former_prefix']}` is retired (seed v1.1, CIRISAgent#1139)." if dim.get("former_prefix") else "")
+        )
+    kinds = dim.get("change_kinds") or []
+    if kinds:
+        parts.append("")
+        parts.append(
+            f"**Kinds of change (RATCHET 11+1)**: {' · '.join(kinds)} — Record: {dim.get('record', 'indirect')}"
+        )
     parts.append("")
     parts.append(
         f"**Seed reference**: `SEED_DIMENSIONS.yaml` v{seed_version}, dimension `{dim['id']}` "
@@ -128,10 +144,24 @@ def render_auto_section(dim: dict, batches_by_id: dict, seed: dict, seed_version
 
     parts.append("## Wire primitives")
     parts.append("")
+    if not dim["wire_primitives"]:
+        parts.append("*(none — structural property; see **Kind** above and the human section for the mechanisms)*")
     for p in dim["wire_primitives"]:
         parts.append(f"- `{p}`")
     parts.append("")
 
+    subs = dim.get("sub_leaves") or []
+    if subs:
+        parts.append("")
+        parts.append("## Named sub-leaves")
+        parts.append("")
+        parts.append("*(Named so a reviewer walking a framework's requirement list finds them; no new D-id — a promoted leaf allocates D28+.)*")
+        parts.append("")
+        for sl in subs:
+            parts.append(f"- `{sl['leaf']}` — folded from {sl['folded_from']}")
+            parts.append(f"    Status: {sl['status']}")
+            parts.append(f"    Promotion trigger: {sl['promotion_trigger']}")
+        parts.append("")
     note = dim.get("convergence_note")
     if note:
         parts.append("## Convergence note")
@@ -209,7 +239,7 @@ def generate(seed_path: Path, output_dir: Path) -> None:
     written = 0
     preserved = 0
     for dim in seed["dimensions"]:
-        filename = f"{dim['id']}_{slugify_prefix(dim['prefix'])}.md"
+        filename = f"{dim['id']}_{dim.get('slug') or slugify_prefix(dim['prefix'])}.md"
         path = output_dir / filename
 
         previously_existed = path.exists()

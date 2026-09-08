@@ -16,19 +16,33 @@
 # CIRISLensCore. Per-dimension PRs SHOULD reference back to this seed by id.
 
 metadata:
-  seed_version: 1.0
+  seed_version: 1.1
   seed_date: 2026-05-27
-  schema_version: 1.0
+  revised: 2026-09-08   # v1.1 — CIRISAgent#1139
+  schema_version: 1.1
   generator: "FOUR_BATCH_OVERLAP_ANALYSIS.md §4 + DIMENSIONS_GUIDE.md"
   source_repo: "https://github.com/CIRISAI/ciris-response-magnifica-humanitas"
   wire_format_version: "FSD-002 v1.4"
   language_primer_version: "1.1"
   totals:
     dimensions: 27
+    namespace_families: 26      # v1.1: D23 is a structural property, not a family
+    structural_properties: 1    # D23 (audit chain)
     strong_4: 16   # attested by all 4 batches
     strong_3: 11   # attested by 3 of 4 batches
     total_attestations: 933
     batches_in_corpus: 4
+  changelog:
+    - version: 1.1
+      date: 2026-09-08
+      issue: CIRISAgent#1139
+      changes:
+        - "D23 rendered as a structural property (audit chain): `accountability:*` was never a CC 3.1 registry family (114) nor in persist's supersets (104), and CIRISAgent emits no such string. 26 families + 1 structural property. D-id, filename (slug) and links unchanged."
+        - "`change_kinds:` + `record:` per dimension — the RATCHET 11+1 kinds-of-change taxonomy shared with CIRISConstitution rc4 (aggregate index `by_change_kind`)."
+        - "Two folded EU HLEG requirements named as sub-leaves, no new D-id: `accountability:human_in_control` (D23) and `autonomy:informational_self_determination` (D08). Promotion trigger: the EU AI Act as a fifth batch (Art. 14 / Art. 10)."
+    - version: 1.0
+      date: 2026-05-27
+      changes: ["initial four-batch seed"]
 
 batches:
   - id: magnifica_humanitas_v1
@@ -69,6 +83,19 @@ batches:
 # 19-29 with row 17-18 outliers omitted per analyst classification).
 # These ids are STABLE. Future seed versions may add D28+; never renumber.
 
+# RATCHET 11+1 — the kinds-of-change taxonomy (v1.1, CIRISAgent#1139).
+# RATCHET's calibration taxonomy is shared with the CIRIS Constitution (rc4) and
+# with the prompt architecture of the agents under test. The 27 dimensions are
+# the Record vocabulary; each is ABOUT one or more of the eleven. Per dimension
+# `change_kinds:` lists the eleven it is about; `record:` is the +1 — every
+# dimension is Record, `direct` where the dimension IS the record (the nine
+# below), `indirect` where the record is composed from it.
+change_kinds:
+  source: "RATCHET kinds-of-change taxonomy; CIRISConstitution rc4 carries the same map"
+  kinds: [facts, rules, manner, identity, priorities, confidence, circumstances, process, structure, model, premises]
+  plus_one: record
+  record_direct: [D09, D13, D14, D17, D18, D22, D23, D25, D27]
+
 dimensions:
 
   # ============================================================
@@ -78,6 +105,8 @@ dimensions:
   - id: D01
     prefix: non_maleficence:*
     tier: STRONG-4
+    change_kinds: [rules, premises]
+    record: indirect
     gloss: "Soft-harm-avoidance baseline (the soft-scalar above the prohibited:* floor)"
     attestations:
       MH: 28
@@ -113,6 +142,8 @@ dimensions:
   - id: D02
     prefix: integrity:*
     tier: STRONG-4
+    change_kinds: [model]
+    record: indirect
     gloss: "'System holds together' structural anchor — auditable, reproducible, lifecycle integrity"
     attestations: { MH: 10, EU: 36, IEEE: 42, ASEAN: 44, total: 132 }
     regulatory_attestations:
@@ -141,6 +172,8 @@ dimensions:
   - id: D03
     prefix: justice:*
     tier: STRONG-4
+    change_kinds: [rules, priorities]
+    record: indirect
     gloss: "Vulnerability-priority + fairness; tie-breaking modifier `justice:lexical_vulnerability_priority` (v1.3 CST closure) is four-source-corroborated"
     attestations: { MH: 19, EU: 22, IEEE: 30, ASEAN: 9, total: 80 }
     regulatory_attestations:
@@ -169,6 +202,8 @@ dimensions:
   - id: D04
     prefix: prohibited:*
     tier: STRONG-4
+    change_kinds: [rules, premises]
+    record: indirect
     gloss: "Categorical floor — polarity-(-1)/constitutional/species — the absolute moral form the wire format admits"
     attestations: { MH: 50, EU: 17, IEEE: 28, ASEAN: 9, total: 104 }
     regulatory_attestations:
@@ -197,6 +232,8 @@ dimensions:
   - id: D05
     prefix: detection:*
     tier: STRONG-4
+    change_kinds: [structure, model]
+    record: indirect
     gloss: "LensCore F-3 / RATCHET family — aggregate-correlation / structural-injustice / drift detection"
     attestations: { MH: 54, EU: 15, IEEE: 41, ASEAN: 16, total: 126 }
     regulatory_attestations:
@@ -225,6 +262,8 @@ dimensions:
   - id: D06
     prefix: goal:*
     tier: STRONG-4
+    change_kinds: [priorities, premises]
+    record: indirect
     gloss: "Multi-scale belonging composite — self/family/community/affiliations/species/planet"
     attestations: { MH: 34, EU: 6, IEEE: 13, ASEAN: 7, total: 60 }
     regulatory_attestations:
@@ -253,6 +292,8 @@ dimensions:
   - id: D07
     prefix: locality:decision:{scale}
     tier: STRONG-4
+    change_kinds: [rules, circumstances]
+    record: indirect
     gloss: "v1.3 subsidiarity closure — decision routing at lowest competent scale"
     attestations: { MH: 17, EU: 5, IEEE: 13, ASEAN: 7, total: 42 }
     regulatory_attestations:
@@ -281,6 +322,8 @@ dimensions:
   - id: D08
     prefix: autonomy:*
     tier: STRONG-4
+    change_kinds: [manner]
+    record: indirect
     gloss: "Human-centric design + informational self-determination"
     attestations: { MH: 7, EU: 15, IEEE: 21, ASEAN: 8, total: 51 }
     regulatory_attestations:
@@ -301,6 +344,11 @@ dimensions:
         language: "AI shall not erode human autonomy; informational self-determination"
         wire_form: "autonomy:informational_self_determination"
     wire_primitives: ["autonomy:*"]
+    sub_leaves:
+      - leaf: autonomy:informational_self_determination
+        folded_from: "EU HLEG requirement 3 'privacy & data governance'; ASEAN §B.4 (the wire_form above)"
+        status: "named sub-leaf of the autonomy:* family so a reviewer walking HLEG's seven finds it; not a separate dimension"
+        promotion_trigger: "EU AI Act Art. 10 (data governance) as a fifth batch; a promoted leaf allocates D28+ per stable_id_rule"
     ciris_compliance: { status: pending }
     monitors: { status: pending }
     accord_principle: autonomy
@@ -309,6 +357,8 @@ dimensions:
   - id: D09
     prefix: fidelity:*
     tier: STRONG-4
+    change_kinds: [facts]
+    record: direct
     gloss: "Faithful disclosure / faithful representation across lifecycle"
     attestations: { MH: 8, EU: 15, IEEE: 16, ASEAN: 26, total: 65 }
     regulatory_attestations:
@@ -337,6 +387,8 @@ dimensions:
   - id: D10
     prefix: beneficence:*
     tier: STRONG-4
+    change_kinds: [manner, premises]
+    record: indirect
     gloss: "Positive duty toward dignity / well-being / environmental stewardship"
     attestations: { MH: 11, EU: 15, IEEE: 16, ASEAN: 3, total: 45 }
     regulatory_attestations:
@@ -365,6 +417,8 @@ dimensions:
   - id: D11
     prefix: multilateral_participation:{forum}:{kind}
     tier: STRONG-4
+    change_kinds: [structure]
+    record: indirect
     gloss: "v1.3 closure for federation participation in external multilateral processes"
     attestations: { MH: 13, EU: 3, IEEE: 10, ASEAN: 11, total: 37 }
     regulatory_attestations:
@@ -393,6 +447,8 @@ dimensions:
   - id: D12
     prefix: conscience:*
     tier: STRONG-4
+    change_kinds: [manner, identity, priorities, confidence, process, premises]
+    record: indirect
     gloss: "Agent-side faculty layer — optimization veto, epistemic humility, coherence, alētheia"
     attestations: { MH: 9, EU: 3, IEEE: 9, ASEAN: 3, total: 24 }
     regulatory_attestations:
@@ -421,6 +477,8 @@ dimensions:
   - id: D13
     prefix: testimonial_witness:{kind}
     tier: STRONG-4
+    change_kinds: [facts]
+    record: direct
     gloss: "v1.4 affected-party-voice closure — preserves displaced/affected/marginalized voices in attestation"
     attestations: { MH: 11, EU: 2, IEEE: 2, ASEAN: 1, total: 16 }
     regulatory_attestations:
@@ -449,6 +507,8 @@ dimensions:
   - id: D14
     prefix: witness_diversity:*
     tier: STRONG-4
+    change_kinds: [confidence, structure]
+    record: direct
     gloss: "Stakeholder pluralism in design/testing/consultation"
     attestations: { MH: 3, EU: 3, IEEE: 16, ASEAN: 2, total: 24 }
     regulatory_attestations:
@@ -477,6 +537,8 @@ dimensions:
   - id: D15
     prefix: moderation:*
     tier: STRONG-4
+    change_kinds: [rules, process]
+    record: indirect
     gloss: "Federation self-correction layer (with IEEE shifting some load to partner_role:* ethics-board constructions)"
     attestations: { MH: 2, EU: 2, IEEE: 1, ASEAN: 1, total: "5+ with adjacent coverage" }
     regulatory_attestations:
@@ -505,6 +567,8 @@ dimensions:
   - id: D16
     prefix: method:*
     tier: STRONG-4
+    change_kinds: [process]
+    record: indirect
     gloss: "Operational-design discipline (densest family overall; convergence weaker than principles — admits source-genre asymmetry honestly)"
     attestations: { MH: 2, EU: 12, IEEE: 136, ASEAN: 36, total: 186 }
     regulatory_attestations:
@@ -538,6 +602,8 @@ dimensions:
   - id: D17
     prefix: transparency_log:*
     tier: STRONG-3
+    change_kinds: [process]
+    record: direct
     gloss: "CIRISVerify per-stakeholder disclosure log"
     attestations: { MH: 2, EU: 5, IEEE: 23, ASEAN: 10, total: 40 }
     absent_batch:
@@ -569,6 +635,8 @@ dimensions:
   - id: D18
     prefix: attestation:l{3,5}:*
     tier: STRONG-3
+    change_kinds: [identity, confidence]
+    record: direct
     gloss: "Verification ladder (L1-L5 hardware-rooted attestation)"
     attestations: { MH: 2, EU: 4, IEEE: 5, ASEAN: 0, total: 11 }
     absent_batch:
@@ -596,6 +664,8 @@ dimensions:
   - id: D19
     prefix: partner_role:*
     tier: STRONG-3
+    change_kinds: [rules]
+    record: indirect
     gloss: "CIRIS Registry partner-role taxonomy (ethics boards, audit bodies, stewards)"
     attestations: { MH: 0, EU: 1, IEEE: 19, ASEAN: 1, total: 21 }
     absent_batch:
@@ -624,6 +694,8 @@ dimensions:
   - id: D20
     prefix: approach:*
     tier: STRONG-3
+    change_kinds: [priorities, premises]
+    record: indirect
     gloss: "Decision-hierarchy strategic axis (Goal→Approach→Method→Progress-Measure DAG)"
     attestations: { MH: 5, EU: 3, IEEE: 23, ASEAN: 1, total: 32 }
     absent_batch:
@@ -650,6 +722,8 @@ dimensions:
   - id: D21
     prefix: progress_measure:*
     tier: STRONG-3
+    change_kinds: [facts, model]
+    record: indirect
     gloss: "Declared-metric outcomes for tracking progress toward goals"
     attestations: { MH: 1, EU: 1, IEEE: 8, ASEAN: 0, total: 10 }
     absent_batch:
@@ -676,6 +750,8 @@ dimensions:
   - id: D22
     prefix: expertise:*
     tier: STRONG-3
+    change_kinds: [facts, confidence]
+    record: direct
     gloss: "Declared competence in domain (named-expert attestation)"
     attestations: { MH: 1, EU: 1, IEEE: 10, ASEAN: 0, total: 12 }
     absent_batch:
@@ -700,9 +776,18 @@ dimensions:
     accord_principle: integrity
 
   - id: D23
-    prefix: accountability:*  # as named primary axis
+    kind: structural   # v1.1 (CIRISAgent#1139): a property the substrate enforces, NOT a namespace family
+    prefix: "structural (audit chain)"
+    slug: accountability   # filename + link stability: compliance/D23_accountability.md
+    former_prefix: accountability:*   # v1.0 label. Never a CC 3.1 registry family (114), never in persist's supersets (104), never emitted by CIRISAgent; CC 2.1's stray accountability:mode_shift removed in rc4.
+    structural_property:
+      mechanism: audit chain
+      statement: "Accountability is enforced, not declared: every action lands on the hash-chained, Ed25519 + ML-DSA-65 hybrid-signed audit log (ciris_server.LensAudit writes, persist audit_verify_chain walks), every decision carries a rationale, every WA resolution records the resolving account. Regulators name it as an axis; the substrate holds it as a property of the record."
+      registry_leaves: ["audit_chain:hash_continuity", "transparency_log:inclusion", "transparency_log:consistency"]   # CC 3.1 canonical leaves this property resolves to
     tier: STRONG-3
-    gloss: "Named accountability as primary axis (not just structural composition)"
+    change_kinds: [identity, structure]
+    record: direct
+    gloss: "Accountability as a structural property of the audit chain — regulators attest it as a named axis; CIRIS enforces it as a property of the record"
     attestations: { MH: 0, EU: 6, IEEE: 3, ASEAN: 19, total: 28 }
     absent_batch:
       - batch_id: magnifica_humanitas_v1
@@ -721,7 +806,12 @@ dimensions:
         citation: "§B.6 + §C.2 (19 attestations)"
         language: "accountability and integrity; human-in-control over AI-augmented decisions"
         wire_form: "accountability:human_in_control + accountability:lifecycle"
-    wire_primitives: ["accountability:{axis}", "accountability:human_in_control (ASEAN-distinctive — HITL/HOTL/HOOTL)"]
+    wire_primitives: []   # none — structural; nothing is emitted under a prefix for this dimension (see structural_property.registry_leaves)
+    sub_leaves:
+      - leaf: accountability:human_in_control
+        folded_from: "EU HLEG requirement 1 'human agency & oversight'; ASEAN §B.6 + §C.2 human-in-control (HITL/HOTL/HOOTL gradient)"
+        status: "named so a reviewer walking HLEG's seven finds it; single-source-STRONG; not a registry family, not emitted"
+        promotion_trigger: "EU AI Act Art. 14 (human oversight) as a fifth batch promotes it under the STRONG rule; a promoted leaf allocates D28+ per stable_id_rule"
     ciris_compliance: { status: pending }
     monitors: { status: pending }
     accord_principle: fidelity
@@ -730,6 +820,8 @@ dimensions:
   - id: D24
     prefix: reconsideration:*
     tier: STRONG-3
+    change_kinds: [circumstances, process]
+    record: indirect
     gloss: "Reverse-axis appeal / rollback / negotiation-reopening primitive"
     attestations: { MH: 3, EU: 2, IEEE: 1, ASEAN: 0, total: 6 }
     absent_batch:
@@ -756,6 +848,8 @@ dimensions:
   - id: D25
     prefix: credits:*  # substrate_building subject specifically
     tier: STRONG-3
+    change_kinds: [structure]
+    record: direct
     gloss: "Commons Credits substrate-building recognition (non-monetary contribution attestation)"
     attestations: { MH: 4, EU: 1, IEEE: 4, ASEAN: 0, total: 9 }
     absent_batch:
@@ -782,6 +876,8 @@ dimensions:
   - id: D26
     prefix: key_boundary:*
     tier: STRONG-3
+    change_kinds: [identity, structure]
+    record: indirect
     gloss: "CIRISEdge encryption key boundary attestation (cryptographic trust scoping)"
     attestations: { MH: 0, EU: 2, IEEE: 7, ASEAN: 2, total: 11 }
     absent_batch:
@@ -809,6 +905,8 @@ dimensions:
   - id: D27
     prefix: provenance:*
     tier: STRONG-3
+    change_kinds: [identity, model]
+    record: direct
     gloss: "Build manifest provenance (foundational technical-infrastructure attestation)"
     attestations: { MH: 0, EU: 1, IEEE: 1, ASEAN: 1, total: 3 }
     absent_batch:
@@ -853,6 +951,23 @@ aggregate_indices:
     STRONG_3: [D17, D18, D19, D20, D21, D22, D23, D24, D25, D26, D27]
 
   # By absent batch (STRONG-3 only)
+  by_change_kind:   # v1.1 — the RATCHET 11+1 map (CIRISAgent#1139)
+    facts: [D09, D13, D21, D22]
+    rules: [D01, D03, D04, D07, D15, D19]
+    manner: [D08, D10, D12]
+    identity: [D12, D18, D23, D26, D27]
+    priorities: [D03, D06, D12, D20]
+    confidence: [D12, D14, D18, D22]
+    circumstances: [D07, D24]
+    process: [D12, D15, D16, D17, D24]
+    structure: [D05, D11, D14, D23, D25, D26]
+    model: [D02, D05, D21, D27]
+    premises: [D01, D04, D06, D10, D12, D20]
+    record: all
+    record_direct: [D09, D13, D14, D17, D18, D22, D23, D25, D27]
+  by_kind:
+    namespace_family: [D01, D02, D03, D04, D05, D06, D07, D08, D09, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D20, D21, D22, D24, D25, D26, D27]
+    structural_property: [D23]
   absent_in_MH: [D19, D23, D26, D27]
   absent_in_ASEAN: [D18, D21, D22, D24, D25]
   low_density_MH_but_nonzero: [D17]
@@ -999,4 +1114,6 @@ maintenance:
     - "MINOR bump: new dimensions added, new batches added, tier promotions/demotions"
     - "PATCH bump: regulatory_attestation language refinements, ciris_compliance pointer fills, monitor binding fills"
 
+  kind_rule: "A dimension is a namespace family unless kind: structural. A structural dimension keeps its D-id and slug, carries no wire_primitives, and names the CC 3.1 registry leaves its property resolves to."
+  change_kinds_rule: "Every dimension lists the RATCHET kinds it is about (change_kinds) and whether it is the record directly (record: direct) or composes into it (indirect). A new dimension MUST be placed in the map before it ships."
   stable_id_rule: "Dimension ids D01-D27 are STABLE. Future batches that surface new dimensions allocate D28+."

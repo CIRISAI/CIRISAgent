@@ -2,7 +2,9 @@
 
 > 'System holds together' structural anchor — auditable, reproducible, lifecycle integrity
 
-**Seed reference**: `SEED_DIMENSIONS.yaml` v1.0, dimension `D02` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
+**Kinds of change (RATCHET 11+1)**: model — Record: indirect
+
+**Seed reference**: `SEED_DIMENSIONS.yaml` v1.1, dimension `D02` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
 **Accord principle**: integrity
 **Attestation density**: MH=10 · EU=36 · IEEE=42 · ASEAN=44 · total=132
 

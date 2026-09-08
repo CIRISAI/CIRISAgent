@@ -2,7 +2,9 @@
 
 > Categorical floor — polarity-(-1)/constitutional/species — the absolute moral form the wire format admits
 
-**Seed reference**: `SEED_DIMENSIONS.yaml` v1.0, dimension `D04` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
+**Kinds of change (RATCHET 11+1)**: rules · premises — Record: indirect
+
+**Seed reference**: `SEED_DIMENSIONS.yaml` v1.1, dimension `D04` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
 **Accord principle**: non_maleficence
 **Attestation density**: MH=50 · EU=17 · IEEE=28 · ASEAN=9 · total=104
 

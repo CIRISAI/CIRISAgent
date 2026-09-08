@@ -46,7 +46,9 @@ Generator script + canonical seed live elsewhere:
 
 ## The 27 dimensions
 
-Stable IDs from `SEED_DIMENSIONS.yaml` v1.0. STRONG-4 = attested by all 4 regulatory batches (Magnifica Humanitas / EU HLEG / IEEE / ASEAN); STRONG-3 = attested by 3 of 4.
+Stable IDs from `SEED_DIMENSIONS.yaml` v1.1: **26 namespace families + 1 structural property** (D23, the audit chain — regulators attest accountability as a named axis; the substrate enforces it as a property of the record, and no `accountability:*` string is emitted). STRONG-4 = attested by all 4 regulatory batches (Magnifica Humanitas / EU HLEG / IEEE / ASEAN); STRONG-3 = attested by 3 of 4.
+
+Seed v1.1 (CIRISAgent#1139) also carries, per dimension, the **RATCHET 11+1 kinds of change** (`change_kinds:` — facts · rules · manner · identity · priorities · confidence · circumstances · process · structure · model · premises, plus Record as the +1 every dimension is), so the D-map and the calibration taxonomy shared with the CIRIS Constitution are one list, not two; and it names two folded EU HLEG requirements as sub-leaves without a new D-id: `accountability:human_in_control` (D23, HLEG "human agency & oversight") and `autonomy:informational_self_determination` (D08, HLEG "privacy & data governance"). The EU AI Act as a fifth batch (Art. 14 / Art. 10) is the mechanical promotion trigger.
 
 ### STRONG-4 (D01–D16) — universal four-source convergence
 
@@ -79,7 +81,7 @@ Stable IDs from `SEED_DIMENSIONS.yaml` v1.0. STRONG-4 = attested by all 4 regula
 | [D20](D20_approach.md) | `approach:*` | Decision-hierarchy strategic axis (Goal→Approach→Method→Progress-Measure) |
 | [D21](D21_progress_measure.md) | `progress_measure:*` | Declared-metric outcomes for tracking progress toward goals |
 | [D22](D22_expertise.md) | `expertise:*` | Declared competence in domain (named-expert attestation) |
-| [D23](D23_accountability.md) | `accountability:*` | Named accountability as primary axis |
+| [D23](D23_accountability.md) | structural (audit chain) | Accountability as a property of the audit chain, not a family — `accountability:*` retired in v1.1 |
 | [D24](D24_reconsideration.md) | `reconsideration:*` | Reverse-axis appeal / rollback / negotiation-reopening |
 | [D25](D25_credits.md) | `credits:*` | Commons Credits substrate-building recognition |
 | [D26](D26_key_boundary.md) | `key_boundary:*` | CIRISEdge encryption key boundary attestation |

@@ -2,7 +2,9 @@
 
 > Reverse-axis appeal / rollback / negotiation-reopening primitive
 
-**Seed reference**: `SEED_DIMENSIONS.yaml` v1.0, dimension `D24` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
+**Kinds of change (RATCHET 11+1)**: circumstances · process — Record: indirect
+
+**Seed reference**: `SEED_DIMENSIONS.yaml` v1.1, dimension `D24` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
 **Accord principle**: integrity
 **Attestation density**: MH=3 · EU=2 · IEEE=1 · ASEAN=0 · total=6
 

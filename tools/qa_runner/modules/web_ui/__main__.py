@@ -1422,12 +1422,30 @@ class DesktopAppTestRunner:
 
                 home = Path(os.environ.get("CIRIS_HOME") or (Path.home() / "ciris"))
                 env_path = home / ".env"
-                try:
-                    body = env_path.read_text(encoding="utf-8", errors="replace")
-                except OSError as exc:
-                    raise RuntimeError(f"cannot read {env_path} to confirm the choice was recorded: {exc}") from exc
-
-                flag = [l.strip() for l in body.splitlines() if l.strip().startswith("CIRIS_RUN_WITHOUT_AI=")]
+                # THE WIZARD'S COMPLETE STEP RACES THE ROUTE. `setup_complete` above
+                # keys on the UI leaving the wizard, which happens when the user
+                # clicks finish -- while POST /v1/setup/complete is still running.
+                # On macOS (run 34257133016) this read came 12 ms after the agent
+                # began writing the file and reported "the agent never recorded the
+                # choice" about a flag that landed a moment later; Linux read 250 ms
+                # after the write and passed. Wait for the positive observation: the
+                # route finishes within a second, so 20 s is a bound, not a sleep.
+                flag: List[str] = []
+                body = ""
+                deadline = time.time() + 20
+                while time.time() < deadline:
+                    try:
+                        body = env_path.read_text(encoding="utf-8", errors="replace")
+                    except OSError:
+                        body = ""
+                    flag = [l.strip() for l in body.splitlines() if l.strip().startswith("CIRIS_RUN_WITHOUT_AI=")]
+                    if flag:
+                        break
+                    await asyncio.sleep(0.25)
+                if not flag and not env_path.exists():
+                    raise RuntimeError(
+                        f"cannot read {env_path} to confirm the choice was recorded: it does not exist 20s after the wizard finished"
+                    )
                 if not flag:
                     disabled = "CIRIS_SERVICES_DISABLED=true" in body
                     raise RuntimeError(
@@ -4192,8 +4210,15 @@ async def run_flow_specs(args: argparse.Namespace) -> int:
             if report:
                 print(f"  report: {report}")
             if not ok:
+                # Nothing was driven and the surface is not there: the first
+                # step failed in `requires`, or in `expect` with no `do` (a
+                # step that only asserts the surface exists). Either way the
+                # flow never exercised anything -- "cannot start", not broken.
                 first = runner.results[0] if runner.results else None
-                if len(runner.results) == 1 and first is not None and first.phase == "requires":
+                untouched = first is not None and len(runner.results) == 1 and (
+                    first.phase == "requires" or (first.phase == "expect" and not spec.steps[0].do)
+                )
+                if untouched:
                     cannot_start.append((spec.flow, first.detail))
                 else:
                     overall = 1

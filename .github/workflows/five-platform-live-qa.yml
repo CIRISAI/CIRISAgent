@@ -1003,6 +1003,19 @@ jobs:
         run: |
           set +e
           mkdir -p artifacts/logs artifacts/cmdlogs
+          # SIMULATOR CRASH REPORTS. An iOS SIGABRT shows up in oslog as one launchd
+          # line ("exited due to SIGABRT … ran for 36620ms", run 34272658734) and
+          # the reason is in the .ips report macOS writes under DiagnosticReports,
+          # which nothing collected -- CIRISClient#50 was filed without it. Only
+          # reports from this job's window, so a runner's stale crashes stay out.
+          if [ "${RUNNER_OS}" = "macOS" ]; then
+            mkdir -p artifacts/cmdlogs/ios-crashes
+            find "$HOME/Library/Logs/DiagnosticReports" -maxdepth 1 -type f \
+              \( -name '*.ips' -o -name '*.crash' \) -mmin -240 \
+              -exec cp {} artifacts/cmdlogs/ios-crashes/ \; 2>/dev/null
+            n=$(ls artifacts/cmdlogs/ios-crashes 2>/dev/null | wc -l | tr -d ' ')
+            echo "simulator crash reports collected: $n"
+          fi
           # Agent + node logs per platform home.
           for d in "${RUNNER_TEMP}"/ciris-*; do
             [ -d "$d" ] || continue

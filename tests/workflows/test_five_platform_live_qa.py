@@ -450,3 +450,13 @@ def test_the_per_platform_script_is_plain_text(spec: Dict[str, Any]) -> None:
                 assert "MATRIX_PLATFORMS" in (step.get("env") or {})
                 return
     raise AssertionError("the qa step is missing")
+
+
+def test_simulator_crash_reports_are_collected(raw: str) -> None:
+    """An iOS SIGABRT is one launchd line in oslog; the reason lives in the .ips
+    report under DiagnosticReports (CIRISClient#50 was filed without it)."""
+    i = raw.find("Library/Logs/DiagnosticReports")
+    assert i > 0, "the collect step does not gather simulator crash reports"
+    around = raw[i - 600 : i + 400]
+    assert "ios-crashes" in around and "*.ips" in around
+    assert 'if: always()' in raw[raw.rfind("- name: Collect artifacts", 0, i) : i], "collection must run on failure too"

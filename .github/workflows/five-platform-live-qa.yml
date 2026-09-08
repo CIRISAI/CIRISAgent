@@ -1010,11 +1010,23 @@ jobs:
           # reports from this job's window, so a runner's stale crashes stay out.
           if [ "${RUNNER_OS}" = "macOS" ]; then
             mkdir -p artifacts/cmdlogs/ios-crashes
-            find "$HOME/Library/Logs/DiagnosticReports" -maxdepth 1 -type f \
-              \( -name '*.ips' -o -name '*.crash' \) -mmin -240 \
-              -exec cp {} artifacts/cmdlogs/ios-crashes/ \; 2>/dev/null
+            # THE APP'S REPORT IS INSIDE THE DEVICE, not on the host. The first
+            # version searched only ~/Library/Logs/DiagnosticReports and collected
+            # exactly one file -- xcodebuild's own abort (run 34283596992) -- while
+            # the iosApp SIGABRT this exists for sat in the simulator container at
+            # ~/Library/Developer/CoreSimulator/Devices/<UDID>/data/Library/Logs/
+            # DiagnosticReports. Search both, and keep the process name in the
+            # filename so a host crash cannot be mistaken for the app's.
+            for root in "$HOME/Library/Logs/DiagnosticReports" \
+                        "$HOME/Library/Logs/CoreSimulator" \
+                        "$HOME/Library/Developer/CoreSimulator/Devices"; do
+              [ -d "$root" ] || continue
+              find "$root" -type f \( -name '*.ips' -o -name '*.crash' \) -mmin -240 \
+                -exec cp {} artifacts/cmdlogs/ios-crashes/ \; 2>/dev/null
+            done
             n=$(ls artifacts/cmdlogs/ios-crashes 2>/dev/null | wc -l | tr -d ' ')
-            echo "simulator crash reports collected: $n"
+            app=$(grep -l -i "iosApp\|ai.ciris.mobile" artifacts/cmdlogs/ios-crashes/* 2>/dev/null | wc -l | tr -d ' ')
+            echo "simulator crash reports collected: $n ($app naming the app)"
           fi
           # Agent + node logs per platform home.
           for d in "${RUNNER_TEMP}"/ciris-*; do

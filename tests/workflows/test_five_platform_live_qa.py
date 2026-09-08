@@ -455,8 +455,13 @@ def test_the_per_platform_script_is_plain_text(spec: Dict[str, Any]) -> None:
 def test_simulator_crash_reports_are_collected(raw: str) -> None:
     """An iOS SIGABRT is one launchd line in oslog; the reason lives in the .ips
     report under DiagnosticReports (CIRISClient#50 was filed without it)."""
-    i = raw.find("Library/Logs/DiagnosticReports")
+    i = raw.find("mkdir -p artifacts/cmdlogs/ios-crashes")
     assert i > 0, "the collect step does not gather simulator crash reports"
-    around = raw[i - 600 : i + 400]
+    around = raw[i : i + 1800]
+    assert "Library/Logs/DiagnosticReports" in around
     assert "ios-crashes" in around and "*.ips" in around
+    # The APP's report is inside the simulator container; the host directory alone
+    # collected only xcodebuild's own abort (run 34283596992).
+    assert "CoreSimulator/Devices" in around, "the simulator device containers are not searched"
+    assert "naming the app" in around, "the count must distinguish the app's crash from a host crash"
     assert 'if: always()' in raw[raw.rfind("- name: Collect artifacts", 0, i) : i], "collection must run on failure too"

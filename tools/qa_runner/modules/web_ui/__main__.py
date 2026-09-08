@@ -1437,13 +1437,29 @@ class DesktopAppTestRunner:
                         f"node read API at {login_base}: {'up' if node_up else 'NOT up after 60s'} "
                         f"(waited for the post-setup hand-off before asserting the announce)"
                     )
-                r = await http.post(
-                    f"{login_base}/v1/auth/login",
-                    json={"username": username, "password": password},
-                )
-                r.raise_for_status()
-                headers = {"Authorization": f"Bearer {r.json()['access_token']}"}
-                check = await check_announce_bundle(http, node_url, headers)
+                # NAME THE PEER THAT DROPPED US. Everything in this block talks to
+                # the NODE (:4243 on a no-AI leg, the agent proxy otherwise) -- never
+                # to the client's automation server on :9091. But a transport error
+                # escaping here reaches run_test, whose classifier reads any
+                # ConnectError/ReadError/RemoteProtocolError as "the client's
+                # automation server stopped answering" -- and matrix #5 (macOS, iOS)
+                # reported exactly that for a bare ReadError from the exec'd node
+                # during the announce POST. Wrong peer, wrong owner, wrong bug.
+                try:
+                    r = await http.post(
+                        f"{login_base}/v1/auth/login",
+                        json={"username": username, "password": password},
+                    )
+                    r.raise_for_status()
+                    headers = {"Authorization": f"Bearer {r.json()['access_token']}"}
+                    check = await check_announce_bundle(http, node_url, headers)
+                except httpx.TransportError as exc:
+                    raise RuntimeError(
+                        f"the NODE at {login_base} dropped the connection during login/announce: "
+                        f"{type(exc).__name__}: {exc or '(no detail)'} -- this is the ciris-server "
+                        f"read API, not the client's automation server; the node's own log "
+                        f"(ciris-server.log.*) around this moment is the evidence"
+                    ) from exc
             for line in check.render().splitlines():
                 self._log(line)
             if check.status in ("unreachable", "not_reported"):

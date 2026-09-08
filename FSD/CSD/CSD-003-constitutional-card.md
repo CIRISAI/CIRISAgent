@@ -6,7 +6,7 @@
 **Author**: CIRIS Development Team
 **Date**: 2026-09-07
 **Flow**: tools/qa_runner/flows/constitutional_card.yaml
-**Client floor**: >=0.5.208
+**Client floor**: >0.5.212
 **Origin**: CIRISClient#45
 **Standard**: `FSD/CSD_STANDARD.md`
 
@@ -77,7 +77,10 @@ description: >-
   cards. The killswitch card is the reason this flow is not optional: it is a
   safety surface, and a safety surface that silently fails to render is worse
   than one that is absent, because the absence is at least visible.
-client: ">=0.5.208"
+# CIRISClient#45 is unmerged (2026-09-08): no released client carries this surface.
+# Bump to the release that ships #45 when it is cut; until then every released
+# client is refused as "cannot start" rather than driven into "element not found".
+client: ">0.5.212"
 
 steps:
   - step_id: constitutional_screen

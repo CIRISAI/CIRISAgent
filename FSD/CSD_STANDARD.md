@@ -57,7 +57,11 @@ addressable by machines:
 ```
 
 `Flow` is the executable half. `Client floor` is the version the flow was written
-against — a floor, not a pin (CIRISClient#39): running the flow on an older client is
+against — a floor, not a pin (CIRISClient#39). Two forms: `>=X.Y.Z` (written against
+release X.Y.Z) and `>X.Y.Z` (*no released client at or below X.Y.Z carries the surface*
+— the flow describes an unmerged client PR; the floor is bumped to the carrying release
+when it is cut, and until then every released client is refused as "cannot start").
+Running the flow on an older client is
 **refused loudly**, because a tag that does not exist yet fails as *element not
 found*, which is indistinguishable from a broken app.
 
@@ -238,7 +242,7 @@ Stdlib-only, wired into `build.yml` beside `check_evidence.py`. It fails on:
 | the embedded block differs from the file | the spec and the test disagree — the exact drift #39 is about |
 | a flow file with no CSD, or with two | a test with no spec, or two specs for one test |
 | the flow's `flow:` id differs from the CSD's filename slug | a CSD titled for one surface driving another |
-| `Client floor` absent or unparseable | the flow cannot refuse an older client loudly |
+| `Client floor` absent or unparseable (`>=X.Y.Z` / `>X.Y.Z`) | the flow cannot refuse an older client loudly |
 | a §3 source that is neither a path nor the word `unconfirmed` | a guessed endpoint is worse than a named unknown |
 | any CSD not listed in `FSD/CSD/README.md` | the registry is the registry |
 

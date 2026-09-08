@@ -4187,8 +4187,11 @@ async def run_flow_specs(args: argparse.Namespace) -> int:
         for spec in specs:
             refusal = check_client_floor(spec.client_floor, client_version)
             if refusal:
+                # The flow says which client it needs and this is not it: the
+                # flow cannot start here. Reported, not failed -- and once the
+                # floor is met, every expectation in it is binding.
                 print(f"\n FLOW {spec.flow} — REFUSED\n   {refusal}")
-                overall = 1
+                cannot_start.append((spec.flow, refusal))
                 continue
             # REACH THE STARTING SCREEN FIRST. A flow states where it starts
             # (its first step's `requires: screen:`) and never encodes the hop;
@@ -4197,6 +4200,7 @@ async def run_flow_specs(args: argparse.Namespace) -> int:
             # `requires` then asserts arrival, so a hop that did not land is
             # reported as "this flow cannot start here", with the drivable set.
             start = spec.steps[0].requires.screen if spec.steps else None
+            nav_err = None
             if start:
                 nav_err = await helper.navigate_to_surface(start)
                 if nav_err:
@@ -4210,13 +4214,16 @@ async def run_flow_specs(args: argparse.Namespace) -> int:
             if report:
                 print(f"  report: {report}")
             if not ok:
-                # Nothing was driven and the surface is not there: the first
-                # step failed in `requires`, or in `expect` with no `do` (a
-                # step that only asserts the surface exists). Either way the
-                # flow never exercised anything -- "cannot start", not broken.
+                # "Cannot start" is ONLY: the sidebar hop did not land, or the
+                # first step's `requires` did not hold. A first step whose
+                # `expect` fails on the right screen is a real verdict -- an
+                # entry card that stopped rendering must redden the leg, which
+                # is what the flow exists to catch (review on #1158). What the
+                # pinned client does not carry at all is the `client:` floor's
+                # job, refused above.
                 first = runner.results[0] if runner.results else None
-                untouched = first is not None and len(runner.results) == 1 and (
-                    first.phase == "requires" or (first.phase == "expect" and not spec.steps[0].do)
+                untouched = nav_err is not None or (
+                    first is not None and len(runner.results) == 1 and first.phase == "requires"
                 )
                 if untouched:
                     cannot_start.append((spec.flow, first.detail))

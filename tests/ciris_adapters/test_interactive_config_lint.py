@@ -213,3 +213,20 @@ def test_an_out_of_tree_manifest_with_field_id_still_loads(caplog: pytest.LogCap
     assert both.name == "a", "when both are present the canonical key wins"
     with pytest.raises(Exception):
         ConfigurationFieldDefinition.model_validate({"type": "string"})  # neither: still a nameless field
+
+
+def test_a_legacy_optional_step_keeps_its_requiredness(caplog: pytest.LogCaptureFixture) -> None:
+    """`optional: false` from a pre-#1154 manifest meant mandatory; with `required`
+    the one key, it must not silently become skippable (review on #1158)."""
+    from ciris_engine.schemas.runtime.manifest import ConfigurationStep
+
+    base = {"step_id": "s1", "step_type": "select", "title": "t", "description": "d"}
+    with caplog.at_level("WARNING"):
+        mandatory = ConfigurationStep.model_validate({**base, "optional": False})
+    assert mandatory.required is True
+    assert "optional" not in (mandatory.model_extra or {})
+    assert "retired key `optional`" in caplog.text
+    skippable = ConfigurationStep.model_validate({**base, "optional": True})
+    assert skippable.required is False
+    both = ConfigurationStep.model_validate({**base, "optional": True, "required": True})
+    assert both.required is True, "the canonical key wins when both are present"

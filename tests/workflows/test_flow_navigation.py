@@ -111,3 +111,17 @@ async def test_already_there_is_a_no_op() -> None:
     fake = _FakeSidebar()
     fake.screen = "LayerFamily"
     assert await fake.navigate_to_surface("LayerFamily") is None and fake.clicks == []
+
+
+def test_cannot_start_is_only_a_hop_or_precondition_failure() -> None:
+    """Source-level guard (the runner drives a live app): a first step whose
+    `expect` fails on the right screen is a real verdict, never "cannot start"."""
+    import inspect
+
+    from tools.qa_runner.modules.web_ui.__main__ import run_flow_specs
+
+    src = inspect.getsource(run_flow_specs)
+    assert "untouched = nav_err is not None or (" in src
+    assert 'first.phase == "requires"' in src
+    assert 'first.phase == "expect"' not in src, "an expect failure must not be classified as cannot-start"
+    assert "cannot_start.append((spec.flow, refusal))" in src, "a floor refusal is cannot-start, not a red leg"

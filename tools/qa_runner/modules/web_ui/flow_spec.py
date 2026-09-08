@@ -228,13 +228,25 @@ def check_client_floor(floor: Optional[str], actual: Optional[str]) -> Optional[
     """
     if not floor:
         return None
-    m = re.match(r"^>=\s*([0-9]+(?:\.[0-9]+)*)$", str(floor).strip())
+    # `>=X`: written against release X. `>X`: the surface is in NO release at or
+    # below X (an unmerged client PR, e.g. CIRISClient#45) -- the floor is bumped
+    # to the release that carries it when that release is cut, and until then
+    # every released client is refused rather than driven into "element not
+    # found". A local-segment build (preview) of X satisfies `>=X`, not `>X`.
+    m = re.match(r"^(>=|>)\s*([0-9]+(?:\.[0-9]+)*)$", str(floor).strip())
     if not m:
-        return f"`client: {floor!r}` is not understood; use e.g. \">=0.5.208\""
+        return f"`client: {floor!r}` is not understood; use e.g. \">=0.5.208\" or \">0.5.212\""
     if not actual:
         return None  # cannot tell; do not invent a refusal
-    want = [int(x) for x in m.group(1).split(".")]
+    strict = m.group(1) == ">"
+    want = [int(x) for x in m.group(2).split(".")]
     have = [int(x) for x in actual.split("+", 1)[0].split(".") if x.isdigit()]
+    if strict and have <= want:
+        return (
+            f"this flow drives a surface no released client at or below {m.group(2)} carries "
+            f"(`client: {floor}`), and {actual} is installed — it cannot start here until the "
+            "floor names the release that ships the surface"
+        )
     if have < want:
         return (
             f"this flow is written against ciris-client {floor}, but {actual} is installed — "

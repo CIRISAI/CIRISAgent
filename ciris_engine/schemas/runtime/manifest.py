@@ -273,6 +273,29 @@ class ConfigurationStep(BaseModel):
 
     model_config = ConfigDict(extra="allow", defer_build=True)  # Allow additional step-specific properties
 
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_legacy_optional(cls, data: Any) -> Any:
+        """Read the retired `optional` spelling as the inverse of `required`; never write it.
+
+        With `extra="allow"` an out-of-tree `optional: false` step validated
+        silently while `required` kept its default (False) -- a step the author
+        marked mandatory became skippable, and the wizard accepted an empty
+        selection for it. `required` wins when both are present.
+        """
+        if isinstance(data, dict) and "optional" in data:
+            data = dict(data)
+            legacy = data.pop("optional")
+            if "required" not in data:
+                data["required"] = not bool(legacy)
+            logging.getLogger(__name__).warning(
+                "interactive_config step %r uses the retired key `optional`; read as required=%s. "
+                "Run tools/dev/migrate_interactive_config.py on this manifest (CIRISClient#39).",
+                data.get("step_id"),
+                data.get("required"),
+            )
+        return data
+
 
 class InteractiveConfiguration(BaseModel):
     """Interactive configuration definition for adapters.

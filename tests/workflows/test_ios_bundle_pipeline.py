@@ -130,3 +130,13 @@ def test_the_staging_runs_before_the_app_is_built() -> None:
     stage = wf.index("update_substrate_libs --platform ios")
     build = wf.index("Build + deploy the iOS app to the simulator")
     assert stage < build, "substrate is staged after the app is built"
+
+
+def test_ios_keeps_the_process_run_mode_override_across_dotenv() -> None:
+    """kmp_main -> setup_ios_environment loads .env with override=True before
+    node_only_config() runs; the environment-wins veto must survive it (review on #1158)."""
+    src = Path("apps/ios/Resources/app/ciris_ios/ios_main.py").read_text(encoding="utf-8")
+    i = src.index("load_dotenv(env_file, override=True)")
+    around = src[i - 600 : i + 500]
+    assert "_run_mode_overrides" in around and "CIRIS_RUN_WITHOUT_AI" in around
+    assert "os.environ[k] = v" in around

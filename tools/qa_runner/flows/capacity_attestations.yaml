@@ -5,7 +5,10 @@ description: >-
   point of the change is that the data is real, so the assertion is on
   `federation_capacity_live` and not merely on the card: a gate placeholder
   would satisfy the card tag alone.
-client: ">=0.5.208"
+# CIRISClient#45 is unmerged (2026-09-08): no released client carries this surface.
+# Bump to the release that ships #45 when it is cut; until then every released
+# client is refused as "cannot start" rather than driven into "element not found".
+client: ">0.5.212"
 
 steps:
   - step_id: attestations_section

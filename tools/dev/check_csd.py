@@ -12,7 +12,7 @@ Checks, each a FAIL:
   - the embedded ```yaml block differs from that file             (spec and test disagree)
   - a flow file under tools/qa_runner/flows with no CSD, or two   (test with no spec)
   - the flow's ``flow:`` id is not the CSD filename's slug        (spec for one surface driving another)
-  - ``Client floor`` absent or not ``>=X.Y.Z``                    (cannot refuse an older client loudly)
+  - ``Client floor`` absent or not ``>=X.Y.Z`` / ``>X.Y.Z``         (cannot refuse an older client loudly)
   - a §3 source cell that is neither a route/path nor ``unconfirmed``
                                                                    (a guessed endpoint is worse than a named unknown)
   - a CSD not listed in FSD/CSD/README.md                         (the registry is the registry)
@@ -35,7 +35,9 @@ INDEX = CSD_DIR / "README.md"
 
 _MARKER = re.compile(r"<!-- flow: (?P<path>[^ ]+) -->\n```yaml\n(?P<body>.*?)\n```", re.S)
 _HEADER = re.compile(r"^\*\*(?P<key>[A-Za-z ]+)\*\*: (?P<val>.+)$", re.M)
-_FLOOR = re.compile(r"^>=\s*\d+(?:\.\d+)+$")
+# `>=X.Y.Z`: written against X.Y.Z. `>X.Y.Z`: no released client at or below X.Y.Z
+# carries the surface (an unmerged client PR); bumped when the carrying release is cut.
+_FLOOR = re.compile(r"^(?:>=|>)\s*\d+(?:\.\d+)+$")
 #: A §3 source is a route (`/v1/...`), a backticked path, or the literal word.
 _SOURCE_OK = re.compile(r"(`/[^`]+`|/v1/|/lens/|\bunconfirmed\b)")
 
@@ -69,7 +71,7 @@ def check_one(path: Path, msgs: list[str], seen_flows: dict[str, Path]) -> None:
 
     floor = hdr.get("Client floor", "")
     if not _FLOOR.match(floor):
-        _fail(msgs, f"{path.name}: Client floor {floor!r} is not of the form >=X.Y.Z")
+        _fail(msgs, f"{path.name}: Client floor {floor!r} is not of the form >=X.Y.Z or >X.Y.Z")
 
     m = _MARKER.search(text)
     if not m:

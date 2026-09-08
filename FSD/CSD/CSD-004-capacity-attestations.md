@@ -6,7 +6,7 @@
 **Author**: CIRIS Development Team
 **Date**: 2026-09-07
 **Flow**: tools/qa_runner/flows/capacity_attestations.yaml
-**Client floor**: >0.5.212
+**Client floor**: unreleased
 **Origin**: CIRISClient#45
 **Standard**: `FSD/CSD_STANDARD.md`
 
@@ -60,10 +60,12 @@ description: >-
   point of the change is that the data is real, so the assertion is on
   `federation_capacity_live` and not merely on the card: a gate placeholder
   would satisfy the card tag alone.
-# CIRISClient#45 is unmerged (2026-09-08): no released client carries this surface.
-# Bump to the release that ships #45 when it is cut; until then every released
-# client is refused as "cannot start" rather than driven into "element not found".
-client: ">0.5.212"
+# CIRISClient#45 is unmerged (2026-09-08): NO release carries this surface, so the
+# flow is refused as "cannot start" rather than driven into "element not found".
+# Replace with ">=<release>" when #45 ships. A numeric floor was tried first and
+# stopped refusing on the next client cut (0.5.213), turning these into binding
+# verdicts against a client that still lacks the screens.
+client: "unreleased"
 
 steps:
   - step_id: attestations_section

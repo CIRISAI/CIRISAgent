@@ -228,14 +228,25 @@ def check_client_floor(floor: Optional[str], actual: Optional[str]) -> Optional[
     """
     if not floor:
         return None
-    # `>=X`: written against release X. `>X`: the surface is in NO release at or
-    # below X (an unmerged client PR, e.g. CIRISClient#45) -- the floor is bumped
-    # to the release that carries it when that release is cut, and until then
-    # every released client is refused rather than driven into "element not
-    # found". A local-segment build (preview) of X satisfies `>=X`, not `>X`.
+    # THREE FORMS.
+    #   `>=X`        written against release X.
+    #   `>X`         no released client at or below X carries the surface.
+    #   `unreleased` NO release carries it at all -- the surface comes from an
+    #                unmerged PR (the CSD's Origin names it). This is the honest
+    #                form for that state and the one that does not chase: `>X`
+    #                stops refusing the moment X+1 ships, which on 0.5.213 turned
+    #                CIRISClient#45's flows into binding verdicts against a client
+    #                that still does not carry them, and reddened the gate.
+    #                Replaced by `>=<carrying release>` when the PR ships.
+    if str(floor).strip().lower() == "unreleased":
+        return (
+            "this flow drives a surface that no released client carries yet "
+            "(`client: unreleased` -- see the CSD's Origin); it runs when the CSD names "
+            "the release that ships it"
+        )
     m = re.match(r"^(>=|>)\s*([0-9]+(?:\.[0-9]+)*)$", str(floor).strip())
     if not m:
-        return f"`client: {floor!r}` is not understood; use e.g. \">=0.5.208\" or \">0.5.212\""
+        return f"`client: {floor!r}` is not understood; use e.g. \">=0.5.208\", \">0.5.212\" or \"unreleased\""
     if not actual:
         return None  # cannot tell; do not invent a refusal
     strict = m.group(1) == ">"

@@ -6,7 +6,7 @@
 **Author**: CIRIS Development Team
 **Date**: 2026-09-07
 **Flow**: tools/qa_runner/flows/delegation_card.yaml
-**Client floor**: >0.5.212
+**Client floor**: unreleased
 **Origin**: CIRISClient#45
 **Standard**: `FSD/CSD_STANDARD.md`
 
@@ -73,10 +73,12 @@ description: >-
   CIRISClient#45 wired DelegationScreen and reached it from the Family layer hub.
   This drives the whole surface: the card is present on the hub, it opens, the
   screen composes its three panels, refresh is live, and back returns to the hub.
-# CIRISClient#45 is unmerged (2026-09-08): no released client carries this surface.
-# Bump to the release that ships #45 when it is cut; until then every released
-# client is refused as "cannot start" rather than driven into "element not found".
-client: ">0.5.212"
+# CIRISClient#45 is unmerged (2026-09-08): NO release carries this surface, so the
+# flow is refused as "cannot start" rather than driven into "element not found".
+# Replace with ">=<release>" when #45 ships. A numeric floor was tried first and
+# stopped refusing on the next client cut (0.5.213), turning these into binding
+# verdicts against a client that still lacks the screens.
+client: "unreleased"
 
 steps:
   - step_id: family_hub

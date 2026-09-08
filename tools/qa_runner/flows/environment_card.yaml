@@ -5,10 +5,12 @@ description: >-
   layer hub and wired its back navigation. Both directions are asserted: an
   entry that cannot be left is a trap, and it is the half that usually ships
   broken because nobody drives it twice.
-# CIRISClient#45 is unmerged (2026-09-08): no released client carries this surface.
-# Bump to the release that ships #45 when it is cut; until then every released
-# client is refused as "cannot start" rather than driven into "element not found".
-client: ">0.5.212"
+# CIRISClient#45 is unmerged (2026-09-08): NO release carries this surface, so the
+# flow is refused as "cannot start" rather than driven into "element not found".
+# Replace with ">=<release>" when #45 ships. A numeric floor was tried first and
+# stopped refusing on the next client cut (0.5.213), turning these into binding
+# verdicts against a client that still lacks the screens.
+client: "unreleased"
 
 steps:
   - step_id: local_community_hub

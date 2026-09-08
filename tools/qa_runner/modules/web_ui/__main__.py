@@ -1276,7 +1276,13 @@ class DesktopAppTestRunner:
             backend's CIRIS_HOME while the app waited on a different directory.
             Both halves looked healthy; the ownership was simply never taken.
             """
-            log = temp_path("ciris_desktop_setup.log")
+            # The launcher writes ONE LOG PER LAUNCH (ciris_desktop_setup.<stamp>.log)
+            # so the no-AI session survives the with-AI pass; read the newest. A
+            # stale fixed name here would fall into the "not observable" branch
+            # below and pass having read nothing -- the vacuous shape this gate
+            # has produced enough times to name.
+            candidates = sorted(temp_path(".").glob("ciris_desktop_setup.*.log"), key=lambda q: q.stat().st_mtime)
+            log = candidates[-1] if candidates else temp_path("ciris_desktop_setup.log")
             try:
                 with open(log, "r", encoding="utf-8", errors="replace") as fh:
                     lines = [ln for ln in fh if "claim_settled" in ln]
@@ -1394,6 +1400,29 @@ class DesktopAppTestRunner:
                 else f"http://127.0.0.1:{api_port}"
             )
             async with httpx.AsyncClient(timeout=30.0) as http:
+                # ON A NO-AI LEG THE NODE IS STILL COMING UP. setup/complete
+                # answers, then the agent execs into ciris-server, and the read
+                # API binds several seconds later -- on Windows the probe here
+                # fired 18ms after the exec and the node answered 6.4s after
+                # that (run #34177749800), so the check declared :4243
+                # "unreachable" and passed as NOT asserted. Wait for the node,
+                # bounded; only then is "unreachable" a finding.
+                if getattr(_args, "run_without_ai", False):
+                    node_deadline = asyncio.get_event_loop().time() + 60.0
+                    node_up = False
+                    while asyncio.get_event_loop().time() < node_deadline:
+                        try:
+                            probe = await http.get(f"{login_base}/v1/identity", timeout=3.0)
+                            if probe.status_code < 500:
+                                node_up = True
+                                break
+                        except Exception:  # noqa: BLE001 -- not up yet is the expected answer
+                            pass
+                        await asyncio.sleep(1.0)
+                    self._log(
+                        f"node read API at {login_base}: {'up' if node_up else 'NOT up after 60s'} "
+                        f"(waited for the post-setup hand-off before asserting the announce)"
+                    )
                 r = await http.post(
                     f"{login_base}/v1/auth/login",
                     json={"username": username, "password": password},
@@ -2259,6 +2288,13 @@ def _desktop_home(server: "object") -> str:
     return str(os.environ.get("CIRIS_HOME") or home or "")
 
 
+def _launch_stamp() -> str:
+    """UTC timestamp for a per-launch log name: sorts chronologically, never collides."""
+    import datetime as _dt
+
+    return _dt.datetime.now(_dt.timezone.utc).strftime("%Y%m%dT%H%M%S")
+
+
 def _desktop_urls(brain_base_url: str) -> "tuple[str, str]":
     """(CIRIS_API_URL, CIRIS_NODE_URL) for the desktop app — BOTH the brain.
 
@@ -2834,7 +2870,7 @@ async def run_desktop_up(args: argparse.Namespace) -> int:
         # SAME HOME AS THE BACKEND, or the app cannot see the files the node writes.
         if _home := _desktop_home(server):
             env["CIRIS_HOME"] = _home
-        log_path = temp_path("ciris_desktop_up.log")
+        log_path = temp_path(f"ciris_desktop_up.{_launch_stamp()}.log")
         with open(log_path, "w") as log:
             subprocess.Popen(
                 ["java", "-jar", str(jar)],
@@ -2962,7 +2998,16 @@ async def run_desktop_first_run_up(args: argparse.Namespace) -> int:
     # (the claim PIN in particular).
     if _home := _desktop_home(server):
         env["CIRIS_HOME"] = _home
-    log_path = temp_path("ciris_desktop_setup.log")
+    # ONE FILE PER LAUNCH. The gate launches the desktop app several times in a
+    # job (no-AI setup, no-AI login, reset, with-AI setup, ...), and a fixed name
+    # opened "w" meant the artifact carried only the LAST session's client log.
+    # The no-AI hand-off -- the one session whose client behaviour we most needed
+    # to read -- was overwritten by the with-AI pass every time, and a diagnosis
+    # of "the client kept polling :8080 after the hand-off" was in fact read
+    # from the with-AI client polling a backend that had died on a port collision
+    # (run #34147279506; corrected on CIRISClient#43). The collector globs
+    # ciris_desktop*.log, so a timestamped name is picked up with no other change.
+    log_path = temp_path(f"ciris_desktop_setup.{_launch_stamp()}.log")
     with open(log_path, "w") as log:
         subprocess.Popen(
             ["java", "-jar", str(jar)],

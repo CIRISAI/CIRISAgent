@@ -1413,7 +1413,15 @@ class DesktopAppTestRunner:
                 if getattr(_args, "run_without_ai", False)
                 else f"http://127.0.0.1:{api_port}"
             )
-            async with httpx.AsyncClient(timeout=30.0) as http:
+            # NO KEEP-ALIVE POOL. On a no-AI leg the peer behind :4243 changes
+            # identity mid-step (the agent-hosted fold dies, the exec'd node takes
+            # the port); a pooled socket opened to the first and reused against
+            # the second is the dropped read CIRISServer#568 diagnosed as ours.
+            # A fresh connection per request costs nothing here and removes the
+            # whole class.
+            async with httpx.AsyncClient(
+                timeout=30.0, limits=httpx.Limits(max_keepalive_connections=0, max_connections=4)
+            ) as http:
                 # ON A NO-AI LEG THE NODE IS STILL COMING UP. setup/complete
                 # answers, then the agent execs into ciris-server, and the read
                 # API binds several seconds later -- on Windows the probe here
@@ -1422,9 +1430,33 @@ class DesktopAppTestRunner:
                 # "unreachable" and passed as NOT asserted. Wait for the node,
                 # bounded; only then is "unreachable" a finding.
                 if getattr(_args, "run_without_ai", False):
-                    node_deadline = asyncio.get_event_loop().time() + 60.0
+                    # WAIT FOR THE TRANSITION, NOT FOR AN ANSWER. On a desktop no-AI
+                    # leg the agent-hosted node fold is ALREADY serving :4243 when
+                    # setup/complete returns; 0.25s later the agent execs into the
+                    # standalone node and the fold dies with it. "Something answers
+                    # on :4243" is therefore true before, during and after the
+                    # hand-off, and on macOS (run #34228782947) the announce landed on
+                    # the fold as the process was replaced: the node log shows the
+                    # write at 13:12:26, the exec'd node's boot at 13:12:27, and our
+                    # pooled connection died between them (CIRISServer#568, closed as
+                    # ours -- correctly). So: watch for :4243 to be REFUSED at least
+                    # once (the fold dying), then for it to answer again (the exec'd
+                    # node). If it is never refused within the grace window the
+                    # backend did not exec -- Android/iOS serve the fold in-process --
+                    # and the fold is the node to announce against.
+                    loop = asyncio.get_event_loop()
+                    saw_down = False
+                    grace = loop.time() + 4.0
+                    while loop.time() < grace:
+                        try:
+                            await http.get(f"{login_base}/v1/identity", timeout=1.0)
+                        except Exception:  # noqa: BLE001 -- refused/dropped IS the signal
+                            saw_down = True
+                            break
+                        await asyncio.sleep(0.2)
+                    node_deadline = loop.time() + 60.0
                     node_up = False
-                    while asyncio.get_event_loop().time() < node_deadline:
+                    while loop.time() < node_deadline:
                         try:
                             probe = await http.get(f"{login_base}/v1/identity", timeout=3.0)
                             if probe.status_code < 500:
@@ -1435,8 +1467,10 @@ class DesktopAppTestRunner:
                         await asyncio.sleep(1.0)
                     self._log(
                         f"node read API at {login_base}: {'up' if node_up else 'NOT up after 60s'} "
-                        f"(waited for the post-setup hand-off before asserting the announce)"
+                        + ("after the hand-off transition (fold down, node up)" if saw_down
+                           else "with no transition seen in 4s -- in-process fold, no exec")
                     )
+
                 # NAME THE PEER THAT DROPPED US. Everything in this block talks to
                 # the NODE (:4243 on a no-AI leg, the agent proxy otherwise) -- never
                 # to the client's automation server on :9091. But a transport error

@@ -266,7 +266,11 @@ class ConfigStepInfo(BaseModel):
     step_type: str = Field(..., description="Type of step (discovery, oauth, select, confirm)")
     title: str = Field(..., description="Step title")
     description: str = Field(..., description="Step description")
-    optional: bool = Field(False, description="Whether this step is optional")
+    required: bool = Field(False, description="Whether this step is required")
+    # DERIVED, NEVER SET. Kept on the wire for any consumer that still reads it,
+    # but computed from `required` so the two cannot disagree -- which is the
+    # whole reason the manifest schema no longer has both.
+    optional: bool = Field(True, description="DEPRECATED: derived as `not required`; read `required`")
 
 
 class ConfigurableAdapterInfo(BaseModel):

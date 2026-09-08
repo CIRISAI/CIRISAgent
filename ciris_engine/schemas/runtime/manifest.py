@@ -143,9 +143,13 @@ class AdapterDeviceAuthConfig(BaseModel):
 class ConfigurationFieldDefinition(BaseModel):
     """Definition of a field within an input step."""
 
-    # Field identification - supports both 'name' and 'field_id' patterns
-    name: Optional[str] = Field(None, description="Field name (alternative to field_id)")
-    field_id: Optional[str] = Field(None, description="Field identifier (alternative to name)")
+    # ONE KEY FOR THE FIELD'S IDENTITY. This carried `name` AND `field_id` as
+    # alternatives, both optional, so a field could have neither -- and 15 of
+    # 58 fields in the tree used one spelling while 43 used the other. Two
+    # spellings of one fact is how a reader ends up matching on the wrong one.
+    # `name` is required; `field_id` retires (migrated by
+    # tools/dev/migrate_interactive_config.py). CIRISClient#39.
+    name: str = Field(..., description="Field name -- the key this field writes")
     label: Optional[str] = Field(None, description="Human-readable label for the field")
 
     # Field type and input
@@ -164,6 +168,14 @@ class ConfigurationFieldDefinition(BaseModel):
 
     # Conditional display
     depends_on: Optional[Dict[str, Any]] = Field(None, description="Conditional display based on other fields")
+    # DECLARED BECAUSE THEY ARE USED. `options` is read by the client's
+    # ConfigFieldData; `sensitive` and `readonly` are written by manifests. With
+    # extra="allow" an undeclared key validates silently, and silence is how
+    # `field_id`, `field_name` and `optional` drifted in. The manifest lint
+    # rejects any key not declared here.
+    options: Optional[List[Any]] = Field(None, description="Static choices for a select-style field")
+    sensitive: bool = Field(False, description="Value is a secret: mask it, never log it")
+    readonly: bool = Field(False, description="Shown but not editable")
 
     model_config = ConfigDict(extra="allow", defer_build=True)  # Allow additional field-specific properties
 
@@ -203,24 +215,34 @@ class ConfigurationStep(BaseModel):
     )
     dynamic_fields: bool = Field(False, description="Whether fields are dynamically generated")
 
-    # Input step fields - simple single field (alternative to 'fields' list)
-    field: Optional[str] = Field(None, description="Single field name (simple input)")
-    field_name: Optional[str] = Field(None, description="Configuration field name for input/select steps")
+    # CONTENTS ARE ALWAYS `fields`. Three keys used to name what a step
+    # collects: `fields` (a list), `field_name` (one name, on select steps)
+    # and `field` (declared, used by nothing). A single field is a list of
+    # one, and a select step's output is a field like any other. `field` and
+    # `field_name` retire; the migration rewrites `field_name: x` as
+    # `fields: [{name: x}]`. CIRISClient#39.
     input_type: Optional[str] = Field(None, description="Input type (text, password, number)")
     placeholder: Optional[str] = Field(None, description="Placeholder text")
 
-    # Step requirements and flow control
+    # ONE AXIS, ONE KEY. This carried `required` AND `optional`, both
+    # defaulting to False, so a step with neither was "not required and not
+    # optional" -- a third state the schema permitted and no reader could act
+    # on. One step in the tree carried both. `optional` retires; absent means
+    # not required, and that is the only thing absence can mean. CIRISClient#39.
     required: bool = Field(False, description="Whether this step is required")
-    optional: bool = Field(False, description="Whether this step/field is optional")
     default: Optional[Any] = Field(None, description="Default value for the field")
     validation: Optional[Dict[str, Any]] = Field(None, description="Validation rules (e.g., min, max, pattern)")
 
-    # Dependencies - supports both list of step_ids and conditional dict
-    depends_on: Optional[Union[List[str], Dict[str, Any]]] = Field(
-        None, description="Step dependencies - list of step_ids or conditional dict"
+    # TWO CONCEPTS, TWO KEYS, EACH ONE SHAPE. `depends_on` is ORDERING: the
+    # step ids that must complete first. `condition` is DISPLAY: a predicate
+    # on a collected value. external_data_sql uses both on one step and
+    # means both. What drifted was `depends_on` also admitting a dict that
+    # nothing wrote -- one key, two shapes. It is a list now.
+    depends_on: Optional[List[str]] = Field(
+        None, description="Step ids that must complete before this one"
     )
     condition: Optional[Dict[str, Any]] = Field(
-        None, description="Condition for showing this step (e.g., {field: 'x', equals: 'y'})"
+        None, description="Predicate on a collected value for showing this step (e.g., {field: 'x', equals: 'y'})"
     )
 
     # Confirm step fields

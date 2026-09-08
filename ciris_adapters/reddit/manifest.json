@@ -113,7 +113,7 @@
         "description": "Enter your Reddit OAuth app credentials from https://www.reddit.com/prefs/apps",
         "fields": [
           {
-            "field_id": "client_id",
+            "name": "client_id",
             "label": "Client ID",
             "description": "OAuth client ID from your Reddit app",
             "input_type": "text",
@@ -121,7 +121,7 @@
             "placeholder": "Enter your Reddit client ID"
           },
           {
-            "field_id": "client_secret",
+            "name": "client_secret",
             "label": "Client Secret",
             "description": "OAuth client secret from your Reddit app",
             "input_type": "password",
@@ -137,7 +137,7 @@
         "description": "Enter credentials for your Reddit bot account",
         "fields": [
           {
-            "field_id": "username",
+            "name": "username",
             "label": "Bot Username",
             "description": "Reddit bot account username",
             "input_type": "text",
@@ -145,7 +145,7 @@
             "placeholder": "Enter your bot username"
           },
           {
-            "field_id": "password",
+            "name": "password",
             "label": "Bot Password",
             "description": "Reddit bot account password",
             "input_type": "password",
@@ -162,7 +162,7 @@
         "description": "Reddit requires a unique User-Agent string for API requests",
         "fields": [
           {
-            "field_id": "user_agent",
+            "name": "user_agent",
             "label": "User-Agent",
             "description": "Unique User-Agent string (required by Reddit API)",
             "input_type": "text",
@@ -180,7 +180,7 @@
         "description": "Choose the primary subreddit for monitoring and interaction",
         "fields": [
           {
-            "field_id": "subreddit",
+            "name": "subreddit",
             "label": "Subreddit",
             "description": "Primary subreddit (without r/ prefix)",
             "input_type": "text",
@@ -190,7 +190,7 @@
           }
         ],
         "depends_on": ["user_agent"],
-        "optional": true
+        "required": false
       },
       {
         "step_id": "select_post_types",
@@ -199,7 +199,7 @@
         "description": "Choose which types of posts to monitor (optional)",
         "options_method": "get_config_options",
         "depends_on": ["user_agent"],
-        "optional": true
+        "required": false
       },
       {
         "step_id": "confirm",

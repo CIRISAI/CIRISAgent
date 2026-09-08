@@ -171,6 +171,11 @@ class AdapterConfigurationService:
             # Log count only to avoid exposing user-controlled key names
             logger.info(f"Pre-populated session with {len(existing_config)} existing config keys")
 
+        # THE FIRST STEP CAN BE CONDITIONAL TOO. Skip before anyone sees it --
+        # after existing_config is folded in, so a re-auth flow's condition can
+        # read what was configured last time.
+        self.skip_unsatisfied(session, self._adapter_manifests[adapter_type])
+
         self._sessions[session.session_id] = session
         logger.info(f"Started config session {session.session_id} for {adapter_type}")
         return session
@@ -190,6 +195,68 @@ class AdapterConfigurationService:
             if self._is_session_expired(session):
                 session.status = SessionStatus.EXPIRED
         return session
+
+    @staticmethod
+    def condition_holds(step: ConfigurationStep, collected: Dict[str, Any]) -> bool:
+        """Does this step's `condition` hold against what the session has collected?
+
+        THREE SHAPES, exhaustively -- the ones the tree actually writes:
+
+            {"field": "dialect", "equals": "sqlite"}
+            {"field": "dialect", "not_equals": "sqlite"}
+            {"field": "auth_method", "values": ["api_key"]}
+
+        A step with no condition always holds. A condition whose field has not
+        been collected yet does NOT hold: showing a step before the answer it
+        depends on exists would be asking a question out of order. `field` names
+        either an input field (stored under its name) or a select step (stored
+        under its step_id) -- both land in `collected_config` the same way.
+
+        Until this existed, `condition` was declared by manifests and evaluated
+        by nothing: external_data_sql showed BOTH its sqlite and its
+        server-connection steps to everyone (CIRISClient#39).
+        """
+        cond = step.condition
+        if not cond:
+            return True
+        field = cond.get("field")
+        if field is None or field not in collected:
+            return False
+        actual = collected[field]
+        if "equals" in cond:
+            return bool(actual == cond["equals"])
+        if "not_equals" in cond:
+            return bool(actual != cond["not_equals"])
+        if "values" in cond:
+            return actual in (cond["values"] or [])
+        # A predicate with no recognised operator is a manifest error, and a
+        # manifest error must not silently show or hide a step.
+        raise ValueError(f"step {step.step_id!r}: condition has no equals/not_equals/values: {cond}")
+
+    def skip_unsatisfied(self, session: AdapterConfigSession, config: InteractiveConfiguration) -> None:
+        """Advance past every step whose condition does not currently hold.
+
+        Called wherever a step is about to be PRESENTED -- on start, on
+        advance, and when status is read -- so a conditional step can never be
+        shown by one path and skipped by another.
+        """
+        steps = config.steps
+        while session.current_step_index < len(steps):
+            if self.condition_holds(steps[session.current_step_index], session.collected_config):
+                return
+            logger.info(
+                f"[CONDITION] Skipping step {steps[session.current_step_index].step_id!r}: "
+                f"condition not met"
+            )
+            session.current_step_index += 1
+
+    def current_step(self, session: AdapterConfigSession) -> Optional[ConfigurationStep]:
+        """The step to present now, with unsatisfied conditions skipped. None when done."""
+        config = self._adapter_manifests[session.adapter_type]
+        self.skip_unsatisfied(session, config)
+        if session.current_step_index >= len(config.steps):
+            return None
+        return config.steps[session.current_step_index]
 
     async def execute_step(
         self,
@@ -213,14 +280,19 @@ class AdapterConfigurationService:
             return StepResult(step_id="", success=False, error="Session expired")
 
         config = self._adapter_manifests[session.adapter_type]
-        if session.current_step_index >= len(config.steps):
+        step = self.current_step(session)
+        if step is None:
             return StepResult(step_id="", success=False, error="No more steps")
-
-        step = config.steps[session.current_step_index]
         adapter = self._adapter_instances[session.adapter_type]
 
         try:
             result = await self._execute_step_type(session, step, adapter, step_data)
+            # An advance may land on a step whose condition is now decidable
+            # and false; move past it so `next_step_index` names a step that
+            # will actually be shown.
+            if result.success and result.next_step_index is not None:
+                self.skip_unsatisfied(session, config)
+                result.next_step_index = session.current_step_index
             session.update()
             return result
         except Exception as e:
@@ -380,9 +452,21 @@ class AdapterConfigurationService:
         if selection == "skip":
             selection = ""
 
-        if selection is not None and (selection or getattr(step, "optional", False)):
+        # ONE AXIS. This read a retired `optional` key; a select step may be
+        # skipped with an empty selection iff it is not required.
+        if selection is not None and (selection or not step.required):
             # Advance: has selection, OR optional step with empty/skip selection
-            session.collected_config[step.step_id] = selection if selection else ""
+            value = selection if selection else ""
+            session.collected_config[step.step_id] = value
+            # A SELECT STEP WRITES THE FIELD IT DECLARES. Adapters read the
+            # declared name (`dialect`, `response_mode`, `auth_method`), and
+            # `condition` predicates name it too -- but only the step_id was
+            # ever stored, so external_data_sql's validate_config failed with
+            # "dialect is required" on a completed wizard and mock_llm's
+            # response_mode never reached the environment. The step_id key is
+            # kept for anything that reads it.
+            for f in step.fields or []:
+                session.collected_config[f.name] = value
             session.current_step_index += 1
             logger.info(
                 f"[SELECT STEP] Stored selection for {step.step_id} (value='{selection}'), advancing to step {session.current_step_index}"
@@ -416,11 +500,18 @@ class AdapterConfigurationService:
         if step.fields:
             for f in step.fields:
                 if f.required:
-                    field_key = f.name or f.field_id
-                    if field_key:
-                        required_fields.append(field_key)
+                    required_fields.append(f.name)
 
         missing_required = [field for field in required_fields if not step_data.get(field)]
+
+        # STEP-LEVEL `required` WAS DECORATIVE. Only field-level required was
+        # checked, so a step marked required with all-optional fields advanced
+        # on an empty form. A required step needs at least one answer.
+        if step.required and not any(step_data.values()):
+            logger.warning(f"[INPUT STEP] Step {step.step_id!r} is required and received no values")
+            return StepResult(
+                step_id=step.step_id, success=False, error=f"Step {step.step_id!r} is required"
+            )
 
         if missing_required:
             logger.warning(f"[INPUT STEP] Missing required fields: {missing_required}")

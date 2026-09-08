@@ -574,7 +574,8 @@ async def list_configurable_adapters(
                             step_type=step.step_type,
                             title=step.title,
                             description=step.description,
-                            optional=getattr(step, "optional", False),
+                            required=step.required,
+                            optional=not step.required,
                         )
                         for step in manifest.steps
                     ],
@@ -689,7 +690,8 @@ async def list_loadable_adapters(
                             step_type=step.step_type,
                             title=step.title,
                             description=step.description,
-                            optional=getattr(step, "optional", False),
+                            required=step.required,
+                            optional=not step.required,
                         )
                         for step in manifest.steps
                     ]

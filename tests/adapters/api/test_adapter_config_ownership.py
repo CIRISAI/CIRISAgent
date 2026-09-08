@@ -60,6 +60,9 @@ async def test_owner_is_allowed():
     manifest = MagicMock()
     manifest.steps = []
     config_service._adapter_manifests = {"discord": manifest}
+    # The route reads the current step THROUGH the service (conditions are
+    # evaluated there); an empty manifest has no current step.
+    config_service.current_step.return_value = None
 
     with patch.object(adapter_config, "get_adapter_config_service", return_value=config_service):
         result = await adapter_config.get_configuration_status(
@@ -77,6 +80,9 @@ async def test_setup_wizard_bypasses_ownership():
     manifest = MagicMock()
     manifest.steps = []
     config_service._adapter_manifests = {"discord": manifest}
+    # The route reads the current step THROUGH the service (conditions are
+    # evaluated there); an empty manifest has no current step.
+    config_service.current_step.return_value = None
 
     with patch.object(adapter_config, "get_adapter_config_service", return_value=config_service):
         result = await adapter_config.get_configuration_status(

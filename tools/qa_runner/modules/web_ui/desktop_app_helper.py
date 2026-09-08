@@ -166,6 +166,23 @@ class DesktopAppHelper:
 
         return self
 
+    async def reconnect(self) -> bool:
+        """Re-open the HTTP client after the app restarted (factory reset relaunches
+        the process on Android/iOS, and the test server with it). True once /health
+        answers again; False otherwise -- never raises, the caller owns the deadline."""
+        try:
+            if self._client:
+                await self._client.aclose()
+        except Exception:  # noqa: BLE001 -- the old socket is gone either way
+            pass
+        self._client = None
+        try:
+            await self.start()
+            return True
+        except Exception:  # noqa: BLE001
+            self._client = None
+            return False
+
     async def stop(self) -> None:
         """Close the HTTP client."""
         if self._client:

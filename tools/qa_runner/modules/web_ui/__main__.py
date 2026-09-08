@@ -933,16 +933,27 @@ class DesktopAppTestRunner:
             # reset that silently stopped clearing the flag would still read green.
             # 1. The app restarted into first run: the Login CHOOSER (signup
             #    affordance), not the credential form of a configured install.
-            deadline = time.time() + 30
+            # THE APP MAY RESTART UNDER US. On Android/iOS factoryReset() relaunches
+            # the process, and the automation server with it: the first poll after
+            # the confirm click dies with "Server disconnected" (run 34272658734).
+            # That is the reset HAPPENING, not failing -- reconnect and keep polling
+            # until the deadline; only a first-run screen that never appears fails.
+            deadline = time.time() + 45
             first_run = False
             while time.time() < deadline:
-                screen = await self.helper.get_screen() or ""
-                if screen == "Login" and await self.helper.is_element_visible("btn_local_login"):
-                    first_run = True
-                    break
-                if screen == "Setup":
-                    first_run = True
-                    break
+                try:
+                    screen = await self.helper.get_screen() or ""
+                    if screen == "Login" and await self.helper.is_element_visible("btn_local_login"):
+                        first_run = True
+                        break
+                    if screen == "Setup":
+                        first_run = True
+                        break
+                except Exception as exc:  # noqa: BLE001 -- the server went away with the old process
+                    self._log(f"automation server not answering ({type(exc).__name__}) — the app is restarting; reconnecting")
+                    await asyncio.sleep(1.0)
+                    await self.helper.reconnect()
+                    continue
                 await asyncio.sleep(0.5)
             if not first_run:
                 await self._dump_tree("reset:first_run")

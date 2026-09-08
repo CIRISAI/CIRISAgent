@@ -2658,9 +2658,9 @@ async def run_android_up(args: argparse.Namespace) -> int:
     # verdict.
     forward_node = _adb(["forward", "tcp:4243", "tcp:4243"], serial=serial, timeout=10)
     if forward_node.returncode == 0:
-        print(f"  forward: host:4243 → {serial}:4243 (node read API, run-without-AI)")
+        print(f"  forward: host:4243 -> {serial}:4243 (node read API, run-without-AI)")
     else:
-        print(f"  ⚠️  adb forward 4243→4243 failed: {forward_node.stderr.strip()} -- node not observable from the host")
+        print(f"  [WARN] adb forward 4243->4243 failed: {forward_node.stderr.strip()} -- node not observable from the host")
 
     # 5. Poll /health.
     print("[4/5] Waiting for AndroidTestAutomationServer to come up…")

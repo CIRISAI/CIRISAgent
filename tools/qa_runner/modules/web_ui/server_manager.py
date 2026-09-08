@@ -276,6 +276,28 @@ class ServerManager:
                 print("   Created minimal .env file (configured mode)")
         else:
             print("   Skipping .env creation (first-run mode)")
+            # A FIRST RUN HAS NO RECORDED ANSWER. The gate runs a no-AI pass and
+            # then a with-AI pass on the same home; when the reset between them
+            # fails, the no-AI pass's CIRIS_RUN_WITHOUT_AI is still in .env when
+            # the with-AI pass starts. ciris-client 0.5.209 honours that flag: it
+            # resolved :4243, found no node, and launched one of its own -- which
+            # bound :4242 0.7s after our with-AI agent had started, and the agent
+            # died on "Edge transport ports are held by another process"
+            # (run #34177749800, macOS). 0.5.208 ignored the flag, which is the
+            # only reason this never showed. Strip the recorded answer and its
+            # key id; nothing else in the file is this mode's business.
+            env_path = os.path.join(self.config.project_root, ".env")
+            if os.path.exists(env_path):
+                with open(env_path, "r", encoding="utf-8", errors="replace") as f:
+                    lines = f.readlines()
+                kept = [ln for ln in lines if not ln.startswith(("CIRIS_RUN_WITHOUT_AI=", "CIRIS_NODE_KEY_ID="))]
+                if len(kept) != len(lines):
+                    with open(env_path, "w", encoding="utf-8") as f:
+                        f.writelines(kept)
+                    print(
+                        f"   Stripped a recorded run-without-AI answer from {env_path} "
+                        f"({len(lines) - len(kept)} line(s)): a first run starts with no answer"
+                    )
 
         # Open log file
         log_path = os.path.join(self.config.project_root, self.config.log_dir, "web_ui_qa_server.log")

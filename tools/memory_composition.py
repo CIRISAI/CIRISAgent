@@ -353,14 +353,15 @@ def render(report: Dict[str, Any], top: int = 20) -> str:
                 f"                 in use  {glibc['in_use_bytes'] / MIB:9.1f} MB     "
                 f"free but retained {glibc['free_bytes'] / MIB:9.1f} MB ({glibc['retention_ratio'] * 100:.1f}%)"
             )
-            lines.append(f"                 mmapped {glibc['mmapped_bytes'] / MIB:9.1f} MB  ({glibc['mmapped_count']} blocks)")
+            lines.append(
+                f"                 mmapped {glibc['mmapped_bytes'] / MIB:9.1f} MB  ({glibc['mmapped_count']} blocks)"
+            )
         pym = probe.get("pymalloc", {})
         if pym.get("available"):
             allocated = pym.get("bytes_in_allocated_blocks", 0)
             arena_total = pym.get("arena_total_bytes", 0)
             lines.append(
-                f"  pymalloc       arenas={pym.get('arena_count', 0):<4d} "
-                f"reserved {arena_total / MIB:9.1f} MB"
+                f"  pymalloc       arenas={pym.get('arena_count', 0):<4d} " f"reserved {arena_total / MIB:9.1f} MB"
             )
             lines.append(
                 f"                 in use  {allocated / MIB:9.1f} MB     "
@@ -383,7 +384,9 @@ def render(report: Dict[str, Any], top: int = 20) -> str:
             return f"  {label:<32} {_mb(kb):9.1f} MB {pct(kb)}"
 
         file_kb = sum(
-            vals["rss_kb"] for klass, vals in agg["by_class"].items() if klass in ("lib", "file", "sqlite", "shm", "dev")
+            vals["rss_kb"]
+            for klass, vals in agg["by_class"].items()
+            if klass in ("lib", "file", "sqlite", "shm", "dev")
         )
         pym_kb = pym.get("arena_total_bytes", 0) / KIB if pym.get("available") else 0
         glibc_use_kb = (glibc.get("in_use_bytes") or 0) / KIB

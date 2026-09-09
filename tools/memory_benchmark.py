@@ -171,8 +171,9 @@ async def send_messages(
     so a CI summary can show *why* messages failed instead of just the
     aggregate count.
     """
-    import httpx
     from collections import Counter
+
+    import httpx
 
     queue: asyncio.Queue[int] = asyncio.Queue()
     for i in range(messages):
@@ -521,7 +522,7 @@ def main(
                 last = idle_samples[-1][1]
                 peak = max(s[1] for s in idle_samples)
                 # Plateau = last 10% of samples agree within 1 MB
-                tail = idle_samples[-max(1, len(idle_samples) // 10):]
+                tail = idle_samples[-max(1, len(idle_samples) // 10) :]
                 stable = (max(s[1] for s in tail) - min(s[1] for s in tail)) < 1.0
                 print(
                     f"  Idle: first={first:.1f}MB peak={peak:.1f}MB final={last:.1f}MB "

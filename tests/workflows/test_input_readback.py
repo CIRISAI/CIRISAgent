@@ -184,5 +184,16 @@ def test_the_you_step_advance_is_detected_by_the_next_steps_control() -> None:
     # this fix, which precedes the code. The raise is what we anchor on.
     i = src.rindex("still on the YOU step")
     loop = src[i - 1500:i]
-    assert 'is_element_visible("toggle_announce_ownership")' in loop, "advance must be detected positively"
-    assert "while await self.helper.is_element_visible(band_tag)" in loop
+    # PRESENCE, NOT ON-SCREEN, and on purpose. The helper now has two
+    # predicates (682fe461a): is_element_present ("composed at all") and
+    # is_element_visible ("on screen"). The positive signal here is the former:
+    # a control that has never been composed is absent, and the moment JOIN
+    # FEDERATION composes it is present -- even below the fold on a phone, where
+    # an on-screen check would wait out the whole budget on a wizard that had in
+    # fact advanced (Android passed join_federation on presence, run
+    # #34168683558). The band loop condition is presence for the same reason:
+    # the registry keeps it, so the exit is the positive break, never the
+    # band's absence.
+    assert 'is_element_present("toggle_announce_ownership")' in loop, "advance must be detected positively"
+    assert "while await self.helper.is_element_present(band_tag)" in loop
+    assert "is_element_visible(" not in loop, "the advance loop must not key on on-screen visibility (false timeout below the fold)"

@@ -8,7 +8,8 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Literal, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field
+import logging
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.types import JSONDict
@@ -143,9 +144,13 @@ class AdapterDeviceAuthConfig(BaseModel):
 class ConfigurationFieldDefinition(BaseModel):
     """Definition of a field within an input step."""
 
-    # Field identification - supports both 'name' and 'field_id' patterns
-    name: Optional[str] = Field(None, description="Field name (alternative to field_id)")
-    field_id: Optional[str] = Field(None, description="Field identifier (alternative to name)")
+    # ONE KEY FOR THE FIELD'S IDENTITY. This carried `name` AND `field_id` as
+    # alternatives, both optional, so a field could have neither -- and 15 of
+    # 58 fields in the tree used one spelling while 43 used the other. Two
+    # spellings of one fact is how a reader ends up matching on the wrong one.
+    # `name` is required; `field_id` retires (migrated by
+    # tools/dev/migrate_interactive_config.py). CIRISClient#39.
+    name: str = Field(..., description="Field name -- the key this field writes")
     label: Optional[str] = Field(None, description="Human-readable label for the field")
 
     # Field type and input
@@ -164,8 +169,38 @@ class ConfigurationFieldDefinition(BaseModel):
 
     # Conditional display
     depends_on: Optional[Dict[str, Any]] = Field(None, description="Conditional display based on other fields")
+    # DECLARED BECAUSE THEY ARE USED. `options` is read by the client's
+    # ConfigFieldData; `sensitive` and `readonly` are written by manifests. With
+    # extra="allow" an undeclared key validates silently, and silence is how
+    # `field_id`, `field_name` and `optional` drifted in. The manifest lint
+    # rejects any key not declared here.
+    options: Optional[List[Any]] = Field(None, description="Static choices for a select-style field")
+    sensitive: bool = Field(False, description="Value is a secret: mask it, never log it")
+    readonly: bool = Field(False, description="Shown but not editable")
 
     model_config = ConfigDict(extra="allow", defer_build=True)  # Allow additional field-specific properties
+
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_legacy_field_id(cls, data: Any) -> Any:
+        """Read the retired spelling; never write it.
+
+        The tree uses one spelling (`name`, enforced by the manifest lint), but
+        an out-of-tree adapter authored against the pre-#1154 schema still says
+        `field_id`. Rejecting it here would make `discover_services()` drop that
+        adapter with one error line at boot -- a silent removal from the
+        operator's point of view. Normalise on the way in and say so, so the
+        adapter keeps working and its author learns the spelling changed.
+        """
+        if isinstance(data, dict) and "name" not in data and "field_id" in data:
+            data = dict(data)
+            data["name"] = data.pop("field_id")
+            logging.getLogger(__name__).warning(
+                "interactive_config field %r uses the retired key `field_id`; read as `name`. "
+                "Run tools/dev/migrate_interactive_config.py on this manifest (CIRISClient#39).",
+                data["name"],
+            )
+        return data
 
 
 class ConfigurationStep(BaseModel):
@@ -203,30 +238,63 @@ class ConfigurationStep(BaseModel):
     )
     dynamic_fields: bool = Field(False, description="Whether fields are dynamically generated")
 
-    # Input step fields - simple single field (alternative to 'fields' list)
-    field: Optional[str] = Field(None, description="Single field name (simple input)")
-    field_name: Optional[str] = Field(None, description="Configuration field name for input/select steps")
+    # CONTENTS ARE ALWAYS `fields`. Three keys used to name what a step
+    # collects: `fields` (a list), `field_name` (one name, on select steps)
+    # and `field` (declared, used by nothing). A single field is a list of
+    # one, and a select step's output is a field like any other. `field` and
+    # `field_name` retire; the migration rewrites `field_name: x` as
+    # `fields: [{name: x}]`. CIRISClient#39.
     input_type: Optional[str] = Field(None, description="Input type (text, password, number)")
     placeholder: Optional[str] = Field(None, description="Placeholder text")
 
-    # Step requirements and flow control
+    # ONE AXIS, ONE KEY. This carried `required` AND `optional`, both
+    # defaulting to False, so a step with neither was "not required and not
+    # optional" -- a third state the schema permitted and no reader could act
+    # on. One step in the tree carried both. `optional` retires; absent means
+    # not required, and that is the only thing absence can mean. CIRISClient#39.
     required: bool = Field(False, description="Whether this step is required")
-    optional: bool = Field(False, description="Whether this step/field is optional")
     default: Optional[Any] = Field(None, description="Default value for the field")
     validation: Optional[Dict[str, Any]] = Field(None, description="Validation rules (e.g., min, max, pattern)")
 
-    # Dependencies - supports both list of step_ids and conditional dict
-    depends_on: Optional[Union[List[str], Dict[str, Any]]] = Field(
-        None, description="Step dependencies - list of step_ids or conditional dict"
+    # TWO CONCEPTS, TWO KEYS, EACH ONE SHAPE. `depends_on` is ORDERING: the
+    # step ids that must complete first. `condition` is DISPLAY: a predicate
+    # on a collected value. external_data_sql uses both on one step and
+    # means both. What drifted was `depends_on` also admitting a dict that
+    # nothing wrote -- one key, two shapes. It is a list now.
+    depends_on: Optional[List[str]] = Field(
+        None, description="Step ids that must complete before this one"
     )
     condition: Optional[Dict[str, Any]] = Field(
-        None, description="Condition for showing this step (e.g., {field: 'x', equals: 'y'})"
+        None, description="Predicate on a collected value for showing this step (e.g., {field: 'x', equals: 'y'})"
     )
 
     # Confirm step fields
     action: Optional[str] = Field(None, description="Action to perform on confirm (e.g., 'test_connection')")
 
     model_config = ConfigDict(extra="allow", defer_build=True)  # Allow additional step-specific properties
+
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_legacy_optional(cls, data: Any) -> Any:
+        """Read the retired `optional` spelling as the inverse of `required`; never write it.
+
+        With `extra="allow"` an out-of-tree `optional: false` step validated
+        silently while `required` kept its default (False) -- a step the author
+        marked mandatory became skippable, and the wizard accepted an empty
+        selection for it. `required` wins when both are present.
+        """
+        if isinstance(data, dict) and "optional" in data:
+            data = dict(data)
+            legacy = data.pop("optional")
+            if "required" not in data:
+                data["required"] = not bool(legacy)
+            logging.getLogger(__name__).warning(
+                "interactive_config step %r uses the retired key `optional`; read as required=%s. "
+                "Run tools/dev/migrate_interactive_config.py on this manifest (CIRISClient#39).",
+                data.get("step_id"),
+                data.get("required"),
+            )
+        return data
 
 
 class InteractiveConfiguration(BaseModel):

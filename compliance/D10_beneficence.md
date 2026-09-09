@@ -2,7 +2,9 @@
 
 > Positive duty toward dignity / well-being / environmental stewardship
 
-**Seed reference**: `SEED_DIMENSIONS.yaml` v1.0, dimension `D10` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
+**Kinds of change (RATCHET 11+1)**: manner · premises — Record: indirect
+
+**Seed reference**: `SEED_DIMENSIONS.yaml` v1.1, dimension `D10` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
 **Accord principle**: beneficence
 **Attestation density**: MH=11 · EU=15 · IEEE=16 · ASEAN=3 · total=45
 

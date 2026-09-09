@@ -497,13 +497,25 @@ The `ciris-agent` command is the **unified entry point** that starts both the Py
 ciris-agent
 
 # Server-only modes (headless)
-ciris-agent --server              # API server only
+ciris-agent --server              # API server only (the agent runtime, no desktop UI)
 ciris-agent --adapter api         # Same as --server
 ciris-agent --adapter discord     # Discord bot mode
 
-# Separate commands
-ciris-server                      # Headless API server only
-ciris-desktop                     # Desktop app only (connects to running server)
+# `ciris-server` and `ciris-desktop` are the ciris-server WHEEL's commands (the
+# node, and its UI-only launcher). ciris-agent installs ONLY `ciris-agent`: it
+# used to install those two names as well, and since ciris-agent depends on
+# ciris-server, pip wrote ours last and the desktop client's node spawn
+# (`ciris-server --home ... --key-id ...`) hit an agent that does not
+# understand --home. The agent's own headless mode is `ciris-agent --server`.
+
+# Run without AI (CIRISAgent#1149): when the wizard records
+# `CIRIS_RUN_WITHOUT_AI=true` in the home's .env, every entry point above hands
+# the process to the ciris-server wheel instead — node + client, no brain, read
+# API on :4243. Every step is logged with the `[RUN-WITHOUT-AI]` prefix on
+# stdout and the `ciris.node_only` logger, so `grep RUN-WITHOUT-AI` is the whole
+# story: where the flag came from, the home and key alias, the node command, the
+# health wait, the client URL, and every exit code. Set
+# `CIRIS_RUN_WITHOUT_AI=false` in the environment to run the brain for one boot.
 ```
 
 **How it works (from `ciris_engine/cli.py`):**

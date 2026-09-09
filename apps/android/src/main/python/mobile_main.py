@@ -901,7 +901,19 @@ def setup_android_environment():
     env_file = ciris_home / ".env"
     if env_file.exists():
         logger.info(f"Loading configuration from {env_file}")
+        # The run-mode override is ENVIRONMENT-WINS by contract (node_only.py:
+        # CIRIS_RUN_WITHOUT_AI=false in the environment vetoes a recorded true,
+        # for one run). override=True would replace the process value with the
+        # file's before node_only_config() ever reads it, so the documented
+        # override silently did nothing on-device. Carry the process values across.
+        _run_mode_overrides = {
+            k: os.environ[k] for k in ("CIRIS_RUN_WITHOUT_AI", "CIRIS_NODE_KEY_ID") if k in os.environ
+        }
         load_dotenv(env_file, override=True)
+        for k, v in _run_mode_overrides.items():
+            if os.environ.get(k) != v:
+                logger.info(f"{k}={v!r} from the process environment wins over the .env value {os.environ.get(k)!r}")
+                os.environ[k] = v
         logger.info(f"Loaded .env - OPENAI_API_KEY set: {bool(os.environ.get('OPENAI_API_KEY'))}")
         logger.info(f"Loaded .env - OPENAI_API_BASE: {os.environ.get('OPENAI_API_BASE', 'NOT SET')}")
     else:
@@ -1096,6 +1108,16 @@ def main():
 
     logger.info("CIRIS Mobile - Full On-Device Runtime (LLM Remote)")
     setup_android_environment()
+
+    # "Run without AI" (CIRISAgent#1149): the owner chose a node with no brain.
+    # The node serves in this thread on the wizard's home and key alias; no
+    # runtime, no API adapter, no LLM. The client talks to the node on :4243.
+    from ciris_engine import node_only
+
+    _node_only = node_only.node_only_config()
+    if _node_only is not None:
+        logger.info("Run without AI: starting ciris-server node only (no runtime)")
+        node_only.run_headless(_node_only)
 
     # Run code integrity and heavy imports IN PARALLEL
     # This reduces startup time by ~2.5s by overlapping I/O-bound hashing

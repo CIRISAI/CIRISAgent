@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
 
 from ciris_engine.logic.config.db_paths import get_sqlite_db_full_path
 from ciris_engine.logic.setup.wizard import create_env_file
@@ -1086,12 +1086,75 @@ def _write_llm_availability_config(f: Any, setup: SetupCompleteRequest) -> None:
     f.write("CIRIS_SERVICES_DISABLED=true\n")
     if setup.run_without_ai:
         logger.info("[SETUP] Owner chose to run without AI — CIRIS_SERVICES_DISABLED=true")
+        _write_run_without_ai(f)
     else:
         logger.warning(
             "[SETUP] No usable LLM provider (provider=%r, key_set=%s) — writing "
             "CIRIS_SERVICES_DISABLED=true so the next boot degrades instead of aborting",
             setup.llm_provider,
             bool((setup.llm_api_key or "").strip()),
+        )
+
+
+def _retract_run_without_ai(config_path: Optional[Path]) -> None:
+    """Undo ``_write_run_without_ai`` after a post-save failure.
+
+    The flag is written by ``_save_and_reload_config`` BEFORE the fallible half
+    of setup (audit bootstrap, persist engine, admin users, auth reload). If any
+    of those raise, the client gets an error -- but a flag left in the file means
+    the NEXT launch bypasses the setup runtime and boots the standalone node,
+    with no admin account and no wizard to retry. Same shape as the signing-key
+    rollback above it: remove the file so the next start is a clean first run,
+    and clear the process copy so this process's own exit path
+    (``main.py`` -> ``node_only_config``) does not act on it either.
+    """
+    from ciris_engine.node_only import ENV_FLAG, ENV_KEY_ID
+
+    for key in (ENV_FLAG, ENV_KEY_ID):
+        os.environ.pop(key, None)
+    if config_path is None:
+        return
+    try:
+        config_path.unlink(missing_ok=True)
+        logger.warning(
+            "[RUN-WITHOUT-AI] setup failed after %s was written -- removed it so the next start is a clean "
+            "first run, not a node-only boot with no admin account",
+            config_path,
+        )
+    except OSError as exc:
+        logger.error("[RUN-WITHOUT-AI] could not remove %s after a failed setup: %s", config_path, exc)
+
+
+def _write_run_without_ai(f: Any) -> None:
+    """Record the explicit choice so every later boot is ciris-server and the client (CIRISAgent#1149).
+
+    ``CIRIS_SERVICES_DISABLED`` only keeps llm_service optional inside the
+    brain; this flag means there is no brain at all. The node's keystore alias
+    is written beside it so the node-only boot serves the SAME identity the
+    wizard just claimed -- the wheel's own desktop default (``ciris-client``)
+    would mint a second one.
+    """
+    from ciris_engine.node_only import ENV_FLAG, ENV_KEY_ID
+
+    f.write(f"{ENV_FLAG}=true\n")
+    key_id: Optional[str] = None
+    try:
+        from ciris_engine.logic.runtime.node_fold import _resolve_key_id
+
+        key_id = _resolve_key_id()
+    except Exception as exc:  # noqa: BLE001 -- the flag must still be written
+        logger.warning("[SETUP] could not resolve the node key alias for node-only boots: %s", exc)
+    if key_id:
+        f.write(f"{ENV_KEY_ID}={key_id}\n")
+    logger.info(
+        "[RUN-WITHOUT-AI] recorded in the home's .env: %s=true %s=%s -- from now on every boot is ciris-server "
+        "and the client (no brain); the read API will be on :%d. Set %s=false in the environment to run the brain once.",
+        ENV_FLAG, ENV_KEY_ID, key_id or "<unresolved: the node will use the wheel's default label>", 4243, ENV_FLAG,
+    )
+    if not key_id:
+        logger.error(
+            "[RUN-WITHOUT-AI] the node key alias could not be resolved at setup-complete; node-only boots will "
+            "NOT serve the identity this wizard claimed until %s is set in .env", ENV_KEY_ID
         )
 
 
@@ -1161,16 +1224,16 @@ def _save_setup_config(setup: SetupCompleteRequest) -> Path:
     Returns:
         Path where config was saved
     """
-    llm_base_url = _get_provider_base_url(setup.llm_provider, setup.llm_base_url) or ""
+    llm_base_url = _get_provider_base_url(setup.llm_provider or "", setup.llm_base_url) or ""
 
     # For local providers, use "local" as placeholder API key if none provided
     # mobile_local provider doesn't need an API key - it runs on-device
-    llm_api_key = setup.llm_api_key
+    llm_api_key = setup.llm_api_key or ""
     if not llm_api_key and setup.llm_provider in ("local", "local_inference", "mobile_local"):
         llm_api_key = "local"
 
     config_path = create_env_file(
-        llm_provider=setup.llm_provider,
+        llm_provider=setup.llm_provider or "",
         llm_api_key=llm_api_key,
         llm_base_url=llm_base_url,
         llm_model=setup.llm_model or "",
@@ -1263,6 +1326,81 @@ def _log_setup_debug_info(setup: SetupCompleteRequest) -> bool:
     # Under self-custody (FSD-002), agent generates its own key - Portal never sends private keys
 
     return will_link_oauth
+
+
+async def _node_only_restart(runtime: Any) -> None:
+    """After a run-without-AI setup, become the node -- here, not via the runtime's shutdown.
+
+    Registered with ``BackgroundTasks``, so Starlette runs it AFTER the
+    setup-complete response has been sent. That ordering is the contract the
+    client asked for (CIRISAgent#1149/#1151): the 200 always arrives first, and
+    a dropped connection on ``/v1/setup/complete`` stays a real failure.
+
+    WHY THIS DOES THE WORK ITSELF. The first version asked the runtime to shut
+    down and let ``main.py``'s exit path exec into the node. That is correct
+    only while the runtime is RUNNING, and the moment this feature fires is
+    exactly the moment it is not: during first-run the runtime is parked waiting
+    for the wizard, nothing awaits its shutdown event, and an end-to-end run
+    showed ``RUNTIME SHUTDOWN REQUESTED`` logged and then :8080 still serving
+    nine minutes later. So the hand-off happens here, and ``main.py``'s exit
+    path stays as the second door for a setup re-run against a live runtime.
+
+    :8080 is told to stop accepting BEFORE the exec, so a client that has not
+    yet re-pointed gets connection-refused -- positive evidence -- rather than a
+    socket that accepts and never answers. Its task is deliberately not awaited:
+    this coroutine is itself one of that server's in-flight requests.
+    """
+    from ciris_engine import node_only
+
+    cfg = node_only.node_only_config()
+    if cfg is None:
+        logger.error(
+            "[RUN-WITHOUT-AI] the flag was just written but does not read back from the home's .env; "
+            "staying on the agent runtime rather than handing off blind"
+        )
+        return
+
+    for adapter in getattr(runtime, "adapters", None) or []:
+        server = getattr(adapter, "_server", None)
+        if server is not None:
+            server.should_exit = True
+            logger.info(
+                "[RUN-WITHOUT-AI] asked %s to stop accepting on :8080; a client that has not moved yet "
+                "will get connection-refused rather than a hang",
+                type(adapter).__name__,
+            )
+
+    # Let the response finish leaving the transport before the process image is
+    # replaced. The bytes are already written; this is the drain, not a guess at
+    # how long the client needs.
+    await asyncio.sleep(0.25)
+
+    logger.info(
+        "[RUN-WITHOUT-AI] setup complete; replacing this process (pid=%d) with the ciris-server node. "
+        ":8080 goes away and the client moves to :4243",
+        os.getpid(),
+    )
+    if not node_only.exec_into_node(cfg):
+        from ciris_engine.logic.utils.platform_detection import is_desktop
+
+        if not is_desktop():
+            # Not a failure: an embedded runtime has no process to become and must
+            # not end the host's (CIRISClient#43). The flag is recorded, :8080 has
+            # stopped, and the node starts on the runtime's next boot. Do NOT ask
+            # the parked runtime to shut down here -- while parked it ignores the
+            # request (CIRISAgent#1152), and a log line claiming a shutdown that
+            # never happens is the exact vacuous shape this feature has already
+            # produced once.
+            logger.info(
+                "[RUN-WITHOUT-AI] embedded runtime: hand-off deferred to the runtime's next boot; "
+                "the flag is recorded and :8080 has stopped. In-session hand-off here is gated on #1152."
+            )
+            return
+        logger.error(
+            "[RUN-WITHOUT-AI] exec into the node FAILED; the agent runtime is left without its API server. "
+            "Asking it to shut down so the next boot starts the node from the recorded flag."
+        )
+        runtime.request_shutdown("Run without AI: exec into the ciris-server node failed")
 
 
 async def _schedule_runtime_resume(runtime: Any) -> None:
@@ -1371,7 +1509,9 @@ async def _try_get_ingress_user(request: Request) -> tuple[Optional[str], Option
 
 
 @router.post("/complete", responses=RESPONSES_400_403_500, dependencies=[SetupOnlyDep])
-async def complete_setup(setup: SetupCompleteRequest, request: Request) -> SuccessResponse[Dict[str, str]]:
+async def complete_setup(
+    setup: SetupCompleteRequest, request: Request, background_tasks: BackgroundTasks
+) -> SuccessResponse[Dict[str, str]]:
     """Complete initial setup.
 
     Saves configuration and creates initial admin user.
@@ -1400,6 +1540,7 @@ async def complete_setup(setup: SetupCompleteRequest, request: Request) -> Succe
     # Validate passwords and potentially generate for OAuth users
     setup.admin_password = _validate_setup_passwords(setup, is_oauth_user)
 
+    config_path: Optional[Path] = None
     try:
         # Save configuration and reload environment variables
         config_path = _save_and_reload_config(setup)
@@ -1548,7 +1689,17 @@ async def complete_setup(setup: SetupCompleteRequest, request: Request) -> Succe
 
         # Resume initialization from first-run mode to start agent processor
         logger.info("Setup complete - resuming initialization to start agent processor")
-        await _schedule_runtime_resume(runtime)
+        if setup.run_without_ai:
+            # No runtime to resume: the wizard is done and the owner chose a node
+            # with no AI. Handed to FastAPI as a BACKGROUND TASK, which Starlette
+            # runs only after this response has been sent -- so the client always
+            # receives its 200 before :8080 goes away, and never has to treat a
+            # dropped connection as success (CIRISAgent#1149, the client's
+            # handover question). main.py's exit path then replaces the process
+            # with the ciris-server node.
+            background_tasks.add_task(_node_only_restart, runtime)
+        else:
+            await _schedule_runtime_resume(runtime)
 
         return SuccessResponse(
             data={
@@ -1562,4 +1713,6 @@ async def complete_setup(setup: SetupCompleteRequest, request: Request) -> Succe
 
     except Exception as e:
         logger.error(f"Setup completion failed: {e}", exc_info=True)
+        if setup.run_without_ai:
+            _retract_run_without_ai(config_path)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))

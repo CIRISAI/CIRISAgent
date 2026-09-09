@@ -287,7 +287,19 @@ def setup_ios_environment() -> Path:
         try:
             from dotenv import load_dotenv
 
+            # The run-mode override is ENVIRONMENT-WINS by contract (node_only.py:
+            # CIRIS_RUN_WITHOUT_AI=false in the environment vetoes a recorded true
+            # for one run). override=True would replace the process value with
+            # the file's before node_only_config() reads it (kmp_main), so the
+            # override silently did nothing on-device. Same block as Android.
+            _run_mode_overrides = {
+                k: os.environ[k] for k in ("CIRIS_RUN_WITHOUT_AI", "CIRIS_NODE_KEY_ID") if k in os.environ
+            }
             load_dotenv(env_file, override=True)
+            for k, v in _run_mode_overrides.items():
+                if os.environ.get(k) != v:
+                    logger.info(f"{k}={v!r} from the process environment wins over the .env value {os.environ.get(k)!r}")
+                    os.environ[k] = v
             logger.info(f"Loaded configuration from {env_file}")
         except ImportError:
             logger.warning("dotenv not available, skipping .env loading")

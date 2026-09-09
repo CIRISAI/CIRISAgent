@@ -2,7 +2,9 @@
 
 > v1.4 affected-party-voice closure — preserves displaced/affected/marginalized voices in attestation
 
-**Seed reference**: `SEED_DIMENSIONS.yaml` v1.0, dimension `D13` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
+**Kinds of change (RATCHET 11+1)**: facts — Record: direct
+
+**Seed reference**: `SEED_DIMENSIONS.yaml` v1.1, dimension `D13` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
 **Accord principle**: justice
 **Attestation density**: MH=11 · EU=2 · IEEE=2 · ASEAN=1 · total=16
 

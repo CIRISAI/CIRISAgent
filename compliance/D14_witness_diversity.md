@@ -2,7 +2,9 @@
 
 > Stakeholder pluralism in design/testing/consultation
 
-**Seed reference**: `SEED_DIMENSIONS.yaml` v1.0, dimension `D14` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
+**Kinds of change (RATCHET 11+1)**: confidence · structure — Record: direct
+
+**Seed reference**: `SEED_DIMENSIONS.yaml` v1.1, dimension `D14` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
 **Accord principle**: justice
 **Attestation density**: MH=3 · EU=3 · IEEE=16 · ASEAN=2 · total=24
 

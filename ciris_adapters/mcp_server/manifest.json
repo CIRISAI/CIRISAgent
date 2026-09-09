@@ -59,7 +59,7 @@
         "title": "Select Transport Type",
         "description": "Choose how the MCP server will communicate with clients",
         "options_method": "get_config_options",
-        "field_name": "transport_type",
+        "fields": [{"name": "transport_type"}],
         "required": true
       },
       {
@@ -116,8 +116,8 @@
         "title": "Authentication Method",
         "description": "Choose how clients will authenticate (optional)",
         "options_method": "get_config_options",
-        "field_name": "auth_method",
-        "optional": true,
+        "fields": [{"name": "auth_method"}],
+        "required": false,
         "default": "none"
       },
       {
@@ -134,11 +134,11 @@
             "required": true
           }
         ],
-        "depends_on": {
+        "condition": {
           "field": "auth_method",
           "values": ["api_key"]
         },
-        "optional": true
+        "required": false
       },
       {
         "step_id": "select_exposure",
@@ -146,7 +146,7 @@
         "title": "Select Features to Expose",
         "description": "Choose which CIRIS capabilities to make available via MCP",
         "options_method": "get_config_options",
-        "field_name": "exposure",
+        "fields": [{"name": "exposure"}],
         "multiple": true,
         "required": true
       },

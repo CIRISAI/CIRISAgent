@@ -2,7 +2,9 @@
 
 > Federation self-correction layer (with IEEE shifting some load to partner_role:* ethics-board constructions)
 
-**Seed reference**: `SEED_DIMENSIONS.yaml` v1.0, dimension `D15` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
+**Kinds of change (RATCHET 11+1)**: rules · process — Record: indirect
+
+**Seed reference**: `SEED_DIMENSIONS.yaml` v1.1, dimension `D15` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
 **Accord principle**: integrity
 **Attestation density**: MH=2 · EU=2 · IEEE=1 · ASEAN=1 · total=5+ with adjacent coverage
 

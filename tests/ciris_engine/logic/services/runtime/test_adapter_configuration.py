@@ -1453,3 +1453,216 @@ class TestDeviceAuthConfigSchema:
         assert step.device_auth_config is not None
         assert step.device_auth_config.provider_name == "CIRISPortal"
         assert step.device_auth_config.poll_interval == 10
+
+
+# ── the manifest language is ENFORCED, not merely parsed ─────────────────────
+#
+# `condition`, step-level `required`, and a select step's declared field were
+# all read by the schema and acted on by nothing (CIRISClient#39). These pin
+# the behaviour that gives the keys their meaning.
+
+
+def _sql_like_config() -> InteractiveConfiguration:
+    """external_data_sql's shape: one select, two mutually exclusive input steps."""
+    return InteractiveConfiguration(
+        required=True,
+        workflow_type="wizard",
+        steps=[
+            ConfigurationStep(
+                step_id="select_dialect",
+                step_type="select",
+                title="Dialect",
+                description="",
+                options_method="get_config_options",
+                fields=[{"name": "dialect"}],
+                required=True,
+            ),
+            ConfigurationStep(
+                step_id="connection_sqlite",
+                step_type="input",
+                title="SQLite",
+                description="",
+                fields=[{"name": "database_path", "required": True}],
+                condition={"field": "dialect", "equals": "sqlite"},
+            ),
+            ConfigurationStep(
+                step_id="connection_server",
+                step_type="input",
+                title="Server",
+                description="",
+                fields=[{"name": "host", "required": True}],
+                condition={"field": "dialect", "not_equals": "sqlite"},
+            ),
+            ConfigurationStep(
+                step_id="api_keys",
+                step_type="input",
+                title="Keys",
+                description="",
+                fields=[{"name": "api_keys"}],
+                condition={"field": "dialect", "values": ["mssql", "postgres"]},
+            ),
+            ConfigurationStep(step_id="confirm", step_type="confirm", title="Confirm", description=""),
+        ],
+        completion_method="apply_config",
+    )
+
+
+class TestConditionsAreEvaluated:
+    def setup_method(self) -> None:
+        self.service = AdapterConfigurationService()
+        self.adapter = MockConfigurableAdapter()
+        self.service.register_adapter_config("sql", _sql_like_config(), self.adapter)
+
+    @pytest.mark.asyncio
+    async def test_choosing_sqlite_shows_the_sqlite_step_and_skips_the_server_step(self) -> None:
+        session = await self.service.start_session("sql", "u")
+        result = await self.service.execute_step(session.session_id, {"selection": "sqlite"})
+        assert result.success
+        step = self.service.current_step(session)
+        assert step is not None and step.step_id == "connection_sqlite"
+        assert result.next_step_index == session.current_step_index
+
+        result = await self.service.execute_step(session.session_id, {"database_path": "/x.db"})
+        assert result.success
+        # connection_server (not_equals sqlite) and api_keys (values) both fail: land on confirm
+        step = self.service.current_step(session)
+        assert step is not None and step.step_id == "confirm", step.step_id
+
+    @pytest.mark.asyncio
+    async def test_choosing_postgres_skips_sqlite_and_shows_both_server_steps(self) -> None:
+        session = await self.service.start_session("sql", "u")
+        await self.service.execute_step(session.session_id, {"selection": "postgres"})
+        assert self.service.current_step(session).step_id == "connection_server"
+        await self.service.execute_step(session.session_id, {"host": "db"})
+        assert self.service.current_step(session).step_id == "api_keys"
+
+    @pytest.mark.asyncio
+    async def test_a_select_writes_the_field_it_declares(self) -> None:
+        # THE BUG. Adapters read `dialect`; only `select_dialect` was stored, so
+        # validate_config said "dialect is required" after a completed wizard.
+        session = await self.service.start_session("sql", "u")
+        await self.service.execute_step(session.session_id, {"selection": "sqlite"})
+        assert session.collected_config["dialect"] == "sqlite"
+        assert session.collected_config["select_dialect"] == "sqlite"  # kept for old readers
+
+    def test_a_condition_on_an_uncollected_field_does_not_hold(self) -> None:
+        # Showing a step before the answer it hangs on exists is asking out of
+        # order. The lint guarantees the field is written EARLIER, so in a
+        # well-formed manifest this only happens on start_step_id jumps.
+        step = _sql_like_config().steps[1]
+        assert self.service.condition_holds(step, {}) is False
+        assert self.service.condition_holds(step, {"dialect": "sqlite"}) is True
+        assert self.service.condition_holds(step, {"dialect": "mysql"}) is False
+
+    def test_the_three_operators_and_nothing_else(self) -> None:
+        mk = lambda cond: ConfigurationStep(step_id="s", step_type="input", title="", description="", condition=cond)
+        assert self.service.condition_holds(mk({"field": "a", "not_equals": 1}), {"a": 2})
+        assert not self.service.condition_holds(mk({"field": "a", "not_equals": 1}), {"a": 1})
+        assert self.service.condition_holds(mk({"field": "a", "values": [1, 2]}), {"a": 2})
+        assert not self.service.condition_holds(mk({"field": "a", "values": []}), {"a": 2})
+        assert self.service.condition_holds(mk(None), {})
+        with pytest.raises(ValueError):
+            # A predicate with no operator must not silently show OR hide.
+            self.service.condition_holds(mk({"field": "a", "matches": "x"}), {"a": "x"})
+
+    @pytest.mark.asyncio
+    async def test_a_conditional_first_step_is_skipped_on_start(self) -> None:
+        cfg = InteractiveConfiguration(
+            required=True,
+            workflow_type="wizard",
+            steps=[
+                ConfigurationStep(
+                    step_id="reauth_only",
+                    step_type="input",
+                    title="",
+                    description="",
+                    fields=[{"name": "token"}],
+                    condition={"field": "base_url", "equals": "https://old"},
+                ),
+                ConfigurationStep(step_id="confirm", step_type="confirm", title="", description=""),
+            ],
+            completion_method="apply_config",
+        )
+        self.service.register_adapter_config("re", cfg, self.adapter)
+        fresh = await self.service.start_session("re", "u")
+        assert fresh.current_step_index == 1, "no base_url collected: the conditional step must not be shown"
+        again = await self.service.start_session("re", "u", existing_config={"base_url": "https://old"})
+        assert again.current_step_index == 0, "existing_config is folded in BEFORE conditions are evaluated"
+
+    @pytest.mark.asyncio
+    async def test_status_and_execute_agree_on_the_current_step(self) -> None:
+        # One evaluator. The status route reads through current_step(); if it
+        # read the raw index it would report connection_server while execute
+        # was about to run confirm.
+        session = await self.service.start_session("sql", "u")
+        await self.service.execute_step(session.session_id, {"selection": "sqlite"})
+        await self.service.execute_step(session.session_id, {"database_path": "/x.db"})
+        raw = _sql_like_config().steps[session.current_step_index].step_id
+        assert raw == "confirm"
+        assert self.service.current_step(session).step_id == "confirm"
+
+
+class TestRequiredIsEnforced:
+    def setup_method(self) -> None:
+        self.service = AdapterConfigurationService()
+        self.adapter = MockConfigurableAdapter()
+
+    def _one_step(self, step: ConfigurationStep) -> None:
+        cfg = InteractiveConfiguration(
+            required=True,
+            workflow_type="wizard",
+            steps=[step, ConfigurationStep(step_id="confirm", step_type="confirm", title="", description="")],
+            completion_method="apply_config",
+        )
+        self.service.register_adapter_config("t", cfg, self.adapter)
+
+    @pytest.mark.asyncio
+    async def test_a_required_input_step_refuses_an_empty_form(self) -> None:
+        # Step-level `required` was decorative: only field-level was checked, so a
+        # required step whose fields are all optional advanced on {}.
+        self._one_step(
+            ConfigurationStep(
+                step_id="ua", step_type="input", title="", description="", required=True, fields=[{"name": "user_agent"}]
+            )
+        )
+        s = await self.service.start_session("t", "u")
+        r = await self.service.execute_step(s.session_id, {})
+        assert not r.success and "required" in (r.error or "")
+        assert s.current_step_index == 0
+        r = await self.service.execute_step(s.session_id, {"user_agent": "CIRIS/1.0"})
+        assert r.success and s.current_step_index == 1
+
+    @pytest.mark.asyncio
+    async def test_an_optional_input_step_advances_on_an_empty_form(self) -> None:
+        self._one_step(
+            ConfigurationStep(step_id="perf", step_type="input", title="", description="", fields=[{"name": "timeout"}])
+        )
+        s = await self.service.start_session("t", "u")
+        r = await self.service.execute_step(s.session_id, {})
+        assert r.success and s.current_step_index == 1
+
+    @pytest.mark.asyncio
+    async def test_a_select_is_skippable_iff_it_is_not_required(self) -> None:
+        self._one_step(
+            ConfigurationStep(
+                step_id="opt", step_type="select", title="", description="", options_method="get_config_options"
+            )
+        )
+        s = await self.service.start_session("t", "u")
+        r = await self.service.execute_step(s.session_id, {"selection": "skip"})
+        assert r.success and s.current_step_index == 1
+
+        self._one_step(
+            ConfigurationStep(
+                step_id="req",
+                step_type="select",
+                title="",
+                description="",
+                options_method="get_config_options",
+                required=True,
+            )
+        )
+        s = await self.service.start_session("t", "u")
+        r = await self.service.execute_step(s.session_id, {"selection": "skip"})
+        # Not advanced: the service falls through to "fetch options for display".
+        assert s.current_step_index == 0

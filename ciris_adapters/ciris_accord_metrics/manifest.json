@@ -96,7 +96,7 @@
         "step_type": "input",
         "title": "Early Warning System (Optional)",
         "description": "Help improve the CIRIS Early Warning System by sharing optional context about your deployment. This enables correlation analysis to detect emerging risks across the CIRIS network. All fields are optional and anonymous.",
-        "optional": true,
+        "required": false,
         "fields": [
           {
             "name": "deployment_region",
@@ -167,7 +167,7 @@
         "step_type": "input",
         "title": "Advanced Configuration",
         "description": "Configure the CIRISLens endpoint and batching behavior (most users can skip this)",
-        "optional": true,
+        "required": false,
         "fields": [
           {
             "name": "endpoint_url",

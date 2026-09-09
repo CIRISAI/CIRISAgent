@@ -2,7 +2,9 @@
 
 > Operational-design discipline (densest family overall; convergence weaker than principles — admits source-genre asymmetry honestly)
 
-**Seed reference**: `SEED_DIMENSIONS.yaml` v1.0, dimension `D16` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
+**Kinds of change (RATCHET 11+1)**: process — Record: indirect
+
+**Seed reference**: `SEED_DIMENSIONS.yaml` v1.1, dimension `D16` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
 **Accord principle**: integrity
 **Attestation density**: MH=2 · EU=12 · IEEE=136 · ASEAN=36 · total=186
 

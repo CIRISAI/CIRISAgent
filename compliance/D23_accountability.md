@@ -1,8 +1,12 @@
-# D23 — `accountability:*` (STRONG-3)
+# D23 — `structural (audit chain)` (STRONG-3)
 
-> Named accountability as primary axis (not just structural composition)
+> Accountability as a structural property of the audit chain — regulators attest it as a named axis; CIRIS enforces it as a property of the record
 
-**Seed reference**: `SEED_DIMENSIONS.yaml` v1.0, dimension `D23` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
+**Kind**: structural property (audit chain) — not a namespace family; nothing is emitted under a prefix for this dimension. Resolves to the CC 3.1 registry leaves `audit_chain:hash_continuity`, `transparency_log:inclusion`, `transparency_log:consistency`. The v1.0 label `accountability:*` is retired (seed v1.1, CIRISAgent#1139).
+
+**Kinds of change (RATCHET 11+1)**: identity · structure — Record: direct
+
+**Seed reference**: `SEED_DIMENSIONS.yaml` v1.1, dimension `D23` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
 **Accord principle**: fidelity
 **Attestation density**: MH=0 · EU=6 · IEEE=3 · ASEAN=19 · total=28
 
@@ -25,8 +29,16 @@
 
 ## Wire primitives
 
-- `accountability:{axis}`
-- `accountability:human_in_control (ASEAN-distinctive — HITL/HOTL/HOOTL)`
+*(none — structural property; see **Kind** above and the human section for the mechanisms)*
+
+
+## Named sub-leaves
+
+*(Named so a reviewer walking a framework's requirement list finds them; no new D-id — a promoted leaf allocates D28+.)*
+
+- `accountability:human_in_control` — folded from EU HLEG requirement 1 'human agency & oversight'; ASEAN §B.6 + §C.2 human-in-control (HITL/HOTL/HOOTL gradient)
+    Status: named so a reviewer walking HLEG's seven finds it; single-source-STRONG; not a registry family, not emitted
+    Promotion trigger: EU AI Act Art. 14 (human oversight) as a fifth batch promotes it under the STRONG rule; a promoted leaf allocates D28+ per stable_id_rule
 
 ## Convergence note
 
@@ -40,6 +52,8 @@ ASEAN's accountability:human_in_control with HITL/HOTL/HOOTL gradient is current
 Accountability asks: who is responsible for the agent's actions, and can that responsibility be verified after the fact? An auditor wants a tamper-evident answer to "who decided this, on what basis, and can you prove the record hasn't been altered?"
 
 ## How CIRIS implements this today
+
+**Seed v1.1 (2026-09-08, [CIRISAgent#1139](https://github.com/CIRISAI/CIRISAgent/issues/1139)): this dimension is a structural property, not a namespace family.** `accountability:*` is absent from CC 3.1's registry of record (114 families) and from persist's supersets (104), and this agent emits no such string — by design, as the paragraph below has said since v1.0. What carries the property on the wire is the audit chain itself: `audit_chain:hash_continuity` and the `transparency_log:inclusion` / `transparency_log:consistency` leaves. The seed, this page and the registry now agree: 26 families + 1 structural property.
 
 CIRIS takes a different approach to accountability than naming it as a single axis: instead of declaring an `accountability:*` label on each action, the accountability properties are built into the substrate — the agent's identity is keyed with Ed25519 cryptography, every action emits an audit entry on a tamper-evident chain, every decision carries a written rationale, and every escalation to a Wise Authority (a human or panel the agent defers to) is recorded with the resolving human's identity and their guidance text. The same goal — verifiable responsibility — is achieved structurally.
 
@@ -117,7 +131,7 @@ Proposed pointer (from seed): `(none specified in seed; please fill)`
 ## Current limitations & next steps
 
 - **Wise Authority resolutions are not signed, and task signatures are never verified** ([CIRISAgent#944](https://github.com/CIRISAI/CIRISAgent/issues/944)). This is the largest agent-side gap in this dimension and it is *not* substrate-shared work — it is ours. `DeferralResponse.signature` is a formatted string (`routes/wa.py:183`) that nothing reads; `verify_task_signature` has zero production callers. The audit chain proves the *record* was not altered; it does not prove *which human* authorized a given resolution, because no key ever touched the resolution. Closing it means signing the resolution with the resolving WA's key and verifying on read — the same shape the budget-grant path already implements (`FSD/BUDGET_ENVELOPE.md`, where the grant signature *is* verified on every spend). Detail and blast radius in `FSD/THREAT_MODEL_2.9.7.md`.
-- **Typed `accountability:*` envelope as a named axis**: shared work with the upstream CIRIS substrate. Accountability is decomposed into substrate-attested primitives (`audit_chain:hash_continuity`, `audit_chain:merkle_inclusion`, `audit_chain:tree_head_signed` in FSD-002 §3.3; `transparency_log:inclusion`, `transparency_log:consistency` in FSD-002 §3.2 per RFC 6962). A per-action accountability claim writes a `scores` attestation pointing back to the audit-chain prefix. Substrate primitives cover the structural surface; the named-axis emission is a presentation layer above the wire.
+- **No typed `accountability:*` family is owed** (settled by seed v1.1 / #1139). Accountability is carried by the substrate-attested audit-chain primitives (`audit_chain:hash_continuity`; `transparency_log:inclusion` / `transparency_log:consistency` per RFC 6962). The one named leaf reserved here, `accountability:human_in_control`, is a sub-leaf for reviewers walking EU HLEG's requirement 1, not an emitted family; it is promoted (D28+) only when a fifth batch — the EU AI Act, Art. 14 — makes it STRONG under the seed's own rule.
 - **ASEAN human-in-control gradient (HITL / HOTL / HOOTL)**: shared work with the upstream substrate (`vote:{contribution_id}` in FSD-002 §3.6.3 NodeCore P4; `deferral_request` / `deferral_response` in `MESSAGE_TAXONOMY.md §4.7-§4.8`). The mode is structurally inferred from the vote timing (synchronous = HITL, asynchronous = HOTL, no vote = HOOTL) rather than declared as a separate enum. The agent emits the request envelope; the gradient falls out compositionally.
 - **EU §1.7 lifecycle accountability**: shared work with the upstream substrate (`commitment_fulfillment:{prior_contribution_id}` in FSD-002 §3.6.4; Stage 9 Archive in `CIRISNodeCore/FSD/CONTRIBUTION_LIFECYCLE.md §11`). The lifecycle is captured by the chain-row sequence rooted into Merkle batches.
 - **IEEE Ch11 rights-based accountability**: shared work with the upstream substrate (`testimonial_witness:{kind}` in FSD-002 §3.6.3 v1.4; lexical-vulnerability-priority reference policy in FSD-002 §6.1.4 v1.3). UDHR-grounded rights basis composes via scalar attestations once the envelope ships.

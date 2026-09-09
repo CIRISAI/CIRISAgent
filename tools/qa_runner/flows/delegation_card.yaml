@@ -1,0 +1,65 @@
+flow: delegation_card
+title: Delegation card and screen on the Family layer
+description: >-
+  CIRISClient#45 wired DelegationScreen and reached it from the Family layer hub.
+  This drives the whole surface: the card is present on the hub, it opens, the
+  screen composes its three panels, refresh is live, and back returns to the hub.
+# CIRISClient#45 is unmerged (2026-09-08): NO release carries this surface, so the
+# flow is refused as "cannot start" rather than driven into "element not found".
+# Replace with ">=<release>" when #45 ships. A numeric floor was tried first and
+# stopped refusing on the next client cut (0.5.213), turning these into binding
+# verdicts against a client that still lacks the screens.
+client: "unreleased"
+
+steps:
+  - step_id: family_hub
+    title: The Family layer hub shows the delegations card
+    description: >-
+      Entry precondition, stated rather than assumed. If the flow is not here the
+      failure is "this flow cannot start", not "a delegation element is broken" —
+      which is the distinction CIRISClient#39 was opened about.
+    requires:
+      screen: LayerFamily
+    expect:
+      visible: [card_family_delegations, btn_open_delegations]
+
+  - step_id: open_delegation
+    title: Opening the card reaches the Delegation screen
+    do:
+      - click: btn_open_delegations
+    expect:
+      screen: Delegation
+      visible: [screen_delegation, btn_delegation_back]
+
+  - step_id: delegation_panels
+    title: The screen composes overview, inbound and outbound
+    description: >-
+      Asserted as three separate tags rather than one screen check: a screen that
+      renders its shell and none of its content still answers /screen correctly.
+    expect:
+      visible:
+        - card_delegation_overview
+        - card_delegation_inbound
+        - card_delegation_outbound
+        - btn_delegation_manage_grants
+
+  - step_id: refresh_is_live
+    title: Refresh runs without leaving the screen
+    description: >-
+      The screen is described as live/interactive, so refresh must be a real
+      action. Asserting we are still on Delegation afterwards is what separates
+      "it refreshed" from "it navigated away or crashed to a fallback".
+    do:
+      - click: btn_delegation_refresh
+    expect:
+      screen: Delegation
+      visible: [card_delegation_overview]
+
+  - step_id: back_to_family
+    title: Back returns to the Family layer hub
+    do:
+      - click: btn_delegation_back
+    expect:
+      screen: LayerFamily
+      visible: [card_family_delegations]
+      absent: [screen_delegation]

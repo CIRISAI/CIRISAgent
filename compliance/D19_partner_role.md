@@ -2,7 +2,9 @@
 
 > CIRIS Registry partner-role taxonomy (ethics boards, audit bodies, stewards)
 
-**Seed reference**: `SEED_DIMENSIONS.yaml` v1.0, dimension `D19` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
+**Kinds of change (RATCHET 11+1)**: rules — Record: indirect
+
+**Seed reference**: `SEED_DIMENSIONS.yaml` v1.1, dimension `D19` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
 **Accord principle**: integrity
 **Attestation density**: MH=0 · EU=1 · IEEE=19 · ASEAN=1 · total=21
 

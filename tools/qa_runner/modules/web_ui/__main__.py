@@ -187,7 +187,16 @@ class DesktopAppTestRunner:
         try:
             server_url = str(getattr(getattr(self.helper, "_client", None), "base_url", "") or "").rstrip("/")
             api_port = getattr(args, "port", None) or 8080
-            verdict = await attribute_device_failure(server_url or "http://localhost:9091", f"http://127.0.0.1:{api_port}")
+            # On a run-without-AI leg :8080 is gone BY DESIGN — the agent hands the
+            # process to a ciris-server node on :4243. Hand the node URL over so the
+            # verdict does not report the feature working as a process death
+            # (CIRISAgent#1149).
+            node_url = None
+            if args is not None and getattr(args, "run_without_ai", False):
+                node_url = getattr(args, "node_url", None) or "http://127.0.0.1:4243"
+            verdict = await attribute_device_failure(
+                server_url or "http://localhost:9091", f"http://127.0.0.1:{api_port}", node_url
+            )
         except Exception as exc:  # noqa: BLE001
             verdict = f"(could not attribute the dead server: {type(exc).__name__}: {exc})"
         if args is not None and getattr(args, "ios", False):
@@ -234,12 +243,33 @@ class DesktopAppTestRunner:
         self.results.append(result)
         return result
 
-    async def test_login_flow(self, username: str = "admin", password: str = "qa_test_password_12345") -> bool:
+    async def test_login_flow(
+        self,
+        username: str = "admin",
+        password: str = "qa_test_password_12345",
+        run_without_ai: bool = False,
+    ) -> bool:
         """Test the login flow on the desktop app."""
         print("\n Testing Login Flow")
 
         if not self.helper:
             raise RuntimeError("Test runner not started")
+
+        # A SESSION MAY ALREADY EXIST. After the run-without-AI hand-off the
+        # client (0.5.212+, CIRISClient#48) auto-logs in against the node and
+        # lands on Interact; waiting 30 s for a Login screen that will never
+        # come marked a correct hand-off as failed. The assertion this leg
+        # exists for is the CREDENTIAL login against that backend, so log out
+        # and drive it rather than accepting the auto-login as the answer.
+        async def release_auto_login():
+            screen = await self.helper.get_screen()
+            if screen != "Interact":
+                self._log(f"no prior session (screen={screen}); the credential login is driven from here")
+                return
+            self._log("the post-setup auto-login already established a session — logging out to exercise the credential login")
+            await self._logout()
+
+        await self.run_test("release_auto_login", release_auto_login)
 
         # Wait for login screen
         async def wait_for_login():
@@ -271,10 +301,10 @@ class DesktopAppTestRunner:
         # and false of Windows desktop, and this step-by-step flow never had the
         # probe at all.
         async def reveal_local_login():
-            if await self.helper.is_element_visible("input_username"):
+            if await self.helper.is_element_present("input_username"):
                 self._log("Login screen shows the credential form directly")
                 return
-            if not await self.helper.is_element_visible("btn_local_login"):
+            if not await self.helper.is_element_present("btn_local_login"):
                 await self._dump_tree("reveal_local_login")
                 raise RuntimeError("Login screen has neither input_username nor btn_local_login")
             self._log("Login screen is a provider chooser — selecting local login")
@@ -333,15 +363,39 @@ class DesktopAppTestRunner:
 
         # Wait for next screen (Interact or Setup)
         async def wait_for_post_login():
-            self._log("Waiting for post-login screen...")
+            # THE HOME DEPENDS ON THE INSTALL, and this step asserted the agent's
+            # on both. `homeScreen(hasAgent)` lands a run-without-AI install on
+            # the NODE surface -- Contacts -- deliberately: "opening on a chat
+            # with no brain behind it is the worse wrong guess" is the client's
+            # own comment. Run 34296932220 is what taught us: the app navigated
+            # to Contacts (btn_contacts_add_open, btn_contacts_back and
+            # btn_contacts_refresh were drivable at the next step) while this
+            # step reported "Still on Login screen after 30s" -- a message that
+            # named a screen it had never checked for and sent two people
+            # hunting a stall that was not happening (CIRISClient#48).
+            agent_homes = ["Interact", "Setup", "Startup"]
+            node_homes = ["Contacts", "Interact", "Setup", "Startup"]
+            wanted = node_homes if run_without_ai else agent_homes
+            self._log(f"Waiting for post-login screen (accepting {'/'.join(wanted)})...")
             start = datetime.now()
+            seen = None
             while (datetime.now() - start).total_seconds() < 30:
-                screen = await self.helper.get_screen()
-                if screen in ["Interact", "Setup", "Startup"]:
-                    self._log(f"Navigated to: {screen}")
+                seen = await self.helper.get_screen()
+                if seen in wanted:
+                    self._log(f"Navigated to: {seen}")
                     return
                 await asyncio.sleep(0.5)
-            raise RuntimeError(f"Still on Login screen after 30s")
+            # SAY WHAT IS THERE, not what was expected to be.
+            drivable = sorted(
+                e.test_tag
+                for e in await self.helper.get_elements()
+                if (e.visible if e.visible is not None else (e.width > 0 and e.height > 0))
+            )
+            await self._dump_tree("wait_for_post_login")
+            raise RuntimeError(
+                f"30s after a successful login the screen is {seen!r}, not one of {wanted}; "
+                f"on screen and drivable now: {drivable[:12]}"
+            )
 
         await self.run_test("wait_for_post_login", wait_for_post_login)
 
@@ -659,7 +713,21 @@ class DesktopAppTestRunner:
         await self.helper.click(f"menu_provider_{provider}")
         await asyncio.sleep(0.3)
 
-        # 2. API key.
+        # 2. API key -- WAIT FOR THE FIELD, do not assume it. On a device that
+        #    can run on-device inference the wizard defaults to it
+        #    ("[AI] defaulting to on-device inference (device is capable)"), and
+        #    choosing a BYOK provider recomposes the form; the key field appears
+        #    a beat after the click. A fixed 0.3s let macOS type into a field
+        #    that did not exist yet ("Element not found: input_api_key") while
+        #    the screenshot showed the field rendered with "API key is required"
+        #    (run #34181104589). Windows CI cannot run on-device inference, shows
+        #    the BYOK form at once, and passed -- a platform-conditional race.
+        if not await self.helper.wait_for_element("input_api_key", timeout=8000):
+            raise RuntimeError(
+                "input_api_key never composed after choosing the provider -- on a device that "
+                "defaults to on-device inference the BYOK form is recomposed on provider choice; "
+                "if it is still absent after 8s the provider click did not take"
+            )
         if not await self.helper.input_text("input_api_key", api_key):
             raise RuntimeError("Failed to enter API key (input_api_key)")
         await asyncio.sleep(0.3)
@@ -783,6 +851,210 @@ class DesktopAppTestRunner:
         else:
             self._log("AI (BYOK): no live model list appeared after retries; leaving provider/text default")
 
+    async def _logout(self) -> None:
+        """Log out, by whichever route this install actually offers.
+
+        THE ROUTE DEPENDS ON THE INSTALL, and there are three of them:
+
+        * `nav_epistemic_account` -> Screen.Settings -> `btn_logout` (ciris-client
+          0.5.216+, CIRISClient#51). Present in BOTH modes by construction -- the
+          client's own `narrowingIsPurelySubtractive` rule forbids a surface that
+          appears only when narrowed -- so this is the route to prefer.
+        * `btn_governance_menu` -> `menu_logout`: the top bar, which lives on the
+          AGENT home only. A run-without-AI install lands on the node home
+          (Contacts) and has no top bar.
+        * `nav_epistemic_agent_settings` -> `btn_logout`: pre-0.5.216, and only
+          where `hasAgent` keeps the Agent group.
+
+        Ordered so the newest route wins and the old ones remain drivable, because
+        this harness pins a client that moves under it several times a day. Each
+        sidebar route is REVEALED, not merely waited for: the row can be in a
+        collapsed group or below the fold, and presence in /tree is not
+        drivability (CIRISClient#39).
+        """
+        async def _sidebar_to_logout(tag: str, what: str) -> bool:
+            if await self.helper.reveal_sidebar_row(tag):
+                return False
+            self._log(f"logout via {what}: {tag} -> btn_logout")
+            if not await self.helper.click(tag):
+                raise RuntimeError(f"{tag} was on screen and the click did not take")
+            # SCROLL IT ON SCREEN. Settings is a long surface and logout sits at the
+            # bottom of it: on iOS (run 34306647597) the account route was taken
+            # correctly and then `btn_logout` was "composed but off screen", which
+            # from 0.5.206 is a refusal, not a coordinate gamble. Same rule as every
+            # other tag we drive -- presence is not drivability.
+            if not await self.helper.scroll_into_view("btn_logout"):
+                if not await self.helper.wait_for_element("btn_logout", timeout=10000):
+                    await self._dump_tree("reset:btn_logout")
+                    raise RuntimeError(
+                        f"btn_logout is not reachable on the surface behind {tag} "
+                        "(not on screen after scrolling it into view)"
+                    )
+            if not await self.helper.click("btn_logout"):
+                raise RuntimeError("Failed to click btn_logout")
+            await asyncio.sleep(1.5)
+            return True
+
+        # 1. The account surface (both modes, both chromes).
+        if await _sidebar_to_logout("nav_epistemic_account", "the Account surface"):
+            return
+
+        # 2. The agent home's top bar.
+        if await self.helper.is_element_visible("btn_governance_menu"):
+            self._log("logout via the governance menu: btn_governance_menu -> menu_logout")
+            if not await self.helper.click("btn_governance_menu"):
+                raise RuntimeError("Failed to open the governance menu")
+            if not await self.helper.wait_for_element("menu_logout", timeout=8000):
+                await self._dump_tree("reset:menu_logout")
+                raise RuntimeError("menu_logout not under btn_governance_menu — the item moved categories")
+            if not await self.helper.click("menu_logout"):
+                raise RuntimeError("Failed to click menu_logout")
+            await asyncio.sleep(1.5)
+            return
+
+        # 3. Pre-0.5.216 Settings, where the Agent group survives.
+        if await _sidebar_to_logout("nav_epistemic_agent_settings", "Settings (pre-0.5.216)"):
+            return
+
+        await self._dump_tree("reset:logout")
+        groups = [e.test_tag for e in await self.helper.get_elements() if e.test_tag.startswith("nav_group_")]
+        raise RuntimeError(
+            "no logout route on this install: neither nav_epistemic_account (0.5.216+), "
+            "btn_governance_menu (the agent home's top bar) nor nav_epistemic_agent_settings "
+            f"is reachable. Sidebar groups on screen: {groups or 'none'}. On a run-without-AI "
+            "install that means the owner cannot sign out at all (CIRISClient#51)."
+        )
+
+    async def test_reset_device_flow(self) -> bool:
+        """Log out and factory-reset the device through the CLIENT's own UI.
+
+        The second half of the run-without-AI gate (CIRISAgent#1149): after the
+        no-AI pass has reached Interact against a node-only backend, the app is
+        put back to first-run so the ordinary with-AI pass can follow in the
+        same job, on the same home.
+
+        It has to go through the client rather than deleting files, because the
+        client's factory reset is what removes the `.env` -- and that file is
+        where `CIRIS_RUN_WITHOUT_AI=true` lives. Skip it and every later boot
+        keeps handing the process to the node, so the with-AI pass would have no
+        :8080 to talk to. Driving the real button is also the only way this test
+        notices if that reset ever stops clearing the flag.
+
+        Path: btn_menu -> menu_logout -> (Login) btn_login_reset_device ->
+        btn_reset_device_confirm.
+        """
+
+        async def logout():
+            await self._logout()
+
+        await self.run_test("logout", logout)
+
+        async def reset_device():
+            # The reset link lives in the Login footer and is always on there
+            # (2.9.3, #794 Bug C), so reaching Login is the precondition.
+            self._log("Resetting the device from the Login footer")
+            if not await self.helper.wait_for_element("btn_login_reset_device", timeout=20000):
+                await self._dump_tree("reset:btn_login_reset_device")
+                raise RuntimeError(
+                    "btn_login_reset_device not found — logout did not land on Login, "
+                    "so there is no reset affordance to drive"
+                )
+            if not await self.helper.click("btn_login_reset_device"):
+                raise RuntimeError("Failed to click btn_login_reset_device")
+            if not await self.helper.wait_for_element("btn_reset_device_confirm", timeout=8000):
+                await self._dump_tree("reset:confirm")
+                raise RuntimeError("The reset confirmation dialog did not appear")
+            if not await self.helper.click("btn_reset_device_confirm"):
+                raise RuntimeError("Failed to confirm the device reset")
+            # factoryReset() wipes user state, clears the signing key and DELETES
+            # the .env (which is what clears CIRIS_RUN_WITHOUT_AI), then asks the
+            # app to restart into the wizard. Give it room to do all of that.
+            await asyncio.sleep(1.0)  # the outcome is asserted in reset_took_effect
+
+        await self.run_test("reset_device", reset_device)
+
+        async def reset_took_effect():
+            # A click that was acknowledged is not a reset that happened: the next
+            # step (`desktop-setup --launch`) rewrites the same .env itself, so a
+            # reset that silently stopped clearing the flag would still read green.
+            # 1. The app restarted into first run: the Login CHOOSER (signup
+            #    affordance), not the credential form of a configured install.
+            # THE APP MAY RESTART UNDER US. On Android/iOS factoryReset() relaunches
+            # the process, and the automation server with it: the first poll after
+            # the confirm click dies with "Server disconnected" (run 34272658734).
+            # That is the reset HAPPENING, not failing -- reconnect and keep polling
+            # until the deadline; only a first-run screen that never appears fails.
+            # iOS CANNOT RELAUNCH ITSELF. Android has AppRestarter and desktop
+            # respawns; on iOS an app that ends is simply gone, which is the same
+            # platform fact that made `os._exit` unusable in the hand-off
+            # (CIRISAgent#1149). So after factoryReset the simulator app wipes and
+            # sits blank -- run 34310581543 dumped `screen='Startup' elements=0` --
+            # and waiting for a self-restart asserts something the platform does not
+            # do. Relaunch it the way a user would tap the icon again, then assert
+            # first run: that is what the reset promised.
+            platform = getattr(_LAST_ARGS, "platform", "desktop") or "desktop"
+            if platform == "ios":
+                udid = getattr(_LAST_ARGS, "ios_udid", None) or _ios_pick_simulator(None)
+                bundle_id = getattr(_LAST_ARGS, "ios_bundle_id", None) or "ai.ciris.mobile"
+                if udid:
+                    self._log(f"iOS cannot restart itself — relaunching {bundle_id} to see what the reset left")
+                    _simctl(["terminate", udid, bundle_id], timeout=60)
+                    await asyncio.sleep(1.0)
+                    env = dict(os.environ)
+                    env["SIMCTL_CHILD_CIRIS_TEST_MODE"] = "true"
+                    subprocess.run(
+                        ["xcrun", "simctl", "launch", udid, bundle_id],
+                        capture_output=True, text=True, timeout=120, env=env,
+                    )
+                    await asyncio.sleep(3.0)
+                    await self.helper.reconnect()
+                else:
+                    self._log("iOS: no booted simulator udid to relaunch with — asserting on the app as it stands")
+
+            deadline = time.time() + 45
+            first_run = False
+            while time.time() < deadline:
+                try:
+                    screen = await self.helper.get_screen() or ""
+                    if screen == "Login" and await self.helper.is_element_visible("btn_local_login"):
+                        first_run = True
+                        break
+                    if screen == "Setup":
+                        first_run = True
+                        break
+                except Exception as exc:  # noqa: BLE001 -- the server went away with the old process
+                    self._log(f"automation server not answering ({type(exc).__name__}) — the app is restarting; reconnecting")
+                    await asyncio.sleep(1.0)
+                    await self.helper.reconnect()
+                    continue
+                await asyncio.sleep(0.5)
+            if not first_run:
+                await self._dump_tree("reset:first_run")
+                raise RuntimeError("the app did not restart into first run within 30s of confirming the reset")
+            self._log("the app restarted into first run")
+            # 2. The recorded choice is gone. DESKTOP ONLY: on a device the home is
+            #    on the device and the runner cannot read it; say so rather than
+            #    imply either answer.
+            platform = getattr(_LAST_ARGS, "platform", "desktop") or "desktop"
+            if platform != "desktop":
+                self._log(f"NOT ASSERTED on {platform}: the .env lives on the device; the desktop legs assert its removal")
+                return
+            env_path = Path(os.environ.get("CIRIS_HOME") or (Path.home() / "ciris")) / ".env"
+            deadline = time.time() + 20
+            while time.time() < deadline:
+                try:
+                    body = env_path.read_text(encoding="utf-8", errors="replace")
+                except OSError:
+                    self._log(f"{env_path} is gone — the recorded choice went with it")
+                    return
+                if "CIRIS_RUN_WITHOUT_AI=" not in body and "CIRIS_CONFIGURED=" not in body:
+                    self._log(f"{env_path} no longer records a configured install")
+                    return
+                await asyncio.sleep(0.5)
+            raise RuntimeError(f"{env_path} still records the install 20s after the reset was confirmed (factory reset stopped clearing it)")
+        await self.run_test("reset_took_effect", reset_took_effect)
+        return all(r.success for r in self.results)
+
     async def test_setup_wizard_flow(
         self,
         username: str = "admin",
@@ -796,6 +1068,7 @@ class DesktopAppTestRunner:
         llm_model: Optional[str] = None,
         llm_key_expect_rejected: bool = False,
         llm_require_live_models: bool = False,
+        run_without_ai: bool = False,
     ) -> bool:
         """Drive the first-run setup wizard via the test server.
 
@@ -870,11 +1143,11 @@ class DesktopAppTestRunner:
                 if screen == "Setup":
                     return
                 if screen == "Login" and not clicked_local:
-                    if await self.helper.is_element_visible("btn_local_login"):
+                    if await self.helper.is_element_present("btn_local_login"):
                         self._log("first run starts at the Login chooser — selecting local signup")
                         await self.helper.click("btn_local_login")
                         clicked_local = True
-                    elif await self.helper.is_element_visible("input_username"):
+                    elif await self.helper.is_element_present("input_username"):
                         # Already configured: this is a login screen, not first
                         # run. Caller's problem, but say which it was.
                         break
@@ -902,10 +1175,52 @@ class DesktopAppTestRunner:
             failure only surfaced one step later as a confusing "the consent screen
             has no toggles". Order fixed, and the skip made loud.
             """
-            self._log(f"YOU: band={age_band}, username={username}, fed-ID label={fed_label}")
+            self._log(
+                f"YOU: without_ai={run_without_ai}, band={age_band}, username={username}, "
+                f"fed-ID label={fed_label}"
+            )
 
-            # 1. AGE — first, required, and never silently skipped.
+            # 0. THE AI QUESTION — FIRST, because that is where the screen puts it.
+            # Client 0.5.203 renders AiPreferenceSection ABOVE age/account/fed-ID
+            # (0.5.202 had no such section), and it is answered first here for two
+            # reasons: it is the order a person meets the screen in, and choosing
+            # "without an AI assistant" recomposes YOU — answering it after filling
+            # the fields below would risk driving a screen that is about to change
+            # under the automation.
+            #
+            # It is not a step of its own. It sets
+            # SetupState.hasAiStep = hasAgent && !runWithoutAi, so this answer
+            # decides whether the AI SCREEN exists two steps later; a wrong answer
+            # surfaces there, not here. Both options are clicked explicitly rather
+            # than trusting the `runWithoutAi = false` default, so the run states
+            # its intent either way.
+            ai_tag = "opt_run_without_ai" if run_without_ai else "opt_run_with_ai"
+            if await self.helper.wait_for_optional_element(ai_tag, timeout=8000):
+                self._log(f"AI preference: {ai_tag}")
+                if not await self.helper.click(ai_tag):
+                    raise RuntimeError(f"Failed to click {ai_tag} on YOU")
+                await asyncio.sleep(0.3)
+            elif run_without_ai:
+                # Fatal only in the without-AI direction: with-AI is the default, so
+                # an older client that lacks the control still does the right thing,
+                # while without-AI silently becoming with-AI would make the whole run
+                # test nothing (CIRISAgent#1149).
+                await self._dump_tree("you_step:ai_preference")
+                raise RuntimeError(
+                    "opt_run_without_ai not found on YOU. This client predates the "
+                    "run-without-AI choice (needs ciris-client >= 0.5.203); without it "
+                    "the wizard would configure an LLM and the run would prove nothing."
+                )
+
+            # 1. AGE — required, and never silently skipped.
             band_tag = f"age_band_{age_band}"
+            # The AI question sits ABOVE age/account/fed-ID from 0.5.203, so on a
+            # short window the bands fall below the fold — and from 0.5.206 an
+            # off-screen element is refused rather than clicked by coordinate.
+            # Scroll first; the wait below still produces the real failure if the
+            # band genuinely is not there.
+            if not await self.helper.is_element_present(band_tag):
+                await self.helper.scroll_into_view(band_tag)
             if not await self.helper.wait_for_element(band_tag, timeout=10000):
                 await self._dump_tree("you_step:age")
                 raise RuntimeError(f"{band_tag} not found — YOU cannot advance without an age band")
@@ -914,7 +1229,7 @@ class DesktopAppTestRunner:
 
             # 2. ACCOUNT — local username/password render only for non-OAuth
             # signup (showLocalUserFields()), so probe rather than assume.
-            if await self.helper.is_element_visible("input_username"):
+            if await self.helper.is_element_present("input_username"):
                 await self.helper.input_text("input_username", username)
                 await self.helper.input_text("input_password", password)
                 await self.helper.input_text("input_password_confirm", password)
@@ -925,7 +1240,7 @@ class DesktopAppTestRunner:
             # username / OAuth id and is only overridden when the user edits it.
             # Setting it explicitly keeps runs identifiable and still exercises
             # the manual-edit path (labelManuallyEdited).
-            if await self.helper.is_element_visible("input_fedid_label"):
+            if await self.helper.is_element_present("input_fedid_label"):
                 await self.helper.input_text("input_fedid_label", fed_label)
 
             await asyncio.sleep(0.3)
@@ -956,8 +1271,8 @@ class DesktopAppTestRunner:
             # on every platform -- and a real refusal (required field unsatisfied)
             # still produces no such control, so the failure is still caught.
             deadline = asyncio.get_event_loop().time() + 30.0
-            while await self.helper.is_element_visible(band_tag):
-                if await self.helper.is_element_visible("toggle_announce_ownership"):
+            while await self.helper.is_element_present(band_tag):
+                if await self.helper.is_element_present("toggle_announce_ownership"):
                     break   # JOIN FEDERATION is on screen: YOU advanced
                 if asyncio.get_event_loop().time() > deadline:
                     await self._dump_tree("you_step:did-not-advance")
@@ -1041,7 +1356,7 @@ class DesktopAppTestRunner:
                     expect_key_rejected=llm_key_expect_rejected,
                     require_live_models=llm_require_live_models,
                 )
-            elif await self.helper.is_element_visible("btn_use_free_ai"):
+            elif await self.helper.is_element_present("btn_use_free_ai"):
                 # CIRIS-hosted proxy option (OAuth path) — no key entry needed.
                 self._log("AI: choosing CIRIS-hosted option (btn_use_free_ai)")
                 if not await self.helper.click("btn_use_free_ai"):
@@ -1063,7 +1378,24 @@ class DesktopAppTestRunner:
                 raise RuntimeError("Failed to click btn_next (finish) on the AI screen")
             await asyncio.sleep(1.0)
 
-        await self.run_test("ai_configuration", ai_step)
+        if run_without_ai:
+            # hasAiStep is false, so JOIN_FEDERATION advances straight to COMPLETE.
+            # Probing for the AI screen here would be a 20s wait for something the
+            # wizard is correct not to show.
+            #
+            # BUT AN ABSENT AI SCREEN PROVES NOTHING ON ITS OWN. hasAiStep is
+            # `hasAgent && !runWithoutAi`, so the screen is also absent when the
+            # client resolved clientMode=NODE — which is exactly what happens on a
+            # fresh home before the node is folded and reachable. The first run of
+            # this pass (34067627803) went green that way: the AI screen was
+            # skipped, the wizard completed, and the agent's own log said
+            # `No usable LLM provider (provider='openai', key_set=False)` — the
+            # accidental-no-key branch, not the deliberate one. run_without_ai
+            # never reached the agent, nothing handed off, and the pass tested
+            # nothing while reporting success.
+            self._log("Running WITHOUT AI: no AI screen expected (hasAiStep=false)")
+        else:
+            await self.run_test("ai_configuration", ai_step)
 
         # ── Step 5: COMPLETE (best-effort — CompleteStep is in SetupScreen) ──
         async def wait_for_complete():
@@ -1076,7 +1408,7 @@ class DesktopAppTestRunner:
                 if screen and screen != "Setup":
                     self._log(f"Left wizard → {screen}")
                     return
-                if not await self.helper.is_element_visible("btn_next"):
+                if not await self.helper.is_element_present("btn_next"):
                     self._log("On COMPLETE step (btn_next gone)")
                     return
                 await asyncio.sleep(0.5)
@@ -1105,7 +1437,13 @@ class DesktopAppTestRunner:
             backend's CIRIS_HOME while the app waited on a different directory.
             Both halves looked healthy; the ownership was simply never taken.
             """
-            log = temp_path("ciris_desktop_setup.log")
+            # The launcher writes ONE LOG PER LAUNCH (ciris_desktop_setup.<stamp>.log)
+            # so the no-AI session survives the with-AI pass; read the newest. A
+            # stale fixed name here would fall into the "not observable" branch
+            # below and pass having read nothing -- the vacuous shape this gate
+            # has produced enough times to name.
+            candidates = sorted(temp_path(".").glob("ciris_desktop_setup.*.log"), key=lambda q: q.stat().st_mtime)
+            log = candidates[-1] if candidates else temp_path("ciris_desktop_setup.log")
             try:
                 with open(log, "r", encoding="utf-8", errors="replace") as fh:
                     lines = [ln for ln in fh if "claim_settled" in ln]
@@ -1129,6 +1467,84 @@ class DesktopAppTestRunner:
 
         await self.run_test("claim_settled", claim_settled)
 
+        if run_without_ai:
+
+            async def without_ai_took_effect():
+                """The OWNER'S CHOICE must have reached the agent, not just the UI.
+
+                Asserted on the agent's own recorded state rather than on the
+                wizard's appearance, because the wizard can skip the AI screen for
+                a reason that has nothing to do with the choice (clientMode=NODE on
+                a fresh home). Without this the pass is green whenever the screen
+                happens to be absent — which is how its first run passed while
+                run_without_ai never left the client (CIRISAgent#1149).
+
+                The evidence is the home's .env: `CIRIS_RUN_WITHOUT_AI=true` is
+                written ONLY by the deliberate branch. The accidental
+                "no usable provider" branch writes CIRIS_SERVICES_DISABLED and
+                nothing else, and that difference is the whole point.
+                """
+                import os
+                from pathlib import Path
+
+                # DESKTOP ONLY, AND SAID OUT LOUD. On Android and iOS the agent's
+                # home lives on the DEVICE, so $CIRIS_HOME on the runner is not it —
+                # reading it there reported "cannot read ... .env" and turned a real
+                # question into a harness error. The desktop legs carry this
+                # assertion; mobile reports that it did not run, because a check
+                # that cannot see the answer must not imply one either way.
+                platform = getattr(_LAST_ARGS, "platform", "desktop") or "desktop"
+                if platform != "desktop":
+                    self._log(
+                        f"NOT ASSERTED on {platform}: the agent's home is on the device, so the runner "
+                        "cannot read its .env. The desktop legs assert this."
+                    )
+                    return
+
+                home = Path(os.environ.get("CIRIS_HOME") or (Path.home() / "ciris"))
+                env_path = home / ".env"
+                # THE WIZARD'S COMPLETE STEP RACES THE ROUTE. `setup_complete` above
+                # keys on the UI leaving the wizard, which happens when the user
+                # clicks finish -- while POST /v1/setup/complete is still running.
+                # On macOS (run 34257133016) this read came 12 ms after the agent
+                # began writing the file and reported "the agent never recorded the
+                # choice" about a flag that landed a moment later; Linux read 250 ms
+                # after the write and passed. Wait for the positive observation: the
+                # route finishes within a second, so 20 s is a bound, not a sleep.
+                flag: List[str] = []
+                body = ""
+                deadline = time.time() + 20
+                while time.time() < deadline:
+                    try:
+                        body = env_path.read_text(encoding="utf-8", errors="replace")
+                    except OSError:
+                        body = ""
+                    flag = [l.strip() for l in body.splitlines() if l.strip().startswith("CIRIS_RUN_WITHOUT_AI=")]
+                    if flag:
+                        break
+                    await asyncio.sleep(0.25)
+                if not flag and not env_path.exists():
+                    raise RuntimeError(
+                        f"cannot read {env_path} to confirm the choice was recorded: it does not exist 20s after the wizard finished"
+                    )
+                if not flag:
+                    disabled = "CIRIS_SERVICES_DISABLED=true" in body
+                    raise RuntimeError(
+                        "The wizard skipped the AI screen but the agent never recorded the choice: "
+                        f"no CIRIS_RUN_WITHOUT_AI in {env_path}.\n"
+                        "        The agent saw run_without_ai=false and took the accidental-no-key "
+                        "branch"
+                        + (" (CIRIS_SERVICES_DISABLED=true is present, which is that branch's signature)" if disabled else "")
+                        + ".\n"
+                        "        So the screen was absent for another reason — most likely "
+                        "clientMode=NODE on a fresh home, where hasAgent is false and hasAiStep is "
+                        "false regardless of the choice.\n"
+                        "        Nothing handed off to the node; :8080 is still the backend."
+                    )
+                self._log(f"the choice reached the agent: {flag[0]}")
+
+            await self.run_test("without_ai_recorded", without_ai_took_effect)
+
         async def announce_bundle():
             """The node must be DISCOVERABLE, not merely claimed.
 
@@ -1150,14 +1566,118 @@ class DesktopAppTestRunner:
             username = getattr(_args, "username", None) or "admin"
             password = getattr(_args, "password", None) or "qa_test_password_12345"
             node_url = getattr(_args, "node_url", None) or DEFAULT_NODE_URL
-            async with httpx.AsyncClient(timeout=30.0) as http:
-                r = await http.post(
-                    f"http://127.0.0.1:{api_port}/v1/auth/login",
-                    json={"username": username, "password": password},
-                )
-                r.raise_for_status()
-                headers = {"Authorization": f"Bearer {r.json()['access_token']}"}
-                check = await check_announce_bundle(http, node_url, headers)
+            # WHERE TO AUTHENTICATE. Normally the agent proxies /v1/auth/* to the
+            # node, so logging in on :8080 is the same session either way. On a
+            # run-without-AI leg there IS no :8080 — setup/complete replaced the
+            # agent process with the node (CIRISAgent#1149) — so the login has to
+            # go straight to the node, which owns /v1/auth/login itself. Keying
+            # this off the flag rather than off a failed connect keeps a genuinely
+            # dead agent on a with-AI leg loud instead of silently rerouted.
+            login_base = (
+                node_url.rstrip("/")
+                if getattr(_args, "run_without_ai", False)
+                else f"http://127.0.0.1:{api_port}"
+            )
+            # NO KEEP-ALIVE POOL. On a no-AI leg the peer behind :4243 changes
+            # identity mid-step (the agent-hosted fold dies, the exec'd node takes
+            # the port); a pooled socket opened to the first and reused against
+            # the second is the dropped read CIRISServer#568 diagnosed as ours.
+            # A fresh connection per request costs nothing here and removes the
+            # whole class.
+            async with httpx.AsyncClient(
+                timeout=30.0, limits=httpx.Limits(max_keepalive_connections=0, max_connections=4)
+            ) as http:
+                # ON A NO-AI LEG THE NODE IS STILL COMING UP. setup/complete
+                # answers, then the agent execs into ciris-server, and the read
+                # API binds several seconds later -- on Windows the probe here
+                # fired 18ms after the exec and the node answered 6.4s after
+                # that (run #34177749800), so the check declared :4243
+                # "unreachable" and passed as NOT asserted. Wait for the node,
+                # bounded; only then is "unreachable" a finding.
+                if getattr(_args, "run_without_ai", False):
+                    # WAIT FOR THE TRANSITION, NOT FOR AN ANSWER. On a desktop no-AI
+                    # leg the agent-hosted node fold is ALREADY serving :4243 when
+                    # setup/complete returns; 0.25s later the agent execs into the
+                    # standalone node and the fold dies with it. "Something answers
+                    # on :4243" is therefore true before, during and after the
+                    # hand-off, and on macOS (run #34228782947) the announce landed on
+                    # the fold as the process was replaced: the node log shows the
+                    # write at 13:12:26, the exec'd node's boot at 13:12:27, and our
+                    # pooled connection died between them (CIRISServer#568, closed as
+                    # ours -- correctly). So: watch for :4243 to be REFUSED at least
+                    # once (the fold dying), then for it to answer again (the exec'd
+                    # node). If it is never refused within the grace window the
+                    # backend did not exec -- Android/iOS serve the fold in-process --
+                    # and the fold is the node to announce against.
+                    loop = asyncio.get_event_loop()
+                    saw_down = False
+                    grace = loop.time() + 4.0
+                    while loop.time() < grace:
+                        try:
+                            await http.get(f"{login_base}/v1/identity", timeout=1.0)
+                        except Exception:  # noqa: BLE001 -- refused/dropped IS the signal
+                            saw_down = True
+                            break
+                        await asyncio.sleep(0.2)
+                    node_deadline = loop.time() + 60.0
+                    node_up = False
+                    while loop.time() < node_deadline:
+                        try:
+                            probe = await http.get(f"{login_base}/v1/identity", timeout=3.0)
+                            if probe.status_code < 500:
+                                node_up = True
+                                break
+                        except Exception:  # noqa: BLE001 -- not up yet is the expected answer
+                            pass
+                        await asyncio.sleep(1.0)
+                    self._log(
+                        f"node read API at {login_base}: {'up' if node_up else 'NOT up after 60s'} "
+                        + ("after the hand-off transition (fold down, node up)" if saw_down
+                           else "with no transition seen in 4s -- in-process fold, no exec")
+                    )
+
+                # NAME THE PEER THAT DROPPED US. Everything in this block talks to
+                # the NODE (:4243 on a no-AI leg, the agent proxy otherwise) -- never
+                # to the client's automation server on :9091. But a transport error
+                # escaping here reaches run_test, whose classifier reads any
+                # ConnectError/ReadError/RemoteProtocolError as "the client's
+                # automation server stopped answering" -- and matrix #5 (macOS, iOS)
+                # reported exactly that for a bare ReadError from the exec'd node
+                # during the announce POST. Wrong peer, wrong owner, wrong bug.
+                try:
+                    r = await http.post(
+                        f"{login_base}/v1/auth/login",
+                        json={"username": username, "password": password},
+                    )
+                    r.raise_for_status()
+                    headers = {"Authorization": f"Bearer {r.json()['access_token']}"}
+                    try:
+                        check = await check_announce_bundle(http, node_url, headers)
+                    except httpx.TransportError as first:
+                        # ANNOUNCE IS IDEMPOTENT, AND THE NODE MAY RE-COMPOSE UNDER IT.
+                        # On macOS (run #34228782947) the node's log shows the announce
+                        # WRITE succeeding at 13:12:26 and the node re-composing at
+                        # 13:12:27 ("takes effect on next boot", and the boot is
+                        # immediate) -- the in-flight response was lost, and a client
+                        # that reads a dropped response as failure reports a
+                        # discoverable node as NOT discoverable. Filed upstream; until
+                        # it is settled, one retry after the re-compose settles is the
+                        # honest reading: the re-announce is a no-op that returns the
+                        # bundle the write produced.
+                        self._log(
+                            f"node at {node_url} dropped the announce response "
+                            f"({type(first).__name__}); it re-composes after announce-self "
+                            f"(CIRISServer issue filed) -- retrying once in 5s (announce is idempotent)"
+                        )
+                        await asyncio.sleep(5.0)
+                        check = await check_announce_bundle(http, node_url, headers)
+                except httpx.TransportError as exc:
+                    raise RuntimeError(
+                        f"the NODE at {login_base} dropped the connection during login/announce: "
+                        f"{type(exc).__name__}: {exc or '(no detail)'} -- this is the ciris-server "
+                        f"read API, not the client's automation server; the node's own log "
+                        f"(ciris-server.log.*) around this moment is the evidence"
+                    ) from exc
             for line in check.render().splitlines():
                 self._log(line)
             if check.status in ("unreachable", "not_reported"):
@@ -1221,25 +1741,25 @@ class DesktopAppTestRunner:
         # → Nodes surface (nav_epistemic_nodes) → btn_add_federation_id.
         async def reach_entry():
             self._log("Looking for btn_add_federation_id (Manage Nodes surface)")
-            if await self.helper.is_element_visible("btn_add_federation_id"):
+            if await self.helper.is_element_present("btn_add_federation_id"):
                 return
             # Expand the Manage group if the Nodes row isn't visible yet.
-            if not await self.helper.is_element_visible("nav_epistemic_nodes"):
-                if await self.helper.is_element_visible("nav_group_manage"):
+            if not await self.helper.is_element_present("nav_epistemic_nodes"):
+                if await self.helper.is_element_present("nav_group_manage"):
                     self._log("Expanding sidebar group nav_group_manage")
                     await self.helper.click("nav_group_manage")
                     try:
                         await self.helper.wait_for_element("nav_epistemic_nodes", timeout=3000)
                     except Exception:  # noqa: BLE001
                         pass
-            if await self.helper.is_element_visible("nav_epistemic_nodes"):
+            if await self.helper.is_element_present("nav_epistemic_nodes"):
                 self._log("Clicking nav_epistemic_nodes")
                 await self.helper.click("nav_epistemic_nodes")
                 try:
                     await self.helper.wait_for_element("btn_add_federation_id", timeout=5000)
                 except Exception:  # noqa: BLE001
                     pass
-                if await self.helper.is_element_visible("btn_add_federation_id"):
+                if await self.helper.is_element_present("btn_add_federation_id"):
                     return
             # Fallback: scan the element tree for any Manage-Nodes-ish nav row.
             elements = await self.helper.get_elements()
@@ -1252,7 +1772,7 @@ class DesktopAppTestRunner:
                 self._log(f"trying nav candidate: {tag}")
                 await self.helper.click(tag)
                 await asyncio.sleep(0.5)
-                if await self.helper.is_element_visible("btn_add_federation_id"):
+                if await self.helper.is_element_present("btn_add_federation_id"):
                     return
             raise RuntimeError(
                 "btn_add_federation_id not reachable — navigate to the Manage "
@@ -1293,7 +1813,7 @@ class DesktopAppTestRunner:
 
         async def trace_gated_off():
             self._log("Asserting toggle_trace_opt_in hidden while announce OFF (catch-up)")
-            if await self.helper.is_element_visible("toggle_trace_opt_in"):
+            if await self.helper.is_element_present("toggle_trace_opt_in"):
                 raise RuntimeError("toggle_trace_opt_in visible before announce ON (catch-up gating broken)")
 
         await self.run_test("catchup_trace_gated_off", trace_gated_off)
@@ -1399,9 +1919,11 @@ Examples:
             "desktop-login",
             "desktop-chat",
             "desktop-setup",
+            "desktop-reset",
             "desktop-catchup",
             "desktop-up",
             "federation",
+            "flow",
             "e2e",
             "setup",
             "interact",
@@ -1467,6 +1989,13 @@ Examples:
         "--fed-label",
         default=None,
         help="Federation ID label for desktop-setup/desktop-catchup (default: generated qa-* name)",
+    )
+    parser.add_argument(
+        "--run-without-ai",
+        action="store_true",
+        help="Answer the wizard's AI question with \"without an AI assistant\" (client >= 0.5.203). "
+        "The AI screen is then not shown, the agent records CIRIS_RUN_WITHOUT_AI=true, and the "
+        "backend becomes a ciris-server node on :4243 (CIRISAgent#1149).",
     )
     parser.add_argument(
         "--no-announce",
@@ -1688,6 +2217,20 @@ Examples:
         "--ios-bundle-id",
         default="ai.ciris.mobile",
         help="For --ios: bundle ID to launch (default: ai.ciris.mobile).",
+    )
+    parser.add_argument(
+        "--spec",
+        action="append",
+        default=None,
+        metavar="PATH",
+        help="For `flow`: a flow spec (.yaml) or a directory of them. Repeatable. "
+        "Default: tools/qa_runner/flows.",
+    )
+    parser.add_argument(
+        "--artifacts",
+        default="artifacts",
+        help="For `flow`: where per-step screenshots and the JSON report are written "
+        "(default: artifacts).",
     )
     parser.add_argument(
         "--node-url",
@@ -1991,6 +2534,13 @@ def _desktop_home(server: "object") -> str:
     """
     home = getattr(getattr(server, "config", None), "project_root", None)
     return str(os.environ.get("CIRIS_HOME") or home or "")
+
+
+def _launch_stamp() -> str:
+    """UTC timestamp for a per-launch log name: sorts chronologically, never collides."""
+    import datetime as _dt
+
+    return _dt.datetime.now(_dt.timezone.utc).strftime("%Y%m%dT%H%M%S")
 
 
 def _desktop_urls(brain_base_url: str) -> "tuple[str, str]":
@@ -2383,6 +2933,19 @@ async def run_android_up(args: argparse.Namespace) -> int:
             "       backend-state assertions in the walk-test will fail; walk continues."
         )
 
+    # THE NODE'S READ API TOO. On a run-without-AI leg :8080 is meant to go
+    # away and :4243 is where the node answers; without this forward the host
+    # cannot see it, so the hand-off attribution read "BOTH backends
+    # unreachable -- the hand-off did not land" on a device where the node was
+    # simply not forwarded (run #34165538262). Best-effort, like 8080: a device
+    # that cannot forward it degrades to "not observable", never to a false
+    # verdict.
+    forward_node = _adb(["forward", "tcp:4243", "tcp:4243"], serial=serial, timeout=10)
+    if forward_node.returncode == 0:
+        print(f"  forward: host:4243 -> {serial}:4243 (node read API, run-without-AI)")
+    else:
+        print(f"  [WARN] adb forward 4243->4243 failed: {forward_node.stderr.strip()} -- node not observable from the host")
+
     # 5. Poll /health.
     print("[4/5] Waiting for AndroidTestAutomationServer to come up…")
     server_url = f"http://localhost:{args.desktop_port}"
@@ -2487,6 +3050,27 @@ async def run_desktop_up(args: argparse.Namespace) -> int:
 
     kill_processes_matching(desktop_process_pattern())
     # CIRIS-linux handled by desktop_process_pattern() above; pkill is POSIX-only.
+    # THE APP'S CHILDREN OUTLIVE THE APP. On a no-AI session ciris-client 0.5.209
+    # resolves :4243, finds the exec'd node not yet bound, and launches a
+    # ciris-server of its own ("Launching local ciris-server node..."); its revive
+    # loop keeps doing so. Killing the JVM by name leaves that child alive, and on
+    # Linux one booted at 12:08:12, eight seconds before our with-AI agent, which
+    # then died on "Edge transport ports are held by another process" (run
+    # #34223901074). Kill the node processes AFTER the app that spawns them, then
+    # prove the ports free by binding -- the same authority the workflow's
+    # teardown uses, because an absent process listing is not evidence.
+    for pat in ("ciris_server", "ciris-server"):
+        kill_processes_matching(pat)
+    import subprocess as _sp
+
+    _free = _sp.run(
+        [sys.executable, "tools/dev/free_ports.py", "4242", "4243", str(args.port), "--timeout", "30", "--label", "bring-up"],
+        capture_output=True, text=True, timeout=60, cwd=str(Path(__file__).resolve().parents[4]),
+    )
+    print(_free.stdout.rstrip() or "  bring-up: free_ports produced no output")
+    if _free.returncode != 0:
+        print(" [FAIL] ports still held after the bring-up kill; the backend would fail Edge init")
+        return 1
     time.sleep(1)
     _wipe_dev_data()
 
@@ -2555,7 +3139,7 @@ async def run_desktop_up(args: argparse.Namespace) -> int:
         # SAME HOME AS THE BACKEND, or the app cannot see the files the node writes.
         if _home := _desktop_home(server):
             env["CIRIS_HOME"] = _home
-        log_path = temp_path("ciris_desktop_up.log")
+        log_path = temp_path(f"ciris_desktop_up.{_launch_stamp()}.log")
         with open(log_path, "w") as log:
             subprocess.Popen(
                 ["java", "-jar", str(jar)],
@@ -2637,6 +3221,27 @@ async def run_desktop_first_run_up(args: argparse.Namespace) -> int:
 
     kill_processes_matching(desktop_process_pattern())
     # CIRIS-linux handled by desktop_process_pattern() above; pkill is POSIX-only.
+    # THE APP'S CHILDREN OUTLIVE THE APP. On a no-AI session ciris-client 0.5.209
+    # resolves :4243, finds the exec'd node not yet bound, and launches a
+    # ciris-server of its own ("Launching local ciris-server node..."); its revive
+    # loop keeps doing so. Killing the JVM by name leaves that child alive, and on
+    # Linux one booted at 12:08:12, eight seconds before our with-AI agent, which
+    # then died on "Edge transport ports are held by another process" (run
+    # #34223901074). Kill the node processes AFTER the app that spawns them, then
+    # prove the ports free by binding -- the same authority the workflow's
+    # teardown uses, because an absent process listing is not evidence.
+    for pat in ("ciris_server", "ciris-server"):
+        kill_processes_matching(pat)
+    import subprocess as _sp
+
+    _free = _sp.run(
+        [sys.executable, "tools/dev/free_ports.py", "4242", "4243", str(args.port), "--timeout", "30", "--label", "bring-up"],
+        capture_output=True, text=True, timeout=60, cwd=str(Path(__file__).resolve().parents[4]),
+    )
+    print(_free.stdout.rstrip() or "  bring-up: free_ports produced no output")
+    if _free.returncode != 0:
+        print(" [FAIL] ports still held after the bring-up kill; the backend would fail Edge init")
+        return 1
     time.sleep(1)
     _wipe_dev_data()
     # _wipe_dev_data rewrites ~/ciris/.env with CIRIS_CONFIGURED="true" (for
@@ -2683,7 +3288,16 @@ async def run_desktop_first_run_up(args: argparse.Namespace) -> int:
     # (the claim PIN in particular).
     if _home := _desktop_home(server):
         env["CIRIS_HOME"] = _home
-    log_path = temp_path("ciris_desktop_setup.log")
+    # ONE FILE PER LAUNCH. The gate launches the desktop app several times in a
+    # job (no-AI setup, no-AI login, reset, with-AI setup, ...), and a fixed name
+    # opened "w" meant the artifact carried only the LAST session's client log.
+    # The no-AI hand-off -- the one session whose client behaviour we most needed
+    # to read -- was overwritten by the with-AI pass every time, and a diagnosis
+    # of "the client kept polling :8080 after the hand-off" was in fact read
+    # from the with-AI client polling a backend that had died on a port collision
+    # (run #34147279506; corrected on CIRISClient#43). The collector globs
+    # ciris_desktop*.log, so a timestamped name is picked up with no other change.
+    log_path = temp_path(f"ciris_desktop_setup.{_launch_stamp()}.log")
     with open(log_path, "w") as log:
         subprocess.Popen(
             ["java", "-jar", str(jar)],
@@ -3593,6 +4207,120 @@ async def _ios_complete_setup_if_needed(
     return False
 
 
+async def run_flow_specs(args: argparse.Namespace) -> int:
+    """Drive declarative UI flows — CIRISClient#39's canonical form, test direction.
+
+    The whole point is that the assertions live in data next to the screens they
+    drive, so a screen reorder cannot land without its flow moving in the same PR.
+    This function only wires the pieces: connect, check the version floor, run each
+    spec, report to the console AND to artifacts/flows/*.json.
+    """
+    from .flow_spec import FlowRunner, FlowSpec, SpecError, check_client_floor, discover
+    from .platforms import build_platform
+
+    paths = args.spec or ["tools/qa_runner/flows"]
+    try:
+        spec_files = discover(paths)
+    except SpecError as exc:
+        print(f"[FAIL] {exc}")
+        return 1
+    if not spec_files:
+        print(f"[FAIL] no flow specs found in {paths}")
+        return 1
+
+    # LOAD EVERYTHING FIRST. A spec that does not parse should be reported before
+    # an emulator is driven for ten minutes, not after.
+    specs = []
+    for path in spec_files:
+        try:
+            specs.append(FlowSpec.load(path))
+        except SpecError as exc:
+            print(f"[FAIL] {exc}")
+            return 1
+
+    client_version = None
+    try:
+        import importlib.metadata as _md
+
+        client_version = _md.version("ciris-client")
+    except Exception:  # noqa: BLE001 -- absence is not a refusal, see check_client_floor
+        client_version = None
+
+    server_url = f"http://localhost:{args.desktop_port}"
+    helper = DesktopAppHelper(DesktopAppConfig(server_url=server_url))
+    platform = build_platform(args)
+    artifacts = Path(args.artifacts)
+
+    if not await helper.start():
+        print(f"[FAIL] the test server is not usable: nothing answered at {server_url}")
+        return 1
+
+    overall = 0
+    # A flow whose FIRST step's `requires` does not hold never ran: its screen
+    # is not what this client shows (FSD/CSD_STANDARD.md §5: "this flow cannot
+    # start here" and "this element is broken" are different bugs with
+    # different owners). Reported loudly, in the JSON and in the gallery, and
+    # returned as exit 2 so the caller can warn instead of failing a leg on a
+    # surface the pinned client does not carry yet (CIRISClient#45 is unmerged
+    # as of 2026-09-08). A flow that started and then failed is exit 1.
+    cannot_start: list = []
+    try:
+        for spec in specs:
+            refusal = check_client_floor(spec.client_floor, client_version)
+            if refusal:
+                # The flow says which client it needs and this is not it: the
+                # flow cannot start here. Reported, not failed -- and once the
+                # floor is met, every expectation in it is binding.
+                print(f"\n FLOW {spec.flow} — REFUSED\n   {refusal}")
+                cannot_start.append((spec.flow, refusal))
+                continue
+            # REACH THE STARTING SCREEN FIRST. A flow states where it starts
+            # (its first step's `requires: screen:`) and never encodes the hop;
+            # the sidebar walk is the harness's job, by the client's own tag
+            # rule (desktop_app_helper.navigate_to_surface). The step's own
+            # `requires` then asserts arrival, so a hop that did not land is
+            # reported as "this flow cannot start here", with the drivable set.
+            start = spec.steps[0].requires.screen if spec.steps else None
+            nav_err = None
+            if start:
+                nav_err = await helper.navigate_to_surface(start)
+                if nav_err:
+                    print(f"\n FLOW {spec.flow} — could not reach its starting screen {start!r}: {nav_err}")
+                else:
+                    print(f"\n FLOW {spec.flow} — on {start!r} via the sidebar")
+            runner = FlowRunner(helper, platform=platform, artifacts=artifacts)
+            ok = await runner.run(spec)
+            report = runner.write_report(spec)
+            print(f"\n  {runner.summary(spec)}")
+            if report:
+                print(f"  report: {report}")
+            if not ok:
+                # "Cannot start" is ONLY: the sidebar hop did not land, or the
+                # first step's `requires` did not hold. A first step whose
+                # `expect` fails on the right screen is a real verdict -- an
+                # entry card that stopped rendering must redden the leg, which
+                # is what the flow exists to catch (review on #1158). What the
+                # pinned client does not carry at all is the `client:` floor's
+                # job, refused above.
+                first = runner.results[0] if runner.results else None
+                untouched = nav_err is not None or (
+                    first is not None and len(runner.results) == 1 and first.phase == "requires"
+                )
+                if untouched:
+                    cannot_start.append((spec.flow, first.detail))
+                else:
+                    overall = 1
+    finally:
+        await helper.stop()
+    if cannot_start:
+        print(f"\n {len(cannot_start)} flow(s) could not start on ciris-client {client_version or '?'}:")
+        for flow, why in cannot_start:
+            print(f"   {flow}: {why}")
+        if overall == 0:
+            return 2
+    return overall
+
+
 async def run_federation_walk(args: argparse.Namespace) -> int:
     """Walk the federation Network screens via the test-automation server.
 
@@ -3733,7 +4461,10 @@ async def run_desktop_tests(args: argparse.Namespace) -> int:
         # client bug and a process kill, which run 33704781359 could not settle.
         if platform in ("android", "ios"):
             backend_url = f"http://localhost:{getattr(args, 'port', 8080)}"
-            print(f"  -> {await attribute_device_failure(server_url, backend_url)}")
+            node_url = None
+            if getattr(args, "run_without_ai", False):
+                node_url = getattr(args, "node_url", None) or "http://127.0.0.1:4243"
+            print(f"  -> {await attribute_device_failure(server_url, backend_url, node_url)}")
         if platform == "android":
             print("\nAndroid: the app is launched with `--es CIRIS_TEST_MODE true` and")
             print("  `setprop debug.CIRIS_TEST_MODE true`, and a debug build should set")
@@ -3777,6 +4508,7 @@ async def run_desktop_tests(args: argparse.Namespace) -> int:
             success = await runner.test_login_flow(
                 username=args.username or "admin",
                 password=args.password or "qa_test_password_12345",
+                run_without_ai=getattr(args, "run_without_ai", False),
             )
             runner.print_summary()
             return 0 if success else 1
@@ -3810,10 +4542,17 @@ async def run_desktop_tests(args: argparse.Namespace) -> int:
                 llm_provider=args.llm_provider,
                 llm_api_key=_byok_key,
                 llm_model=args.llm_model,
+                run_without_ai=getattr(args, "run_without_ai", False),
             )
             runner.print_summary()
             return 0 if success else 1
 
+        elif args.command == "desktop-reset":
+            # Log out + factory reset THROUGH THE CLIENT, so the .env (and with it
+            # CIRIS_RUN_WITHOUT_AI) is cleared the way a user would clear it.
+            success = await runner.test_reset_device_flow()
+            runner.print_summary()
+            return 0 if success else 1
         elif args.command == "desktop-catchup":
             # Catch-up "Add Federation ID" flow (AddFederationIdScreen):
             #   btn_add_federation_id → input_fed_label →
@@ -3849,6 +4588,11 @@ async def main() -> int:
     # Federation Network screen walk-test
     if args.command == "federation":
         return await run_federation_walk(args)
+
+    # Declarative UI flows (CIRISClient#39's canonical form). See
+    # tools/qa_runner/flows/README.md.
+    if args.command == "flow":
+        return await run_flow_specs(args)
 
     # Node-client first-run setup wizard: --launch brings up backend in
     # FIRST-RUN mode + desktop app sitting on the Setup wizard, then drives it.

@@ -106,7 +106,19 @@ def _read_api_url(port: int = 4243) -> str:
 def _wait_for_node_health(
     server_url: str, node_proc: "subprocess.Popen[bytes]", timeout: float = 60.0
 ) -> bool:
-    """Poll ``GET {server_url}/health`` until the node answers 200 or it dies."""
+    """Poll ``GET {server_url}/health`` until the node answers 200 or it dies.
+
+    200 IS the contract (CIRISServer#548): ``/health`` sits on the one read-API
+    listener, which binds only after the stores are open, the identity is
+    stamped, the trust root is resolved and every route is mounted — so a TCP
+    accept already means "serving", and before it the port is connection
+    refused. There is no intermediate to detect: the plain route's ``status``
+    is a constant ok and the node has no starting value anywhere (the tuple
+    this used to test against was a leftover from 174f3d9 that named a state
+    no producer ever emitted — a mirrored vocabulary the node itself did not
+    have; tests/launcher_readiness_is_the_contract.rs keeps it out). The body
+    is read only for the log line.
+    """
     import json
     import urllib.error
     import urllib.request
@@ -125,10 +137,15 @@ def _wait_for_node_health(
                         body = json.loads(resp.read().decode("utf-8"))
                     except (ValueError, UnicodeDecodeError):
                         body = {}
-                    if body.get("status", "ok") in ("ok", "starting", "degraded"):
-                        elapsed = time.time() - start
-                        print(f"Node ready ({elapsed:.1f}s)")
-                        return True
+                    elapsed = time.time() - start
+                    node = body.get("node") or {}
+                    print(
+                        f"Node ready ({elapsed:.1f}s)"
+                        f" version={body.get('version', '?')}"
+                        f" standing={node.get('standing', '?')}"
+                        f" instance={str(node.get('instance_id', '?'))[:8]}"
+                    )
+                    return True
         except (urllib.error.URLError, OSError, TimeoutError):
             pass
         if attempt % 10 == 0:

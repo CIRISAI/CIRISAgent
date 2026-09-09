@@ -94,7 +94,7 @@
         "description": "Choose which discovered instance to use (single selection)",
         "depends_on": ["discover"],
         "multiple": false,
-        "optional": false,
+        "required": true,
         "_comment": "STEP TYPE: select (REQUIRED, SINGLE) - Shows discovered instances. User must select exactly one. Not optional, must complete."
       },
       {
@@ -104,7 +104,7 @@
         "description": "Optionally choose cameras to monitor",
         "depends_on": ["oauth"],
         "multiple": true,
-        "optional": true,
+        "required": false,
         "_comment": "STEP TYPE: select (OPTIONAL, MULTIPLE) - Can be skipped. If completed, user can select 0+ cameras. optional: true means step can be skipped entirely."
       },
       {
@@ -149,7 +149,7 @@
         "step_type": "input",
         "title": "Advanced Settings (Optional)",
         "description": "Configure advanced options (can be skipped)",
-        "optional": true,
+        "required": false,
         "fields": [
           {
             "name": "debug_mode",

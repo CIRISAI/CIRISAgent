@@ -2,7 +2,9 @@
 
 > v1.3 subsidiarity closure — decision routing at lowest competent scale
 
-**Seed reference**: `SEED_DIMENSIONS.yaml` v1.0, dimension `D07` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
+**Kinds of change (RATCHET 11+1)**: rules · circumstances — Record: indirect
+
+**Seed reference**: `SEED_DIMENSIONS.yaml` v1.1, dimension `D07` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
 **Accord principle**: justice
 **Attestation density**: MH=17 · EU=5 · IEEE=13 · ASEAN=7 · total=42
 

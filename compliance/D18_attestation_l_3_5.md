@@ -2,7 +2,9 @@
 
 > Verification ladder (L1-L5 hardware-rooted attestation)
 
-**Seed reference**: `SEED_DIMENSIONS.yaml` v1.0, dimension `D18` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
+**Kinds of change (RATCHET 11+1)**: identity · confidence — Record: direct
+
+**Seed reference**: `SEED_DIMENSIONS.yaml` v1.1, dimension `D18` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
 **Accord principle**: integrity
 **Attestation density**: MH=2 · EU=4 · IEEE=5 · ASEAN=0 · total=11
 

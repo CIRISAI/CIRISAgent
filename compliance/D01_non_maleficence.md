@@ -2,7 +2,9 @@
 
 > Soft-harm-avoidance baseline (the soft-scalar above the prohibited:* floor)
 
-**Seed reference**: `SEED_DIMENSIONS.yaml` v1.0, dimension `D01` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
+**Kinds of change (RATCHET 11+1)**: rules · premises — Record: indirect
+
+**Seed reference**: `SEED_DIMENSIONS.yaml` v1.1, dimension `D01` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
 **Accord principle**: non_maleficence
 **Attestation density**: MH=28 · EU=29 · IEEE=33 · ASEAN=27 · total=117
 

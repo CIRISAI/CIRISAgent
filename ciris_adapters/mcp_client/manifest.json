@@ -92,7 +92,7 @@
         "title": "Select Transport Type",
         "description": "Choose how to connect to the MCP server",
         "options_method": "get_config_options",
-        "field_name": "transport",
+        "fields": [{"name": "transport"}],
         "required": true
       },
       {
@@ -109,7 +109,7 @@
         "step_type": "input",
         "title": "Security Settings",
         "description": "Configure rate limiting and security options (optional)",
-        "optional": true,
+        "required": false,
         "fields": [
           {
             "name": "max_calls_per_minute",
@@ -135,7 +135,7 @@
         "title": "Select Bus Bindings",
         "description": "Choose which CIRIS buses to bind this server to",
         "options_method": "get_config_options",
-        "field_name": "enabled_buses",
+        "fields": [{"name": "enabled_buses"}],
         "multiple": true,
         "required": true
       },

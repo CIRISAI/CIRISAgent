@@ -6,10 +6,10 @@ from typing import List
 from ciris_engine.schemas.runtime.canonical_peer import CanonicalBootstrapPeer
 
 # Version information
-CIRIS_VERSION = "2.10.0-stable"
+CIRIS_VERSION = "2.11.0-stable"
 ACCORD_VERSION = "1.2-Beta"
 CIRIS_VERSION_MAJOR = 2
-CIRIS_VERSION_MINOR = 10
+CIRIS_VERSION_MINOR = 11
 CIRIS_VERSION_PATCH = 0
 CIRIS_VERSION_BUILD = 0
 CIRIS_VERSION_STAGE = "stable"

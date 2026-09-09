@@ -182,10 +182,10 @@ class FederationWalkTest:
         loop = asyncio.get_event_loop()
         deadline = loop.time() + (timeout_ms / 1000.0)
         while loop.time() < deadline:
-            if not await self.helper.is_element_visible(tag):
+            if not await self.helper.is_element_present(tag):
                 return True
             await asyncio.sleep(0.2)
-        return not await self.helper.is_element_visible(tag)
+        return not await self.helper.is_element_present(tag)
 
     # ─── Diagnostic capture ───────────────────────────────────────
     async def _capture_diagnostic(self) -> DiagnosticSnapshot:
@@ -225,6 +225,11 @@ class FederationWalkTest:
 
     async def _navigate_to_hub(self) -> bool:
         """Open Network hub via standard nav; tolerate either path."""
+        # ON SCREEN, not merely composed: the client's registry never forgets a
+        # tag, so once the hub has been shown `screen_network_hub` stays PRESENT
+        # while any other screen is active. A navigation that failed would still
+        # read as success under the presence predicate. Presence is kept only for
+        # controls that may be below the fold (tiles, refresh buttons).
         # Try the high-level navigate_to first (uses menu pattern); if the
         # menu doesn't list Network yet, fall back to direct hub-root probe.
         try:
@@ -313,7 +318,7 @@ class FederationWalkTest:
                 return r
 
         # Click the nav tile (must be present on the hub)
-        if not await self.helper.is_element_visible(screen.nav_tile):
+        if not await self.helper.is_element_present(screen.nav_tile):
             r.status = WalkStatus.FAIL
             r.reason = f"nav tile missing on hub: {screen.nav_tile}"
             r.missing_tags = [screen.nav_tile]
@@ -361,7 +366,7 @@ class FederationWalkTest:
 
         # Click each clickable target
         for target in screen.clickable_targets:
-            if not await self.helper.is_element_visible(target):
+            if not await self.helper.is_element_present(target):
                 r.missing_tags.append(target)
                 continue
             if await self._try_click(target):
@@ -373,7 +378,7 @@ class FederationWalkTest:
 
         # Refresh (one click) if defined
         if screen.refresh is not None:
-            if not await self.helper.is_element_visible(screen.refresh):
+            if not await self.helper.is_element_present(screen.refresh):
                 r.missing_tags.append(screen.refresh)
             elif await self._try_click(screen.refresh):
                 r.refresh_clicked = True
@@ -469,7 +474,7 @@ class FederationWalkTest:
                 r.text_probe_values[probe] = elem.text or ""
 
         for target in screen.clickable_targets:
-            if not await self.helper.is_element_visible(target):
+            if not await self.helper.is_element_present(target):
                 r.missing_tags.append(target)
                 continue
             if await self._try_click(target):
@@ -479,7 +484,7 @@ class FederationWalkTest:
                 r.failed_targets.append(target)
 
         if screen.refresh is not None:
-            if not await self.helper.is_element_visible(screen.refresh):
+            if not await self.helper.is_element_present(screen.refresh):
                 r.missing_tags.append(screen.refresh)
             elif await self._try_click(screen.refresh):
                 r.refresh_clicked = True
@@ -554,7 +559,7 @@ class FederationWalkTest:
                 return
             # Dialog may appear; click confirm if so (best-effort)
             await asyncio.sleep(0.3)
-            if await self.helper.is_element_visible(BTN_MODE_CONFIRM):
+            if await self.helper.is_element_present(BTN_MODE_CONFIRM):
                 await self._try_click(BTN_MODE_CONFIRM)
             await self._poll_until_mode("proxy", timeout_s=3.0)
         result.proxy_selected = True
@@ -788,7 +793,7 @@ class FederationWalkTest:
             return
 
         # Open dialog
-        if not await self.helper.is_element_visible(BTN_ADD_PEER):
+        if not await self.helper.is_element_present(BTN_ADD_PEER):
             result.status = WalkStatus.FAIL
             result.reason = f"add-peer button missing: {BTN_ADD_PEER}"
             result.missing_tags = [BTN_ADD_PEER]
@@ -854,7 +859,7 @@ class FederationWalkTest:
         # Cancel — Compose ModalBottomSheet dismiss animation + state
         # propagation can run noticeably longer than the default ~500ms
         # element-poll budget, so give the sheet up to 3s to disappear.
-        if not await self.helper.is_element_visible(BTN_ADD_PEER_CANCEL):
+        if not await self.helper.is_element_present(BTN_ADD_PEER_CANCEL):
             result.missing_tags.append(BTN_ADD_PEER_CANCEL)
         else:
             if await self._try_click(BTN_ADD_PEER_CANCEL):

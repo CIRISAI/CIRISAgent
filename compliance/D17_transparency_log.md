@@ -2,7 +2,9 @@
 
 > CIRISVerify per-stakeholder disclosure log
 
-**Seed reference**: `SEED_DIMENSIONS.yaml` v1.0, dimension `D17` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
+**Kinds of change (RATCHET 11+1)**: process — Record: direct
+
+**Seed reference**: `SEED_DIMENSIONS.yaml` v1.1, dimension `D17` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
 **Accord principle**: fidelity
 **Attestation density**: MH=2 · EU=5 · IEEE=23 · ASEAN=10 · total=40
 

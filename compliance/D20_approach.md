@@ -2,7 +2,9 @@
 
 > Decision-hierarchy strategic axis (Goal→Approach→Method→Progress-Measure DAG)
 
-**Seed reference**: `SEED_DIMENSIONS.yaml` v1.0, dimension `D20` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
+**Kinds of change (RATCHET 11+1)**: priorities · premises — Record: indirect
+
+**Seed reference**: `SEED_DIMENSIONS.yaml` v1.1, dimension `D20` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
 **Accord principle**: integrity
 **Attestation density**: MH=5 · EU=3 · IEEE=23 · ASEAN=1 · total=32
 

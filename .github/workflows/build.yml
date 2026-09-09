@@ -64,6 +64,12 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python tools/check_evidence.py
 
+      # A CSD's flow block must be byte-identical to the executable flow file it
+      # names, in both directions (FSD/CSD_STANDARD.md §7). This is what makes a
+      # screen reorder fail CI unless the spec moves with it (CIRISClient#39).
+      - name: CSD spec/flow identity (both directions)
+        run: python tools/dev/check_csd.py
+
       # D27: runtime code must not depend on its own .md (outside L4 attestation
       # tree). Stdlib-only AST gate, no deps. CIRISAgent#807.
       - name: D27 runtime .md-reference gate

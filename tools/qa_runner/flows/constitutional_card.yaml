@@ -1,0 +1,39 @@
+flow: constitutional_card
+title: Constitutional screen and its Accord cards
+description: >-
+  CIRISClient#45 implemented ConstitutionalScreen with the killswitch and holders
+  cards. The killswitch card is the reason this flow is not optional: it is a
+  safety surface, and a safety surface that silently fails to render is worse
+  than one that is absent, because the absence is at least visible.
+# CIRISClient#45 is unmerged (2026-09-08): NO release carries this surface, so the
+# flow is refused as "cannot start" rather than driven into "element not found".
+# Replace with ">=<release>" when #45 ships. A numeric floor was tried first and
+# stopped refusing on the next client cut (0.5.213), turning these into binding
+# verdicts against a client that still lacks the screens.
+client: "unreleased"
+
+steps:
+  - step_id: constitutional_screen
+    title: The Constitutional screen composes its overview
+    requires:
+      screen: Constitutional
+    expect:
+      visible: [screen_constitutional, card_constitutional_overview, btn_constitutional_back]
+
+  - step_id: accord_cards
+    title: Killswitch and holders cards are both present
+    expect:
+      visible: [card_accord_killswitch, card_accord_holders]
+
+  - step_id: accord_entry_points
+    title: The ceremony and provision entry points are offered
+    expect:
+      visible: [btn_open_accord_ceremony, btn_open_provision_holder]
+
+  - step_id: refresh_is_live
+    title: Refresh runs without leaving the screen
+    do:
+      - click: btn_constitutional_refresh
+    expect:
+      screen: Constitutional
+      visible: [card_accord_killswitch]

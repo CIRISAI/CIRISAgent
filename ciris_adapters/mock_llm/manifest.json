@@ -39,9 +39,9 @@
         "step_type": "input",
         "title": "Configure Response Delay",
         "description": "Set simulated API latency in milliseconds (0-60000)",
-        "field_name": "delay_ms",
+        "fields": [{"name": "delay_ms"}],
         "default": 100,
-        "optional": true,
+        "required": false,
         "validation": {
           "min": 0,
           "max": 60000
@@ -52,19 +52,19 @@
         "step_type": "select",
         "title": "Select Response Mode",
         "description": "Choose how the mock LLM generates responses",
-        "field_name": "response_mode",
+        "fields": [{"name": "response_mode"}],
         "options_method": "get_config_options",
         "default": "deterministic",
-        "optional": true
+        "required": false
       },
       {
         "step_id": "configure_failures",
         "step_type": "input",
         "title": "Configure Failure Rate",
         "description": "Probability of simulated failures for testing (0.0-1.0)",
-        "field_name": "failure_rate",
+        "fields": [{"name": "failure_rate"}],
         "default": 0.0,
-        "optional": true,
+        "required": false,
         "validation": {
           "min": 0.0,
           "max": 1.0

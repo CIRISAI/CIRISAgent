@@ -60,6 +60,11 @@
         "title": "Select Database Type",
         "description": "Choose the type of SQL database you want to connect to",
         "options_method": "get_config_options",
+        "fields": [
+          {
+            "name": "dialect"
+          }
+        ],
         "required": true
       },
       {
@@ -69,14 +74,14 @@
         "description": "Enter the path to your SQLite database file",
         "fields": [
           {
-            "field_id": "database_path",
+            "name": "database_path",
             "label": "Database File Path",
             "type": "string",
             "placeholder": "/path/to/database.db",
             "required": true
           },
           {
-            "field_id": "connector_id",
+            "name": "connector_id",
             "label": "Connector ID",
             "type": "string",
             "placeholder": "my_sqlite_db",
@@ -97,42 +102,42 @@
         "description": "Enter connection details for your database server",
         "fields": [
           {
-            "field_id": "host",
+            "name": "host",
             "label": "Host",
             "type": "string",
             "placeholder": "localhost",
             "required": true
           },
           {
-            "field_id": "port",
+            "name": "port",
             "label": "Port",
             "type": "number",
             "placeholder": "5432",
             "required": false
           },
           {
-            "field_id": "database",
+            "name": "database",
             "label": "Database Name",
             "type": "string",
             "placeholder": "mydb",
             "required": true
           },
           {
-            "field_id": "user",
+            "name": "user",
             "label": "Username",
             "type": "string",
             "placeholder": "dbuser",
             "required": true
           },
           {
-            "field_id": "password",
+            "name": "password",
             "label": "Password",
             "type": "password",
             "placeholder": "••••••••",
             "required": true
           },
           {
-            "field_id": "connector_id",
+            "name": "connector_id",
             "label": "Connector ID",
             "type": "string",
             "placeholder": "my_database",
@@ -153,14 +158,14 @@
         "description": "Configure privacy schema for GDPR/DSAR compliance",
         "fields": [
           {
-            "field_id": "privacy_schema_path",
+            "name": "privacy_schema_path",
             "label": "Privacy Schema File Path",
             "type": "string",
             "placeholder": "/path/to/privacy_schema.yaml",
             "required": false
           }
         ],
-        "optional": true,
+        "required": false,
         "depends_on": ["select_dialect"]
       },
       {
@@ -177,7 +182,7 @@
         "step_type": "confirm",
         "title": "Test Connection",
         "description": "Test the database connection before applying configuration",
-        "optional": true,
+        "required": false,
         "action": "test_connection"
       },
       {

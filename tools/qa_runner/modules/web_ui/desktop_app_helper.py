@@ -259,7 +259,7 @@ class DesktopAppHelper:
             visible=data.get("visible"),
         )
 
-    async def scroll_into_view(self, test_tag: str, per_direction: int = 12, amount: int = 300) -> bool:
+    async def scroll_into_view(self, test_tag: str, per_direction: int = 40, amount: int = 300) -> bool:
         """Scroll a composed-but-off-screen element onto the screen. Best effort.
 
         From ciris-client 0.5.206 a positioned element must also be ON SCREEN for
@@ -273,6 +273,15 @@ class DesktopAppHelper:
         without moving anything, because dispatch went to the most recently composed
         scrollable rather than one with overflow (CIRISClient#44). The fix makes a
         200 mean the screen MOVED and carries the offsets, and a refusal name why.
+
+        THE BUDGET MUST COVER THE SURFACE, NOT A GUESS AT IT. `per_direction` was
+        12, i.e. 3600px, and iOS Settings is 7041px tall: on run 34308760845 the
+        scroll walked `600 -> 2099 of 7041`, ran out, and the caller reported
+        `btn_logout` as unreachable on a screen that simply continues below the
+        fold. 40 x 300px = 12000px covers every surface we drive today, and costs
+        nothing when the element is near the top: a refusal ("already at the
+        bottom") ends the direction the moment there is no more travel, so the cap
+        is only ever reached on a surface that really is that long.
 
         EXHAUST ONE DIRECTION, THEN THE OTHER -- do not split the budget up front.
         The previous version fixed half the attempts to each direction, so on a

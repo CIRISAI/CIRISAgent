@@ -170,3 +170,20 @@ def test_logout_prefers_the_route_that_exists_in_both_modes() -> None:
     assert "reveal_sidebar_row(tag)" in src
     # And a client with no route at all says so in the product's terms.
     assert "cannot sign out at all (CIRISClient#51)" in src
+
+
+def test_the_scroll_budget_covers_the_longest_surface_we_drive() -> None:
+    """iOS Settings measured 7041px on run 34308760845 and the 12x300px budget
+    stopped at ~2100, reporting btn_logout unreachable on a screen that just
+    continues. The cap must exceed the tallest surface we know of."""
+    import inspect
+
+    from tools.qa_runner.modules.web_ui.desktop_app_helper import DesktopAppHelper
+
+    sig = inspect.signature(DesktopAppHelper.scroll_into_view)
+    per_direction = sig.parameters["per_direction"].default
+    amount = sig.parameters["amount"].default
+    assert per_direction * amount >= 7041 * 1.5, (
+        f"scroll budget {per_direction}x{amount}px = {per_direction * amount}px does not clear "
+        "the 7041px iOS Settings surface with margin"
+    )

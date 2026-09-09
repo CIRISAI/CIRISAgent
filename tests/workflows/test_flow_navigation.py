@@ -187,3 +187,22 @@ def test_the_scroll_budget_covers_the_longest_surface_we_drive() -> None:
         f"scroll budget {per_direction}x{amount}px = {per_direction * amount}px does not clear "
         "the 7041px iOS Settings surface with margin"
     )
+
+
+def test_the_ios_reset_relaunches_because_ios_cannot_restart_itself() -> None:
+    """Android has AppRestarter and desktop respawns; on iOS an app that ends is
+    gone — the same platform fact behind the hand-off contract (CIRISAgent#1149).
+    After factoryReset the simulator app wipes and sits blank (`screen='Startup'
+    elements=0`, run 34310581543), so the step must relaunch it and then assert
+    first run, rather than wait for a self-restart that cannot happen."""
+    import inspect
+
+    from tools.qa_runner.modules.web_ui.__main__ import DesktopAppTestRunner
+
+    src = inspect.getsource(DesktopAppTestRunner.test_reset_device_flow)
+    assert 'platform == "ios"' in src
+    assert "simctl" in src and "terminate" in src and "launch" in src
+    assert "SIMCTL_CHILD_CIRIS_TEST_MODE" in src, "the relaunch must keep test mode on"
+    assert "reconnect()" in src, "the automation server is new after a relaunch"
+    # The wipe assertion itself must still run afterwards.
+    assert "first_run" in src and "restarted into first run" in src

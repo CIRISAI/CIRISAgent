@@ -984,6 +984,33 @@ class DesktopAppTestRunner:
             # the confirm click dies with "Server disconnected" (run 34272658734).
             # That is the reset HAPPENING, not failing -- reconnect and keep polling
             # until the deadline; only a first-run screen that never appears fails.
+            # iOS CANNOT RELAUNCH ITSELF. Android has AppRestarter and desktop
+            # respawns; on iOS an app that ends is simply gone, which is the same
+            # platform fact that made `os._exit` unusable in the hand-off
+            # (CIRISAgent#1149). So after factoryReset the simulator app wipes and
+            # sits blank -- run 34310581543 dumped `screen='Startup' elements=0` --
+            # and waiting for a self-restart asserts something the platform does not
+            # do. Relaunch it the way a user would tap the icon again, then assert
+            # first run: that is what the reset promised.
+            platform = getattr(_LAST_ARGS, "platform", "desktop") or "desktop"
+            if platform == "ios":
+                udid = getattr(_LAST_ARGS, "ios_udid", None) or _ios_pick_simulator(None)
+                bundle_id = getattr(_LAST_ARGS, "ios_bundle_id", None) or "ai.ciris.mobile"
+                if udid:
+                    self._log(f"iOS cannot restart itself — relaunching {bundle_id} to see what the reset left")
+                    _simctl(["terminate", udid, bundle_id], timeout=60)
+                    await asyncio.sleep(1.0)
+                    env = dict(os.environ)
+                    env["SIMCTL_CHILD_CIRIS_TEST_MODE"] = "true"
+                    subprocess.run(
+                        ["xcrun", "simctl", "launch", udid, bundle_id],
+                        capture_output=True, text=True, timeout=120, env=env,
+                    )
+                    await asyncio.sleep(3.0)
+                    await self.helper.reconnect()
+                else:
+                    self._log("iOS: no booted simulator udid to relaunch with — asserting on the app as it stands")
+
             deadline = time.time() + 45
             first_run = False
             while time.time() < deadline:

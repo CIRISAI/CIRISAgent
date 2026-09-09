@@ -14,8 +14,8 @@ except Exception:  # pragma: no cover - never let the shim stop the runner
     pass
 
 import argparse
-import os
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import List
@@ -110,6 +110,14 @@ Available modules:
     )
     parser.add_argument("--port", type=int, default=8080, help="API server port (default: 8080)")
     parser.add_argument("--no-auto-start", action="store_true", help="Don't automatically start the API server")
+    parser.add_argument(
+        "--incidents-log",
+        default=None,
+        help=(
+            "Path to the backend's incidents_latest.log when the backend was not started by this runner "
+            "(e.g. pulled from an emulator). The incidents gate reads it and still fails closed if missing."
+        ),
+    )
     parser.add_argument("--no-mock-llm", action="store_true", help="Don't use mock LLM (requires real LLM)")
     parser.add_argument(
         "--adapter", default="api", choices=["api", "cli", "discord"], help="Adapter to use (default: api)"
@@ -142,7 +150,9 @@ Available modules:
         "--live", action="store_true", help="Use real LLM API instead of mock. Reads key from --live-key-file"
     )
     parser.add_argument(
-        "--live-key-file", default="~/.openrouter_key", help="Path to file containing API key (default: ~/.openrouter_key)"
+        "--live-key-file",
+        default="~/.openrouter_key",
+        help="Path to file containing API key (default: ~/.openrouter_key)",
     )
     parser.add_argument(
         "--live-model",
@@ -314,10 +324,7 @@ Available modules:
         "--safety-battery-limit",
         type=int,
         default=0,
-        help=(
-            "Run only the first N battery questions (0 = all). "
-            "Cycle-time lever for trace-flow troubleshooting."
-        ),
+        help=("Run only the first N battery questions (0 = all). " "Cycle-time lever for trace-flow troubleshooting."),
     )
     parser.add_argument(
         "--safety-battery-domain",
@@ -604,10 +611,7 @@ def main():
         from .staged_env import prepare as prepare_staged_env
 
         repo_root = Path(__file__).resolve().parent.parent.parent
-        print(
-            f"[staged] Preparing staged QA environment at {args.staged_root} "
-            f"(rebuild={args.rebuild_staged})"
-        )
+        print(f"[staged] Preparing staged QA environment at {args.staged_root} " f"(rebuild={args.rebuild_staged})")
         staged_env = prepare_staged_env(
             src=repo_root,
             root=args.staged_root,
@@ -634,6 +638,7 @@ def main():
         html_report=args.html,
         report_dir=Path(args.report_dir),
         auto_start_server=not args.no_auto_start,
+        incidents_log_path=Path(args.incidents_log) if args.incidents_log else None,
         mock_llm=use_mock_llm,
         adapter=args.adapter,
         database_backends=args.database_backends,
@@ -665,9 +670,7 @@ def main():
         model_eval_languages=[lang.strip() for lang in args.model_eval_languages.split(",") if lang.strip()],
         model_eval_concurrency=args.model_eval_concurrency,
         model_eval_profile_memory=not args.no_model_eval_memory_profile,
-        model_eval_question_categories=[
-            cat.strip() for cat in args.model_eval_questions.split(",") if cat.strip()
-        ],
+        model_eval_question_categories=[cat.strip() for cat in args.model_eval_questions.split(",") if cat.strip()],
         model_eval_questions_file=(args.model_eval_questions_file or None),
         safety_battery_lang=args.safety_battery_lang,
         safety_battery_limit=args.safety_battery_limit,

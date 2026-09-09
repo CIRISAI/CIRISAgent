@@ -17,18 +17,17 @@ import asyncio
 import json
 import logging
 import os
+import re
 import subprocess
 import sys
 import time
-import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from pydantic import BaseModel, ConfigDict
-
 import requests
+from pydantic import BaseModel, ConfigDict
 from rich.console import Console
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
@@ -56,85 +55,85 @@ logger = logging.getLogger(__name__)
 # Every entry names the module that drives it. Add one only with that
 # reason attached — an unexplained entry here is a silenced defect.
 EXPECTED_QA_INCIDENT_PATTERNS = [
-        "MOCK_MODULE_LOADED",
-        "MOCK LLM",
-        "RUNTIME SHUTDOWN",
-        "SYSTEM SHUTDOWN",
-        "GRACEFUL SHUTDOWN",
-        "[SIGNAL]",  # signal-handler lines (e.g. SIGTERM to stop the QA server)
-        "Edge already exists",
-        "duplicate edge",
-        "TSDB consolidation",
-        # The setup module deliberately validates bad LLM endpoints —
-        # the agent correctly logs the validation failure.
-        "[VALIDATE_LLM]",
-        # ciris_verify logs ERROR for an offline build-registry; in QA
-        # there is no registry and L4 file integrity is legitimately
-        # skipped — an environmental degradation, not a test failure.
-        "MANIFEST_CACHE MISS",
-        # CIRISVerify's file-integrity periodic re-check fails in CI
-        # because CI runs against the working tree, not a registry-
-        # published build. The re-check fires every ~3 minutes and on
-        # 2026-05-28 (run 26608575466) the SQLite-vs-Postgres timing
-        # diff made the third re-check land inside the SQLite test
-        # window while Postgres just missed it — flaking the SQLite
-        # backend. Both backends always produce ≥2 of these per run.
-        # Environmental; tracked at CIRISAgent#836.
-        "check_full: manifest integrity verification FAILED",
-        # QA/CI hosts have no TPM and no hardware Ed25519 key, so the
-        # CIRISVerify FFI key probe + TPM TCTI context creation log
-        # ERROR and fall back to software — expected, not a failure.
-        "get_ed25519_public_key: no key loaded",
-        "Error when creating a TCTI context",
-        "TPM: failed to create context",
-        # QA modules that DELIBERATELY exercise error / edge paths —
-        # the agent correctly logs the rejection; the ERROR line is
-        # the expected test outcome, not an incident (cf. VALIDATE_LLM):
-        #  - state_transitions test submits an invalid target state
-        "Invalid target state",
-        #  - adapter_manifest test unloads its scratch adapters, some
-        #    of which were never loaded
-        "qa_manifest_test_",
-        #  - adapter_manifest probes every ciris_adapters/* dir; the
-        #    shared MCP library `mcp_common` is not a loadable adapter
-        #    (no Adapter class — by design), and the loader correctly
-        #    says so. Expected probe noise, not an incident.
-        "ciris_adapters.mcp_common' has no attribute 'Adapter'",
-        #  - dsar_multi_source exercises the DSAR path for a test user
-        #    that has no consent record; the orchestrator correctly
-        #    reports the absence (the test asserts that behaviour).
-        "No consent found for user user_dsar",
-        #  - accord_metrics ships WBD deferrals to the lens; the QA
-        #    mock lens does not implement /accord/wbd/deferrals, so the
-        #    adapter correctly logs the 404 it received. Mock gap.
-        "WBD deferral rejected: Status 404",
-        #  - CIRISVerify's attestation probe reaches for the registry
-        #    over the network; CI has no route to it, so it correctly
-        #    logs a timeout and falls back to software. Environmental.
-        "ciris_verify_run_attestation: TIMEOUT",
-        #  - accord_metrics trace-signing is briefly blocked while an
-        #    attestation is in progress; the adapter retries (~500ms).
-        #    A transient, self-recovering condition, not a fault.
-        "Attestation in progress - sign_ed25519 blocked",
-        #  - adapter_config test submits an empty config to verify
-        #    validation rejects it
-        "Config validation failed: Configuration is empty",
-        #  - cognitive-state tests force unnatural WORK/DREAM
-        #    transitions; a force-transitioned DREAM seed thought has
-        #    no originating adapter channel. (Tracked as a follow-up:
-        #    DREAM seed thoughts should carry a synthetic channel.)
-        "No channel context found for thought thought_dream_",
-        "Failed to transition from AgentState.WORK to AgentState.WORK",
-        # High-frequency BENIGN warnings — routine per-thought / per-
-        # cache-gen chatter, not systemic malfunctions. Excluded so the
-        # WARNING-flood detector below isn't tripped by normal noise:
-        #  - the mock LLM's own diagnostic (QA fixture only — never
-        #    emitted in production, there is no mock LLM there)
-        "[MOCK_LLM] No user_input found in context",
-        #  - the tool-cache generator noting CIRISVerifyService is not
-        #    a tool-enumeration provider (true by design — it is a
-        #    verification service, not a tool service)
-        "[TOOL_CACHE] CIRISVerifyService: No get_all_tool_info",
+    "MOCK_MODULE_LOADED",
+    "MOCK LLM",
+    "RUNTIME SHUTDOWN",
+    "SYSTEM SHUTDOWN",
+    "GRACEFUL SHUTDOWN",
+    "[SIGNAL]",  # signal-handler lines (e.g. SIGTERM to stop the QA server)
+    "Edge already exists",
+    "duplicate edge",
+    "TSDB consolidation",
+    # The setup module deliberately validates bad LLM endpoints —
+    # the agent correctly logs the validation failure.
+    "[VALIDATE_LLM]",
+    # ciris_verify logs ERROR for an offline build-registry; in QA
+    # there is no registry and L4 file integrity is legitimately
+    # skipped — an environmental degradation, not a test failure.
+    "MANIFEST_CACHE MISS",
+    # CIRISVerify's file-integrity periodic re-check fails in CI
+    # because CI runs against the working tree, not a registry-
+    # published build. The re-check fires every ~3 minutes and on
+    # 2026-05-28 (run 26608575466) the SQLite-vs-Postgres timing
+    # diff made the third re-check land inside the SQLite test
+    # window while Postgres just missed it — flaking the SQLite
+    # backend. Both backends always produce ≥2 of these per run.
+    # Environmental; tracked at CIRISAgent#836.
+    "check_full: manifest integrity verification FAILED",
+    # QA/CI hosts have no TPM and no hardware Ed25519 key, so the
+    # CIRISVerify FFI key probe + TPM TCTI context creation log
+    # ERROR and fall back to software — expected, not a failure.
+    "get_ed25519_public_key: no key loaded",
+    "Error when creating a TCTI context",
+    "TPM: failed to create context",
+    # QA modules that DELIBERATELY exercise error / edge paths —
+    # the agent correctly logs the rejection; the ERROR line is
+    # the expected test outcome, not an incident (cf. VALIDATE_LLM):
+    #  - state_transitions test submits an invalid target state
+    "Invalid target state",
+    #  - adapter_manifest test unloads its scratch adapters, some
+    #    of which were never loaded
+    "qa_manifest_test_",
+    #  - adapter_manifest probes every ciris_adapters/* dir; the
+    #    shared MCP library `mcp_common` is not a loadable adapter
+    #    (no Adapter class — by design), and the loader correctly
+    #    says so. Expected probe noise, not an incident.
+    "ciris_adapters.mcp_common' has no attribute 'Adapter'",
+    #  - dsar_multi_source exercises the DSAR path for a test user
+    #    that has no consent record; the orchestrator correctly
+    #    reports the absence (the test asserts that behaviour).
+    "No consent found for user user_dsar",
+    #  - accord_metrics ships WBD deferrals to the lens; the QA
+    #    mock lens does not implement /accord/wbd/deferrals, so the
+    #    adapter correctly logs the 404 it received. Mock gap.
+    "WBD deferral rejected: Status 404",
+    #  - CIRISVerify's attestation probe reaches for the registry
+    #    over the network; CI has no route to it, so it correctly
+    #    logs a timeout and falls back to software. Environmental.
+    "ciris_verify_run_attestation: TIMEOUT",
+    #  - accord_metrics trace-signing is briefly blocked while an
+    #    attestation is in progress; the adapter retries (~500ms).
+    #    A transient, self-recovering condition, not a fault.
+    "Attestation in progress - sign_ed25519 blocked",
+    #  - adapter_config test submits an empty config to verify
+    #    validation rejects it
+    "Config validation failed: Configuration is empty",
+    #  - cognitive-state tests force unnatural WORK/DREAM
+    #    transitions; a force-transitioned DREAM seed thought has
+    #    no originating adapter channel. (Tracked as a follow-up:
+    #    DREAM seed thoughts should carry a synthetic channel.)
+    "No channel context found for thought thought_dream_",
+    "Failed to transition from AgentState.WORK to AgentState.WORK",
+    # High-frequency BENIGN warnings — routine per-thought / per-
+    # cache-gen chatter, not systemic malfunctions. Excluded so the
+    # WARNING-flood detector below isn't tripped by normal noise:
+    #  - the mock LLM's own diagnostic (QA fixture only — never
+    #    emitted in production, there is no mock LLM there)
+    "[MOCK_LLM] No user_input found in context",
+    #  - the tool-cache generator noting CIRISVerifyService is not
+    #    a tool-enumeration provider (true by design — it is a
+    #    verification service, not a tool service)
+    "[TOOL_CACHE] CIRISVerifyService: No get_all_tool_info",
     # - reddit adapter probe: QA has no Reddit credentials, so the adapter
     #   correctly refuses to load. Environmental, not a fault.
     "Reddit credentials are not configured",
@@ -150,11 +149,7 @@ def _expand_module_aggregates(modules: List[QAModule]) -> List[QAModule]:
     per-module logic must see the expanded list. Idempotent; order- and
     dedupe-preserving.
     """
-    from .config import (
-        ALL_1_MODULE_SEQUENCE,
-        ALL_2_MODULE_SEQUENCE,
-        ALL_MODULE_SEQUENCE,
-    )
+    from .config import ALL_1_MODULE_SEQUENCE, ALL_2_MODULE_SEQUENCE, ALL_MODULE_SEQUENCE
 
     aggregates = {
         QAModule.ALL: ALL_MODULE_SEQUENCE,
@@ -169,7 +164,6 @@ def _expand_module_aggregates(modules: List[QAModule]) -> List[QAModule]:
             if sm not in expanded:
                 expanded.append(sm)
     return expanded
-
 
 
 def _err_text(result: dict, limit: int = 100) -> str:
@@ -206,10 +200,7 @@ _IDENTITY_CLOSING = (("logout", "/auth/logout"),)
 
 
 def _closes_identity(test: Any) -> bool:
-    return any(
-        name in test.name.lower() and endpoint in test.endpoint
-        for name, endpoint in _IDENTITY_CLOSING
-    )
+    return any(name in test.name.lower() and endpoint in test.endpoint for name, endpoint in _IDENTITY_CLOSING)
 
 
 def _is_non_failing(status: str) -> bool:
@@ -320,16 +311,12 @@ class QARunner:
         # CIRIS agent just to throw it away is wasteful and surfaces
         # unrelated failure modes (e.g. CIRISVerify FFI on TPM-less
         # runners) that have nothing to do with the test in question.
-        if self.modules and all(
-            not getattr(_get_module_md(_m), "requires_ciris_server", True)
-            for _m in self.modules
-        ):
+        if self.modules and all(not getattr(_get_module_md(_m), "requires_ciris_server", True) for _m in self.modules):
             self._skip_ciris_server = True
             if self.config.auto_start_server:
                 self.config.auto_start_server = False
                 self.console.print(
-                    "[dim]Auto-disabled server start: all selected modules "
-                    "declare REQUIRES_CIRIS_SERVER=False[/dim]"
+                    "[dim]Auto-disabled server start: all selected modules " "declare REQUIRES_CIRIS_SERVER=False[/dim]"
                 )
         else:
             self._skip_ciris_server = False
@@ -513,9 +500,7 @@ class QARunner:
         # Get authentication token (skip for SETUP module - first-run has no users,
         # and skip when no module needs a CIRIS server at all)
         if getattr(self, "_skip_ciris_server", False):
-            self.console.print(
-                "[dim]Skipping authentication: no selected module requires a CIRIS server[/dim]"
-            )
+            self.console.print("[dim]Skipping authentication: no selected module requires a CIRIS server[/dim]")
         elif QAModule.SETUP not in modules:
             if not self._authenticate():
                 self.console.print("[red][FAIL] Authentication failed[/red]")
@@ -637,8 +622,7 @@ class QARunner:
                 self.console.print("[dim]Authenticating after SETUP wizard...[/dim]")
                 if not self._authenticate():
                     self.console.print(
-                        "[yellow]⚠️  Post-SETUP authentication failed — "
-                        "remaining modules may report 401[/yellow]"
+                        "[yellow]⚠️  Post-SETUP authentication failed — " "remaining modules may report 401[/yellow]"
                     )
 
         # Phase 2: remaining HTTP test modules (now token-wired).
@@ -670,7 +654,9 @@ class QARunner:
 
             if not mo_result["success"]:
                 success = False
-                self.console.print(f"[red][FAIL] Multi-occurrence integration test failed: {mo_result.get('errors')}[/red]")
+                self.console.print(
+                    f"[red][FAIL] Multi-occurrence integration test failed: {mo_result.get('errors')}[/red]"
+                )
             else:
                 self.console.print("[green][OK] Multi-occurrence integration test passed![/green]")
 
@@ -763,7 +749,9 @@ class QARunner:
                 # NOT the same failure as "incidents found". This one means the gate
                 # could not look at all — which used to silently PASS, making every
                 # green run only as trustworthy as the log file having existed.
-                self.console.print("[bold red][ALERT] RUN NOT CERTIFIED: THE INCIDENTS GATE COULD NOT RUN [ALERT][/bold red]")
+                self.console.print(
+                    "[bold red][ALERT] RUN NOT CERTIFIED: THE INCIDENTS GATE COULD NOT RUN [ALERT][/bold red]"
+                )
                 self.console.print(
                     "[bold red]No incidents were found because none could be looked for. "
                     "See the CANNOT CERTIFY block above for the expected path.[/bold red]"
@@ -971,7 +959,9 @@ class QARunner:
                 self.console.print(f"   ... and {len(unique_errors) - 10} more critical errors")
 
             # Make it impossible to miss
-            self.console.print(f"\n[bold red][ALERT] {len(unique_errors)} CRITICAL ISSUES REQUIRE ATTENTION! [ALERT][/bold red]")
+            self.console.print(
+                f"\n[bold red][ALERT] {len(unique_errors)} CRITICAL ISSUES REQUIRE ATTENTION! [ALERT][/bold red]"
+            )
         else:
             self.console.print("[bold green][OK] No critical issues found[/bold green]")
 
@@ -986,6 +976,12 @@ class QARunner:
         undetected and runs reported "no incidents" when they should have
         failed.
         """
+        explicit = getattr(self.config, "incidents_log_path", None)
+        if explicit:
+            # A backend we did not start (a phone's, a desktop app's) writes
+            # wherever it lives; the caller tells us where. Existence is still
+            # checked by the gate -- an absent file fails the run, as always.
+            return Path(explicit)
         server_manager = getattr(self, "server_manager", None)
         backend = getattr(server_manager, "database_backend", None) if server_manager else None
         if backend:
@@ -1026,9 +1022,7 @@ class QARunner:
         incidents_log = self._incidents_log_path()
 
         if not incidents_log.exists():
-            self.console.print(
-                "\n[bold red]❌ CANNOT CERTIFY THIS RUN — the incidents log does not exist.[/bold red]"
-            )
+            self.console.print("\n[bold red]❌ CANNOT CERTIFY THIS RUN — the incidents log does not exist.[/bold red]")
             self.console.print(
                 f"[red]   expected : {incidents_log.resolve()}[/red]\n"
                 f"[red]   backend  : {getattr(getattr(self, 'server_manager', None), 'database_backend', '<unknown>')}[/red]\n"
@@ -1193,7 +1187,7 @@ class QARunner:
 
         # Transport rooting + KEX from the [DELIVERY-PROBE] line the server logs
         # once the canonical roots (or times out).
-        backend = (self.database_backends[0] if getattr(self, "database_backends", None) else "sqlite")
+        backend = self.database_backends[0] if getattr(self, "database_backends", None) else "sqlite"
 
         def _read_probe_log() -> str:
             """Read the runtime log, tolerating a missing latest.log symlink.
@@ -1274,7 +1268,9 @@ class QARunner:
                 )
 
         self.console.print(f"  canonical peer      : {canonical_key or '<from probe>'}")
-        rooted_str = "✅ YES" if transport_rooted else ("❌ NO" if transport_rooted is False else "❓ probe verdict not found")
+        rooted_str = (
+            "✅ YES" if transport_rooted else ("❌ NO" if transport_rooted is False else "❓ probe verdict not found")
+        )
         self.console.print(f"  transport-rooted    : {rooted_str}  (edge.knows_peer — authoritative)")
         self.console.print(f"  peer KEX resolvable : {kex_state}  (gates the sealed-envelope TRACE path)")
 
@@ -1391,9 +1387,7 @@ class QARunner:
             self._diagnose_delivery_status(_read_probe_log)
         return rooted
 
-    def _trace_plane_from_node_state(
-        self, read_probe_log: Callable[[], str]
-    ) -> Optional[TracePlaneStanding]:
+    def _trace_plane_from_node_state(self, read_probe_log: Callable[[], str]) -> Optional[TracePlaneStanding]:
         """The node's `[TRACE-PLANE]` line, or None when it never logged one.
 
         READ, DO NOT CALL. `node_state()` is in-process to the server, and this
@@ -1417,9 +1411,7 @@ class QARunner:
             logger.debug("[FEDERATION-DELIVERY] trace-plane line unreadable: %s", exc)
             return None
 
-    def _peer_state_from_delivery_status(
-        self, read_probe_log: Callable[[], str]
-    ) -> Optional["CanonicalPeerState"]:
+    def _peer_state_from_delivery_status(self, read_probe_log: Callable[[], str]) -> Optional["CanonicalPeerState"]:
         """The canonical peer's entry from the last [DELIVERY-STATUS] line.
 
         Same source `_diagnose_delivery_status` renders, read as data instead of
@@ -1462,7 +1454,9 @@ class QARunner:
         try:
             lines = [ln for ln in read_probe_log().splitlines() if "[DELIVERY-STATUS]" in ln]
             if not lines:
-                self.console.print("  delivery_status     : (no [DELIVERY-STATUS] line — ciris_server <0.5.125 or probe not run)")
+                self.console.print(
+                    "  delivery_status     : (no [DELIVERY-STATUS] line — ciris_server <0.5.125 or probe not run)"
+                )
                 return
             m = re.search(r"\[DELIVERY-STATUS\]\s+phase=(\S+)\s+(\{.*\})", lines[-1])
             if not m:
@@ -1470,13 +1464,18 @@ class QARunner:
                 return
             phase, blob = m.group(1), m.group(2)
             st = _json.loads(blob)
-            self.console.print(f"  delivery_status     : phase={phase} started={st.get('delivery_started')} edge_up={st.get('edge_up')} targets={st.get('canonical_targets')}")
+            self.console.print(
+                f"  delivery_status     : phase={phase} started={st.get('delivery_started')} edge_up={st.get('edge_up')} targets={st.get('canonical_targets')}"
+            )
             hint = "  → "
             if not st.get("delivery_started"):
                 hint += "delivery_started=false — prime never ran/re-fired (call reprime_federation_delivery(); #288)"
             else:
                 peers = st.get("peers") or []
-                canon = next((p for p in peers if p.get("key_id") in (st.get("canonical_targets") or [])), peers[0] if peers else None)
+                canon = next(
+                    (p for p in peers if p.get("key_id") in (st.get("canonical_targets") or [])),
+                    peers[0] if peers else None,
+                )
                 if canon is None:
                     hint += "no peers in status — canonical not admitted yet"
                 elif not canon.get("knows_peer"):
@@ -1716,10 +1715,10 @@ class QARunner:
         )
         from .modules.accord_metrics_tests import AccordMetricsTests
         from .modules.adapter_autoload_tests import AdapterAutoloadTests
-        from .modules.agent_mode_tests import AgentModeTests
         from .modules.adapter_availability_tests import AdapterAvailabilityTests
         from .modules.adapter_config_tests import AdapterConfigTests
         from .modules.adapter_manifest_tests import AdapterManifestTests
+        from .modules.agent_mode_tests import AgentModeTests
         from .modules.billing_integration_tests import BillingIntegrationTests
         from .modules.cognitive_state_api_tests import CognitiveStateAPITests
         from .modules.context_enrichment_tests import ContextEnrichmentTests
@@ -1740,10 +1739,10 @@ class QARunner:
         from .modules.mesh_repro_tests import MeshReproTests
         from .modules.model_eval_tests import ModelEvalTests
         from .modules.parallel_locales_tests import ParallelLocalesTests
-        from .modules.safety_battery import SafetyBatteryTests
-        from .modules.safety_interpret import SafetyInterpretTests
         from .modules.play_live_tests import PlayLiveTests
         from .modules.reddit_tests import RedditTests
+        from .modules.safety_battery import SafetyBatteryTests
+        from .modules.safety_interpret import SafetyInterpretTests
         from .modules.secrets_encryption_tests import SecretsEncryptionTests
         from .modules.solitude_live_tests import SolitudeLiveTests
         from .modules.sql_external_data_tests import SQLExternalDataTests
@@ -1836,6 +1835,7 @@ class QARunner:
             # external API directly — don't try to open a CIRISClient
             # to a server that isn't running.
             from .modules._module_metadata import get_metadata as _md_lookup
+
             _module_needs_server = getattr(_md_lookup(module), "requires_ciris_server", True)
 
             from contextlib import asynccontextmanager
@@ -1944,6 +1944,7 @@ class QARunner:
                     )
                 elif module == QAModule.SAFETY_INTERPRET:
                     from pathlib import Path as _Path
+
                     _cap = getattr(self.config, "safety_interpret_capture_dir", None)
                     _crit = getattr(self.config, "safety_interpret_criteria_file", None)
                     _key = getattr(self.config, "safety_interpret_openrouter_key_file", None)
@@ -1971,9 +1972,7 @@ class QARunner:
                     self._mesh_repro_verdict = getattr(test_instance, "harness_verdict", None)
                 # Real wall time for this SDK module (accumulate — a module
                 # can run twice across a re-auth retry).
-                self._module_wall[module.value] = self._module_wall.get(module.value, 0.0) + (
-                    time.time() - _mod_t0
-                )
+                self._module_wall[module.value] = self._module_wall.get(module.value, 0.0) + (time.time() - _mod_t0)
 
                 # Store results in runner's results dict
                 for result in results:
@@ -2070,7 +2069,6 @@ class QARunner:
             for test in tests:
                 progress.update(task, description=f"Testing {test.name}...")
 
-
                 passed, result = self._run_single_test(test)
                 self.results[f"{test.module.value}::{test.name}"] = result
 
@@ -2083,27 +2081,27 @@ class QARunner:
                             self.console.print(f"[yellow] Re-authenticating after {test.name}...[/yellow]")
                         # Re-authenticate to restore token for subsequent tests
                         if not self._authenticate():
-                                # `/v1/auth/logout` is the NODE's now, and the node's
-                                # logout DEACTIVATES THE WA CERT rather than dropping a
-                                # token — deliberate upstream, because unauthenticated
-                                # logout was an account-lockout vector (CIRISServer#387).
-                                # A successful logout therefore ENDS the run's identity,
-                                # and re-auth cannot succeed: resolve_login and every
-                                # enumeration are active-only, so the cert is not merely
-                                # logged out, it is invisible.
-                                #
-                                # This produced 191 "Invalid session token" failures that
-                                # read as 191 defects and were one closed account. The
-                                # suite still TESTS logout — fully, asserting 204 — and
-                                # then stops depending on the account it just closed.
-                                self.console.print(
-                                    f"[yellow]🔒 {test.name} closed the run's account "
-                                    f"(node logout deactivates the WA cert, by design). "
-                                    f"Re-auth is impossible; later auth-dependent tests "
-                                    f"are skipped, not counted as failures.[/yellow]"
-                                )
-                                self._identity_closed_by = test.name
-                                self.token = None
+                            # `/v1/auth/logout` is the NODE's now, and the node's
+                            # logout DEACTIVATES THE WA CERT rather than dropping a
+                            # token — deliberate upstream, because unauthenticated
+                            # logout was an account-lockout vector (CIRISServer#387).
+                            # A successful logout therefore ENDS the run's identity,
+                            # and re-auth cannot succeed: resolve_login and every
+                            # enumeration are active-only, so the cert is not merely
+                            # logged out, it is invisible.
+                            #
+                            # This produced 191 "Invalid session token" failures that
+                            # read as 191 defects and were one closed account. The
+                            # suite still TESTS logout — fully, asserting 204 — and
+                            # then stops depending on the account it just closed.
+                            self.console.print(
+                                f"[yellow]🔒 {test.name} closed the run's account "
+                                f"(node logout deactivates the WA cert, by design). "
+                                f"Re-auth is impossible; later auth-dependent tests "
+                                f"are skipped, not counted as failures.[/yellow]"
+                            )
+                            self._identity_closed_by = test.name
+                            self.token = None
                         break
 
                 # Diagnostic auth gate — if this test corrupted the session
@@ -2117,7 +2115,9 @@ class QARunner:
                 if incidents:
                     result["incidents"] = incidents
                     if self.config.verbose:
-                        self.console.print(f"[yellow][WARN] Found {len(incidents)} incidents during {test.name}[/yellow]")
+                        self.console.print(
+                            f"[yellow][WARN] Found {len(incidents)} incidents during {test.name}[/yellow]"
+                        )
 
                 # Check for task appending warnings (messages appended to existing active tasks)
                 task_warnings = self._check_task_appending_warnings(test.name)
@@ -2768,9 +2768,7 @@ class QARunner:
             wall = self._module_wall.get(module_name)
             if wall is None:
                 wall = sum(
-                    (r.get("duration") or 0.0)
-                    for k, r in self.results.items()
-                    if k.split("::", 1)[0] == module_name
+                    (r.get("duration") or 0.0) for k, r in self.results.items() if k.split("::", 1)[0] == module_name
                 )
             if not wall:
                 wall = duration_seconds / len(module_results) if module_results else duration_seconds
@@ -2979,7 +2977,9 @@ class QARunner:
             except subprocess.TimeoutExpired:
                 proc.kill()
                 backend_results[backend] = {"success": False, "detail": f"timeout >{leg_timeout}s"}
-                self.console.print(f"[red][FAIL] {backend.upper()} backend subprocess timed out after {leg_timeout}s[/red]")
+                self.console.print(
+                    f"[red][FAIL] {backend.upper()} backend subprocess timed out after {leg_timeout}s[/red]"
+                )
 
         procs = {}
         for backend in self.database_backends:
@@ -3016,9 +3016,7 @@ class QARunner:
         self.console.print(table)
 
         self.console.print(f"\n[dim]Total Duration: {elapsed:.2f}s ({mode_label})[/dim]")
-        self.console.print(
-            "[dim]Per-backend test counts + incidents are in each subprocess's own summary above.[/dim]"
-        )
+        self.console.print("[dim]Per-backend test counts + incidents are in each subprocess's own summary above.[/dim]")
 
         self.console.print("\n[cyan] Log Locations:[/cyan]")
         for backend in self.database_backends:

@@ -976,7 +976,8 @@ class QARunner:
         undetected and runs reported "no incidents" when they should have
         failed.
         """
-        explicit = getattr(self.config, "incidents_log_path", None)
+        # getattr on config too: the gate tests build a bare QARunner via __new__.
+        explicit = getattr(getattr(self, "config", None), "incidents_log_path", None)
         if explicit:
             # A backend we did not start (a phone's, a desktop app's) writes
             # wherever it lives; the caller tells us where. Existence is still
@@ -1022,7 +1023,9 @@ class QARunner:
         incidents_log = self._incidents_log_path()
 
         if not incidents_log.exists():
-            self.console.print("\n[bold red]❌ CANNOT CERTIFY THIS RUN — the incidents log does not exist.[/bold red]")
+            self.console.print(
+                "\n[bold red][FAIL] CANNOT CERTIFY THIS RUN — the incidents log does not exist.[/bold red]"
+            )
             self.console.print(
                 f"[red]   expected : {incidents_log.resolve()}[/red]\n"
                 f"[red]   backend  : {getattr(getattr(self, 'server_manager', None), 'database_backend', '<unknown>')}[/red]\n"

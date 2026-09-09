@@ -1035,9 +1035,6 @@ class DesktopAppTestRunner:
             # 2. The recorded choice is gone. DESKTOP ONLY: on a device the home is
             #    on the device and the runner cannot read it; say so rather than
             #    imply either answer.
-            import os
-            from pathlib import Path
-
             platform = getattr(_LAST_ARGS, "platform", "desktop") or "desktop"
             if platform != "desktop":
                 self._log(f"NOT ASSERTED on {platform}: the .env lives on the device; the desktop legs assert its removal")

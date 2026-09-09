@@ -852,81 +852,69 @@ class DesktopAppTestRunner:
             self._log("AI (BYOK): no live model list appeared after retries; leaving provider/text default")
 
     async def _logout(self) -> None:
-        """Log out — by two different routes, because the chrome differs.
+        """Log out, by whichever route this install actually offers.
 
-        DESKTOP keeps the top-bar dropdowns: `btn_governance_menu` opens the
-        category that holds `menu_logout` (`btn_menu` opens ADVANCED, which
-        does not).
+        THE ROUTE DEPENDS ON THE INSTALL, and there are three of them:
 
-        MOBILE HAS NO `menu_logout` AT ALL. The 2.9.4 rewire replaced that
-        chrome with the EpistemicSidebar, and its own header says so: "Existing
-        QA scripts that drove the old top-bar dropdown menu (`menu_*` testTags)
-        will need updating to the new `nav_epistemic_*` testTags ... the old
-        chrome is fully replaced." Logout lives on the Settings surface as
-        `btn_logout`, reached through the drawer:
-            btn_nav_drawer_open -> nav_epistemic_agent_settings -> btn_logout
+        * `nav_epistemic_account` -> Screen.Settings -> `btn_logout` (ciris-client
+          0.5.216+, CIRISClient#51). Present in BOTH modes by construction -- the
+          client's own `narrowingIsPurelySubtractive` rule forbids a surface that
+          appears only when narrowed -- so this is the route to prefer.
+        * `btn_governance_menu` -> `menu_logout`: the top bar, which lives on the
+          AGENT home only. A run-without-AI install lands on the node home
+          (Contacts) and has no top bar.
+        * `nav_epistemic_agent_settings` -> `btn_logout`: pre-0.5.216, and only
+          where `hasAgent` keeps the Agent group.
 
-        The desktop tags DO still appear in a mobile `/tree` — the registration
-        has no DisposableEffect, so the registry reports every element ever
-        composed. That is why the first version of this looked reachable and
-        then timed out; presence there is not drivability, so the mobile route
-        is taken on its own terms rather than probed for.
+        Ordered so the newest route wins and the old ones remain drivable, because
+        this harness pins a client that moves under it several times a day. Each
+        sidebar route is REVEALED, not merely waited for: the row can be in a
+        collapsed group or below the fold, and presence in /tree is not
+        drivability (CIRISClient#39).
         """
-        if await self.helper.is_element_present("btn_nav_drawer_open") or await self.helper.is_element_visible(
-            "btn_nav_drawer_close"
-        ):
-            self._log("mobile chrome: drawer -> Settings -> btn_logout")
-            # REVEAL, do not merely wait. On iOS (run 34291675402) the drawer was
-            # already OPEN and Settings sat inside a COLLAPSED group: the row was in
-            # /tree, absent from the screen, and an 8 s wait could only time out on
-            # an app that was perfectly healthy — `nav_group_manage`, `_node` and
-            # `_safety` were the groups showing, and Settings is in none of them.
-            # The sidebar walk opens the drawer, opens groups, scrolls, and names
-            # what it could not reach.
-            reveal_err = await self.helper.reveal_sidebar_row("nav_epistemic_agent_settings")
-            if reveal_err:
-                await self._dump_tree("reset:nav_settings")
-                # NAME THE LIKELY CAUSE. `epistemicNavGroups(hasAgent)` drops the
-                # whole Agent group when there is no agent, and Settings -- the only
-                # screen carrying `btn_logout` -- lives in it. On a run-without-AI
-                # install that leaves mobile chrome with no logout at all (the
-                # desktop's `btn_governance_menu` is not in the drawer). Say so, so
-                # the next reader does not go hunting a moved test tag.
-                groups = [e.test_tag for e in await self.helper.get_elements() if e.test_tag.startswith("nav_group_")]
-                hint = (
-                    " — and `nav_group_agent` is not among the groups, which is what a node-only install looks like: "
-                    "no Agent group means no Settings and no btn_logout (CIRISClient#51)"
-                    if not any(g.endswith("_agent") for g in groups)
-                    else ""
-                )
-                raise RuntimeError(f"cannot reach Settings in the sidebar: {reveal_err}{hint}")
-            if not await self.helper.click("nav_epistemic_agent_settings"):
-                raise RuntimeError("Failed to open Settings from the drawer")
-            await asyncio.sleep(1.0)
+        async def _sidebar_to_logout(tag: str, what: str) -> bool:
+            if await self.helper.reveal_sidebar_row(tag):
+                return False
+            self._log(f"logout via {what}: {tag} -> btn_logout")
+            if not await self.helper.click(tag):
+                raise RuntimeError(f"{tag} was on screen and the click did not take")
             if not await self.helper.wait_for_element("btn_logout", timeout=10000):
                 await self._dump_tree("reset:btn_logout")
-                raise RuntimeError("btn_logout not on the Settings surface")
+                raise RuntimeError(f"btn_logout is not on the surface behind {tag}")
             if not await self.helper.click("btn_logout"):
                 raise RuntimeError("Failed to click btn_logout")
             await asyncio.sleep(1.5)
+            return True
+
+        # 1. The account surface (both modes, both chromes).
+        if await _sidebar_to_logout("nav_epistemic_account", "the Account surface"):
             return
 
-        self._log("desktop chrome: btn_governance_menu -> menu_logout")
-        if not await self.helper.wait_for_element("btn_governance_menu", timeout=20000):
-            await self._dump_tree("reset:btn_governance_menu")
-            raise RuntimeError(
-                "btn_governance_menu not found and no nav drawer either — the app is not on an "
-                "authenticated screen, or the chrome changed again."
-            )
-        if not await self.helper.click("btn_governance_menu"):
-            raise RuntimeError("Failed to open the governance menu")
-        if not await self.helper.wait_for_element("menu_logout", timeout=8000):
-            await self._dump_tree("reset:menu_logout")
-            raise RuntimeError("menu_logout not under btn_governance_menu — the item moved categories")
-        if not await self.helper.click("menu_logout"):
-            raise RuntimeError("Failed to click menu_logout")
-        await asyncio.sleep(1.5)
+        # 2. The agent home's top bar.
+        if await self.helper.is_element_visible("btn_governance_menu"):
+            self._log("logout via the governance menu: btn_governance_menu -> menu_logout")
+            if not await self.helper.click("btn_governance_menu"):
+                raise RuntimeError("Failed to open the governance menu")
+            if not await self.helper.wait_for_element("menu_logout", timeout=8000):
+                await self._dump_tree("reset:menu_logout")
+                raise RuntimeError("menu_logout not under btn_governance_menu — the item moved categories")
+            if not await self.helper.click("menu_logout"):
+                raise RuntimeError("Failed to click menu_logout")
+            await asyncio.sleep(1.5)
+            return
 
+        # 3. Pre-0.5.216 Settings, where the Agent group survives.
+        if await _sidebar_to_logout("nav_epistemic_agent_settings", "Settings (pre-0.5.216)"):
+            return
+
+        await self._dump_tree("reset:logout")
+        groups = [e.test_tag for e in await self.helper.get_elements() if e.test_tag.startswith("nav_group_")]
+        raise RuntimeError(
+            "no logout route on this install: neither nav_epistemic_account (0.5.216+), "
+            "btn_governance_menu (the agent home's top bar) nor nav_epistemic_agent_settings "
+            f"is reachable. Sidebar groups on screen: {groups or 'none'}. On a run-without-AI "
+            "install that means the owner cannot sign out at all (CIRISClient#51)."
+        )
 
     async def test_reset_device_flow(self) -> bool:
         """Log out and factory-reset the device through the CLIENT's own UI.

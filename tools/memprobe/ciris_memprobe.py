@@ -83,12 +83,29 @@ def _malloc_info_xml() -> Optional[str]:
 
 
 def _parse_malloc_info(xml: str) -> Dict[str, Any]:
-    """Reduce the malloc_info XML to the numbers that decide the question.
+    """Reduce malloc_info XML to the numbers that decide the question.
 
-    Per-arena and in total, glibc reports `<system type="current">` (bytes held
-    from the kernel) alongside `<total type="rest">` and `<total type="fast">`
-    (bytes sitting free in bins).  in_use = system - free is the only figure
-    that corresponds to live objects.
+    The schema is the allocator's, not a standard, so dispatch on it and say so
+    when it is one we do not know -- reporting zeros for an unrecognised
+    allocator would look exactly like a process that allocates nothing.
+    """
+    if "<system " in xml:
+        return _parse_malloc_info_glibc(xml)
+    if 'version="jemalloc' in xml or "<allocated-bins>" in xml:
+        return _parse_malloc_info_bionic(xml)
+    return {
+        "available": False,
+        "flavor": "unrecognised",
+        "reason": "malloc_info schema not recognised; report the head below",
+        "xml_head": xml[:512],
+    }
+
+
+def _parse_malloc_info_glibc(xml: str) -> Dict[str, Any]:
+    """glibc reports, per arena and in total, bytes held from the kernel
+    (`<system type="current">`) alongside bytes sitting free in bins
+    (`<total type="rest">` / `"fast"`).  in_use = system - free is the only
+    figure that corresponds to live objects; the remainder is retention.
     """
     heaps: List[Dict[str, int]] = []
     for block in re.findall(r'<heap nr="(\d+)">(.*?)</heap>', xml, re.S):
@@ -120,6 +137,8 @@ def _parse_malloc_info(xml: str) -> Dict[str, Any]:
 
     free_bytes = totals["fast_bytes"] + totals["rest_bytes"]
     return {
+        "available": True,
+        "flavor": "glibc",
         "arenas": len(heaps),
         "system_current_bytes": totals["system_current"],
         "mmapped_bytes": totals["mmap_bytes"],
@@ -128,6 +147,44 @@ def _parse_malloc_info(xml: str) -> Dict[str, Any]:
         "in_use_bytes": max(0, totals["system_current"] - free_bytes),
         "retention_ratio": (free_bytes / totals["system_current"]) if totals["system_current"] else 0.0,
         "heaps": sorted(heaps, key=lambda h: -h["system_current"])[:16],
+    }
+
+
+def _parse_malloc_info_bionic(xml: str) -> Dict[str, Any]:
+    """Android reports only what is *allocated*, per heap and size class.
+
+    There is no counterpart to glibc's `<system>`, so retention cannot be read
+    off directly -- it has to be inferred against anonymous RSS by the caller.
+    Reporting only what Bionic actually states keeps that inference honest.
+    """
+    heaps: List[Dict[str, int]] = []
+    for block in re.findall(r'<heap nr="(\d+)">(.*?)</heap>', xml, re.S):
+        nr, body = int(block[0]), block[1]
+        heap = {"nr": nr}
+        for tag, key in (
+            ("allocated-large", "allocated_large"),
+            ("allocated-huge", "allocated_huge"),
+            ("allocated-bins", "allocated_bins"),
+            ("bins-total", "bins_total"),
+        ):
+            match = re.search(rf"<{tag}>(\d+)</{tag}>", body)
+            heap[key] = int(match.group(1)) if match else 0
+        heap["in_use_bytes"] = heap["allocated_large"] + heap["allocated_huge"] + heap["allocated_bins"]
+        heaps.append(heap)
+
+    in_use = sum(h["in_use_bytes"] for h in heaps)
+    return {
+        "available": True,
+        "flavor": "bionic",
+        "arenas": len(heaps),
+        "in_use_bytes": in_use,
+        # Bionic states none of these; leaving them absent rather than zero keeps
+        # "not reported" distinguishable from "measured as nothing".
+        "system_current_bytes": None,
+        "free_bytes": None,
+        "mmapped_bytes": None,
+        "retention_note": "bionic reports allocated bytes only; infer retention from anonymous RSS",
+        "heaps": sorted(heaps, key=lambda h: -h["in_use_bytes"])[:16],
     }
 
 

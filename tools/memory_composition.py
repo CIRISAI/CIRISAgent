@@ -335,9 +335,18 @@ def render(report: Dict[str, Any], top: int = 20) -> str:
         lines.append("")
         lines.append("-- allocators (in-process) ------------------------------------------------")
         glibc = probe.get("glibc_malloc", {})
-        if glibc.get("arenas") is not None:
+        flavor = glibc.get("flavor", "glibc")
+        if not glibc.get("available", glibc.get("arenas") is not None):
+            if glibc.get("reason"):
+                lines.append(f"  system malloc  UNREADABLE: {glibc['reason']}")
+                lines.append(f"                 {glibc.get('xml_head', '')[:120]!r}")
+        elif glibc.get("system_current_bytes") is None:
+            # Bionic states allocated bytes only.
+            lines.append(f"  {flavor} malloc  heaps={glibc['arenas']:<4d} in use {glibc['in_use_bytes'] / MIB:9.1f} MB")
+            lines.append(f"                 retention not reported by this allocator; see residual below")
+        else:
             lines.append(
-                f"  glibc malloc   arenas={glibc['arenas']:<4d} "
+                f"  {flavor} malloc   arenas={glibc['arenas']:<4d} "
                 f"from OS {glibc['system_current_bytes'] / MIB:9.1f} MB"
             )
             lines.append(
@@ -369,26 +378,33 @@ def render(report: Dict[str, Any], top: int = 20) -> str:
 
         lines.append("")
         lines.append("-- reconciliation ---------------------------------------------------------")
+
+        def row(label: str, kb: float) -> str:
+            return f"  {label:<32} {_mb(kb):9.1f} MB {pct(kb)}"
+
         file_kb = sum(
             vals["rss_kb"] for klass, vals in agg["by_class"].items() if klass in ("lib", "file", "sqlite", "shm", "dev")
         )
         pym_kb = pym.get("arena_total_bytes", 0) / KIB if pym.get("available") else 0
-        glibc_use_kb = glibc.get("in_use_bytes", 0) / KIB
-        glibc_free_kb = glibc.get("free_bytes", 0) / KIB
+        glibc_use_kb = (glibc.get("in_use_bytes") or 0) / KIB
+        glibc_free_kb = (glibc.get("free_bytes") or 0) / KIB
         # Allocations above the mmap threshold bypass the arenas entirely, so
         # they are absent from `system current` and have to be added back.
-        glibc_mmap_kb = glibc.get("mmapped_bytes", 0) / KIB
+        glibc_mmap_kb = (glibc.get("mmapped_bytes") or 0) / KIB
         stack_kb = agg["by_class"].get("stack", {}).get("rss_kb", 0)
         accounted = file_kb + pym_kb + glibc_use_kb + glibc_free_kb + glibc_mmap_kb + stack_kb
-        lines.append(f"  file-backed images (touched)     {_mb(file_kb):9.1f} MB {pct(file_kb)}")
-        lines.append(f"  pymalloc arenas (python objects) {_mb(pym_kb):9.1f} MB {pct(pym_kb)}")
-        lines.append(f"  glibc arenas, in use             {_mb(glibc_use_kb):9.1f} MB {pct(glibc_use_kb)}")
-        lines.append(f"  glibc arenas, free not returned  {_mb(glibc_free_kb):9.1f} MB {pct(glibc_free_kb)}")
-        lines.append(f"  glibc mmapped blocks (large)     {_mb(glibc_mmap_kb):9.1f} MB {pct(glibc_mmap_kb)}")
-        lines.append(f"  thread stacks                    {_mb(stack_kb):9.1f} MB {pct(stack_kb)}")
+        lines.append(row("file-backed images (touched)", file_kb))
+        lines.append(row("pymalloc arenas (python objects)", pym_kb))
+        lines.append(row(f"{flavor} heap, in use", glibc_use_kb))
+        if glibc.get("free_bytes") is None:
+            lines.append(f"  {'heap free but not returned':<32}    (not reported by this allocator)")
+        else:
+            lines.append(row("heap free but not returned", glibc_free_kb))
+            lines.append(row("heap mmapped blocks (large)", glibc_mmap_kb))
+        lines.append(row("thread stacks", stack_kb))
         lines.append(f"  {'-' * 60}")
-        lines.append(f"  accounted                        {_mb(accounted):9.1f} MB {pct(accounted)}")
-        lines.append(f"  residual (RSS - accounted)       {_mb(rss_kb - accounted):9.1f} MB {pct(rss_kb - accounted)}")
+        lines.append(row("accounted", accounted))
+        lines.append(row("residual (RSS - accounted)", rss_kb - accounted))
         lines.append("  note: allocator figures are bytes held from the OS, which for a")
         lines.append("  demand-paged region can exceed what is resident -- expect a small")
         lines.append("  negative residual rather than an exact sum.")

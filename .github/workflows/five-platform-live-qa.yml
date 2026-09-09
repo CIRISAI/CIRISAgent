@@ -745,6 +745,7 @@ jobs:
             python -m tools.qa_runner.modules.web_ui desktop-login \
               --platform "$target" $extra \
               --username qaadmin --password "qa_test_password_12345" \
+              --run-without-ai \
               --screenshot-on-success "artifacts/shots/$plat-login-noai.png" \
               -v || { overall=1; echo "::error::$plat run-without-AI login failed — Interact unreachable against a node-only backend"; python3 tools/dev/diagnose_gate_failure.py --platform "$plat" --phase login-noai --logs artifacts "${CIRIS_QA_LOG_DIR:-artifacts/cmdlogs}" || true; }
 

@@ -243,7 +243,12 @@ class DesktopAppTestRunner:
         self.results.append(result)
         return result
 
-    async def test_login_flow(self, username: str = "admin", password: str = "qa_test_password_12345") -> bool:
+    async def test_login_flow(
+        self,
+        username: str = "admin",
+        password: str = "qa_test_password_12345",
+        run_without_ai: bool = False,
+    ) -> bool:
         """Test the login flow on the desktop app."""
         print("\n Testing Login Flow")
 
@@ -358,15 +363,39 @@ class DesktopAppTestRunner:
 
         # Wait for next screen (Interact or Setup)
         async def wait_for_post_login():
-            self._log("Waiting for post-login screen...")
+            # THE HOME DEPENDS ON THE INSTALL, and this step asserted the agent's
+            # on both. `homeScreen(hasAgent)` lands a run-without-AI install on
+            # the NODE surface -- Contacts -- deliberately: "opening on a chat
+            # with no brain behind it is the worse wrong guess" is the client's
+            # own comment. Run 34296932220 is what taught us: the app navigated
+            # to Contacts (btn_contacts_add_open, btn_contacts_back and
+            # btn_contacts_refresh were drivable at the next step) while this
+            # step reported "Still on Login screen after 30s" -- a message that
+            # named a screen it had never checked for and sent two people
+            # hunting a stall that was not happening (CIRISClient#48).
+            agent_homes = ["Interact", "Setup", "Startup"]
+            node_homes = ["Contacts", "Interact", "Setup", "Startup"]
+            wanted = node_homes if run_without_ai else agent_homes
+            self._log(f"Waiting for post-login screen (accepting {'/'.join(wanted)})...")
             start = datetime.now()
+            seen = None
             while (datetime.now() - start).total_seconds() < 30:
-                screen = await self.helper.get_screen()
-                if screen in ["Interact", "Setup", "Startup"]:
-                    self._log(f"Navigated to: {screen}")
+                seen = await self.helper.get_screen()
+                if seen in wanted:
+                    self._log(f"Navigated to: {seen}")
                     return
                 await asyncio.sleep(0.5)
-            raise RuntimeError(f"Still on Login screen after 30s")
+            # SAY WHAT IS THERE, not what was expected to be.
+            drivable = sorted(
+                e.test_tag
+                for e in await self.helper.get_elements()
+                if (e.visible if e.visible is not None else (e.width > 0 and e.height > 0))
+            )
+            await self._dump_tree("wait_for_post_login")
+            raise RuntimeError(
+                f"30s after a successful login the screen is {seen!r}, not one of {wanted}; "
+                f"on screen and drivable now: {drivable[:12]}"
+            )
 
         await self.run_test("wait_for_post_login", wait_for_post_login)
 
@@ -4458,6 +4487,7 @@ async def run_desktop_tests(args: argparse.Namespace) -> int:
             success = await runner.test_login_flow(
                 username=args.username or "admin",
                 password=args.password or "qa_test_password_12345",
+                run_without_ai=getattr(args, "run_without_ai", False),
             )
             runner.print_summary()
             return 0 if success else 1

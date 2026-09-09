@@ -465,3 +465,18 @@ def test_simulator_crash_reports_are_collected(raw: str) -> None:
     assert "CoreSimulator/Devices" in around, "the simulator device containers are not searched"
     assert "naming the app" in around, "the count must distinguish the app's crash from a host crash"
     assert 'if: always()' in raw[raw.rfind("- name: Collect artifacts", 0, i) : i], "collection must run on failure too"
+
+
+def test_the_no_ai_login_leg_declares_the_install_it_drives(raw: str) -> None:
+    """`homeScreen(hasAgent)` lands a run-without-AI install on the NODE surface
+    (Contacts), not Interact — the client's deliberate design. The login leg must
+    say which install it is driving so it asserts the right home; asserting the
+    agent home on a node cost run 34296932220 (CIRISClient#48)."""
+    i = raw.find("$plat-login-noai.png")
+    assert i > 0
+    block = raw[i - 500 : i]
+    assert "desktop-login" in block and "--run-without-ai" in block
+    # ...and the with-AI leg must NOT claim it, or it would accept the node home.
+    j = raw.find("$plat-login.png")
+    assert j > 0
+    assert "--run-without-ai" not in raw[j - 500 : j]

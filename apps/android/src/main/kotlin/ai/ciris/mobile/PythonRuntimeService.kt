@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.ComponentCallbacks2
 import android.content.Context
 import android.content.Intent
 import android.net.wifi.WifiManager
@@ -102,6 +103,43 @@ class PythonRuntimeService : Service(), DefaultLifecycleObserver {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    /**
+     * The OS is asking for memory back. Until this override existed the answer
+     * was silence, and on a 2 GB phone silence is how a foreground service gets
+     * killed. The Python runtime releases what its allocators are holding
+     * (gc.collect + mallopt(M_PURGE)) and reports the result to its resource
+     * monitor; see mobile_main.on_trim_memory.
+     *
+     * Runs off the main thread: the release holds the GIL for ~100 ms on a
+     * loaded runtime, and onTrimMemory is delivered on the main thread.
+     */
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        val name = when (level) {
+            ComponentCallbacks2.TRIM_MEMORY_COMPLETE -> "COMPLETE"
+            ComponentCallbacks2.TRIM_MEMORY_MODERATE -> "MODERATE"
+            ComponentCallbacks2.TRIM_MEMORY_BACKGROUND -> "BACKGROUND"
+            ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN -> "UI_HIDDEN"
+            ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL -> "RUNNING_CRITICAL"
+            ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW -> "RUNNING_LOW"
+            ComponentCallbacks2.TRIM_MEMORY_RUNNING_MODERATE -> "RUNNING_MODERATE"
+            else -> "LEVEL_$level"
+        }
+        if (!Python.isStarted()) {
+            Log.i(TAG, "onTrimMemory($name): Python not started, nothing to release")
+            return
+        }
+        serviceScope.launch {
+            try {
+                val summary = Python.getInstance().getModule("mobile_main")
+                    .callAttr("on_trim_memory", name).toString()
+                Log.w(TAG, "onTrimMemory($name): $summary")
+            } catch (e: Exception) {
+                Log.e(TAG, "onTrimMemory($name): release failed", e)
+            }
+        }
+    }
 
     override fun onDestroy() {
         super<Service>.onDestroy()

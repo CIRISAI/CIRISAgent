@@ -71,6 +71,29 @@ class ResourceBudget(BaseModel):
     model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
+class MemoryReleaseResult(BaseModel):
+    """What one attempt to hand memory back to the OS actually did.
+
+    Emitted by `release_memory()` whether the trigger was the resource monitor
+    crossing its own threshold or the host OS asking (Android onTrimMemory,
+    iOS memory warning). `reclaimed_mb` can be negative: RSS is sampled live and
+    another thread may allocate between the two reads.
+    """
+
+    trigger: str = Field(description="Who asked: resource_monitor:<signal>, host:<level>, or manual")
+    platform_call: str = Field(
+        description="Allocator call made: malloc_trim, mallopt(M_PURGE), malloc_zone_pressure_relief, none, or unavailable:<why>"
+    )
+    rss_before_mb: int = Field(ge=0, description="Resident set before, in MB")
+    rss_after_mb: int = Field(ge=0, description="Resident set after, in MB")
+    reclaimed_mb: int = Field(description="rss_before_mb - rss_after_mb")
+    gc_collected: int = Field(ge=0, description="Unreachable objects gc.collect() found")
+    duration_ms: int = Field(ge=0, description="Wall time of the whole release")
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class ResourceSnapshot(BaseModel):
     """Current resource usage snapshot"""
 

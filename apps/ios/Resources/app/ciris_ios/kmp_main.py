@@ -247,6 +247,61 @@ def watchdog_thread_func():
     _watchdog_log.info("Watchdog thread exiting")
 
 
+# ---------------------------------------------------------------------------
+# Memory pressure: iOS asked for memory back
+# ---------------------------------------------------------------------------
+#
+# Swift has no direct call into Python here (PythonInit.runModule only), so it
+# speaks the same way the restart path does: a signal file, watched by a plain
+# thread. The release runs on that thread on purpose -- an iOS memory warning
+# is exactly when the event loop may be suspended -- and the running resource
+# monitor is told afterwards. Started before the run-without-AI branch so a
+# node-only install answers the OS too.
+
+
+def get_memory_pressure_signal_path() -> Path:
+    return _get_ciris_dir() / ".memory_pressure"
+
+
+def _memory_pressure_thread_func():
+    from ciris_engine.logic.utils.memory_release import release_memory
+
+    log = init_logging("kmp.memory")
+    path = get_memory_pressure_signal_path()
+    log.info(f"Memory pressure watcher started (signal: {path})")
+    while True:
+        time.sleep(1.0)
+        if not path.exists():
+            continue
+        try:
+            path.unlink()
+        except OSError:
+            pass
+        try:
+            result = release_memory(trigger="host:ios_memory_warning")
+            log.warning(
+                f"iOS memory warning: rss {result.rss_before_mb} -> {result.rss_after_mb} MB, "
+                f"reclaimed {result.reclaimed_mb} MB via {result.platform_call} in {result.duration_ms} ms"
+            )
+            loop, runtime = _event_loop, _runtime_ref
+            if loop is not None and runtime is not None and not loop.is_closed():
+                monitor = getattr(runtime, "resource_monitor_service", None) or getattr(
+                    getattr(runtime, "service_initializer", None), "resource_monitor_service", None
+                )
+                if monitor is not None:
+                    loop.call_soon_threadsafe(monitor.record_release, result)
+        except Exception as e:
+            log.error(f"Memory release failed: {e}")
+
+
+def start_memory_pressure_thread():
+    import threading
+
+    thread = threading.Thread(target=_memory_pressure_thread_func, name="ciris-mem-pressure", daemon=True)
+    thread.start()
+    return thread
+
+
 def start_watchdog_thread():
     """Start the watchdog thread as a daemon."""
     import threading
@@ -527,6 +582,8 @@ def main():
     # restart loop, the runtime and the API adapter are never started. The
     # client talks to the node on :4243.
     from ciris_engine import node_only
+
+    start_memory_pressure_thread()
 
     _node_only = node_only.node_only_config()
     if _node_only is not None:

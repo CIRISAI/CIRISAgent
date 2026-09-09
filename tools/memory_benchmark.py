@@ -15,6 +15,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 
 def format_size(size: float) -> str:
@@ -339,6 +340,36 @@ def verify_task_processing(
     return False, task_complete_count, speak_count
 
 
+def dump_composition(pid: int, json_path: Optional[str] = None) -> None:
+    """Print what the resident set is actually made of.
+
+    Imported lazily so the benchmark keeps working if the tool is absent, and
+    never fatal: a failed introspection must not fail a memory run.
+    """
+    print("\n[composition] attributing resident memory...")
+    try:
+        # This file is usually run as a script, so `tools` is not importable as
+        # a package -- load the sibling module by path instead of by name.
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "memory_composition", Path(__file__).parent / "memory_composition.py"
+        )
+        if spec is None or spec.loader is None:
+            raise ImportError("cannot locate tools/memory_composition.py")
+        memory_composition = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(memory_composition)
+
+        report = memory_composition.collect(pid, probe=True, trim=True)
+        print(memory_composition.render(report))
+        if json_path:
+            with open(json_path, "w", encoding="utf-8") as handle:
+                json.dump(report, handle, indent=2, sort_keys=True)
+            print(f"  wrote {json_path}")
+    except Exception as exc:
+        print(f"  composition failed: {exc}")
+
+
 def main(
     messages: int = 100,
     adapter: str = "api",
@@ -346,6 +377,8 @@ def main(
     concurrency: int = 20,
     verify_audit: bool = False,
     idle_seconds: int = 0,
+    composition: bool = False,
+    composition_json: Optional[str] = None,
 ) -> int:
     """Run memory benchmark with N messages."""
     print("=" * 70)
@@ -362,6 +395,15 @@ def main(
     # Benchmarks measure per-task throughput, so bypass the channel-level task-append
     # coalescing in BaseObserver. See ciris_engine/logic/adapters/base_observer.py.
     env.setdefault("CIRIS_DISABLE_TASK_APPEND", "1")
+
+    if composition:
+        # Arming is purely a launch-time concern: putting tools/memprobe on
+        # PYTHONPATH makes `site` import its sitecustomize, which registers a
+        # SIGUSR1 handler.  No engine code is involved and nothing changes when
+        # the flag is off.
+        probe_dir = project_root / "tools" / "memprobe"
+        env["CIRIS_MEMPROBE"] = "1"
+        env["PYTHONPATH"] = os.pathsep.join(filter(None, [str(probe_dir), env.get("PYTHONPATH", "")]))
 
     cmd = [
         sys.executable,
@@ -486,6 +528,11 @@ def main(
                     f"delta={last - first:+.1f}MB plateau={'yes' if stable else 'no'}"
                 )
 
+        # Composition is taken last, at the plateau, because that is the number
+        # the resource budget is judged against.
+        if composition:
+            dump_composition(pid, composition_json)
+
     except Exception as e:
         print(f"  ERROR: {e}")
     finally:
@@ -553,6 +600,19 @@ def parse_args() -> argparse.Namespace:
             "drains and RAM plateaus. Default 0 (matches old behavior)."
         ),
     )
+    parser.add_argument(
+        "--composition",
+        action="store_true",
+        help=(
+            "At the end of the run, attribute resident memory to allocators and "
+            "mappings (see tools/memory_composition.py). Arms the in-process probe."
+        ),
+    )
+    parser.add_argument(
+        "--composition-json",
+        default=None,
+        help="Write the composition report here as JSON",
+    )
     return parser.parse_args()
 
 
@@ -566,5 +626,7 @@ if __name__ == "__main__":
             concurrency=max(1, args.concurrency),
             verify_audit=args.verify_audit,
             idle_seconds=max(0, args.idle_seconds),
+            composition=args.composition,
+            composition_json=args.composition_json,
         )
     )

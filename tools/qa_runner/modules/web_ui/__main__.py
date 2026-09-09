@@ -843,14 +843,21 @@ class DesktopAppTestRunner:
         then timed out; presence there is not drivability, so the mobile route
         is taken on its own terms rather than probed for.
         """
-        if await self.helper.is_element_present("btn_nav_drawer_open"):
+        if await self.helper.is_element_present("btn_nav_drawer_open") or await self.helper.is_element_visible(
+            "btn_nav_drawer_close"
+        ):
             self._log("mobile chrome: drawer -> Settings -> btn_logout")
-            if not await self.helper.click("btn_nav_drawer_open"):
-                raise RuntimeError("Failed to open the nav drawer (btn_nav_drawer_open)")
-            await asyncio.sleep(0.6)
-            if not await self.helper.wait_for_element("nav_epistemic_agent_settings", timeout=8000):
+            # REVEAL, do not merely wait. On iOS (run 34291675402) the drawer was
+            # already OPEN and Settings sat inside a COLLAPSED group: the row was in
+            # /tree, absent from the screen, and an 8 s wait could only time out on
+            # an app that was perfectly healthy — `nav_group_manage`, `_node` and
+            # `_safety` were the groups showing, and Settings is in none of them.
+            # The sidebar walk opens the drawer, opens groups, scrolls, and names
+            # what it could not reach.
+            reveal_err = await self.helper.reveal_sidebar_row("nav_epistemic_agent_settings")
+            if reveal_err:
                 await self._dump_tree("reset:nav_settings")
-                raise RuntimeError("nav_epistemic_agent_settings not in the drawer — the sidebar surfaces moved")
+                raise RuntimeError(f"cannot reach Settings in the sidebar: {reveal_err}")
             if not await self.helper.click("nav_epistemic_agent_settings"):
                 raise RuntimeError("Failed to open Settings from the drawer")
             await asyncio.sleep(1.0)

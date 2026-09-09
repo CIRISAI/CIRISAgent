@@ -125,3 +125,28 @@ def test_cannot_start_is_only_a_hop_or_precondition_failure() -> None:
     assert 'first.phase == "requires"' in src
     assert 'first.phase == "expect"' not in src, "an expect failure must not be classified as cannot-start"
     assert "cannot_start.append((spec.flow, refusal))" in src, "a floor refusal is cannot-start, not a red leg"
+
+
+@pytest.mark.asyncio
+async def test_reveal_opens_a_collapsed_group_for_a_row_the_drawer_already_shows() -> None:
+    """iOS run 34291675402: the drawer was open, Settings sat in a collapsed group,
+    and the logout step waited 8 s for a row that was never going to compose."""
+    fake = _FakeSidebar()
+    fake.expanded = {"nav_group_manage": True, "nav_group_agent": False}
+
+    async def elements():
+        rows = [_Row(g, True) for g in fake.expanded]
+        rows.append(_Row("nav_epistemic_agent_settings", fake.expanded["nav_group_agent"]))
+        return rows
+
+    fake.get_elements = elements  # type: ignore[assignment]
+    assert await fake.reveal_sidebar_row("nav_epistemic_agent_settings") is None
+    assert fake.expanded["nav_group_agent"] is True
+    assert "nav_group_agent" in fake.clicks
+
+
+@pytest.mark.asyncio
+async def test_reveal_names_the_row_it_could_not_bring_on_screen() -> None:
+    fake = _FakeSidebar()
+    err = await fake.reveal_sidebar_row("nav_epistemic_nowhere")
+    assert err and "nav_epistemic_nowhere" in err and "nav_group_" in err

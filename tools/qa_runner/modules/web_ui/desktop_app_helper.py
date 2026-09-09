@@ -644,6 +644,38 @@ class DesktopAppHelper:
         """
         return await self.get_element(test_tag) is not None
 
+    async def reveal_sidebar_row(self, tag: str) -> Optional[str]:
+        """Bring an EpistemicSidebar row on screen: drawer, collapsed group, fold.
+        None once it is drivable, else why not.
+
+        Three things hide a row, and every one of them has cost a leg:
+        the drawer is closed (mobile chrome); its group is collapsed (iOS run
+        34291675402 -- `nav_epistemic_agent_settings` absent while `nav_group_manage`,
+        `nav_group_node` and `nav_group_safety` were the only groups on screen, so
+        logout failed on an authenticated app); or the row is below the sidebar's
+        fold (run 34255952177 at 1200x800). Presence in `/tree` proves none of it --
+        the registry never forgets -- so every check here is the on-screen predicate.
+        """
+        if await self.is_element_visible(tag):
+            return None
+        if await self.is_element_visible("btn_nav_drawer_open"):
+            await self.click("btn_nav_drawer_open")
+            await asyncio.sleep(0.5)
+        if await self.is_element_visible(tag) or await self.scroll_into_view(tag):
+            return None
+        groups = sorted(e.test_tag for e in await self.get_elements() if e.test_tag.startswith("nav_group_"))
+        for group in groups:
+            if not await self.scroll_into_view(group):
+                continue
+            await self.click(group)
+            await asyncio.sleep(0.3)
+            if await self.scroll_into_view(tag):
+                return None
+            await self.scroll_into_view(group)
+            await self.click(group)  # wrong group: restore it, or the next toggle inverts
+            await asyncio.sleep(0.2)
+        return f"{tag!r} is not on screen after opening each sidebar group ({groups or 'no nav_group_* rows'})"
+
     async def navigate_to_surface(self, screen_name: str, timeout_ms: int = 8000) -> Optional[str]:
         """Reach `screen_name` through the EpistemicSidebar. None on success, else why not.
 
@@ -664,36 +696,15 @@ class DesktopAppHelper:
         if current == screen_name:
             return None
         tag = surface_tag(screen_name)
-        # Mobile chrome keeps the sidebar in a drawer.
-        if not await self.is_element_visible(tag) and await self.is_element_visible("btn_nav_drawer_open"):
-            await self.click("btn_nav_drawer_open")
-            await asyncio.sleep(0.5)
         if not await self.is_element_visible(tag):
             parent = NESTED_SURFACE_PARENT.get(_surface_id(screen_name))
             if parent and parent != current:
                 err = await self.navigate_to_surface(parent, timeout_ms=timeout_ms)
                 if err:
                     return f"{screen_name} sits under {parent}, which could not be reached: {err}"
-        # THE SIDEBAR SCROLLS. On a 1200x800 desktop the Commons and Client group
-        # headers sit below the fold (run 34255952177: present in /tree, not on
-        # screen), and a row inside an opened group can be off-screen the same
-        # way. Bring each thing on screen before asking whether it is there.
-        if not await self.is_element_visible(tag):
-            await self.scroll_into_view(tag)
-        if not await self.is_element_visible(tag):
-            groups = sorted(e.test_tag for e in await self.get_elements() if e.test_tag.startswith("nav_group_"))
-            for group in groups:
-                if not await self.scroll_into_view(group):
-                    continue
-                await self.click(group)
-                await asyncio.sleep(0.3)
-                if await self.scroll_into_view(tag):
-                    break
-                await self.scroll_into_view(group)
-                await self.click(group)  # wrong group: restore it, or the next toggle inverts
-                await asyncio.sleep(0.2)
-            else:
-                return f"{tag!r} is not on screen after opening each sidebar group ({groups or 'no nav_group_* rows'})"
+        reveal_err = await self.reveal_sidebar_row(tag)
+        if reveal_err:
+            return reveal_err
         if not await self.click(tag):
             return f"click on {tag!r} did not succeed"
         if not await self.wait_for_screen(screen_name, timeout=timeout_ms):

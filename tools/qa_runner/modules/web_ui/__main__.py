@@ -878,9 +878,18 @@ class DesktopAppTestRunner:
             self._log(f"logout via {what}: {tag} -> btn_logout")
             if not await self.helper.click(tag):
                 raise RuntimeError(f"{tag} was on screen and the click did not take")
-            if not await self.helper.wait_for_element("btn_logout", timeout=10000):
-                await self._dump_tree("reset:btn_logout")
-                raise RuntimeError(f"btn_logout is not on the surface behind {tag}")
+            # SCROLL IT ON SCREEN. Settings is a long surface and logout sits at the
+            # bottom of it: on iOS (run 34306647597) the account route was taken
+            # correctly and then `btn_logout` was "composed but off screen", which
+            # from 0.5.206 is a refusal, not a coordinate gamble. Same rule as every
+            # other tag we drive -- presence is not drivability.
+            if not await self.helper.scroll_into_view("btn_logout"):
+                if not await self.helper.wait_for_element("btn_logout", timeout=10000):
+                    await self._dump_tree("reset:btn_logout")
+                    raise RuntimeError(
+                        f"btn_logout is not reachable on the surface behind {tag} "
+                        "(not on screen after scrolling it into view)"
+                    )
             if not await self.helper.click("btn_logout"):
                 raise RuntimeError("Failed to click btn_logout")
             await asyncio.sleep(1.5)

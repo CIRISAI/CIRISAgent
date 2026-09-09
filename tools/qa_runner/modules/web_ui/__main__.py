@@ -857,7 +857,20 @@ class DesktopAppTestRunner:
             reveal_err = await self.helper.reveal_sidebar_row("nav_epistemic_agent_settings")
             if reveal_err:
                 await self._dump_tree("reset:nav_settings")
-                raise RuntimeError(f"cannot reach Settings in the sidebar: {reveal_err}")
+                # NAME THE LIKELY CAUSE. `epistemicNavGroups(hasAgent)` drops the
+                # whole Agent group when there is no agent, and Settings -- the only
+                # screen carrying `btn_logout` -- lives in it. On a run-without-AI
+                # install that leaves mobile chrome with no logout at all (the
+                # desktop's `btn_governance_menu` is not in the drawer). Say so, so
+                # the next reader does not go hunting a moved test tag.
+                groups = [e.test_tag for e in await self.helper.get_elements() if e.test_tag.startswith("nav_group_")]
+                hint = (
+                    " — and `nav_group_agent` is not among the groups, which is what a node-only install looks like: "
+                    "no Agent group means no Settings and no btn_logout (CIRISClient#51)"
+                    if not any(g.endswith("_agent") for g in groups)
+                    else ""
+                )
+                raise RuntimeError(f"cannot reach Settings in the sidebar: {reveal_err}{hint}")
             if not await self.helper.click("nav_epistemic_agent_settings"):
                 raise RuntimeError("Failed to open Settings from the drawer")
             await asyncio.sleep(1.0)

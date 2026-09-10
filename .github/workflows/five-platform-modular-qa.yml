@@ -709,7 +709,13 @@ jobs:
             fi
 
             # 4. THE SUITE, against the backend this platform brought up.
+            # `shell: bash` runs this script with -e. A non-zero runner exit here is
+            # a RESULT to record, not a reason to stop: unwrapped, it aborted the
+            # script before the verdict, the log copy and the leg's SECOND platform
+            # -- run 34494723581 lost iOS entirely behind one macOS incident, and
+            # run 34426927040 had no chat-windows.json for the same reason.
             qa_rc=0
+            set +e
             python -m tools.qa_runner $MODULES \
               --no-auto-start --port 8080 \
               --username qaadmin --password "qa_test_password_12345" \
@@ -717,6 +723,7 @@ jobs:
               --proceed-anyway --json --report-dir "artifacts/qa/$plat" -v \
               2>&1 | tee "artifacts/qa/$plat/runner.log"
             qa_rc=${PIPESTATUS[0]}
+            set -e
             [ -n "$mirror_pid" ] && { kill "$mirror_pid" 2>/dev/null || true; }
             if [ "$qa_rc" != 0 ]; then
               overall=1

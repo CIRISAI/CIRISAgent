@@ -249,16 +249,38 @@ def test_windows_uses_heapmin_and_trims_the_working_set(monkeypatch):
 
     kernel32 = types.SimpleNamespace(SetProcessWorkingSetSize=_WinFn(), GetCurrentProcess=lambda: 42)
     monkeypatch.setattr(memory_release.ctypes, "windll", types.SimpleNamespace(kernel32=kernel32), raising=False)
-    assert memory_release._platform_release() == "_heapmin+SetProcessWorkingSetSize"
+    assert memory_release._platform_release("host:RUNNING_CRITICAL") == "_heapmin+SetProcessWorkingSetSize"
     assert libc.calls[0][0] == "_heapmin"
     assert calls and calls[0][0] == 42
+
+
+def test_windows_own_threshold_does_not_empty_the_working_set(monkeypatch):
+    """The gate measured 279 -> 1 MB from SetProcessWorkingSetSize: it evicts live
+    pages too. That is for the host's memory pressure, not our 768 MB warning."""
+    libc = _FakeLibc({"_heapmin"})
+    _use(monkeypatch, libc, platform="win32")
+    calls = []
+
+    class _WinFn:
+        argtypes = None
+        restype = None
+
+        def __call__(self, *a):
+            calls.append(a)
+            return 1
+
+    kernel32 = types.SimpleNamespace(SetProcessWorkingSetSize=_WinFn(), GetCurrentProcess=lambda: 42)
+    monkeypatch.setattr(memory_release.ctypes, "windll", types.SimpleNamespace(kernel32=kernel32), raising=False)
+    assert memory_release._platform_release("resource_monitor:defer") == "_heapmin"
+    assert libc.calls[0][0] == "_heapmin"
+    assert calls == []
 
 
 def test_windows_without_kernel32_still_heapmins(monkeypatch):
     libc = _FakeLibc({"_heapmin"})
     _use(monkeypatch, libc, platform="win32")
     monkeypatch.delattr(memory_release.ctypes, "windll", raising=False)
-    assert memory_release._platform_release() == "_heapmin"
+    assert memory_release._platform_release("host:COMPLETE") == "_heapmin"
 
 
 def test_windows_without_heapmin_reports_unavailable(monkeypatch):

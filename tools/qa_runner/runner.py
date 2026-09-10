@@ -769,7 +769,7 @@ class QARunner:
         self.console.print("\n[cyan] Log Locations:[/cyan]")
         self.console.print(f"[dim]   • Console (early startup): {log_dir}/console.log[/dim]")
         self.console.print(f"[dim]   • Full logs: {log_dir}/latest.log[/dim]")
-        self.console.print(f"[dim]   • Incidents: {log_dir}/incidents_latest.log[/dim]")
+        self.console.print(f"[dim]   • Incidents: {self._incidents_log_path()}[/dim]")
 
         # Billing-specific reminder for billing integration tests
         if QAModule.BILLING_INTEGRATION in modules:
@@ -2464,6 +2464,17 @@ class QARunner:
                         result["success"] = False
                         if self.config.verbose:
                             self.console.print(f"[red][FAIL] {test.name}: Validation failed[/red]")
+                            # Say WHICH rule and WHAT came back. The first all-platform
+                            # modular run reported "Validation failed" for the memory
+                            # release on Windows and nothing else; the body was the answer.
+                            errors = validation_result.get("validation", {}).get("errors", [])
+                            if errors:
+                                self.console.print(f"[red]   rules: {'; '.join(map(str, errors))}[/red]")
+                            try:
+                                body = response.text
+                            except Exception:
+                                body = "<unreadable>"
+                            self.console.print(f"[red]   body: {body[:400]}[/red]")
                         return False, result
 
                     if self.config.verbose:

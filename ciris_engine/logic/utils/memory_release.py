@@ -97,8 +97,14 @@ def rss_bytes() -> int:
         return 0
 
 
-def _platform_release() -> str:
-    """Ask the system allocator to return free pages. Never raises."""
+def _platform_release(trigger: str = "manual") -> str:
+    """Ask the system allocator to return free pages. Never raises.
+
+    `trigger` matters on Windows only: emptying the working set is right when
+    the HOST asks for memory and too blunt for our own threshold -- it evicts
+    live pages too, which then soft-fault back in, so on a desktop that would
+    be a fault storm every time the warning trips.
+    """
     libc = _load_libc()
     if libc is None:
         return "none"
@@ -134,9 +140,12 @@ def _platform_release() -> str:
             libc._heapmin.restype = ctypes.c_int
             libc._heapmin()
             # Returning heap pages is only half of it on Windows: the working
-            # set keeps them resident until the kernel is told it may trim.
+            # set keeps them resident until the kernel is told it may trim. But
+            # SetProcessWorkingSetSize(-1, -1) empties the WHOLE working set, live
+            # pages included (the gate measured 279 -> 1 MB), so only do it when
+            # the host itself is asking -- that is the one time it is worth it.
             kernel32 = getattr(getattr(ctypes, "windll", None), "kernel32", None)
-            if kernel32 is not None:
+            if kernel32 is not None and trigger.startswith("host:"):
                 try:
                     kernel32.SetProcessWorkingSetSize.argtypes = [ctypes.c_void_p, ctypes.c_size_t, ctypes.c_size_t]
                     kernel32.SetProcessWorkingSetSize.restype = ctypes.c_int
@@ -161,7 +170,7 @@ def release_memory(trigger: str = "manual") -> MemoryReleaseResult:
     started = time.perf_counter()
     before = rss_bytes()
     collected = gc.collect()
-    call = _platform_release()
+    call = _platform_release(trigger)
     after = rss_bytes()
     result = MemoryReleaseResult(
         trigger=trigger,

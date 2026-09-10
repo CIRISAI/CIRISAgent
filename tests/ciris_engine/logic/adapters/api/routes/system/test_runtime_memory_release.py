@@ -90,3 +90,14 @@ def test_release_requires_admin():
 
     assert response.status_code != 200, response.text
     monitor.release_memory.assert_not_awaited()
+
+
+def test_release_failure_is_a_500_with_the_reason(app: FastAPI):
+    monitor = MagicMock()
+    monitor.release_memory = AsyncMock(side_effect=RuntimeError("allocator exploded"))
+    app.state.resource_monitor = monitor
+
+    response = TestClient(app).post("/system/runtime/memory/release")
+
+    assert response.status_code == 500
+    assert "allocator exploded" in response.json()["detail"]

@@ -75,3 +75,157 @@ def test_release_memory_survives_a_failing_allocator_call(monkeypatch):
     monkeypatch.setattr(memory_release, "_load_libc", lambda: BrokenLibc())
     result = memory_release.release_memory(trigger="manual")
     assert result.platform_call.startswith("unavailable:")
+
+
+# ---------------------------------------------------------------------------
+# Platform dispatch. These exercise the *choice* of allocator call with fake
+# libc objects; the real calls are covered by the glibc test above and, for the
+# phones, by the five-platform gates.
+# ---------------------------------------------------------------------------
+
+
+class _FakeLibc:
+    """Records mallopt/trim/relief calls; `symbols` controls what exists."""
+
+    def __init__(self, symbols, mallopt_results=None):
+        self._symbols = set(symbols)
+        self.calls = []
+        self._mallopt_results = list(mallopt_results or [])
+
+    def __getattr__(self, name):
+        if name not in self._symbols:
+            raise AttributeError(name)
+        fake = self
+
+        class _Fn:
+            argtypes = None
+            restype = None
+
+            def __call__(self, *args):
+                fake.calls.append((name, args))
+                if name == "mallopt" and fake._mallopt_results:
+                    return fake._mallopt_results.pop(0)
+                return 0
+
+        return _Fn()
+
+
+def _use(monkeypatch, libc, *, platform="linux", android=False):
+    monkeypatch.setattr(memory_release.sys, "platform", platform)
+    monkeypatch.setattr(memory_release, "_is_android", lambda: android)
+    monkeypatch.setattr(memory_release, "_load_libc", lambda: libc)
+
+
+def test_android_prefers_purge_all_when_the_device_has_it(monkeypatch):
+    libc = _FakeLibc({"mallopt"}, mallopt_results=[1])
+    _use(monkeypatch, libc, android=True)
+    assert memory_release._platform_release() == "mallopt(M_PURGE_ALL)"
+    assert libc.calls == [("mallopt", (memory_release._BIONIC_M_PURGE_ALL, 0))]
+
+
+def test_android_falls_back_to_purge_on_older_api_levels(monkeypatch):
+    """M_PURGE_ALL is API 34; an older Bionic returns 0 and we try M_PURGE (API 28)."""
+    libc = _FakeLibc({"mallopt"}, mallopt_results=[0, 1])
+    _use(monkeypatch, libc, android=True)
+    assert memory_release._platform_release() == "mallopt(M_PURGE)"
+    assert [c[1][0] for c in libc.calls] == [memory_release._BIONIC_M_PURGE_ALL, memory_release._BIONIC_M_PURGE]
+
+
+def test_android_without_mallopt_reports_unavailable(monkeypatch):
+    _use(monkeypatch, _FakeLibc(set()), android=True)
+    assert memory_release._platform_release() == "unavailable:no mallopt"
+
+
+def test_darwin_uses_malloc_zone_pressure_relief(monkeypatch):
+    libc = _FakeLibc({"malloc_zone_pressure_relief"})
+    _use(monkeypatch, libc, platform="darwin")
+    assert memory_release._platform_release() == "malloc_zone_pressure_relief"
+    assert libc.calls[0][0] == "malloc_zone_pressure_relief"
+
+
+def test_ios_is_darwin_for_this_purpose(monkeypatch):
+    _use(monkeypatch, _FakeLibc({"malloc_zone_pressure_relief"}), platform="ios")
+    assert memory_release._platform_release() == "malloc_zone_pressure_relief"
+
+
+def test_darwin_without_the_symbol_reports_unavailable(monkeypatch):
+    _use(monkeypatch, _FakeLibc(set()), platform="darwin")
+    assert memory_release._platform_release() == "unavailable:no malloc_zone_pressure_relief"
+
+
+def test_linux_without_malloc_trim_reports_unavailable(monkeypatch):
+    _use(monkeypatch, _FakeLibc(set()), platform="linux")
+    assert memory_release._platform_release() == "unavailable:no malloc_trim"
+
+
+def test_no_libc_at_all_is_none(monkeypatch):
+    _use(monkeypatch, None, platform="linux")
+    assert memory_release._platform_release() == "none"
+
+
+def test_load_libc_tries_each_candidate_and_remembers_failure(monkeypatch):
+    attempts = []
+
+    def fake_cdll(name):
+        attempts.append(name)
+        raise OSError("nope")
+
+    monkeypatch.setattr(memory_release.ctypes, "CDLL", fake_cdll)
+    monkeypatch.setattr(memory_release, "_libc", None)
+    monkeypatch.setattr(memory_release, "_libc_failed", False)
+    monkeypatch.setattr(memory_release, "_is_android", lambda: False)
+    monkeypatch.setattr(memory_release.sys, "platform", "darwin")
+    assert memory_release._load_libc() is None
+    assert attempts == ["libSystem.B.dylib", None]
+    # Second call must not retry: a failed dlopen is not going to start working.
+    assert memory_release._load_libc() is None
+    assert attempts == ["libSystem.B.dylib", None]
+
+
+def test_load_libc_picks_bionic_name_on_android(monkeypatch):
+    seen = []
+    monkeypatch.setattr(memory_release.ctypes, "CDLL", lambda name: seen.append(name) or object())
+    monkeypatch.setattr(memory_release, "_libc", None)
+    monkeypatch.setattr(memory_release, "_libc_failed", False)
+    monkeypatch.setattr(memory_release, "_is_android", lambda: True)
+    assert memory_release._load_libc() is not None
+    assert seen == ["libc.so"]
+
+
+def test_rss_bytes_falls_back_to_psutil_without_procfs(monkeypatch):
+    """No /proc (macOS, Windows) -> psutil. psutil itself reads /proc on Linux,
+    so the fallback is proven with a fake module rather than by starving open()."""
+    import builtins
+    import sys
+    import types
+
+    real_open = builtins.open
+
+    def no_procfs(path, *a, **k):
+        if str(path).startswith("/proc/"):
+            raise OSError("no procfs")
+        return real_open(path, *a, **k)
+
+    fake_psutil = types.ModuleType("psutil")
+    fake_psutil.Process = lambda: types.SimpleNamespace(memory_info=lambda: types.SimpleNamespace(rss=123456789))
+    monkeypatch.setattr(builtins, "open", no_procfs)
+    monkeypatch.setitem(sys.modules, "psutil", fake_psutil)
+    assert memory_release.rss_bytes() == 123456789
+
+
+def test_rss_bytes_is_zero_when_nothing_can_answer(monkeypatch):
+    import builtins
+    import sys
+
+    monkeypatch.setattr(builtins, "open", lambda *a, **k: (_ for _ in ()).throw(OSError("no procfs")))
+    monkeypatch.setitem(sys.modules, "psutil", None)  # import psutil -> ImportError
+    assert memory_release.rss_bytes() == 0
+
+
+def test_is_android_detection_reads_the_environment(monkeypatch):
+    monkeypatch.delenv("ANDROID_ROOT", raising=False)
+    monkeypatch.delenv("ANDROID_DATA", raising=False)
+    monkeypatch.delattr(memory_release.sys, "getandroidapilevel", raising=False)
+    assert memory_release._is_android() is False
+    monkeypatch.setenv("ANDROID_DATA", "/data")
+    assert memory_release._is_android() is True

@@ -15,7 +15,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Dict, Optional
 
 from ciris_engine.logic.utils import win_console as _win_console
 
@@ -182,7 +182,7 @@ def _print_java_install_instructions() -> None:
     print("=" * 70 + "\n", file=sys.stderr)
 
 
-def desktop_app_env(server_url: str, base: Optional[dict] = None) -> dict:
+def desktop_app_env(server_url: str, base: Optional[Dict[str, str]] = None) -> Dict[str, str]:
     """The environment the desktop JAR is launched with. ONE definition.
 
     The client reads two names: CIRIS_API_URL (the brain) and CIRIS_NODE_URL
@@ -200,7 +200,7 @@ def desktop_app_env(server_url: str, base: Optional[dict] = None) -> dict:
     So: both names point at the brain, an operator's explicit CIRIS_NODE_URL
     is honoured verbatim, and the harness derives its own values from here.
     """
-    env = dict(os.environ if base is None else base)
+    env: Dict[str, str] = dict(os.environ) if base is None else dict(base)
     env["CIRIS_API_URL"] = server_url
     explicit = (env.get("CIRIS_NODE_URL") or "").strip()
     env["CIRIS_NODE_URL"] = explicit or server_url

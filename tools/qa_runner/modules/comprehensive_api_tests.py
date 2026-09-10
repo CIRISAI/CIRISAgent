@@ -67,8 +67,12 @@ class ComprehensiveAPITestModule:
                 requires_auth=True,
                 description="Admin-triggered gc + allocator give-back; asserts a real platform call was made",
                 validation_rules={
+                    # A KNOWN give-back call, not merely "not none": the first all-platform
+                    # run showed `unavailable:<why>` would have slipped through this rule.
                     "made_a_platform_call": lambda r: isinstance(r.get("data", {}).get("platform_call"), str)
-                    and r["data"]["platform_call"] not in ("", "none"),
+                    and r["data"]["platform_call"].startswith(
+                        ("malloc_trim", "mallopt(", "malloc_zone_pressure_relief", "_heapmin")
+                    ),
                     "reports_rss": lambda r: isinstance(r.get("data", {}).get("rss_after_mb"), int)
                     and r["data"]["rss_after_mb"] > 0,
                 },

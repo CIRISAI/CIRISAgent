@@ -15,7 +15,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Dict, Optional
 
 from ciris_engine.logic.utils import win_console as _win_console
 
@@ -182,6 +182,31 @@ def _print_java_install_instructions() -> None:
     print("=" * 70 + "\n", file=sys.stderr)
 
 
+def desktop_app_env(server_url: str, base: Optional[Dict[str, str]] = None) -> Dict[str, str]:
+    """The environment the desktop JAR is launched with. ONE definition.
+
+    The client reads two names: CIRIS_API_URL (the brain) and CIRIS_NODE_URL
+    (the node). Since ciris-client 0.5.213 it builds its ordinary API client
+    from CIRIS_NODE_URL alone and ignores CIRIS_API_URL there -- a deliberate
+    fix for the run-without-AI hand-off (CIRISClient#48/#52). This launcher
+    set only CIRIS_API_URL, so every desktop started by `ciris-agent` had its
+    UI pointed at the bare node on :4243, where only the node-native surface
+    and fourteen proxied brain prefixes exist: "Add provider" (PUT
+    /v1/setup/llm), list-models, /v1/system/llm, users, memory writes all
+    404'd. The QA gate never saw it because its harness set BOTH names to the
+    brain -- the intended configuration (routes/node_proxy.py makes :8080 the
+    one complete surface) -- while the product did not.
+
+    So: both names point at the brain, an operator's explicit CIRIS_NODE_URL
+    is honoured verbatim, and the harness derives its own values from here.
+    """
+    env: Dict[str, str] = dict(os.environ) if base is None else dict(base)
+    env["CIRIS_API_URL"] = server_url
+    explicit = (env.get("CIRIS_NODE_URL") or "").strip()
+    env["CIRIS_NODE_URL"] = explicit or server_url
+    return env
+
+
 def launch_desktop_app(server_url: str = "http://localhost:8080") -> int:
     """
     Launch the CIRIS Desktop application.
@@ -221,9 +246,7 @@ def launch_desktop_app(server_url: str = "http://localhost:8080") -> int:
 
     print(f"Launching CIRIS Desktop from: {jar_path}")
 
-    # Set environment for desktop app
-    env = os.environ.copy()
-    env["CIRIS_API_URL"] = server_url
+    env = desktop_app_env(server_url)
 
     # Launch desktop app
     try:

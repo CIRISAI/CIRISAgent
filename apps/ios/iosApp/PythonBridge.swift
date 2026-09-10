@@ -357,6 +357,26 @@ import Compression
         NSLog("[PythonBridge] Wrote restart signal to \(signalPath)")
     }
 
+    /// iOS is asking for memory back. Same channel as the restart signal: a file
+    /// the Python side's memory-pressure thread polls once a second and acts on
+    /// without needing the event loop, which is often suspended at exactly this
+    /// moment. See kmp_main.start_memory_pressure_thread.
+    @objc public static func writeMemoryPressureSignal() {
+        let fm = FileManager.default
+        guard let documentsPath = fm.urls(for: .documentDirectory, in: .userDomainMask).first?.path else {
+            NSLog("[PythonBridge] ERROR: Could not get Documents directory")
+            return
+        }
+
+        let signalPath = "\(documentsPath)/ciris/.memory_pressure"
+        let cirisDir = "\(documentsPath)/ciris"
+        try? fm.createDirectory(atPath: cirisDir, withIntermediateDirectories: true)
+
+        let timestamp = "\(Date().timeIntervalSince1970)"
+        try? timestamp.write(toFile: signalPath, atomically: true, encoding: .utf8)
+        NSLog("[PythonBridge] Wrote memory pressure signal to \(signalPath)")
+    }
+
     /// Check if server ready signal exists (indicates server restarted successfully)
     @objc public static func checkServerReady() -> Bool {
         let fm = FileManager.default

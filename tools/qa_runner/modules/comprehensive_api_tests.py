@@ -55,6 +55,24 @@ class ComprehensiveAPITestModule:
                 requires_auth=True,
                 description="Test single step processing execution",
             ),
+            # Memory give-back: the resource monitor's release path, driven from
+            # the API so every platform the gate runs proves the chain works
+            # there -- not just the Linux box it was measured on.
+            QATestCase(
+                name="Release memory to the OS",
+                module=QAModule.SYSTEM,
+                endpoint="/v1/system/runtime/memory/release",
+                method="POST",
+                expected_status=200,
+                requires_auth=True,
+                description="Admin-triggered gc + allocator give-back; asserts a real platform call was made",
+                validation_rules={
+                    "made_a_platform_call": lambda r: isinstance(r.get("data", {}).get("platform_call"), str)
+                    and r["data"]["platform_call"] not in ("", "none"),
+                    "reports_rss": lambda r: isinstance(r.get("data", {}).get("rss_after_mb"), int)
+                    and r["data"]["rss_after_mb"] > 0,
+                },
+            ),
         ]
 
     @staticmethod

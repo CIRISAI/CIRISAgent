@@ -7,12 +7,13 @@ import shutil
 from collections import deque
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Callable, Deque, Dict, List, Optional, Tuple
+from typing import Awaitable, Callable, Deque, Dict, List, Optional, Tuple
 
 import psutil
 
 from ciris_engine.constants import SERVER_MINIMUM_DISK_BYTES
 from ciris_engine.logic.services.base_scheduled_service import BaseScheduledService
+from ciris_engine.logic.utils.memory_release import release_memory as _release_process_memory
 from ciris_engine.protocols.services.infrastructure.credit_gate import CreditGateProtocol
 from ciris_engine.protocols.services.infrastructure.resource_monitor import ResourceMonitorServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
@@ -25,7 +26,13 @@ from ciris_engine.schemas.services.credit_gate import (
     CreditSpendRequest,
     CreditSpendResult,
 )
-from ciris_engine.schemas.services.resources_core import ResourceAction, ResourceBudget, ResourceLimit, ResourceSnapshot
+from ciris_engine.schemas.services.resources_core import (
+    MemoryReleaseResult,
+    ResourceAction,
+    ResourceBudget,
+    ResourceLimit,
+    ResourceSnapshot,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +41,9 @@ class ResourceSignalBus:
     """Simple signal bus for resource events."""
 
     def __init__(self) -> None:
-        self._handlers: Dict[str, List[Callable[[str, str], "asyncio.Future[None]"]]] = {
+        # Handlers are `async def (signal, resource)`; what register() receives is
+        # a coroutine function, i.e. a Callable returning an Awaitable, not a Future.
+        self._handlers: Dict[str, List[Callable[[str, str], Awaitable[None]]]] = {
             "throttle": [],
             "defer": [],
             "reject": [],
@@ -42,7 +51,7 @@ class ResourceSignalBus:
             "token_refreshed": [],  # ciris.ai token refresh signal
         }
 
-    def register(self, signal: str, handler: Callable[[str, str], "asyncio.Future[None]"]) -> None:
+    def register(self, signal: str, handler: Callable[[str, str], Awaitable[None]]) -> None:
         self._handlers.setdefault(signal, []).append(handler)
 
     async def emit(self, signal: str, resource: str) -> None:
@@ -92,6 +101,18 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
         self._env_file_mtime: float = 0.0  # Last known .env modification time
         self._token_refresh_signal_mtime: float = 0.0  # Last signal file mtime we processed
         self._ciris_home: Optional[Path] = None  # Cached CIRIS_HOME path
+
+        # The monitor is its own first subscriber. Until it was, every
+        # throttle/defer/reject/shutdown it emitted went to an empty handler
+        # list: crossing the memory warning produced one log line and nothing
+        # else. Registering here, not in the initializer, means a monitor
+        # constructed anywhere -- tests, node-only, a future host -- is wired.
+        self._signal_counts: Dict[str, int] = {}
+        self._last_release: Optional[MemoryReleaseResult] = None
+        self._release_count = 0
+        self._released_total_mb = 0
+        for signal in ("throttle", "defer", "reject", "shutdown"):
+            self.signal_bus.register(signal, self._on_resource_signal)
 
     def get_service_type(self) -> ServiceType:
         """Get service type."""
@@ -214,6 +235,42 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
             await self.signal_bus.emit("shutdown", resource)
         self._last_action_time[f"{resource}_{level}"] = current_time
 
+    async def _on_resource_signal(self, signal: str, resource: str) -> None:
+        """Built-in subscriber for the monitor's own signals.
+
+        Memory is the one resource where the right response is to *give some
+        back* rather than to do less: freed memory that the allocators are
+        holding is not ours to keep on a phone. Every other signal is counted so
+        an emit is never silent, and left for the processor to act on.
+        """
+        self._signal_counts[signal] = self._signal_counts.get(signal, 0) + 1
+        if resource == "memory_mb" and signal in ("throttle", "defer", "reject"):
+            await self.release_memory(trigger=f"resource_monitor:{signal}")
+
+    def record_release(self, result: MemoryReleaseResult) -> None:
+        """Fold a release into the monitor's state, wherever it was performed.
+
+        Host callbacks release on their own thread (the loop may be frozen
+        when the OS asks) and report here afterwards; the snapshot is updated
+        so the next limit check, and the next prompt's resource alert, see the
+        post-release number instead of a sample from before it.
+        """
+        self._last_release = result
+        self._release_count += 1
+        self._released_total_mb += max(0, result.reclaimed_mb)
+        self.snapshot.memory_mb = result.rss_after_mb
+        self.snapshot.memory_percent = min(100, self.snapshot.memory_mb * 100 // self.budget.memory_mb.limit)
+
+    async def release_memory(self, trigger: str = "manual") -> MemoryReleaseResult:
+        """Collect garbage and return the allocators' free pages to the OS."""
+        result = _release_process_memory(trigger)
+        self.record_release(result)
+        return result
+
+    async def handle_host_memory_pressure(self, level: str) -> MemoryReleaseResult:
+        """The host OS asked for memory. No cooldown: refusing is how a process gets killed."""
+        return await self.release_memory(trigger=f"host:{level}")
+
     async def _check_token_refresh_signal(self) -> None:
         """Check for token refresh signals from ciris.ai authentication.
 
@@ -248,10 +305,7 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
             # Watch for the client's answer. Filenames come from the shared
             # handshake module so this side and the client cannot disagree
             # about which files the conversation uses.
-            from ciris_engine.logic.utils.token_handshake import (
-                CONFIG_RELOAD_SIGNAL_FILE,
-                ENV_FILE,
-            )
+            from ciris_engine.logic.utils.token_handshake import CONFIG_RELOAD_SIGNAL_FILE, ENV_FILE
 
             config_reload_file = self._ciris_home / CONFIG_RELOAD_SIGNAL_FILE
             env_file = self._ciris_home / ENV_FILE
@@ -391,7 +445,13 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
             "thoughts_active": float(self.snapshot.thoughts_active),
             "warnings": float(len(self.snapshot.warnings)),
             "critical": float(len(self.snapshot.critical)),
+            # Memory give-back: proof the warning threshold does something.
+            "memory_release_count": float(self._release_count),
+            "memory_released_mb_total": float(self._released_total_mb),
+            "memory_last_release_mb": float(self._last_release.reclaimed_mb if self._last_release else 0),
         }
+        for signal, count in self._signal_counts.items():
+            metrics[f"resource_signal_{signal}_total"] = float(count)
 
         if self.credit_provider:
             metrics["credit_provider_enabled"] = 1.0

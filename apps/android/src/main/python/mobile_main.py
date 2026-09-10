@@ -20,6 +20,12 @@ import sys
 from pathlib import Path
 from typing import List, Optional, Tuple
 
+# Set once the runtime is up, so Android's memory-pressure callback -- which
+# arrives on whatever thread Chaquopy calls from -- can report into the running
+# resource monitor without holding a reference to anything else.
+_event_loop: Optional[asyncio.AbstractEventLoop] = None
+_runtime_ref = None
+
 # Constants to avoid string duplication (SonarCloud S1192)
 PYDANTIC_CORE_SO_PATTERN = "_pydantic_core*.so"
 
@@ -1032,6 +1038,9 @@ async def start_mobile_runtime():
         host="0.0.0.0",  # Bind all interfaces so browser OAuth can reach us
         port=8080,
     )
+    global _event_loop, _runtime_ref
+    _event_loop = asyncio.get_running_loop()
+    _runtime_ref = runtime
 
     # Initialize all services (22 services, buses, etc.)
     logger.info("Initializing CIRIS services...")
@@ -1100,6 +1109,39 @@ def clear_signing_key() -> bool:
     except Exception as e:
         logger.error(f"[clear_signing_key] Failed to clear signing key: {e}", exc_info=True)
         return False
+
+
+def on_trim_memory(level: str) -> str:
+    """Android asked for memory back (ComponentCallbacks2.onTrimMemory).
+
+    Called by PythonRuntimeService on a background thread. The release itself
+    is done right here, synchronously, on this thread: it must work even when
+    the event loop is wedged, and on a budget phone the alternative to
+    answering the OS is being killed by it. The running resource monitor is
+    told afterwards so the release shows in telemetry and the next limit check
+    sees the post-release figure. Works in run-without-AI too, where there is
+    no runtime to tell.
+    """
+    from ciris_engine.logic.utils.memory_release import release_memory
+
+    result = release_memory(trigger=f"host:{level}")
+    logger.warning(
+        "onTrimMemory(%s): rss %d -> %d MB, reclaimed %d MB via %s in %d ms",
+        level,
+        result.rss_before_mb,
+        result.rss_after_mb,
+        result.reclaimed_mb,
+        result.platform_call,
+        result.duration_ms,
+    )
+    loop, runtime = _event_loop, _runtime_ref
+    if loop is not None and runtime is not None and not loop.is_closed():
+        monitor = getattr(runtime, "resource_monitor_service", None) or getattr(
+            getattr(runtime, "service_initializer", None), "resource_monitor_service", None
+        )
+        if monitor is not None:
+            loop.call_soon_threadsafe(monitor.record_release, result)
+    return result.model_dump_json()
 
 
 def main():

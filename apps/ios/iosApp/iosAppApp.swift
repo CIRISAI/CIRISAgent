@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 @main
 struct iosAppApp: App {
@@ -29,6 +30,16 @@ struct iosAppApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                // A memory warning is the last thing iOS says before jetsam.
+                // Hand it to the Python runtime, which releases what its
+                // allocators are holding and reports the result to its
+                // resource monitor.
+                .onReceive(NotificationCenter.default.publisher(
+                    for: UIApplication.didReceiveMemoryWarningNotification
+                )) { _ in
+                    NSLog("[CIRIS] iOS memory warning received - asking the runtime to release")
+                    PythonBridge.writeMemoryPressureSignal()
+                }
         }
     }
 }

@@ -22,6 +22,7 @@ if TYPE_CHECKING:
         CreditSpendResult,
     )
     from ciris_engine.schemas.services.infrastructure.resource_monitor import ResourceBudget, ResourceSnapshot
+    from ciris_engine.schemas.services.resources_core import MemoryReleaseResult
 
 
 @runtime_checkable
@@ -63,6 +64,14 @@ class ResourceMonitorServiceProtocol(ServiceProtocol, Protocol):
         Returns:
             True if resource is available, False if would exceed warning threshold
         """
+        ...
+
+    async def release_memory(self, trigger: str = "manual") -> "MemoryReleaseResult":
+        """Collect garbage and return the allocators' free pages to the OS."""
+        ...
+
+    async def handle_host_memory_pressure(self, level: str) -> "MemoryReleaseResult":
+        """The host OS (Android onTrimMemory, iOS memory warning) asked for memory back."""
         ...
 
     async def check_credit(

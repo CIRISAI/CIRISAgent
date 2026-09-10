@@ -154,12 +154,25 @@ jobs:
           # plateau in CI without burning the 60s of budget that pushed the
           # 25033091098 run past the 15-minute cap. Production weekly cron
           # gets the longer 90s window via workflow_dispatch when needed.
-          python3 -u tools/memory_benchmark.py --messages 1000 --adapter api --idle-seconds 30 | tee 1000msg.log || echo "1000-msg benchmark skipped"
+          # --composition attributes the plateau RSS to allocators and mappings
+          # instead of reporting a bare number. Between 2.10 and 2.11 this figure
+          # moved 317 MB -> 732 MB with nothing in CI able to say which allocator
+          # gained it; see tools/memory_composition.py.
+          python3 -u tools/memory_benchmark.py --messages 1000 --adapter api --idle-seconds 30 \
+            --composition --composition-json composition.json | tee 1000msg.log \
+            || echo "1000-msg benchmark skipped"
           if [ -f 1000msg.log ]; then
             echo '```' >> $GITHUB_STEP_SUMMARY
-            # Tail 30 lines instead of 20 so the failure-breakdown + idle
-            # summary lines both make it into the GitHub summary.
-            tail -30 1000msg.log >> $GITHUB_STEP_SUMMARY
+            # The composition report lands between the idle line and the results
+            # banner. Cut it out for the run summary -- which keeps the same last
+            # 30 lines it always showed, failure breakdown and idle included --
+            # and give it its own section below.
+            awk '/MEMORY COMPOSITION/{skip=1} /Shutting down server/{skip=0} !skip' 1000msg.log \
+              | tail -30 >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "### Resident memory composition" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            awk '/MEMORY COMPOSITION/,/Shutting down server/' 1000msg.log >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
           fi
 
@@ -182,6 +195,7 @@ jobs:
             cold_start.log
             100msg.log
             1000msg.log
+            composition.json
           retention-days: 90
 
       - name: Capture upgrade-compat fixture (memory-burst)

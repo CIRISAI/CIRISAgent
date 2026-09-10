@@ -10,6 +10,7 @@ from typing import Annotated
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
 
 from ciris_engine.schemas.api.responses import SuccessResponse
+from ciris_engine.schemas.services.resources_core import MemoryReleaseResult
 
 from ...constants import ERROR_RUNTIME_CONTROL_SERVICE_NOT_AVAILABLE
 from ...dependencies.auth import AuthContext, require_admin
@@ -37,6 +38,40 @@ router = APIRouter()
 
 # Valid cognitive states for transition
 VALID_COGNITIVE_STATES = {"WORK", "DREAM", "PLAY", "SOLITUDE"}
+
+
+@router.post(
+    "/runtime/memory/release",
+    responses={
+        500: {"description": "Memory release failed"},
+        503: {"description": "Resource monitor not available"},
+    },
+)
+async def release_memory(
+    request: Request,
+    auth: AuthAdminDep,
+) -> SuccessResponse[MemoryReleaseResult]:
+    """
+    Hand freed memory back to the operating system, now.
+
+    The same path the resource monitor takes when it crosses its own memory
+    threshold, and the path the phones take on an OS memory warning -- exposed
+    so an operator can trigger it and so the five-platform gate can prove the
+    chain works on every platform, not just the one it was measured on.
+
+    Requires ADMIN role.
+    """
+    monitor = getattr(request.app.state, "resource_monitor", None)
+    if monitor is None:
+        runtime = getattr(request.app.state, "runtime", None)
+        monitor = getattr(runtime, "resource_monitor_service", None)
+    if monitor is None:
+        raise HTTPException(status_code=503, detail="Resource monitor not available")
+    try:
+        result = await monitor.release_memory(trigger="api:admin")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return SuccessResponse(data=result)
 
 
 @router.post(

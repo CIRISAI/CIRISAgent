@@ -2,8 +2,7 @@
 QA Runner configuration and module definitions.
 """
 
-from dataclasses import dataclass
-from dataclasses import field
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
@@ -58,7 +57,9 @@ class QAModule(Enum):
     DEGRADED_MODE = "degraded_mode"  # Degraded mode behavior testing (no LLM provider)
     MODEL_EVAL = "model_eval"  # Model quality evaluation with tough questions (requires --live)
     PARALLEL_LOCALES = "parallel_locales"  # 29-locale parallel multi-turn convo (per-user channels)
-    SAFETY_BATTERY = "safety_battery"  # Run a canonical safety battery (CIRISNodeCore SCHEMA.md §11) against the agent via A2A
+    SAFETY_BATTERY = (
+        "safety_battery"  # Run a canonical safety battery (CIRISNodeCore SCHEMA.md §11) against the agent via A2A
+    )
     SAFETY_INTERPRET = "safety_interpret"  # Apply a rubric's criteria.json to a capture bundle; emit signed verdicts (CIRISNodeCore FSD/JUDGE_MODEL.md)
     SECRETS_ENCRYPTION = "secrets_encryption"  # Secrets encryption testing (CIRISVerify v1.6.0+)
     MEMORY_BENCHMARK = "memory_benchmark"  # Memory usage benchmark under message load
@@ -85,7 +86,9 @@ class QAModule(Enum):
     SINGLE_STEP_SIMPLE = "single_step_simple"
     SINGLE_STEP_COMPREHENSIVE = "single_step_comprehensive"
     STREAMING = "streaming"  # H3ERE pipeline streaming verification
-    L4_ATTESTATION = "l4_attestation"  # Algorithm A (verify_tree) runtime contract — staged-QA L3+ floor + cache-population guard
+    L4_ATTESTATION = (
+        "l4_attestation"  # Algorithm A (verify_tree) runtime contract — staged-QA L3+ floor + cache-population guard
+    )
 
     # Full suites
     API_FULL = "api_full"
@@ -249,6 +252,11 @@ class QAConfig:
 
     # Server management
     auto_start_server: bool = True
+    # Where the backend under test writes incidents_latest.log, when it is not the
+    # server this runner started. The five-platform modular gate points this at a
+    # log pulled from an emulator or simulator; the gate still fails closed if the
+    # file is missing -- this only says WHERE to look, never whether to look.
+    incidents_log_path: Optional[Path] = None
     server_startup_timeout: float = (
         600.0  # Wakeup with rate-limited LLM: 60 LLM calls × ~40K tokens = 2.4M tokens, at 300K TPM = ~8-10 min
     )
@@ -268,7 +276,9 @@ class QAConfig:
     # Database backend configuration (for parallel testing)
     database_backends: List[str] = None  # None = ["sqlite"], or ["sqlite", "postgres"] for parallel
     postgres_url: str = "postgresql://ciris_test:ciris_test_password@localhost:5432/ciris_test_db"
-    postgres_api_port: int = 8001  # API-server port for the postgres-backend run (NOT the PG DB port — see postgres_url)
+    postgres_api_port: int = (
+        8001  # API-server port for the postgres-backend run (NOT the PG DB port — see postgres_url)
+    )
     parallel_backends: bool = False  # Run backend tests in parallel instead of sequentially
 
     # Live LLM configuration (--live flag)

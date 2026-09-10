@@ -27,6 +27,21 @@ from typing import Dict, Optional
 logger = logging.getLogger(__name__)
 
 
+#: The port the folded node's substrate read-API listens on.
+#:
+#: A NAMED constant because the three functional uses below were bare literals,
+#: and a test that wants to exercise the ownership logic therefore had to bind
+#: the REAL 4243 — which made `test_refuses_a_live_node_this_process_does_not_own`
+#: race anything else on the box that touched the port. It failed on three
+#: unrelated PRs (#1162, #1164, #1169), each costing a shard re-run
+#: (CIRISAgent#1166). Tests now point this at an ephemeral port instead.
+#:
+#: NOT a configuration knob: the node's real port is fixed by the substrate and
+#: by CIRISClient's NODE_ONLY_ENDPOINT. Changing it here changes only what this
+#: module probes, which is why nothing reads it from the environment.
+NODE_FOLD_PORT = 4243
+
+
 def _this_process_owns_port(port: int) -> Optional[bool]:
     """Does THIS process hold the listening socket on `port`?
 
@@ -131,7 +146,6 @@ def _resolve_home() -> str:
     return str(get_ciris_home())
 
 
-
 def _repair_if_bricked_then_raise(node_error: object) -> None:
     """Last stop for a boot that cannot succeed on this home.
 
@@ -167,6 +181,7 @@ def _repair_if_bricked_then_raise(node_error: object) -> None:
             "START CIRIS AGAIN to complete setup."
         ) from None
     raise err
+
 
 def _resolve_key_id() -> Optional[str]:
     """Federation keystore alias for the node — the SAME alias the Engine uses.
@@ -347,7 +362,9 @@ def stop_node_fold(timeout_secs: float = 30.0) -> Optional[bool]:
         return None
     shutdown_node = getattr(ciris_server, "shutdown_node", None)
     if shutdown_node is None:
-        logger.warning("Node fold: ciris_server.shutdown_node unavailable; :4243 may stay bound after exit (CIRISAgent#1102)")
+        logger.warning(
+            "Node fold: ciris_server.shutdown_node unavailable; :4243 may stay bound after exit (CIRISAgent#1102)"
+        )
         return None
     try:
         freed = bool(shutdown_node(timeout_secs=timeout_secs))
@@ -395,7 +412,7 @@ def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Opti
     import socket as _socket
 
     try:
-        with _socket.create_connection(("127.0.0.1", 4243), timeout=1):
+        with _socket.create_connection(("127.0.0.1", NODE_FOLD_PORT), timeout=1):
             live_node = True
     except OSError:
         live_node = False
@@ -421,7 +438,7 @@ def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Opti
             # sufficient condition; the node must also be ALIVE.
             for probe_path in ("/v1/self/identity", "/v1/health"):
                 try:
-                    with _urlreq.urlopen(f"http://127.0.0.1:4243{probe_path}", timeout=2) as resp:
+                    with _urlreq.urlopen(f"http://127.0.0.1:{NODE_FOLD_PORT}{probe_path}", timeout=2) as resp:
                         identity_text += resp.read(65536).decode("utf-8", errors="replace")
                         http_alive = True
                 except _urlerr.HTTPError:
@@ -457,10 +474,10 @@ def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Opti
             #
             # Ownership alone was the wrong sufficient condition — my first fix. It
             # answers 'is it ours', and a zombie of ours is still unusable.
-            owns = _this_process_owns_port(4243)
+            owns = _this_process_owns_port(NODE_FOLD_PORT)
             if not http_alive:
                 raise RuntimeError(
-                    "node fold: :4243 is bound but does not speak HTTP "
+                    f"node fold: :{NODE_FOLD_PORT} is bound but does not speak HTTP "
                     f"(owned_by_us={owns}). Reusing a dead listener leaves every "
                     "/v1/auth call answering 502 for the life of the process — observed "
                     "in CI as 0 node-side successes with 39 proxy failures.\n"
@@ -472,7 +489,7 @@ def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Opti
                 )
             if owns is False:
                 raise RuntimeError(
-                    "node fold: :4243 is serving, its identity could not be read, and the "
+                    f"node fold: :{NODE_FOLD_PORT} is serving, its identity could not be read, and the "
                     "listening socket is NOT held by this process — so it is not ours. "
                     "Reusing it would ship traces to a foreign node (verify_unknown_key, "
                     "QA all_1 RCA). Run one node-folded stack per host."
@@ -629,7 +646,7 @@ def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Opti
         if _node_error is not None:
             _repair_if_bricked_then_raise(_node_error)
         try:
-            with socket.create_connection(("127.0.0.1", 4243), timeout=1):
+            with socket.create_connection(("127.0.0.1", NODE_FOLD_PORT), timeout=1):
                 node_up = True
                 break
         except OSError:
@@ -652,10 +669,11 @@ def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Opti
     # here rather than at process start: a home that is about to brick must not
     # be marked as already fixed.
     try:
+        from pathlib import Path as _P
+
         from ciris_engine.constants import CIRIS_VERSION
         from ciris_engine.logic.setup.bricked_install import record_install_version
         from ciris_engine.logic.utils.path_resolution import get_ciris_home
-        from pathlib import Path as _P
 
         record_install_version(_P(get_ciris_home()), CIRIS_VERSION)
     except Exception:  # noqa: BLE001

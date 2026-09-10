@@ -22,6 +22,10 @@ header where one was available:
                                               a harmless no-op on older devices
   Darwin  malloc_zone_pressure_relief(NULL, 0) what the OS itself calls on a
                                               memory warning
+  Windows _heapmin() + SetProcessWorkingSetSize  the CRT heap CPython sits on
+                                              gives back its free pages; the
+                                              working-set call then lets the
+                                              kernel trim what is no longer used
 """
 
 from __future__ import annotations
@@ -62,6 +66,10 @@ def _load_libc() -> Optional[ctypes.CDLL]:
         candidates = ["libc.so.6"]
     elif sys.platform in ("darwin", "ios"):
         candidates = ["libSystem.B.dylib", None]
+    elif sys.platform == "win32":
+        # ucrtbase is the Universal CRT every supported CPython links against;
+        # msvcrt is the legacy fallback and still exports _heapmin.
+        candidates = ["ucrtbase", "msvcrt"]
     else:
         candidates = []
     for name in candidates:
@@ -119,6 +127,26 @@ def _platform_release() -> str:
             libc.malloc_zone_pressure_relief.restype = ctypes.c_size_t
             libc.malloc_zone_pressure_relief(None, 0)
             return "malloc_zone_pressure_relief"
+        if sys.platform == "win32":
+            if not hasattr(libc, "_heapmin"):
+                return "unavailable:no _heapmin"
+            libc._heapmin.argtypes = []
+            libc._heapmin.restype = ctypes.c_int
+            libc._heapmin()
+            # Returning heap pages is only half of it on Windows: the working
+            # set keeps them resident until the kernel is told it may trim.
+            kernel32 = getattr(getattr(ctypes, "windll", None), "kernel32", None)
+            if kernel32 is not None:
+                try:
+                    kernel32.SetProcessWorkingSetSize.argtypes = [ctypes.c_void_p, ctypes.c_size_t, ctypes.c_size_t]
+                    kernel32.SetProcessWorkingSetSize.restype = ctypes.c_int
+                    kernel32.SetProcessWorkingSetSize(
+                        kernel32.GetCurrentProcess(), ctypes.c_size_t(-1).value, ctypes.c_size_t(-1).value
+                    )
+                    return "_heapmin+SetProcessWorkingSetSize"
+                except Exception:
+                    pass
+            return "_heapmin"
     except Exception as exc:  # an allocator call must never take the process down
         return f"unavailable:{type(exc).__name__}"
     return "none"

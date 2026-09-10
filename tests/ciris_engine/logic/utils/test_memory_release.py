@@ -2,6 +2,7 @@
 
 import ctypes
 import sys
+import types
 
 import pytest
 
@@ -229,3 +230,55 @@ def test_is_android_detection_reads_the_environment(monkeypatch):
     assert memory_release._is_android() is False
     monkeypatch.setenv("ANDROID_DATA", "/data")
     assert memory_release._is_android() is True
+
+
+def test_windows_uses_heapmin_and_trims_the_working_set(monkeypatch):
+    """The Windows leg of the modular gate returned platform_call=none: a Windows
+    desktop was getting gc.collect() and nothing else."""
+    libc = _FakeLibc({"_heapmin"})
+    _use(monkeypatch, libc, platform="win32")
+    calls = []
+
+    class _WinFn:
+        argtypes = None
+        restype = None
+
+        def __call__(self, *a):
+            calls.append(a)
+            return 1
+
+    kernel32 = types.SimpleNamespace(SetProcessWorkingSetSize=_WinFn(), GetCurrentProcess=lambda: 42)
+    monkeypatch.setattr(memory_release.ctypes, "windll", types.SimpleNamespace(kernel32=kernel32), raising=False)
+    assert memory_release._platform_release() == "_heapmin+SetProcessWorkingSetSize"
+    assert libc.calls[0][0] == "_heapmin"
+    assert calls and calls[0][0] == 42
+
+
+def test_windows_without_kernel32_still_heapmins(monkeypatch):
+    libc = _FakeLibc({"_heapmin"})
+    _use(monkeypatch, libc, platform="win32")
+    monkeypatch.delattr(memory_release.ctypes, "windll", raising=False)
+    assert memory_release._platform_release() == "_heapmin"
+
+
+def test_windows_without_heapmin_reports_unavailable(monkeypatch):
+    _use(monkeypatch, _FakeLibc(set()), platform="win32")
+    assert memory_release._platform_release() == "unavailable:no _heapmin"
+
+
+def test_load_libc_tries_ucrtbase_then_msvcrt_on_windows(monkeypatch):
+    seen = []
+
+    def fake_cdll(name):
+        seen.append(name)
+        if name == "ucrtbase":
+            raise OSError("not found")
+        return object()
+
+    monkeypatch.setattr(memory_release.ctypes, "CDLL", fake_cdll)
+    monkeypatch.setattr(memory_release, "_libc", None)
+    monkeypatch.setattr(memory_release, "_libc_failed", False)
+    monkeypatch.setattr(memory_release, "_is_android", lambda: False)
+    monkeypatch.setattr(memory_release.sys, "platform", "win32")
+    assert memory_release._load_libc() is not None
+    assert seen == ["ucrtbase", "msvcrt"]

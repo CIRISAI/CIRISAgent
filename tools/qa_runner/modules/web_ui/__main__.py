@@ -57,28 +57,23 @@ import asyncio
 import glob
 import json
 import os
+import re
 import shutil
 import subprocess
-import tempfile
 import sys
+import tempfile
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional
 
-import re
 import requests
 
 from tools.qa_runner.platform_procs import temp_path
 
 from .browser_helper import BrowserConfig, ensure_playwright_installed
-from .desktop_app_helper import (
-    DesktopAppConfig,
-    DesktopAppHelper,
-    attribute_device_failure,
-    check_desktop_app_running,
-)
+from .desktop_app_helper import DesktopAppConfig, DesktopAppHelper, attribute_device_failure, check_desktop_app_running
 from .federation_walk_test import FederationWalkTest
 from .server_manager import ServerConfig
 from .test_cases import WebUITestConfig
@@ -169,8 +164,13 @@ class DesktopAppTestRunner:
         return any(
             k in text
             for k in (
-                "ConnectError", "ConnectTimeout", "RemoteProtocolError", "ReadError",
-                "All connection attempts failed", "Connection refused", "Connection reset",
+                "ConnectError",
+                "ConnectTimeout",
+                "RemoteProtocolError",
+                "ReadError",
+                "All connection attempts failed",
+                "Connection refused",
+                "Connection reset",
             )
         )
 
@@ -266,7 +266,9 @@ class DesktopAppTestRunner:
             if screen != "Interact":
                 self._log(f"no prior session (screen={screen}); the credential login is driven from here")
                 return
-            self._log("the post-setup auto-login already established a session — logging out to exercise the credential login")
+            self._log(
+                "the post-setup auto-login already established a session — logging out to exercise the credential login"
+            )
             await self._logout()
 
         await self.run_test("release_auto_login", release_auto_login)
@@ -470,9 +472,7 @@ class DesktopAppTestRunner:
             return r.json()["data"]["messages"]
 
         _http = httpx.AsyncClient(timeout=30.0)
-        _r = await _http.post(
-            f"{api_base}/v1/auth/login", json={"username": username, "password": password}
-        )
+        _r = await _http.post(f"{api_base}/v1/auth/login", json={"username": username, "password": password})
         _r.raise_for_status()
         _headers = {"Authorization": f"Bearer {_r.json()['access_token']}"}
         try:
@@ -481,7 +481,6 @@ class DesktopAppTestRunner:
             self._log(f"pre-send history unavailable ({type(exc).__name__}); baseline empty")
             baseline_ids = set()
         self._log(f"History baseline: {len(baseline_ids)} existing message(s)")
-
 
         # Click send button
         async def click_send():
@@ -655,9 +654,7 @@ class DesktopAppTestRunner:
         lines = [
             f"          {e.test_tag} = {e.text.strip()[:110]}"
             for e in elements
-            if getattr(e, "text", None)
-            and e.text.strip()
-            and any(e.test_tag.startswith(pfx) for pfx in prefixes)
+            if getattr(e, "text", None) and e.text.strip() and any(e.test_tag.startswith(pfx) for pfx in prefixes)
         ]
         if not lines:
             return (
@@ -872,6 +869,7 @@ class DesktopAppTestRunner:
         collapsed group or below the fold, and presence in /tree is not
         drivability (CIRISClient#39).
         """
+
         async def _sidebar_to_logout(tag: str, what: str) -> bool:
             if await self.helper.reveal_sidebar_row(tag):
                 return False
@@ -1004,7 +1002,10 @@ class DesktopAppTestRunner:
                     env["SIMCTL_CHILD_CIRIS_TEST_MODE"] = "true"
                     subprocess.run(
                         ["xcrun", "simctl", "launch", udid, bundle_id],
-                        capture_output=True, text=True, timeout=120, env=env,
+                        capture_output=True,
+                        text=True,
+                        timeout=120,
+                        env=env,
                     )
                     await asyncio.sleep(3.0)
                     await self.helper.reconnect()
@@ -1023,7 +1024,9 @@ class DesktopAppTestRunner:
                         first_run = True
                         break
                 except Exception as exc:  # noqa: BLE001 -- the server went away with the old process
-                    self._log(f"automation server not answering ({type(exc).__name__}) — the app is restarting; reconnecting")
+                    self._log(
+                        f"automation server not answering ({type(exc).__name__}) — the app is restarting; reconnecting"
+                    )
                     await asyncio.sleep(1.0)
                     await self.helper.reconnect()
                     continue
@@ -1037,7 +1040,9 @@ class DesktopAppTestRunner:
             #    imply either answer.
             platform = getattr(_LAST_ARGS, "platform", "desktop") or "desktop"
             if platform != "desktop":
-                self._log(f"NOT ASSERTED on {platform}: the .env lives on the device; the desktop legs assert its removal")
+                self._log(
+                    f"NOT ASSERTED on {platform}: the .env lives on the device; the desktop legs assert its removal"
+                )
                 return
             env_path = Path(os.environ.get("CIRIS_HOME") or (Path.home() / "ciris")) / ".env"
             deadline = time.time() + 20
@@ -1051,7 +1056,10 @@ class DesktopAppTestRunner:
                     self._log(f"{env_path} no longer records a configured install")
                     return
                 await asyncio.sleep(0.5)
-            raise RuntimeError(f"{env_path} still records the install 20s after the reset was confirmed (factory reset stopped clearing it)")
+            raise RuntimeError(
+                f"{env_path} still records the install 20s after the reset was confirmed (factory reset stopped clearing it)"
+            )
+
         await self.run_test("reset_took_effect", reset_took_effect)
         return all(r.success for r in self.results)
 
@@ -1176,8 +1184,7 @@ class DesktopAppTestRunner:
             has no toggles". Order fixed, and the skip made loud.
             """
             self._log(
-                f"YOU: without_ai={run_without_ai}, band={age_band}, username={username}, "
-                f"fed-ID label={fed_label}"
+                f"YOU: without_ai={run_without_ai}, band={age_band}, username={username}, " f"fed-ID label={fed_label}"
             )
 
             # 0. THE AI QUESTION — FIRST, because that is where the screen puts it.
@@ -1273,7 +1280,7 @@ class DesktopAppTestRunner:
             deadline = asyncio.get_event_loop().time() + 30.0
             while await self.helper.is_element_present(band_tag):
                 if await self.helper.is_element_present("toggle_announce_ownership"):
-                    break   # JOIN FEDERATION is on screen: YOU advanced
+                    break  # JOIN FEDERATION is on screen: YOU advanced
                 if asyncio.get_event_loop().time() > deadline:
                     await self._dump_tree("you_step:did-not-advance")
                     raise RuntimeError(
@@ -1534,7 +1541,11 @@ class DesktopAppTestRunner:
                         f"no CIRIS_RUN_WITHOUT_AI in {env_path}.\n"
                         "        The agent saw run_without_ai=false and took the accidental-no-key "
                         "branch"
-                        + (" (CIRIS_SERVICES_DISABLED=true is present, which is that branch's signature)" if disabled else "")
+                        + (
+                            " (CIRIS_SERVICES_DISABLED=true is present, which is that branch's signature)"
+                            if disabled
+                            else ""
+                        )
                         + ".\n"
                         "        So the screen was absent for another reason — most likely "
                         "clientMode=NODE on a fresh home, where hasAgent is false and hasAiStep is "
@@ -1574,9 +1585,7 @@ class DesktopAppTestRunner:
             # this off the flag rather than off a failed connect keeps a genuinely
             # dead agent on a with-AI leg loud instead of silently rerouted.
             login_base = (
-                node_url.rstrip("/")
-                if getattr(_args, "run_without_ai", False)
-                else f"http://127.0.0.1:{api_port}"
+                node_url.rstrip("/") if getattr(_args, "run_without_ai", False) else f"http://127.0.0.1:{api_port}"
             )
             # NO KEEP-ALIVE POOL. On a no-AI leg the peer behind :4243 changes
             # identity mid-step (the agent-hosted fold dies, the exec'd node takes
@@ -1632,8 +1641,11 @@ class DesktopAppTestRunner:
                         await asyncio.sleep(1.0)
                     self._log(
                         f"node read API at {login_base}: {'up' if node_up else 'NOT up after 60s'} "
-                        + ("after the hand-off transition (fold down, node up)" if saw_down
-                           else "with no transition seen in 4s -- in-process fold, no exec")
+                        + (
+                            "after the hand-off transition (fold down, node up)"
+                            if saw_down
+                            else "with no transition seen in 4s -- in-process fold, no exec"
+                        )
                     )
 
                 # NAME THE PEER THAT DROPPED US. Everything in this block talks to
@@ -1993,7 +2005,7 @@ Examples:
     parser.add_argument(
         "--run-without-ai",
         action="store_true",
-        help="Answer the wizard's AI question with \"without an AI assistant\" (client >= 0.5.203). "
+        help='Answer the wizard\'s AI question with "without an AI assistant" (client >= 0.5.203). '
         "The AI screen is then not shown, the agent records CIRIS_RUN_WITHOUT_AI=true, and the "
         "backend becomes a ciris-server node on :4243 (CIRISAgent#1149).",
     )
@@ -2223,14 +2235,12 @@ Examples:
         action="append",
         default=None,
         metavar="PATH",
-        help="For `flow`: a flow spec (.yaml) or a directory of them. Repeatable. "
-        "Default: tools/qa_runner/flows.",
+        help="For `flow`: a flow spec (.yaml) or a directory of them. Repeatable. " "Default: tools/qa_runner/flows.",
     )
     parser.add_argument(
         "--artifacts",
         default="artifacts",
-        help="For `flow`: where per-step screenshots and the JSON report are written "
-        "(default: artifacts).",
+        help="For `flow`: where per-step screenshots and the JSON report are written " "(default: artifacts).",
     )
     parser.add_argument(
         "--node-url",
@@ -2558,8 +2568,16 @@ def _desktop_urls(brain_base_url: str) -> "tuple[str, str]":
 
     Set CIRIS_DESKTOP_NODE_URL to drive a bare node deliberately.
     """
+    # Derived from the PRODUCT launcher, not restated here. This helper used
+    # to carry its own copy of the rule, and the copy was right while the
+    # launcher was wrong (it set only CIRIS_API_URL): the gate went green on all
+    # five platforms with an environment no user ever got, and the first real
+    # desktop user 404'd on "Add provider". One definition, two callers.
+    from ciris_engine.desktop_launcher import desktop_app_env
+
     api = os.environ.get("CIRIS_DESKTOP_API_URL", "").strip() or brain_base_url
-    node = os.environ.get("CIRIS_DESKTOP_NODE_URL", "").strip() or api
+    derived = desktop_app_env(api, base={})
+    node = os.environ.get("CIRIS_DESKTOP_NODE_URL", "").strip() or derived["CIRIS_NODE_URL"]
     return api, node
 
 
@@ -2944,7 +2962,9 @@ async def run_android_up(args: argparse.Namespace) -> int:
     if forward_node.returncode == 0:
         print(f"  forward: host:4243 -> {serial}:4243 (node read API, run-without-AI)")
     else:
-        print(f"  [WARN] adb forward 4243->4243 failed: {forward_node.stderr.strip()} -- node not observable from the host")
+        print(
+            f"  [WARN] adb forward 4243->4243 failed: {forward_node.stderr.strip()} -- node not observable from the host"
+        )
 
     # 5. Poll /health.
     print("[4/5] Waiting for AndroidTestAutomationServer to come up…")
@@ -3064,8 +3084,21 @@ async def run_desktop_up(args: argparse.Namespace) -> int:
     import subprocess as _sp
 
     _free = _sp.run(
-        [sys.executable, "tools/dev/free_ports.py", "4242", "4243", str(args.port), "--timeout", "30", "--label", "bring-up"],
-        capture_output=True, text=True, timeout=60, cwd=str(Path(__file__).resolve().parents[4]),
+        [
+            sys.executable,
+            "tools/dev/free_ports.py",
+            "4242",
+            "4243",
+            str(args.port),
+            "--timeout",
+            "30",
+            "--label",
+            "bring-up",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        cwd=str(Path(__file__).resolve().parents[4]),
     )
     print(_free.stdout.rstrip() or "  bring-up: free_ports produced no output")
     if _free.returncode != 0:
@@ -3235,8 +3268,21 @@ async def run_desktop_first_run_up(args: argparse.Namespace) -> int:
     import subprocess as _sp
 
     _free = _sp.run(
-        [sys.executable, "tools/dev/free_ports.py", "4242", "4243", str(args.port), "--timeout", "30", "--label", "bring-up"],
-        capture_output=True, text=True, timeout=60, cwd=str(Path(__file__).resolve().parents[4]),
+        [
+            sys.executable,
+            "tools/dev/free_ports.py",
+            "4242",
+            "4243",
+            str(args.port),
+            "--timeout",
+            "30",
+            "--label",
+            "bring-up",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        cwd=str(Path(__file__).resolve().parents[4]),
     )
     print(_free.stdout.rstrip() or "  bring-up: free_ports produced no output")
     if _free.returncode != 0:
@@ -3378,7 +3424,6 @@ def _is_new_agent_reply(msg: dict, baseline_ids: set, sent: str) -> bool:
     return bool(content) and content != sent
 
 
-
 def qa_log_dir() -> Path:
     """Where bring-up writes everything it learns, so CI can upload it.
 
@@ -3486,9 +3531,18 @@ def _ios_diagnostics(udid: str, bundle_id: str, process_name: str = "iosApp") ->
         (
             "ios-oslog",
             [
-                "xcrun", "simctl", "spawn", udid, "log", "show",
-                "--last", "10m", "--style", "syslog",
-                "--predicate", f'process == "{process_name}" OR subsystem CONTAINS "{bundle_id}"',
+                "xcrun",
+                "simctl",
+                "spawn",
+                udid,
+                "log",
+                "show",
+                "--last",
+                "10m",
+                "--style",
+                "syslog",
+                "--predicate",
+                f'process == "{process_name}" OR subsystem CONTAINS "{bundle_id}"',
             ],
         ),
     ]
@@ -3517,9 +3571,16 @@ def _ios_diagnostics(udid: str, bundle_id: str, process_name: str = "iosApp") ->
             fw_dir = Path(app_root[0]) / "Frameworks"
             names = sorted(p.name for p in fw_dir.iterdir()) if fw_dir.is_dir() else []
             (qa_log_dir() / "ios-app-frameworks.txt").write_text("\n".join(names) + "\n", encoding="utf-8")
-            ext = [n for n in names if n.endswith(".framework") and n not in ("shared.framework", "CIRISVerify.framework", "Python.framework")]
-            print(f"    app Frameworks/: {len(names)} entries, {len(ext)} Python extension framework(s); "
-                  f"_struct.framework {'present' if '_struct.framework' in names else 'MISSING'}")
+            ext = [
+                n
+                for n in names
+                if n.endswith(".framework")
+                and n not in ("shared.framework", "CIRISVerify.framework", "Python.framework")
+            ]
+            print(
+                f"    app Frameworks/: {len(names)} entries, {len(ext)} Python extension framework(s); "
+                f"_struct.framework {'present' if '_struct.framework' in names else 'MISSING'}"
+            )
         box = _simctl(["get_app_container", udid, bundle_id, "data"], timeout=60)
         root = (box.stdout or "").strip().splitlines()
         base = Path(root[0]) / "Documents" / "ciris" if root and root[0].startswith("/") else None
@@ -3549,8 +3610,7 @@ def _ios_diagnostics(udid: str, bundle_id: str, process_name: str = "iosApp") ->
                 for line in tail:
                     print(f"      {line[:160]}")
         else:
-            print("    ios-app-logs: no Documents/ciris in the container — the app "
-                  "had not started writing yet")
+            print("    ios-app-logs: no Documents/ciris in the container — the app " "had not started writing yet")
     except Exception as exc:  # noqa: BLE001
         print(f"    ios-app-logs: could not collect ({type(exc).__name__}: {exc})")
 
@@ -3589,13 +3649,9 @@ def _simctl(args: List[str], timeout: int = 120) -> subprocess.CompletedProcess:
         # a stack that points at subprocess.py, and the reader goes looking for a
         # bug in the automation. Fail as a normal non-zero result so the caller's
         # own diagnostics run and say something true.
-        proc = subprocess.CompletedProcess(
-            cmd, 127, "", "xcrun not found — this host has no Xcode command line tools."
-        )
+        proc = subprocess.CompletedProcess(cmd, 127, "", "xcrun not found — this host has no Xcode command line tools.")
     except subprocess.TimeoutExpired:
-        proc = subprocess.CompletedProcess(
-            cmd, 124, "", f"timed out after {timeout}s"
-        )
+        proc = subprocess.CompletedProcess(cmd, 124, "", f"timed out after {timeout}s")
     # Recorded unconditionally, not just on failure: the command BEFORE the one
     # that broke is usually what explains it, and by then it is too late to
     # re-run it in the same state.
@@ -3703,15 +3759,15 @@ async def run_ios_simulator_up(args: argparse.Namespace) -> int:
             _fail(
                 "no Xcode toolchain on this host",
                 hint="`xcrun` is not on PATH, so no simulator can exist here.\n"
-                     "iOS bring-up requires a macOS runner with Xcode; on Linux/Windows\n"
-                     "this platform should be SKIPPED, not attempted.",
+                "iOS bring-up requires a macOS runner with Xcode; on Linux/Windows\n"
+                "this platform should be SKIPPED, not attempted.",
             )
         else:
             _fail(
                 "no available iOS simulator",
                 hint="`xcrun simctl list devices available` shows what this host has.\n"
-                     "A GitHub macos runner ships at least one iPhone runtime; if the list\n"
-                     "is empty the Xcode selection is probably wrong (check xcode-select -p).",
+                "A GitHub macos runner ships at least one iPhone runtime; if the list\n"
+                "is empty the Xcode selection is probably wrong (check xcode-select -p).",
             )
         return 1
     print(f"  simulator: {udid}")
@@ -3747,10 +3803,10 @@ async def run_ios_simulator_up(args: argparse.Namespace) -> int:
             _fail(
                 "no *Debug-iphonesimulator*/*.app found and the bundle is not installed",
                 hint="Build it with `bash apps/ios/scripts/rebuild_and_deploy.sh`, which\n"
-                     "runs xcodegen, rebuilds Resources.zip and lays down the SIMULATOR\n"
-                     "Python bundle — a bare `xcodebuild -scheme iosApp` skips all three\n"
-                     "and produces an app that launches to nothing.\n"
-                     "Or pass --ios-app-path explicitly.",
+                "runs xcodegen, rebuilds Resources.zip and lays down the SIMULATOR\n"
+                "Python bundle — a bare `xcodebuild -scheme iosApp` skips all three\n"
+                "and produces an app that launches to nothing.\n"
+                "Or pass --ios-app-path explicitly.",
             )
             return 1
     else:
@@ -3777,8 +3833,8 @@ async def run_ios_simulator_up(args: argparse.Namespace) -> int:
             _fail(
                 f"port {port} is already owned on the host by {owner}",
                 hint="The simulator reaches the host's loopback, so the app's own health\n"
-                     "check and this gate's probes would both be answered by that process,\n"
-                     "not by the iOS app. Tear the previous platform down first.",
+                "check and this gate's probes would both be answered by that process,\n"
+                "not by the iOS app. Tear the previous platform down first.",
             )
             return 1
 
@@ -3786,10 +3842,13 @@ async def run_ios_simulator_up(args: argparse.Namespace) -> int:
     print("[3/5] Installing…" if app else "[3/5] Install skipped — already present")
     install = _simctl(["install", udid, str(app)], timeout=300) if app else None
     if install is not None and install.returncode != 0:
-        _fail(f"simctl install {app.name}", install,
-              hint="A device (iphoneos) build cannot install into a simulator — the\n"
-                   "architectures differ. Confirm this bundle came from an\n"
-                   "-sdk iphonesimulator build.")
+        _fail(
+            f"simctl install {app.name}",
+            install,
+            hint="A device (iphoneos) build cannot install into a simulator — the\n"
+            "architectures differ. Confirm this bundle came from an\n"
+            "-sdk iphonesimulator build.",
+        )
         _ios_diagnostics(udid, getattr(args, "ios_bundle_id", None) or "ai.ciris.mobile")
         return 1
 
@@ -3810,9 +3869,12 @@ async def run_ios_simulator_up(args: argparse.Namespace) -> int:
     )
     _record("simctl-launch", launch, ["xcrun", "simctl", "launch", udid, bundle_id])
     if launch.returncode != 0:
-        _fail(f"simctl launch {bundle_id}", launch,
-              hint="If this says the bundle is unknown, the install silently targeted a\n"
-                   "different simulator — check the UDID above against `simctl listapps`.")
+        _fail(
+            f"simctl launch {bundle_id}",
+            launch,
+            hint="If this says the bundle is unknown, the install silently targeted a\n"
+            "different simulator — check the UDID above against `simctl listapps`.",
+        )
         _ios_diagnostics(udid, bundle_id)
         return 1
 
@@ -3857,7 +3919,9 @@ async def run_ios_simulator_up(args: argparse.Namespace) -> int:
                 if backend_ok:
                     print(f" [OK] embedded backend reachable at {backend_url}")
                 else:
-                    print(f"  \u26a0\ufe0f  embedded backend not yet ready at {backend_url}; the wizard will proceed and the AI step may fail to list models")
+                    print(
+                        f"  \u26a0\ufe0f  embedded backend not yet ready at {backend_url}; the wizard will proceed and the AI step may fail to list models"
+                    )
                 return 0
         except Exception:  # noqa: BLE001
             pass
@@ -3896,8 +3960,8 @@ async def run_ios_simulator_up(args: argparse.Namespace) -> int:
                 _fail(
                     f"the app EXITED while we waited for {server_url}/health after {elapsed:.0f}s",
                     hint="It launched and then stopped, so this is a crash on startup\n"
-                         "rather than a slow one. The os_log dump below covers the\n"
-                         "launch window.",
+                    "rather than a slow one. The os_log dump below covers the\n"
+                    "launch window.",
                 )
                 _ios_diagnostics(udid, bundle_id)
                 return 1
@@ -3906,12 +3970,12 @@ async def run_ios_simulator_up(args: argparse.Namespace) -> int:
     _fail(
         f"no /health from {server_url} within {wait_secs}s",
         hint="The app launched but its TestAutomationServer never answered.\n"
-             "Most likely causes, in order:\n"
-             "  1. CIRIS_TEST_MODE did not reach the app — simctl only forwards env\n"
-             "     vars with the SIMCTL_CHILD_ prefix.\n"
-             "  2. This build does not embed the test server.\n"
-             "  3. The app crashed on launch — see the os_log dump below.\n"
-             "A simulator needs NO port forward: 9091 is reached directly on the host.",
+        "Most likely causes, in order:\n"
+        "  1. CIRIS_TEST_MODE did not reach the app — simctl only forwards env\n"
+        "     vars with the SIMCTL_CHILD_ prefix.\n"
+        "  2. This build does not embed the test server.\n"
+        "  3. The app crashed on launch — see the os_log dump below.\n"
+        "A simulator needs NO port forward: 9091 is reached directly on the host.",
     )
     _ios_diagnostics(udid, bundle_id)
     return 1

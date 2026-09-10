@@ -97,6 +97,67 @@ def rss_bytes() -> int:
         return 0
 
 
+def _release_bionic(libc: ctypes.CDLL) -> str:
+    if not hasattr(libc, "mallopt"):
+        return "unavailable:no mallopt"
+    libc.mallopt.argtypes = [ctypes.c_int, ctypes.c_int]
+    libc.mallopt.restype = ctypes.c_int
+    # Newest first; an unrecognised option returns 0 and does nothing.
+    if libc.mallopt(_BIONIC_M_PURGE_ALL, 0):
+        return "mallopt(M_PURGE_ALL)"
+    libc.mallopt(_BIONIC_M_PURGE, 0)
+    return "mallopt(M_PURGE)"
+
+
+def _release_glibc(libc: ctypes.CDLL) -> str:
+    if not hasattr(libc, "malloc_trim"):
+        return "unavailable:no malloc_trim"
+    libc.malloc_trim.argtypes = [ctypes.c_size_t]
+    libc.malloc_trim.restype = ctypes.c_int
+    libc.malloc_trim(0)
+    return "malloc_trim"
+
+
+def _release_darwin(libc: ctypes.CDLL) -> str:
+    if not hasattr(libc, "malloc_zone_pressure_relief"):
+        return "unavailable:no malloc_zone_pressure_relief"
+    libc.malloc_zone_pressure_relief.argtypes = [ctypes.c_void_p, ctypes.c_size_t]
+    libc.malloc_zone_pressure_relief.restype = ctypes.c_size_t
+    libc.malloc_zone_pressure_relief(None, 0)
+    return "malloc_zone_pressure_relief"
+
+
+def _trim_windows_working_set() -> bool:
+    """SetProcessWorkingSetSize(-1, -1): empties the WHOLE working set, live pages
+    included (the gate measured 279 -> 1 MB). Returns False when kernel32 is not
+    reachable or the call fails; never raises."""
+    kernel32 = getattr(getattr(ctypes, "windll", None), "kernel32", None)
+    if kernel32 is None:
+        return False
+    try:
+        kernel32.SetProcessWorkingSetSize.argtypes = [ctypes.c_void_p, ctypes.c_size_t, ctypes.c_size_t]
+        kernel32.SetProcessWorkingSetSize.restype = ctypes.c_int
+        everything = ctypes.c_size_t(-1).value
+        kernel32.SetProcessWorkingSetSize(kernel32.GetCurrentProcess(), everything, everything)
+        return True
+    except Exception:
+        return False
+
+
+def _release_windows(libc: ctypes.CDLL, trigger: str) -> str:
+    if not hasattr(libc, "_heapmin"):
+        return "unavailable:no _heapmin"
+    libc._heapmin.argtypes = []
+    libc._heapmin.restype = ctypes.c_int
+    libc._heapmin()
+    # Returning heap pages is only half of it on Windows: the working set keeps
+    # them resident until the kernel is told it may trim. But that trim evicts
+    # live pages too, so only when the host itself is asking.
+    if trigger.startswith("host:") and _trim_windows_working_set():
+        return "_heapmin+SetProcessWorkingSetSize"
+    return "_heapmin"
+
+
 def _platform_release(trigger: str = "manual") -> str:
     """Ask the system allocator to return free pages. Never raises.
 
@@ -110,52 +171,13 @@ def _platform_release(trigger: str = "manual") -> str:
         return "none"
     try:
         if _is_android():
-            if not hasattr(libc, "mallopt"):
-                return "unavailable:no mallopt"
-            libc.mallopt.argtypes = [ctypes.c_int, ctypes.c_int]
-            libc.mallopt.restype = ctypes.c_int
-            # Newest first; an unrecognised option returns 0 and does nothing.
-            if libc.mallopt(_BIONIC_M_PURGE_ALL, 0):
-                return "mallopt(M_PURGE_ALL)"
-            libc.mallopt(_BIONIC_M_PURGE, 0)
-            return "mallopt(M_PURGE)"
+            return _release_bionic(libc)
         if sys.platform.startswith("linux"):
-            if not hasattr(libc, "malloc_trim"):
-                return "unavailable:no malloc_trim"
-            libc.malloc_trim.argtypes = [ctypes.c_size_t]
-            libc.malloc_trim.restype = ctypes.c_int
-            libc.malloc_trim(0)
-            return "malloc_trim"
+            return _release_glibc(libc)
         if sys.platform in ("darwin", "ios"):
-            if not hasattr(libc, "malloc_zone_pressure_relief"):
-                return "unavailable:no malloc_zone_pressure_relief"
-            libc.malloc_zone_pressure_relief.argtypes = [ctypes.c_void_p, ctypes.c_size_t]
-            libc.malloc_zone_pressure_relief.restype = ctypes.c_size_t
-            libc.malloc_zone_pressure_relief(None, 0)
-            return "malloc_zone_pressure_relief"
+            return _release_darwin(libc)
         if sys.platform == "win32":
-            if not hasattr(libc, "_heapmin"):
-                return "unavailable:no _heapmin"
-            libc._heapmin.argtypes = []
-            libc._heapmin.restype = ctypes.c_int
-            libc._heapmin()
-            # Returning heap pages is only half of it on Windows: the working
-            # set keeps them resident until the kernel is told it may trim. But
-            # SetProcessWorkingSetSize(-1, -1) empties the WHOLE working set, live
-            # pages included (the gate measured 279 -> 1 MB), so only do it when
-            # the host itself is asking -- that is the one time it is worth it.
-            kernel32 = getattr(getattr(ctypes, "windll", None), "kernel32", None)
-            if kernel32 is not None and trigger.startswith("host:"):
-                try:
-                    kernel32.SetProcessWorkingSetSize.argtypes = [ctypes.c_void_p, ctypes.c_size_t, ctypes.c_size_t]
-                    kernel32.SetProcessWorkingSetSize.restype = ctypes.c_int
-                    kernel32.SetProcessWorkingSetSize(
-                        kernel32.GetCurrentProcess(), ctypes.c_size_t(-1).value, ctypes.c_size_t(-1).value
-                    )
-                    return "_heapmin+SetProcessWorkingSetSize"
-                except Exception:
-                    pass
-            return "_heapmin"
+            return _release_windows(libc, trigger)
     except Exception as exc:  # an allocator call must never take the process down
         return f"unavailable:{type(exc).__name__}"
     return "none"

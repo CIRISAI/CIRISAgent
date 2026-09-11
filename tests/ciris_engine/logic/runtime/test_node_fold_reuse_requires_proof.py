@@ -35,8 +35,30 @@ import pytest
 from ciris_engine.logic.runtime import node_fold
 
 
+@pytest.fixture(autouse=True)
+def node_port(monkeypatch) -> int:
+    """Point `node_fold` at an EPHEMERAL port instead of the real 4243.
+
+    These tests assert on the ownership logic, not on a port number, and binding
+    the real 4243 made them race every other thing on the box that touches it:
+    the sibling `own_listener` in another xdist worker, a leftover node from an
+    earlier test, a TIME_WAIT socket with SO_REUSEADDR. The foreign-listener test
+    failed on three unrelated PRs (#1162 shard 6, #1164 shard 2, #1169 shard 7),
+    each costing a ~18-minute shard re-run, and the flaky-retry plugin re-ran into
+    the same shared environment so retries rarely helped (CIRISAgent#1166).
+
+    The kernel hands out a port nothing else holds, so the race is gone by
+    construction rather than by hoping the box is quiet.
+    """
+    with closing(socket.socket()) as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    monkeypatch.setattr(node_fold, "NODE_FOLD_PORT", port)
+    return port
+
+
 @pytest.fixture
-def own_listener():
+def own_listener(node_port: int):
     """A listener on 4243 held by THIS process — the in-process-restart shape.
 
     Socket ownership is the discriminator, so the fixtures differ only in WHO
@@ -48,17 +70,17 @@ def own_listener():
     s = socket.socket()
     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     try:
-        s.bind(("127.0.0.1", 4243))
+        s.bind(("127.0.0.1", node_port))
     except OSError:  # pragma: no cover - a real node is running on this box
         s.close()
-        pytest.skip("port 4243 already in use")
+        pytest.skip(f"port {node_port} already in use")
     s.listen(8)
     with closing(s):
         yield s
 
 
 @pytest.fixture
-def foreign_listener():
+def foreign_listener(node_port: int):
     """A listener on 4243 held by a DIFFERENT process — the CI shape.
 
     A child process, not a thread: the point is that the socket belongs to
@@ -76,17 +98,17 @@ def foreign_listener():
             "class H(BaseHTTPRequestHandler):\n"
             "    def do_GET(self): self.send_error(404)\n"
             "    def log_message(self,*a): pass\n"
-            "HTTPServer(('127.0.0.1',4243),H).serve_forever()",
+            f"HTTPServer(('127.0.0.1',{node_port}),H).serve_forever()",
         ]
     )
     for _ in range(50):
         with socket.socket() as probe:
-            if probe.connect_ex(("127.0.0.1", 4243)) == 0:
+            if probe.connect_ex(("127.0.0.1", node_port)) == 0:
                 break
         time.sleep(0.1)
     else:  # pragma: no cover
         child.kill()
-        pytest.skip("could not stand up a foreign listener on 4243")
+        pytest.skip(f"could not stand up a foreign listener on {node_port}")
     try:
         yield child
     finally:
@@ -132,9 +154,7 @@ def test_liveness_and_ownership_are_both_consulted() -> None:
 
     source = inspect.getsource(node_fold.start_node_fold)
     guard = source[source.index("if not identity_text:") :]
-    assert "_this_process_owns_port" in guard[:3000], (
-        "the cannot-read-identity arm no longer consults socket ownership"
-    )
+    assert "_this_process_owns_port" in guard[:3000], "the cannot-read-identity arm no longer consults socket ownership"
     assert "http_alive" in guard[:3000], (
         "the cannot-read-identity arm no longer distinguishes a LIVE node with "
         "drifted endpoints from a dead socket — that collapse is what left the "
@@ -169,7 +189,7 @@ def test_refuses_a_zombie_listener_even_though_it_is_ours(own_listener, tmp_path
     )
 
 
-def test_reuses_our_live_node_whose_identity_endpoints_drifted(tmp_path):
+def test_reuses_our_live_node_whose_identity_endpoints_drifted(tmp_path, node_port: int):
     """Alive but unreadable is the older-wheel case this branch exists for.
 
     An HTTPError PROVES a server answered; connection-refused proves one did not.
@@ -186,9 +206,9 @@ def test_reuses_our_live_node_whose_identity_endpoints_drifted(tmp_path):
             return
 
     try:
-        srv = HTTPServer(("127.0.0.1", 4243), _Drifted)
+        srv = HTTPServer(("127.0.0.1", node_port), _Drifted)
     except OSError:  # pragma: no cover
-        pytest.skip("port 4243 already in use")
+        pytest.skip(f"port {node_port} already in use")
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     try:
         # Must not raise: our socket, alive, endpoints simply absent.
@@ -196,3 +216,44 @@ def test_reuses_our_live_node_whose_identity_endpoints_drifted(tmp_path):
     finally:
         srv.shutdown()
         srv.server_close()
+
+
+# ---------------------------------------------------------------------------
+# stop_node_fold: the #1102 arm that cannot free the port
+# ---------------------------------------------------------------------------
+
+
+def test_stop_node_fold_says_so_when_the_wheel_cannot_free_the_port(monkeypatch, caplog):
+    """A wheel older than `shutdown_node` leaves the port bound after exit.
+
+    `stop_node_fold` returns None for BOTH "this process never started a node"
+    and "the wheel cannot stop it" -- so the warning is the only thing that
+    distinguishes a clean no-op from a node that will still be holding the port
+    when the next boot tries to bind it (CIRISAgent#1102, the EADDRINUSE the
+    five-platform gate's post-reset port check exists to catch). Untested until
+    now, which is how it came to be the uncovered half of this module's
+    port-constant change.
+    """
+    import logging
+    import sys
+    import types
+
+    monkeypatch.setattr(node_fold, "_node_thread", object(), raising=False)
+    # A wheel that predates shutdown_node: importable, but without the symbol.
+    monkeypatch.setitem(sys.modules, "ciris_server", types.ModuleType("ciris_server"))
+
+    with caplog.at_level(logging.WARNING, logger=node_fold.logger.name):
+        assert node_fold.stop_node_fold() is None
+
+    assert any("shutdown_node unavailable" in r.message for r in caplog.records), caplog.text
+    assert any("CIRISAgent#1102" in r.message for r in caplog.records), caplog.text
+
+
+def test_stop_node_fold_is_a_clean_no_op_when_we_started_nothing(monkeypatch, caplog):
+    """The other None: nothing to stop, and nothing to warn about."""
+    import logging
+
+    monkeypatch.setattr(node_fold, "_node_thread", None, raising=False)
+    with caplog.at_level(logging.WARNING, logger=node_fold.logger.name):
+        assert node_fold.stop_node_fold() is None
+    assert not [r for r in caplog.records if "shutdown_node unavailable" in r.message]

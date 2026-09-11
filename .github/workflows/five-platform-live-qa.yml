@@ -428,7 +428,7 @@ jobs:
           }
         env:
           IMAGE: "system-images;android-34;google_apis;x86_64"
-      
+
 
       # MATERIALIZE THE iOS PYTHON BUNDLE IN THE RUNNER.
       #
@@ -715,6 +715,7 @@ jobs:
             # browser). An emulator or simulator has its own display and the flag
             # means nothing there, so it is only passed for desktop.
             extra=""
+            noai_ok=1
             [ "$target" = "desktop" ] && extra="--headless"
             if [ "$target" = "ios" ]; then
               if [ -z "${IOS_APP:-}" ]; then
@@ -740,14 +741,25 @@ jobs:
               --username qaadmin --password "qa_test_password_12345" \
               --run-without-ai \
               --screenshot-on-success "artifacts/shots/$plat-setup-noai.png" \
-              -v || { overall=1; echo "::error::$plat run-without-AI setup failed"; python3 tools/dev/diagnose_gate_failure.py --platform "$plat" --phase setup-noai --logs artifacts "${CIRIS_QA_LOG_DIR:-artifacts/cmdlogs}" || true; }
+              -v || { overall=1; noai_ok=0; echo "::error::$plat run-without-AI setup failed"; python3 tools/dev/diagnose_gate_failure.py --platform "$plat" --phase setup-noai --logs artifacts "${CIRIS_QA_LOG_DIR:-artifacts/cmdlogs}" || true; }
 
-            python -m tools.qa_runner.modules.web_ui desktop-login \
-              --platform "$target" $extra \
-              --username qaadmin --password "qa_test_password_12345" \
-              --run-without-ai \
-              --screenshot-on-success "artifacts/shots/$plat-login-noai.png" \
-              -v || { overall=1; echo "::error::$plat run-without-AI login failed — Interact unreachable against a node-only backend"; python3 tools/dev/diagnose_gate_failure.py --platform "$plat" --phase login-noai --logs artifacts "${CIRIS_QA_LOG_DIR:-artifacts/cmdlogs}" || true; }
+            # ONE FAULT, ONE RED. If the no-AI setup never completed, a login
+            # failure here is its CONSEQUENCE, not a finding: the app is mid-wizard,
+            # so every element the driver waits for is legitimately absent. Nightly
+            # 34596459034 turned one unreachable test server into four reds that read
+            # as client defects, and the classifier called all of them UNKNOWN
+            # (CIRISAgent#1172). Skip loudly instead.
+            if [ "$noai_ok" = 1 ]; then
+              python -m tools.qa_runner.modules.web_ui desktop-login \
+                --platform "$target" $extra \
+                --username qaadmin --password "qa_test_password_12345" \
+                --run-without-ai \
+                --screenshot-on-success "artifacts/shots/$plat-login-noai.png" \
+                -v || { overall=1; echo "::error::$plat run-without-AI login failed — Interact unreachable against a node-only backend"; python3 tools/dev/diagnose_gate_failure.py --platform "$plat" --phase login-noai --logs artifacts "${CIRIS_QA_LOG_DIR:-artifacts/cmdlogs}" || true; }
+
+            else
+              echo "::notice::$plat run-without-AI login SKIPPED — setup-noai did not complete, so a failure here would be a consequence, not a finding"
+            fi
 
             # 0b. RESET THROUGH THE CLIENT, not with rm. The client's factory reset is
             #     what deletes the .env, and the .env is where CIRIS_RUN_WITHOUT_AI
@@ -755,10 +767,21 @@ jobs:
             #     node, so the with-AI pass below would have no :8080 to talk to.
             #     Driving the real button is also how we find out if that reset ever
             #     stops clearing the flag.
-            python -m tools.qa_runner.modules.web_ui desktop-reset \
-              --platform "$target" $extra \
-              --screenshot-on-success "artifacts/shots/$plat-reset.png" \
-              -v || { overall=1; echo "::error::$plat client reset failed — the with-AI pass starts from an unknown state"; python3 tools/dev/diagnose_gate_failure.py --platform "$plat" --phase reset --logs artifacts "${CIRIS_QA_LOG_DIR:-artifacts/cmdlogs}" || true; }
+            if [ "$noai_ok" = 1 ]; then
+              python -m tools.qa_runner.modules.web_ui desktop-reset \
+                --platform "$target" $extra \
+                --screenshot-on-success "artifacts/shots/$plat-reset.png" \
+                -v || { overall=1; echo "::error::$plat client reset failed — the with-AI pass starts from an unknown state"; python3 tools/dev/diagnose_gate_failure.py --platform "$plat" --phase reset --logs artifacts "${CIRIS_QA_LOG_DIR:-artifacts/cmdlogs}" || true; }
+
+            else
+              # The reset is the cleanup the with-AI pass depends on, and it cannot
+              # run through a UI that never got there. Clear the home directly so the
+              # with-AI result below is still trustworthy; best-effort because a
+              # Windows file lock must not end the leg.
+              echo "::notice::$plat client reset SKIPPED — setup-noai did not complete; wiping $CIRIS_HOME so the with-AI pass starts from a known state"
+              rm -rf "$CIRIS_HOME" 2>/dev/null || true
+              mkdir -p "$CIRIS_HOME"
+            fi
 
             # 0c. Reap the node the no-AI pass left behind. `--launch` tears down the
             #     app and `main.py --adapter api`, but a node-only backend is

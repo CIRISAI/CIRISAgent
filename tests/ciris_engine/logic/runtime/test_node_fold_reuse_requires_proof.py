@@ -216,3 +216,44 @@ def test_reuses_our_live_node_whose_identity_endpoints_drifted(tmp_path, node_po
     finally:
         srv.shutdown()
         srv.server_close()
+
+
+# ---------------------------------------------------------------------------
+# stop_node_fold: the #1102 arm that cannot free the port
+# ---------------------------------------------------------------------------
+
+
+def test_stop_node_fold_says_so_when_the_wheel_cannot_free_the_port(monkeypatch, caplog):
+    """A wheel older than `shutdown_node` leaves the port bound after exit.
+
+    `stop_node_fold` returns None for BOTH "this process never started a node"
+    and "the wheel cannot stop it" -- so the warning is the only thing that
+    distinguishes a clean no-op from a node that will still be holding the port
+    when the next boot tries to bind it (CIRISAgent#1102, the EADDRINUSE the
+    five-platform gate's post-reset port check exists to catch). Untested until
+    now, which is how it came to be the uncovered half of this module's
+    port-constant change.
+    """
+    import logging
+    import sys
+    import types
+
+    monkeypatch.setattr(node_fold, "_node_thread", object(), raising=False)
+    # A wheel that predates shutdown_node: importable, but without the symbol.
+    monkeypatch.setitem(sys.modules, "ciris_server", types.ModuleType("ciris_server"))
+
+    with caplog.at_level(logging.WARNING, logger=node_fold.logger.name):
+        assert node_fold.stop_node_fold() is None
+
+    assert any("shutdown_node unavailable" in r.message for r in caplog.records), caplog.text
+    assert any("CIRISAgent#1102" in r.message for r in caplog.records), caplog.text
+
+
+def test_stop_node_fold_is_a_clean_no_op_when_we_started_nothing(monkeypatch, caplog):
+    """The other None: nothing to stop, and nothing to warn about."""
+    import logging
+
+    monkeypatch.setattr(node_fold, "_node_thread", None, raising=False)
+    with caplog.at_level(logging.WARNING, logger=node_fold.logger.name):
+        assert node_fold.stop_node_fold() is None
+    assert not [r for r in caplog.records if "shutdown_node unavailable" in r.message]

@@ -73,34 +73,82 @@ def strip_advice(blob: str) -> str:
     run, for the same reason: the words we match on appear in text that is not
     about what we are diagnosing.
     """
-    return "\n".join(
-        l for l in blob.splitlines() if not ADVICE.search(l) and not NOT_THE_LLM.search(l)
-    )
+    return "\n".join(l for l in blob.splitlines() if not ADVICE.search(l) and not NOT_THE_LLM.search(l))
 
 
 SIGNATURES: list[tuple[str, str, str]] = [
-    ("WIRE", r"Key limit exceeded|insufficient[_ ]credits|quota exceeded", "provider refused: account limit or credit exhausted"),
-    ("WIRE", r"(?:HTTP|status|status_code|code)[ =:]*402\b|\b402 Payment Required|payment required", "provider refused: payment required"),
+    (
+        "WIRE",
+        r"Key limit exceeded|insufficient[_ ]credits|quota exceeded",
+        "provider refused: account limit or credit exhausted",
+    ),
+    (
+        "WIRE",
+        r"(?:HTTP|status|status_code|code)[ =:]*402\b|\b402 Payment Required|payment required",
+        "provider refused: payment required",
+    ),
     # "rate limited" only as an EVENT: a status line, the reason phrase, or the
     # provider naming it. A dict key like 'dns_us_rate_limited': False is not one.
-    ("WIRE", r"(?:HTTP|status|status_code|code)[ =:]*429\b|\b429 Too Many|Too Many Requests|rate.?limit(?:ed)? (?:exceeded|reached|hit)|rate.?limit.*retry.?after|(?:openrouter|provider|llm)[^\n]{0,40}rate.?limit(?!ed['\"]?[:=])", "provider refused: rate limited"),
-    ("WIRE", r"(?:HTTP|status|status_code|code)[ =:]*401\b.*(openrouter|provider|llm)|invalid[_ ]api[_ ]key|unauthorized.*llm", "provider refused: key rejected"),
-    ("WIRE", r"model_not_available|model not found|(?:HTTP|status|status_code|code)[ =:]*404\b.*model", "provider refused: model name not served"),
+    (
+        "WIRE",
+        r"(?:HTTP|status|status_code|code)[ =:]*429\b|\b429 Too Many|Too Many Requests|rate.?limit(?:ed)? (?:exceeded|reached|hit)|rate.?limit.*retry.?after|(?:openrouter|provider|llm)[^\n]{0,40}rate.?limit(?!ed['\"]?[:=])",
+        "provider refused: rate limited",
+    ),
+    (
+        "WIRE",
+        r"(?:HTTP|status|status_code|code)[ =:]*401\b.*(openrouter|provider|llm)|invalid[_ ]api[_ ]key|unauthorized.*llm",
+        "provider refused: key rejected",
+    ),
+    (
+        "WIRE",
+        r"model_not_available|model not found|(?:HTTP|status|status_code|code)[ =:]*404\b.*model",
+        "provider refused: model name not served",
+    ),
     ("WIRE", r"(connection|read) timed out.*(openrouter|api\.|llm)|provider.*unreachable", "provider unreachable"),
-    ("AGENT", r"(ERROR|CRITICAL)\b[^\n]*\bDMA\b|\b\w*DMA\w*(Evaluator)?\b[^\n]*\b(raised|failed:|exception|ValidationError)", "a DMA errored"),
+    (
+        "AGENT",
+        r"(ERROR|CRITICAL)\b[^\n]*\bDMA\b|\b\w*DMA\w*(Evaluator)?\b[^\n]*\b(raised|failed:|exception|ValidationError)",
+        "a DMA errored",
+    ),
     ("AGENT", r"(ERROR|CRITICAL)\b[^\n]*conscience|conscience[^\n]*(raised|failed:|exception)", "a conscience errored"),
     ("AGENT", r"Traceback \(most recent call last\)", "unhandled exception in the agent"),
     ("INFRA", r"none of the given log paths exist", "no logs were produced: the app or server never started"),
     ("INFRA", r"Address already in use|EADDRINUSE", "port already held"),
+    # Ordered BEFORE the CLIENT element/timeout signature on purpose: when the
+    # app's test server never answered, the driver's "element not found" lines
+    # are consequences, not evidence. Reading them as CLIENT is what sent three
+    # Windows legs hunting product defects that were not there.
+    (
+        "INFRA",
+        r"desktop test server (?:not reachable|didn't come up)|REACHABILITY, not startup",
+        "the desktop app's test server never answered the driver",
+    ),
     ("INFRA", r"no simulator \.app was built", "the iOS app was never built"),
-    ("CLIENT", r"element .*not found|no element with testTag|wait_for.*timed out|tagged but not dr", "the UI never reached the awaited state"),
+    (
+        "CLIENT",
+        r"element .*not found|no element with testTag|wait_for.*timed out|tagged but not dr",
+        "the UI never reached the awaited state",
+    ),
     ("DELIVERY", r"no \[DELIVERY-PROBE\] lines|highest rung reached", "traces did not reach the required rung"),
-    ("SILENT", r"message_type=='agent' row|agent did not answer|no reply", "the agent produced no reply and logged no error"),
+    (
+        "SILENT",
+        r"message_type=='agent' row|agent did not answer|no reply",
+        "the agent produced no reply and logged no error",
+    ),
 ]
 
+# EVERY phase the workflow passes must be a key here. `setup-noai`, `login-noai`
+# and `reset` were not, so nightly 34596459034's three Windows failures each
+# reported "UNKNOWN -- no known signature matched" -- the classifier had nothing
+# to say about the only leg that failed (CIRISAgent#1172). Keep this in step with
+# `grep -oE '--phase [a-z-]+' .github/workflows/five-platform-live-qa.yml`;
+# test_diagnose_phases_are_complete asserts exactly that.
 PHASE_DEFAULT = {
     "setup": ("CLIENT", "the setup wizard did not complete"),
+    "setup-noai": ("CLIENT", "the run-without-AI setup wizard did not complete"),
     "login": ("CLIENT", "login did not complete"),
+    "login-noai": ("CLIENT", "login against a node-only backend did not complete"),
+    "reset": ("CLIENT", "the client-side device reset did not complete"),
     "interact": ("SILENT", "no reply was rendered"),
     "delivery": ("DELIVERY", "trace delivery did not reach the required rung"),
     "identity": ("AGENT", "the one-holder-per-identity invariant broke"),
@@ -112,7 +160,11 @@ def read_logs(paths: list[str], cap: int = 400_000) -> str:
     out: list[str] = []
     for p in paths:
         path = pathlib.Path(p)
-        for f in ([path] if path.is_file() else sorted(path.rglob("*.log")) + sorted(path.rglob("*.txt")) if path.is_dir() else []):
+        for f in (
+            [path]
+            if path.is_file()
+            else sorted(path.rglob("*.log")) + sorted(path.rglob("*.txt")) if path.is_dir() else []
+        ):
             try:
                 out.append(f"--- {f} ---\n" + f.read_text(errors="replace")[-cap:])
             except OSError:
@@ -130,9 +182,7 @@ def probe_provider() -> tuple[str, str] | None:
     key = os.environ.get("OPENROUTER_API_KEY", "").strip()
     if not key:
         return ("WIRE?", "no OPENROUTER_API_KEY in this job -- cannot check the budget")
-    req = urllib.request.Request(
-        "https://openrouter.ai/api/v1/key", headers={"Authorization": f"Bearer {key}"}
-    )
+    req = urllib.request.Request("https://openrouter.ai/api/v1/key", headers={"Authorization": f"Bearer {key}"})
     try:
         with urllib.request.urlopen(req, timeout=20) as r:
             d = json.load(r).get("data", {})

@@ -3051,6 +3051,107 @@ def _android_teardown(args: argparse.Namespace, keep_open: bool) -> None:
             pass
 
 
+#: Loopback spellings to try, in order. BOTH, because they are not the same host.
+#:
+#: The Windows leg of nightly 34596459034 failed with "desktop test server didn't
+#: come up within 60s" while the app's own log said
+#: `[TestAutomation] Server started on http://localhost:9091` and the UI had
+#: already reached the Setup screen. The app was fine; the probe could not reach
+#: it. On Windows `localhost` resolves to ::1 before 127.0.0.1, and a server bound
+#: to one of those is unreachable at the other -- so a single spelling turns a
+#: reachability question into a false "the app never started".
+_LOOPBACKS = ("127.0.0.1", "localhost")
+
+
+def _await_desktop_test_server(
+    proc: "subprocess.Popen[bytes]",
+    log_path: Path,
+    port: int,
+    budget_s: float = 90.0,
+) -> Optional[str]:
+    """Wait for the desktop app's TestAutomationServer. On failure, SAY WHY.
+
+    Returns the base URL that answered, or None.
+
+    THE FAILURE MESSAGE IS THE POINT. The old version of this loop printed
+    "didn't come up within 60s" and returned, which is three different faults
+    wearing one sentence:
+
+      * the JVM died          -> exit code and the tail of its log say so
+      * the JVM is still starting -> it is alive, and the budget was too short
+      * the JVM is serving, we cannot reach it -> its log says "Server started"
+        and something else holds the port, or we probed the wrong loopback
+
+    Only the first two are "didn't come up". The third is what actually happened
+    on Windows, and reporting it as a startup failure sent three downstream legs
+    looking for product defects that were not there (CIRISAgent#1172).
+    """
+    deadline = time.time() + budget_s
+    while time.time() < deadline:
+        if proc.poll() is not None:
+            break  # dead: no point waiting out the budget
+        for host in _LOOPBACKS:
+            base = f"http://{host}:{port}"
+            try:
+                if requests.get(f"{base}/health", timeout=2).status_code == 200:
+                    print(f" [OK] desktop test server up at {base}")
+                    return base
+            except Exception:  # noqa: BLE001 -- not up yet is the normal case
+                pass
+        time.sleep(1)
+
+    # ---- it did not answer: establish WHICH fault this is -------------------
+    rc = proc.poll()
+    alive = rc is None
+    try:
+        tail = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        tail = []
+    started = any("TestAutomation" in line and "Server started" in line for line in tail)
+
+    print(f" [FAIL] desktop test server not reachable within {budget_s:.0f}s")
+    print(f"     jvm: {'ALIVE' if alive else f'EXITED rc={rc}'}")
+    print(f"     its log says the server started: {'YES' if started else 'no'}")
+    if started and alive:
+        print("     => REACHABILITY, not startup: the app is serving and we could not")
+        print(f"        reach it on any of {list(_LOOPBACKS)}. Firewall, or a bound")
+        print("        interface we did not try. NOT a client or product fault.")
+    elif alive:
+        print("     => still starting when the budget expired: raise it, do not")
+        print("        read this as a product failure.")
+    else:
+        print("     => the app exited; the tail below is why.")
+    try:
+        from tools.qa_runner.platform_procs import pids_listening_on
+
+        holders = pids_listening_on(port)
+        print(f"     pids listening on {port}: {holders or '(could not tell)'}")
+    except Exception:  # noqa: BLE001
+        pass
+    print(f"     inspect: {log_path}")
+    for line in tail[-25:]:
+        print(f"     | {line[:200]}")
+    return None
+
+
+def _kill_desktop_app(proc: "subprocess.Popen[bytes]") -> None:
+    """Stop an app we launched and are about to give up on.
+
+    The old failure path left it running. The next leg then launched a SECOND
+    app against the same home and the same test port, so its failures were
+    races against our own orphan rather than anything the product did
+    (CIRISAgent#1172).
+    """
+    if proc.poll() is not None:
+        return
+    try:
+        proc.kill()
+        proc.wait(timeout=10)
+        print("     (stopped the app we gave up on, so the next leg starts clean)")
+    except Exception as exc:  # noqa: BLE001
+        print(f"     (could not stop the app: {exc})")
+
+
 async def run_desktop_up(args: argparse.Namespace) -> int:
     """End-to-end: wipe → start backend in first-run → setup → launch desktop → login.
 
@@ -3174,7 +3275,7 @@ async def run_desktop_up(args: argparse.Namespace) -> int:
             env["CIRIS_HOME"] = _home
         log_path = temp_path(f"ciris_desktop_up.{_launch_stamp()}.log")
         with open(log_path, "w") as log:
-            subprocess.Popen(
+            proc = subprocess.Popen(
                 ["java", "-jar", str(jar)],
                 stdout=log,
                 stderr=subprocess.STDOUT,
@@ -3183,18 +3284,12 @@ async def run_desktop_up(args: argparse.Namespace) -> int:
             )
         print(f"  logs: {log_path}")
 
-        # Wait for test server
-        deadline = time.time() + 60
-        server_url = f"http://localhost:{args.desktop_port}"
-        while time.time() < deadline:
-            try:
-                if requests.get(f"{server_url}/health", timeout=2).status_code == 200:
-                    break
-            except Exception:
-                pass
-            time.sleep(1)
-        else:
-            print(" [WARN] desktop test server didn't come up; continuing anyway")
+        reached = _await_desktop_test_server(proc, Path(log_path), args.desktop_port)
+        # Lenient by design HERE: this command drives the UI next, and a late
+        # server still works. The diagnosis above prints either way.
+        server_url = reached or f"http://localhost:{args.desktop_port}"
+        if reached is None:
+            print(" [WARN] continuing anyway — the UI steps below will say if it never arrived")
 
         # 5. Log in via the UI
         print("[5/5] Logging in via UI...")
@@ -3345,7 +3440,7 @@ async def run_desktop_first_run_up(args: argparse.Namespace) -> int:
     # ciris_desktop*.log, so a timestamped name is picked up with no other change.
     log_path = temp_path(f"ciris_desktop_setup.{_launch_stamp()}.log")
     with open(log_path, "w") as log:
-        subprocess.Popen(
+        proc = subprocess.Popen(
             ["java", "-jar", str(jar)],
             stdout=log,
             stderr=subprocess.STDOUT,
@@ -3354,20 +3449,9 @@ async def run_desktop_first_run_up(args: argparse.Namespace) -> int:
         )
     print(f"  logs: {log_path}")
 
-    # Wait for the desktop test server
-    deadline = time.time() + 60
-    server_url = f"http://localhost:{args.desktop_port}"
-    while time.time() < deadline:
-        try:
-            if requests.get(f"{server_url}/health", timeout=2).status_code == 200:
-                print(f" [OK] desktop test server up at {server_url}")
-                break
-        except Exception:
-            pass
-        time.sleep(1)
-    else:
-        print(" [FAIL] desktop test server didn't come up within 60s")
-        print(f"     inspect: {log_path}")
+    server_url = _await_desktop_test_server(proc, Path(log_path), args.desktop_port)
+    if server_url is None:
+        _kill_desktop_app(proc)
         return 1
 
     print(f"[OK] First-run stack ready. Backend: {server.base_url} (first-run) Desktop: {server_url}")

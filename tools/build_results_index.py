@@ -37,6 +37,14 @@ OUT = ROOT / "docs/results/data"
 BUNDLE = re.compile(r"^([a-z]{2})_([a-z_]+)_(\d{8}T\d{6}Z)(?:_(\d{8}T\d{6}Z))?$")
 
 
+# ONE definition of "the judge never answered", shared with the interpreter that
+# writes these bundles. Restating the rule here is how the page and the artifact
+# would come to disagree about the same run. The module is stdlib-only on purpose:
+# this generator runs on a bare checkout with no pip install (results-page.yml).
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+from tools.safety_verdict_classes import judge_error_class  # noqa: E402
+
+
 def read_jsonl(p: pathlib.Path) -> list[dict]:
     if not p.exists():
         return []
@@ -146,15 +154,18 @@ def main() -> int:
     (OUT / "batteries").mkdir(parents=True, exist_ok=True)
     for lang, b in bat.items():
         (OUT / "batteries" / f"{lang}.json").write_text(
-            json.dumps(b, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+            json.dumps(b, indent=1, ensure_ascii=False) + "\n", encoding="utf-8"
+        )
     (OUT / "batteries" / "index.json").write_text(
-        json.dumps({"languages": sorted(bat)}, indent=1) + "\n", encoding="utf-8")
+        json.dumps({"languages": sorted(bat)}, indent=1) + "\n", encoding="utf-8"
+    )
 
     (OUT / "rubrics").mkdir(parents=True, exist_ok=True)
 
     for rid, r in rub.items():
         (OUT / "rubrics" / f"{rid}.json").write_text(
-            json.dumps(r, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+            json.dumps(r, indent=1, ensure_ascii=False) + "\n", encoding="utf-8"
+        )
 
     index, orphan_verdicts, no_capture = [], 0, 0
     for d in sorted(INT.iterdir()) if INT.exists() else []:
@@ -183,71 +194,126 @@ def main() -> int:
             q = by_q.setdefault(qid, {"question_id": qid, "criteria": []})
             src = cap.get(v.get("response_id"))
             if src and "question_text" not in q:
-                q.update({
-                    "question_text": src.get("question_text"),
-                    "agent_response": src.get("agent_response"),
-                    "stage": src.get("stage"),
-                    "category": src.get("category"),
-                    "as_display_name": src.get("as_display_name"),
-                    "duration_s": src.get("duration_s"),
-                })
+                q.update(
+                    {
+                        "question_text": src.get("question_text"),
+                        "agent_response": src.get("agent_response"),
+                        "stage": src.get("stage"),
+                        "category": src.get("category"),
+                        "as_display_name": src.get("as_display_name"),
+                        "duration_s": src.get("duration_s"),
+                    }
+                )
             elif not src:
                 orphan_verdicts += 1
-            q["criteria"].append({
-                "criterion_id": v.get("criterion_id"),
-                "verdict": v.get("verdict"),
-                "severity": v.get("severity"),
-                "cited_span": v.get("cited_span") or "",
-            })
+            q["criteria"].append(
+                {
+                    "criterion_id": v.get("criterion_id"),
+                    "verdict": v.get("verdict"),
+                    "severity": v.get("severity"),
+                    "cited_span": v.get("cited_span") or "",
+                }
+            )
 
         counts = summary.get("verdict_counts") or {}
         if not counts:
-            counts = {k: sum(1 for v in verdicts if v.get("verdict") == k)
-                      for k in ("pass", "fail", "undetermined")}
+            counts = {k: sum(1 for v in verdicts if v.get("verdict") == k) for k in ("pass", "fail", "undetermined")}
+
+        # WHAT WAS JUDGED, SEPARATELY FROM WHAT COULD NOT BE (CIRISAgent#1161).
+        #
+        # Recomputed from verdicts.jsonl rather than read from the summary, so
+        # the 249 runs harvested BEFORE the summary carried these fields render
+        # correctly too — the evidence always had the per-verdict `error`, only
+        # the summary lacked the split. Re-rendering fixes history in place;
+        # nothing in qa_reports/ is rewritten.
+        judged = {"pass": 0, "fail": 0, "undetermined": 0}
+        not_judged: dict[str, int] = {}
+        for v in verdicts:
+            cause = judge_error_class(v.get("error"))
+            if cause is None:
+                k = v.get("verdict")
+                if k in judged:
+                    judged[k] += 1
+            else:
+                not_judged[cause] = not_judged.get(cause, 0) + 1
+        n_judged = sum(judged.values())
+        n_not_judged = sum(not_judged.values())
 
         slug = d.name
         (OUT / "runs" / f"{slug}.json").write_text(
-            json.dumps({
-                "bundle": slug, "language": lang, "domain": domain,
-                "captured_at": cap_ts, "interpreted_at": int_ts,
+            json.dumps(
+                {
+                    "bundle": slug,
+                    "language": lang,
+                    "domain": domain,
+                    "captured_at": cap_ts,
+                    "interpreted_at": int_ts,
+                    "battery_id": summary.get("battery_id"),
+                    "battery_version": summary.get("battery_version"),
+                    "rubric_id": summary.get("rubric_id"),
+                    "rubric_version": summary.get("rubric_version"),
+                    "judge_model": summary.get("judge_model"),
+                    "answers_present": bool(cap),
+                    "questions": sorted(by_q.values(), key=lambda x: x["question_id"]),
+                },
+                indent=1,
+                ensure_ascii=False,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        index.append(
+            {
+                "bundle": slug,
+                "language": lang,
+                "domain": domain,
+                "captured_at": cap_ts,
+                "interpreted_at": int_ts,
                 "battery_id": summary.get("battery_id"),
                 "battery_version": summary.get("battery_version"),
                 "rubric_id": summary.get("rubric_id"),
                 "rubric_version": summary.get("rubric_version"),
                 "judge_model": summary.get("judge_model"),
+                "n": summary.get("n_verdicts") or len(verdicts),
+                "n_judged": n_judged,
+                "n_not_judged": n_not_judged,
+                "judged_pass": judged["pass"],
+                "judged_fail": judged["fail"],
+                "judged_undetermined": judged["undetermined"],
+                "not_judged_by_cause": not_judged,
+                "complete": n_not_judged == 0,
+                "pass_rate_judged": (judged["pass"] / n_judged) if n_judged else None,
+                "pass": counts.get("pass", 0),
+                "fail": counts.get("fail", 0),
+                "undetermined": counts.get("undetermined", 0),
                 "answers_present": bool(cap),
-                "questions": sorted(by_q.values(), key=lambda x: x["question_id"]),
-            }, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
-
-        index.append({
-            "bundle": slug, "language": lang, "domain": domain,
-            "captured_at": cap_ts, "interpreted_at": int_ts,
-            "battery_id": summary.get("battery_id"),
-            "battery_version": summary.get("battery_version"),
-            "rubric_id": summary.get("rubric_id"),
-            "rubric_version": summary.get("rubric_version"),
-            "judge_model": summary.get("judge_model"),
-            "n": summary.get("n_verdicts") or len(verdicts),
-            "pass": counts.get("pass", 0),
-            "fail": counts.get("fail", 0),
-            "undetermined": counts.get("undetermined", 0),
-            "answers_present": bool(cap),
-        })
+            }
+        )
 
     index.sort(key=lambda r: (r["captured_at"], r["language"]), reverse=True)
     (OUT / "index.json").write_text(
-        json.dumps({
-            "_meta": {
-                "schema": "ciris.ai/results_index/v1",
-                "source": "qa_reports/safety_battery + qa_reports/safety_interpret",
-                "note": ("Built by tools/build_results_index.py from committed evidence. "
-                         "Artifacts expire at 90 days; this is generated from the copy that does not."),
-                "runs": len(index),
-                "runs_without_answers": no_capture,
-                "orphan_verdicts": orphan_verdicts,
+        json.dumps(
+            {
+                "_meta": {
+                    "schema": "ciris.ai/results_index/v1",
+                    "source": "qa_reports/safety_battery + qa_reports/safety_interpret",
+                    "note": (
+                        "Built by tools/build_results_index.py from committed evidence. "
+                        "Artifacts expire at 90 days; this is generated from the copy that does not."
+                    ),
+                    "runs": len(index),
+                    "runs_without_answers": no_capture,
+                    "orphan_verdicts": orphan_verdicts,
+                },
+                "runs": index,
             },
-            "runs": index,
-        }, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+            indent=1,
+            ensure_ascii=False,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
 
     for name in ("safety_sweeps.json", "qa_status.json"):
         src = ROOT / "qa_reports" / name

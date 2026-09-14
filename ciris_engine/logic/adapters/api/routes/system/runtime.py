@@ -4,9 +4,10 @@ Runtime control endpoints.
 Provides control over agent runtime behavior and cognitive state transitions.
 """
 
+import asyncio
 import json
 import logging
-from typing import Annotated, Optional
+from typing import Annotated, Dict, Optional, Tuple
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
 
@@ -46,6 +47,52 @@ router = APIRouter()
 
 # Valid cognitive states for transition
 VALID_COGNITIVE_STATES = {"WORK", "DREAM", "PLAY", "SOLITUDE"}
+
+
+# THE ACCESSOR'S SPELLING IS NOT OURS TO PIN. `delivery_receipt` is a Rust
+# accessor in a wheel we depend on but do not build, its payload has no schema
+# we can import, and the one canonical we can reach is two releases behind and
+# 404s the route — so the field names cannot be confirmed against a live
+# response. Reading a single guessed key would project `null` for every
+# canonical while the signed answer sat right there in the payload, and the
+# gate would report "unknown" forever with nothing to show for it.
+#
+# So: accept the spellings upstream is known to use, take the first one
+# actually present, and keep `raw_json` verbatim beside the projection. If all
+# of these are wrong, the raw payload in the response and in the gate log is
+# the evidence that says so — a projection that can be checked, rather than one
+# that fails silently.
+_HOLD_KEYS = ("newest_authored_held", "holds_trace", "holds_newest")
+_URL_SOURCE_KEYS = ("url_source", "url_from", "source")
+
+
+def _first_bool(*sources_and_keys: object) -> Optional[bool]:
+    """First real bool for any of `keys`, scanning `sources` in order.
+
+    Called as _first_bool(row, canonical, keys): the per-agent row wins over the
+    canonical-level aggregate, because the row is about us and the aggregate is
+    about everyone.
+    """
+    *sources, keys = sources_and_keys
+    assert isinstance(keys, tuple)
+    for src in sources:
+        if not isinstance(src, dict):
+            continue
+        for k in keys:
+            v = src.get(k)
+            if isinstance(v, bool):
+                return v
+    return None
+
+
+def _first_str(source: object, keys: Tuple[str, ...]) -> Optional[str]:
+    if not isinstance(source, dict):
+        return None
+    for k in keys:
+        v = source.get(k)
+        if isinstance(v, str) and v:
+            return v
+    return None
 
 
 @router.get(
@@ -89,7 +136,12 @@ async def delivery_receipt(
     except Exception:  # noqa: BLE001 — discovery is the documented fallback
         agent_hash = None
 
-    raw = read_delivery_receipt(agent_id_hash=agent_hash)
+    # OFF THE EVENT LOOP. The accessor makes a synchronous HTTP round-trip per
+    # canonical, and a slow or unreachable one would otherwise park the whole
+    # FastAPI loop thread for the cumulative timeout — a diagnostic that stalls
+    # the API it is diagnosing. asyncio.to_thread keeps the async boundary the
+    # adapter promises.
+    raw = await asyncio.to_thread(read_delivery_receipt, agent_id_hash=agent_hash)
     if raw is None:
         raise HTTPException(
             status_code=503,
@@ -106,25 +158,27 @@ async def delivery_receipt(
     for c in payload.get("canonicals") or []:
         if not isinstance(c, dict):
             continue
-        # shipped_any lives under the per-agent breakdown; take the entry for the
-        # agent we asked about, else the only one, else leave it unknown.
-        shipped: Optional[bool] = None
-        agents = c.get("agents") or []
-        if isinstance(agents, list):
-            for a in agents:
-                if not isinstance(a, dict):
-                    continue
-                if agent_hash is None or a.get("agent_id_hash") in (None, agent_hash):
-                    if isinstance(a.get("shipped_any"), bool):
-                        shipped = a["shipped_any"]
-                        break
+
+        # WHICH AGENT'S ROW? A canonical serves many agents. When we know our
+        # own hash, take the row that names it. When we do NOT, only a SOLE row
+        # can be about us — picking the first of several would make the
+        # behind-vs-never-landed diagnosis depend on upstream list ordering,
+        # which is a coin flip wearing a boolean's clothes. Several rows and no
+        # hash is genuinely unknown, and says so.
+        agent_row: Optional[Dict[str, object]] = None
+        agents = [a for a in (c.get("agents") or []) if isinstance(a, dict)]
+        if agent_hash is not None:
+            agent_row = next((a for a in agents if a.get("agent_id_hash") == agent_hash), None)
+        elif len(agents) == 1:
+            agent_row = agents[0]
+
         canonicals.append(
             CanonicalReceipt(
                 key_id=c.get("key_id"),
-                holds_newest=c.get("holds_newest") if isinstance(c.get("holds_newest"), bool) else None,
-                shipped_any=shipped,
+                holds_newest=_first_bool(agent_row, c, _HOLD_KEYS),
+                shipped_any=_first_bool(agent_row, c, ("shipped_any",)),
                 url=c.get("url"),
-                url_source=c.get("url_source"),
+                url_source=_first_str(c, _URL_SOURCE_KEYS),
                 error=c.get("error"),
             )
         )
@@ -137,6 +191,7 @@ async def delivery_receipt(
             canonicals_unreachable=verdict.get("canonicals_unreachable"),
             canonicals_unverified=verdict.get("canonicals_unverified"),
             canonicals_partial=verdict.get("canonicals_partial"),
+            canonicals_answered=verdict.get("canonicals_answered"),
             discovery_incomplete=verdict.get("discovery_incomplete"),
             identity_unavailable=verdict.get("identity_unavailable"),
             canonicals=canonicals,

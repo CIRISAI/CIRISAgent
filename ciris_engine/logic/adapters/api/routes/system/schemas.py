@@ -457,7 +457,14 @@ class CanonicalReceipt(BaseModel):
     """
 
     key_id: Optional[str] = Field(None, description="The canonical's node key id")
-    holds_newest: Optional[bool] = Field(None, description="Does it hold the newest trace we authored?")
+    holds_newest: Optional[bool] = Field(
+        None,
+        description=(
+            "Does it hold the newest trace we authored? Projected from whichever spelling the "
+            "accessor used (newest_authored_held / holds_trace); null means the payload carried "
+            "none of them, NOT that the canonical said no — check raw_json."
+        ),
+    )
     shipped_any: Optional[bool] = Field(
         None,
         description=(
@@ -496,6 +503,13 @@ class TraceDeliveryReceipt(BaseModel):
     canonicals_unreachable: Optional[int] = Field(None, description="Could not be asked")
     canonicals_unverified: Optional[int] = Field(None, description="Answered, but the receipt did not verify")
     canonicals_partial: Optional[int] = Field(None, description="Answered for some of what was asked")
+    canonicals_answered: Optional[int] = Field(
+        None,
+        description=(
+            "How many canonicals answered at all. Zero with a null verdict means nobody was "
+            "reached, which reads very differently from everyone answering and agreeing."
+        ),
+    )
     discovery_incomplete: Optional[bool] = Field(None, description="The canonical set itself is not fully known")
     identity_unavailable: Optional[bool] = Field(None, description="This node could not resolve its own identity")
     canonicals: List[CanonicalReceipt] = Field(default_factory=list, description="Per-canonical detail")

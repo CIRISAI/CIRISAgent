@@ -169,6 +169,11 @@ def main() -> int:
     ap.add_argument("--receipt-username", default=None, help="Admin user for --receipt-url")
     ap.add_argument("--receipt-password", default=None, help="Password for --receipt-username")
     ap.add_argument(
+        "--receipt-raw-out",
+        default=None,
+        help="Write the receipt's verbatim payload here (the projection is derived from it)",
+    )
+    ap.add_argument(
         "--peer",
         default=None,
         help="Only consider probe lines for this canonical key (default: any).",
@@ -271,6 +276,27 @@ def _ask_receipt(args) -> Optional[int]:
     verdict = data.get("held_by_every_answering_canonical")
     print("RECEIPT (the canonical's own signed answer):")
     print(f"  newest_authored_held_by_every_answering_canonical = {verdict!r}")
+
+    # THE RAW PAYLOAD, VERBATIM. Our projection of this receipt reads field names
+    # out of a Rust accessor whose schema we cannot import and could not confirm
+    # against a live canonical (the one we can reach is behind and 404s the
+    # route). If the projection above is reading the wrong key, every line of it
+    # says `None` and looks exactly like a canonical that answered "no" — so the
+    # payload it was derived FROM is printed beside it, and written next to the
+    # other artifacts. A projection you cannot check is not evidence.
+    raw = data.get("raw_json")
+    if isinstance(raw, str) and raw:
+        print("  raw receipt payload (authoritative; the projection above is derived from this):")
+        for line in raw.splitlines() or [raw]:
+            print(f"    {line}")
+        if args.receipt_raw_out:
+            try:
+                out = Path(args.receipt_raw_out)
+                out.parent.mkdir(parents=True, exist_ok=True)
+                out.write_text(raw)
+                print(f"  raw receipt written to {out}")
+            except Exception as exc:  # noqa: BLE001 — never fail the gate on a dump
+                print(f"  (could not write raw receipt to {args.receipt_raw_out}: {exc})")
     for c in data.get("canonicals") or []:
         bits = [f"key={c.get('key_id')}", f"holds_newest={c.get('holds_newest')!r}"]
         if c.get("shipped_any") is not None:
@@ -289,6 +315,7 @@ def _ask_receipt(args) -> Optional[int]:
         print("      shipped_any separates 'the plane works and is behind' from 'nothing ever landed'.")
         return 1
     for k in (
+        "canonicals_answered",
         "canonicals_unreachable",
         "canonicals_unverified",
         "canonicals_partial",

@@ -156,6 +156,24 @@ def main() -> int:
         ),
     )
     ap.add_argument(
+        "--receipt-url",
+        default=None,
+        help=(
+            "Agent API base (e.g. http://localhost:8080). When given, the RECEIPT is asked "
+            "first and its answer is authoritative: it is the canonical's own signed "
+            "statement of what it holds, where every rung below is this node's account of "
+            "what it sent. Requires ciris-server >= 0.5.208; on an older wheel the endpoint "
+            "503s and this falls back to the ladder."
+        ),
+    )
+    ap.add_argument("--receipt-username", default=None, help="Admin user for --receipt-url")
+    ap.add_argument("--receipt-password", default=None, help="Password for --receipt-username")
+    ap.add_argument(
+        "--receipt-raw-out",
+        default=None,
+        help="Write the receipt's verbatim payload here (the projection is derived from it)",
+    )
+    ap.add_argument(
         "--peer",
         default=None,
         help="Only consider probe lines for this canonical key (default: any).",
@@ -176,7 +194,17 @@ def main() -> int:
 
     deadline = time.monotonic() + max(0, args.wait_secs)
     while True:
-        rc = _evaluate(args)
+        rc = None
+        if args.receipt_url:
+            rc = _ask_receipt(args)
+            if rc is not None and rc != 1:
+                # 0 and RECEIPT_UNKNOWN are both settled: the first is the answer
+                # we wanted, the second cannot become knowable by re-reading a log.
+                # Only 1 (a canonical answered and does not hold it) is worth
+                # waiting on, because delivery is asynchronous.
+                return rc
+        if rc is None:
+            rc = _evaluate(args)
         # 3 IS TERMINAL, LIKE 0. Waiting exists because delivery is
         # ASYNCHRONOUS — a rung that has not appeared yet may appear. But 3 says
         # the substrate exposes no replication counter AT ALL (CIRISServer#518),
@@ -190,6 +218,117 @@ def main() -> int:
         if rc in (0, 3) or time.monotonic() >= deadline:
             return rc
         time.sleep(10)
+
+
+#: Exit 4 — the receipt could not be established. NOT a delivery failure.
+#: `None` from the verdict means unreachable / unverified / partial / discovery
+#: incomplete, and upstream is explicit that it is "unknown, not zero". A gate
+#: that scored it as failure would red on someone else's outage; one that scored
+#: it as success would be the vacuous green this file exists to prevent. It gets
+#: its own code so the workflow can say "not established" and mean it.
+RECEIPT_UNKNOWN = 4
+
+
+def _ask_receipt(args) -> Optional[int]:
+    """The canonical's answer, or None to fall back to the ladder.
+
+    Returns 0 (delivered), 1 (a canonical that answered does not hold it —
+    retryable, because delivery is asynchronous) or RECEIPT_UNKNOWN.
+    """
+    import json as _json
+    import urllib.error
+    import urllib.request
+
+    base = args.receipt_url.rstrip("/")
+    token = None
+    if args.receipt_username and args.receipt_password:
+        try:
+            body = _json.dumps({"username": args.receipt_username, "password": args.receipt_password}).encode()
+            req = urllib.request.Request(
+                f"{base}/v1/auth/login", data=body, headers={"Content-Type": "application/json"}
+            )
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                token = _json.loads(resp.read()).get("access_token")
+        except Exception as exc:  # noqa: BLE001
+            # Same phrase as every other fall-back below, on purpose: the
+            # operator is being told the same thing — the receipt could not be
+            # asked, so the ladder answers instead.
+            print(f"  receipt: could not authenticate against {base} ({exc}) — falling back to the ladder")
+            return None
+
+    req = urllib.request.Request(f"{base}/v1/system/runtime/delivery-receipt")
+    if token:
+        req.add_header("Authorization", f"Bearer {token}")
+    try:
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            payload = _json.loads(resp.read())
+    except urllib.error.HTTPError as exc:
+        if exc.code == 503:
+            print("  receipt: unavailable on this wheel (ciris-server < 0.5.208) — falling back to the ladder")
+            return None
+        print(f"  receipt: HTTP {exc.code} from {base} — falling back to the ladder")
+        return None
+    except Exception as exc:  # noqa: BLE001
+        print(f"  receipt: {base} unreachable ({exc}) — falling back to the ladder")
+        return None
+
+    data = payload.get("data") or {}
+    verdict = data.get("held_by_every_answering_canonical")
+    print("RECEIPT (the canonical's own signed answer):")
+    print(f"  newest_authored_held_by_every_answering_canonical = {verdict!r}")
+
+    # THE RAW PAYLOAD, VERBATIM. Our projection of this receipt reads field names
+    # out of a Rust accessor whose schema we cannot import and could not confirm
+    # against a live canonical (the one we can reach is behind and 404s the
+    # route). If the projection above is reading the wrong key, every line of it
+    # says `None` and looks exactly like a canonical that answered "no" — so the
+    # payload it was derived FROM is printed beside it, and written next to the
+    # other artifacts. A projection you cannot check is not evidence.
+    raw = data.get("raw_json")
+    if isinstance(raw, str) and raw:
+        print("  raw receipt payload (authoritative; the projection above is derived from this):")
+        for line in raw.splitlines() or [raw]:
+            print(f"    {line}")
+        if args.receipt_raw_out:
+            try:
+                out = Path(args.receipt_raw_out)
+                out.parent.mkdir(parents=True, exist_ok=True)
+                out.write_text(raw)
+                print(f"  raw receipt written to {out}")
+            except Exception as exc:  # noqa: BLE001 — never fail the gate on a dump
+                print(f"  (could not write raw receipt to {args.receipt_raw_out}: {exc})")
+    for c in data.get("canonicals") or []:
+        bits = [f"key={c.get('key_id')}", f"holds_newest={c.get('holds_newest')!r}"]
+        if c.get("shipped_any") is not None:
+            bits.append("shipped_any=%r (%s)" % (c["shipped_any"], "behind" if c["shipped_any"] else "never landed"))
+        if c.get("url"):
+            bits.append(f"url={c['url']} ({c.get('url_source')})")
+        if c.get("error"):
+            bits.append(f"error={c['error']}")
+        print("   - " + "  ".join(bits))
+
+    if verdict is True:
+        print("PASS: every canonical that answered holds the newest trace this node authored.")
+        return 0
+    if verdict is False:
+        print("FAIL: a canonical that answered does NOT hold the newest trace this node authored.")
+        print("      shipped_any separates 'the plane works and is behind' from 'nothing ever landed'.")
+        return 1
+    for k in (
+        "canonicals_answered",
+        "canonicals_unreachable",
+        "canonicals_unverified",
+        "canonicals_partial",
+        "discovery_incomplete",
+        "identity_unavailable",
+    ):
+        if data.get(k):
+            print(f"  {k} = {data[k]!r}")
+    if data.get("error"):
+        print(f"  accessor error: {data['error']}")
+    print("UNKNOWN: the receipt could not be established. This is NOT a delivery failure —")
+    print("         upstream is explicit that None means unknown, not zero.")
+    return RECEIPT_UNKNOWN
 
 
 def _evaluate(args) -> int:

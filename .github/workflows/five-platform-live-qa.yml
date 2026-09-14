@@ -24,13 +24,15 @@
 #
 # WHAT MAKES IT A GATE RATHER THAN A REPORT:
 #   * the response assertion fails on silence (web_ui `wait_for_response`)
-#   * the trace assertion reports replication_envelopes_served_total > 0
-#     — TEMPORARILY NON-BLOCKING while upstream rebuilds KEX/replication;
-#     it warns instead of failing, and the restore is marked at the call site
-#     (tools/dev/assert_traces_reached_canonical.py). Rooting and KEX are
-#     preconditions, not delivery — and NOT envelopes_sent_total, which counts
-#     the application/durable plane and is structurally blind to trace
-#     replication (CIRISEdge#434).
+#   * the trace assertion asks the CANONICAL whether it holds what we authored
+#     (ciris-server >= 0.5.208 `delivery_receipt`, CIRISServer#487/#592) and
+#     falls back to the replication-counter ladder when the receipt cannot be
+#     established or the wheel is older. Rooting, KEX and envelope counts are
+#     the sender's preconditions and can all be green with nothing stored at the
+#     far end — which is the gap the receipt closes. Still NON-BLOCKING while
+#     upstream rebuilds KEX/replication; it reports instead of failing, and the
+#     restore is marked at the call site.
+#     A null verdict is UNKNOWN, NOT ZERO, and is reported as such — never red.
 #   * a platform that cannot run must SKIP loudly; it must never quietly pass
 
 name: Five-Platform Live QA
@@ -949,21 +951,56 @@ jobs:
             #    NOTE this is downstream of step 3: with no message sent, the node
             #    admits no traces at all (trace_plane standing=never_admitted,
             #    rows=0) and this fails for a reason that is not about delivery.
-            #    THREE OUTCOMES, THREE CODES. 0 delivered, 1 did not, 3 could not
+            #    FOUR OUTCOMES, FOUR CODES. 0 delivered, 1 did not, 3 could not
             #    be observed (CIRISServer#518 — the wheel exposes no replication
-            #    counter). Collapsing 3 into either of the others is a lie in one
-            #    direction or the other: as 0 the gallery claimed "traces reached
+            #    counter), 4 the canonical's receipt could not be established.
+            #    Collapsing any of these into another is a lie in one direction
+            #    or the other: as 0 the gallery claimed "traces reached
             #    canonical" for a run that proved nothing, which is how this was
             #    wrong before.
+            # ASK THE RECEIVER, NOT THE SENDER (ciris-server >= 0.5.208,
+            # CIRISServer#487/#592). Every rung below this is our own account of
+            # what we sent — rooted, KEX present, envelopes counted — and all of
+            # them can be green while nothing was stored at the far end. The
+            # receipt is the canonical's own signed statement of what it holds,
+            # verified against our directory with its key's standing checked at
+            # the instant of the ask, so a replayed or wrong-signer answer
+            # contributes nothing. The ladder stays as the diagnosis for when the
+            # receipt cannot be established, and as the answer on an older wheel.
+            #
+            # THE BACKEND MUST STILL BE UP: the accessor reads this node's own
+            # engine handle, so it is asked over the agent's API while the
+            # platform is still standing, not from a log after teardown.
+            receipt_base="http://localhost:8080"
+            if [ "$target" = "android" ]; then
+              # The backend lives inside the emulator; the host reaches it only
+              # through the adb forward the bring-up step installed, and that
+              # forward does not survive every teardown path on the way here
+              # (_android_teardown removes both ports). Re-assert it — adb forward
+              # is idempotent, so this is a no-op when it is already standing, and
+              # the difference between "no route" and "no receipt" when it is not.
+              ADB=$(command -v adb 2>/dev/null || echo "${ANDROID_HOME:-/usr/local/lib/android/sdk}/platform-tools/adb")
+              [ -x "$ADB" ] && "$ADB" forward tcp:8080 tcp:8080 >/dev/null 2>&1 || true
+            fi
             set +e
             python3 tools/dev/assert_traces_reached_canonical.py \
-              "$CIRIS_HOME/logs" artifacts/cmdlogs --require replication --wait-secs 240
+              "$CIRIS_HOME/logs" artifacts/cmdlogs --require replication --wait-secs 240 \
+              --receipt-url "$receipt_base" \
+              --receipt-username qaadmin --receipt-password "qa_test_password_12345" \
+              --receipt-raw-out "artifacts/receipt-$plat.json"
             trace_status=$?
             set -e
             case "$trace_status" in
               0) trace_rc=0; traces_json=true ;;
               3) trace_rc=0; traces_json=null
                  echo "::notice::$plat trace delivery NOT OBSERVABLE on this substrate (CIRISServer#518)" ;;
+              4) trace_rc=0; traces_json=null
+                 # UNKNOWN IS NOT FAILURE. Upstream is explicit that a null verdict
+                 # means unreachable / unverified / partial — someone else's outage
+                 # or an incomplete directory, not a statement that we did not
+                 # deliver. Scoring it red would make this gate report other
+                 # people's weather.
+                 echo "::notice::$plat canonical RECEIPT NOT ESTABLISHED (unknown, not zero) — see the per-canonical reasons above" ;;
               *) trace_rc=1; traces_json=false
                  echo "::warning::$plat traces did not reach canonical (NOT enforced — upstream KEX/replication revamp in flight)" ;;
             esac
@@ -1144,11 +1181,47 @@ jobs:
           # app-side output at all — which is the half you need when the question
           # is "the agent replied, why did the screen not change".
           if [ "${MATRIX_PLATFORMS#*ios}" != "$MATRIX_PLATFORMS" ] && command -v xcrun >/dev/null 2>&1; then
-            timeout 180 xcrun simctl spawn booted log show --last 15m --style syslog \
-              --predicate 'subsystem CONTAINS "ai.ciris" OR process CONTAINS "iosApp"' \
-              > artifacts/logs/ios-oslog.txt 2>/dev/null \
-              || echo "ios os_log unavailable (no booted simulator or log show timed out)" \
+            # A SIGABRT WITH NO MESSAGE IS NOT A DIAGNOSIS. Kotlin/Native writes
+            # the uncaught-exception text to stderr, which for a simctl-launched
+            # app lands in the simulator's os_log and NOWHERE ELSE — not in the
+            # .ips (its `asi` is null for these), not in kmp_errors.log, not in
+            # the Python logs. Run 34889646303 crashed the iOS app mid-setup and
+            # this capture returned "unavailable", so the only artifact of the
+            # failure was a backtrace through the Compose dispatcher with no
+            # statement of what threw.
+            #
+            # Two independent problems, fixed together:
+            #
+            # 1. THE FALLBACK CONFLATED ITS CAUSES. "no booted simulator or log
+            #    show timed out" is a disjunction, so the operator cannot act on
+            #    it: one means the app took the simulator down with it, the other
+            #    means our query was too slow. Say which.
+            #
+            # 2. `--last 15m` OVER EVERYTHING IS TOO SLOW. Predicate filtering in
+            #    `log show` happens AFTER the store is read, so a broad window
+            #    pays full cost before matching anything and routinely burns the
+            #    180s. The crash line is the whole point, so take it FIRST in a
+            #    narrow, cheap query that can afford to finish, then attempt the
+            #    wide one best-effort.
+            booted=$(xcrun simctl list devices booted 2>/dev/null | grep -c "Booted" || true)
+            if [ "${booted:-0}" -eq 0 ]; then
+              echo "ios os_log unavailable: NO BOOTED SIMULATOR at collection time." \
+                   "The app may have taken it down; check cmdlogs/ios-crashes/*.ips." \
                  > artifacts/logs/ios-oslog.txt
+            else
+              # The crash-shaped lines, first and cheap.
+              timeout 90 xcrun simctl spawn booted log show --last 15m --style syslog \
+                --predicate 'messageType == error OR messageType == fault' \
+                > artifacts/logs/ios-oslog-faults.txt 2>/dev/null \
+                || echo "ios os_log faults: timed out after 90s" > artifacts/logs/ios-oslog-faults.txt
+              # Then the full app-scoped stream, best effort.
+              timeout 240 xcrun simctl spawn booted log show --last 15m --style syslog \
+                --predicate 'subsystem CONTAINS "ai.ciris" OR process CONTAINS "iosApp"' \
+                > artifacts/logs/ios-oslog.txt 2>/dev/null \
+                || echo "ios os_log unavailable: simulator WAS booted, log show exceeded 240s." \
+                        "See logs/ios-oslog-faults.txt for the error/fault slice." \
+                   > artifacts/logs/ios-oslog.txt
+            fi
           fi
 
           # A MANIFEST, so a MISSING log is as visible as a present one. Every
@@ -1176,7 +1249,9 @@ jobs:
                 android) [ -f "artifacts/logs/android-logcat.txt" ] \
                   || echo "  logs/android-logcat.txt (no device log — an app death cannot be diagnosed)" ;;
                 ios)     [ -f "artifacts/logs/ios-oslog.txt" ] \
-                  || echo "  logs/ios-oslog.txt (no simulator log — an app death cannot be diagnosed)" ;;
+                  || echo "  logs/ios-oslog.txt (no simulator log — an app death cannot be diagnosed)"
+                         [ -f "artifacts/logs/ios-oslog-faults.txt" ] \
+                  || echo "  logs/ios-oslog-faults.txt (no error/fault slice — a SIGABRT would have no message)" ;;
               esac
             done
             ls artifacts/ciris_desktop*.log >/dev/null 2>&1 || echo "  ciris_desktop*.log (no CLIENT log — a UI failure cannot be diagnosed)"

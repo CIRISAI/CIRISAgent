@@ -1181,11 +1181,47 @@ jobs:
           # app-side output at all — which is the half you need when the question
           # is "the agent replied, why did the screen not change".
           if [ "${MATRIX_PLATFORMS#*ios}" != "$MATRIX_PLATFORMS" ] && command -v xcrun >/dev/null 2>&1; then
-            timeout 180 xcrun simctl spawn booted log show --last 15m --style syslog \
-              --predicate 'subsystem CONTAINS "ai.ciris" OR process CONTAINS "iosApp"' \
-              > artifacts/logs/ios-oslog.txt 2>/dev/null \
-              || echo "ios os_log unavailable (no booted simulator or log show timed out)" \
+            # A SIGABRT WITH NO MESSAGE IS NOT A DIAGNOSIS. Kotlin/Native writes
+            # the uncaught-exception text to stderr, which for a simctl-launched
+            # app lands in the simulator's os_log and NOWHERE ELSE — not in the
+            # .ips (its `asi` is null for these), not in kmp_errors.log, not in
+            # the Python logs. Run 34889646303 crashed the iOS app mid-setup and
+            # this capture returned "unavailable", so the only artifact of the
+            # failure was a backtrace through the Compose dispatcher with no
+            # statement of what threw.
+            #
+            # Two independent problems, fixed together:
+            #
+            # 1. THE FALLBACK CONFLATED ITS CAUSES. "no booted simulator or log
+            #    show timed out" is a disjunction, so the operator cannot act on
+            #    it: one means the app took the simulator down with it, the other
+            #    means our query was too slow. Say which.
+            #
+            # 2. `--last 15m` OVER EVERYTHING IS TOO SLOW. Predicate filtering in
+            #    `log show` happens AFTER the store is read, so a broad window
+            #    pays full cost before matching anything and routinely burns the
+            #    180s. The crash line is the whole point, so take it FIRST in a
+            #    narrow, cheap query that can afford to finish, then attempt the
+            #    wide one best-effort.
+            booted=$(xcrun simctl list devices booted 2>/dev/null | grep -c "Booted" || true)
+            if [ "${booted:-0}" -eq 0 ]; then
+              echo "ios os_log unavailable: NO BOOTED SIMULATOR at collection time." \
+                   "The app may have taken it down; check cmdlogs/ios-crashes/*.ips." \
                  > artifacts/logs/ios-oslog.txt
+            else
+              # The crash-shaped lines, first and cheap.
+              timeout 90 xcrun simctl spawn booted log show --last 15m --style syslog \
+                --predicate 'messageType == error OR messageType == fault' \
+                > artifacts/logs/ios-oslog-faults.txt 2>/dev/null \
+                || echo "ios os_log faults: timed out after 90s" > artifacts/logs/ios-oslog-faults.txt
+              # Then the full app-scoped stream, best effort.
+              timeout 240 xcrun simctl spawn booted log show --last 15m --style syslog \
+                --predicate 'subsystem CONTAINS "ai.ciris" OR process CONTAINS "iosApp"' \
+                > artifacts/logs/ios-oslog.txt 2>/dev/null \
+                || echo "ios os_log unavailable: simulator WAS booted, log show exceeded 240s." \
+                        "See logs/ios-oslog-faults.txt for the error/fault slice." \
+                   > artifacts/logs/ios-oslog.txt
+            fi
           fi
 
           # A MANIFEST, so a MISSING log is as visible as a present one. Every
@@ -1213,7 +1249,9 @@ jobs:
                 android) [ -f "artifacts/logs/android-logcat.txt" ] \
                   || echo "  logs/android-logcat.txt (no device log — an app death cannot be diagnosed)" ;;
                 ios)     [ -f "artifacts/logs/ios-oslog.txt" ] \
-                  || echo "  logs/ios-oslog.txt (no simulator log — an app death cannot be diagnosed)" ;;
+                  || echo "  logs/ios-oslog.txt (no simulator log — an app death cannot be diagnosed)"
+                         [ -f "artifacts/logs/ios-oslog-faults.txt" ] \
+                  || echo "  logs/ios-oslog-faults.txt (no error/fault slice — a SIGABRT would have no message)" ;;
               esac
             done
             ls artifacts/ciris_desktop*.log >/dev/null 2>&1 || echo "  ciris_desktop*.log (no CLIENT log — a UI failure cannot be diagnosed)"

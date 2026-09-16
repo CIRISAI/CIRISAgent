@@ -862,13 +862,19 @@ class CIRISBillingProvider(CreditGateProtocol):
             _detail = _detail[len(error_category) :].strip().strip(":").strip()
         _human = _HUMAN.get(error_category, error_category)
         reason = f"{_human} ({error_category}{': ' + _detail if _detail else ''})"
+        # THE CATEGORY TRAVELS AS DATA, NOT INSIDE THE SENTENCE. `reason` is for
+        # people and may be reworded freely; anything that needs to know WHICH
+        # failure this was — the credits route deciding between 401, 503 and a
+        # genuine zero — reads `provider_metadata["error_category"]` and never
+        # the prose. Parsing the sentence would make the wording load-bearing.
+        metadata = {"error_category": error_category}
         if self._fail_open:
             logger.warning(
                 "[BILLING] FAIL_OPEN engaged - allowing request despite error: %s",
                 reason,
             )
-            return CreditCheckResult(has_credit=True, reason=f"FAIL_OPEN:{reason}")
-        return CreditCheckResult(has_credit=False, reason=reason)
+            return CreditCheckResult(has_credit=True, reason=f"FAIL_OPEN:{reason}", provider_metadata=metadata)
+        return CreditCheckResult(has_credit=False, reason=reason, provider_metadata=metadata)
 
 
 __all__ = ["CIRISBillingProvider"]

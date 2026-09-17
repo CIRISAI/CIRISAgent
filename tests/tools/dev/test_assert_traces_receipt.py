@@ -69,6 +69,7 @@ def _args(port: int, **over):
         receipt_url=f"http://127.0.0.1:{port}",
         receipt_username="qaadmin",
         receipt_password="pw",
+        receipt_raw_out=None,
     )
     base.update(over)
     return SimpleNamespace(**base)
@@ -80,7 +81,7 @@ def test_delivered_is_zero(capsys):
         "canonicals": [{"key_id": "c1", "holds_newest": True, "url": "http://h:4243", "url_source": "ip_hint"}],
     }
     with _Server(200, body) as s:
-        assert atrc._ask_receipt(_args(s.port)) == 0
+        assert atrc._ask_receipt(_args(s.port))[0] == 0
         assert "/v1/auth/login" in s.calls
         assert "/v1/system/runtime/delivery-receipt" in s.calls
     assert "PASS" in capsys.readouterr().out
@@ -95,7 +96,7 @@ def test_a_canonical_that_answered_and_does_not_hold_it_is_one(capsys):
         ],
     }
     with _Server(200, body) as s:
-        assert atrc._ask_receipt(_args(s.port)) == 1
+        assert atrc._ask_receipt(_args(s.port))[0] == 1
     out = capsys.readouterr().out
     assert "behind" in out and "never landed" in out, "the two faults must be told apart in the output"
 
@@ -109,7 +110,7 @@ def test_unknown_is_its_own_code_and_is_not_failure(capsys):
         "canonicals": [{"key_id": "c1", "error": "connect timeout"}],
     }
     with _Server(200, body) as s:
-        rc = atrc._ask_receipt(_args(s.port))
+        rc, _ = atrc._ask_receipt(_args(s.port))
     assert rc == atrc.RECEIPT_UNKNOWN
     assert rc not in (0, 1), "unknown is neither delivered nor failed"
     out = capsys.readouterr().out
@@ -121,13 +122,13 @@ def test_an_older_wheel_falls_back_to_the_ladder(capsys):
     """503 means the accessor does not exist here. Returning None hands the
     question back to the log ladder instead of inventing a verdict."""
     with _Server(503, None) as s:
-        assert atrc._ask_receipt(_args(s.port)) is None
+        assert atrc._ask_receipt(_args(s.port))[0] is None
     assert "falling back to the ladder" in capsys.readouterr().out
 
 
 def test_an_unreachable_agent_api_falls_back_rather_than_failing(capsys):
     args = _args(9)  # nothing listening
-    assert atrc._ask_receipt(args) is None
+    assert atrc._ask_receipt(args)[0] is None
     assert "falling back to the ladder" in capsys.readouterr().out
 
 
@@ -136,5 +137,38 @@ def test_no_credentials_still_asks(capsys):
     a misconfiguration shows as the endpoint's own 401, not as silence."""
     body = {"held_by_every_answering_canonical": True, "canonicals": []}
     with _Server(200, body) as s:
-        assert atrc._ask_receipt(_args(s.port, receipt_username=None, receipt_password=None)) == 0
+        assert atrc._ask_receipt(_args(s.port, receipt_username=None, receipt_password=None))[0] == 0
         assert not [c for c in s.calls if c == "/v1/auth/login"]
+
+
+def test_an_unchanged_receipt_is_not_reprinted(capsys):
+    """Same state on a re-read prints nothing; only read_at differs and that is not a change."""
+    body = {"held_by_every_answering_canonical": False,
+            "canonicals": [{"key_id": "k1", "holds_newest": False, "shipped_any": False}]}
+    with _Server(200, body) as s:
+        rc1, shown = atrc._ask_receipt(_args(s.port))
+        assert rc1 == 1 and shown
+        rc2, again = atrc._ask_receipt(_args(s.port), quiet_if_same_as=shown)
+        assert rc2 == 1 and again is None
+    out = capsys.readouterr().out
+    assert out.count("RECEIPT (the canonical's own signed answer)") == 1
+
+
+def test_a_final_false_prints_the_ladder_as_diagnosis(tmp_path, capsys, monkeypatch):
+    """The receipt says WHETHER; the ladder says WHY. A False with no ladder is a verdict with no cause."""
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    (logs / "agent.log").write_text("[DELIVERY-PROBE] canonical k1 ROOTED after ~10s\n")
+    body = {"held_by_every_answering_canonical": False,
+            "canonicals": [{"key_id": "k1", "holds_newest": False, "shipped_any": False}]}
+    with _Server(200, body) as s:
+        monkeypatch.setattr(
+            "sys.argv",
+            ["x", str(logs), "--wait-secs", "0", "--receipt-url", f"http://127.0.0.1:{s.port}",
+             "--receipt-username", "u", "--receipt-password", "p"],
+        )
+        rc = atrc.main()
+    assert rc == 1
+    out = capsys.readouterr().out
+    assert "DIAGNOSIS" in out
+    assert "ROOTED" in out and "KEX PRESENT" in out, "the ladder must follow the verdict"

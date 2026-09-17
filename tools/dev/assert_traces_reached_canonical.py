@@ -193,10 +193,17 @@ def main() -> int:
     args = ap.parse_args()
 
     deadline = time.monotonic() + max(0, args.wait_secs)
+    last_receipt_print = ""
     while True:
         rc = None
         if args.receipt_url:
-            rc = _ask_receipt(args)
+            # PRINT THE RECEIPT WHEN IT CHANGES, NOT EVERY TEN SECONDS. The first
+            # live negative reprinted an identical payload 24 times per platform
+            # while waiting out the deadline, and the one line that mattered — the
+            # authored count ticking 1 → 2 — was buried in the repetition.
+            rc, shown = _ask_receipt(args, quiet_if_same_as=last_receipt_print)
+            if shown:
+                last_receipt_print = shown
             if rc is not None and rc != 1:
                 # 0 and RECEIPT_UNKNOWN are both settled: the first is the answer
                 # we wanted, the second cannot become knowable by re-reading a log.
@@ -216,6 +223,16 @@ def main() -> int:
         #
         # 1 and 2 keep retrying: those CAN change while we wait.
         if rc in (0, 3) or time.monotonic() >= deadline:
+            if rc == 1 and args.receipt_url:
+                # THE RECEIPT IS THE VERDICT; THE LADDER IS THE DIAGNOSIS. A
+                # canonical saying "I hold nothing of yours" settles WHETHER
+                # traces landed and says nothing about WHY — that lives in this
+                # node's own probe: rooted? KEX resolved? Without this, the first
+                # real negative shipped a verdict and no cause, and the cause had
+                # to be dug out of the artifacts by hand.
+                print()
+                print("DIAGNOSIS — this node's own account of which gate stopped it:")
+                _evaluate(args)
             return rc
         time.sleep(10)
 
@@ -229,12 +246,38 @@ def main() -> int:
 RECEIPT_UNKNOWN = 4
 
 
-def _ask_receipt(args) -> Optional[int]:
+def _ask_receipt(args, quiet_if_same_as: str = "") -> "tuple[Optional[int], Optional[str]]":
     """The canonical's answer, or None to fall back to the ladder.
 
-    Returns 0 (delivered), 1 (a canonical that answered does not hold it —
-    retryable, because delivery is asynchronous) or RECEIPT_UNKNOWN.
+    Returns (rc, printed) where rc is 0 (delivered), 1 (a canonical that
+    answered does not hold it — retryable, because delivery is asynchronous),
+    RECEIPT_UNKNOWN, or None (fall back). `printed` is the receipt text that was
+    shown, or None when it was suppressed for being identical to
+    `quiet_if_same_as` — the raw payload's read_at is stripped for that
+    comparison so a re-read of the same state is recognised as the same state.
     """
+    import io as _io
+    import contextlib as _ctx
+
+    buf = _io.StringIO()
+    with _ctx.redirect_stdout(buf):
+        rc = _ask_receipt_impl(args)
+    text = buf.getvalue()
+    same = quiet_if_same_as and _strip_read_at(text) == _strip_read_at(quiet_if_same_as)
+    if same:
+        return rc, None
+    print(text, end="")
+    return rc, text
+
+
+def _strip_read_at(text: str) -> str:
+    import re as _re
+
+    return _re.sub(r'"read_at":"[^"]*"', '"read_at":"-"', text)
+
+
+def _ask_receipt_impl(args) -> Optional[int]:
+    """The body of _ask_receipt, printing to stdout as it goes."""
     import json as _json
     import urllib.error
     import urllib.request

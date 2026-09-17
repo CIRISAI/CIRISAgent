@@ -1142,22 +1142,31 @@ jobs:
             if [ -x "$ADB" ]; then
               timeout 60 "$ADB" logcat -d > artifacts/logs/android-logcat.txt 2>/dev/null || \
                 echo "logcat unavailable (adb timed out or no device attached)" > artifacts/logs/android-logcat.txt
-            else
-              echo "logcat unavailable (no adb executable at '$ADB')" > artifacts/logs/android-logcat.txt
               # THE RUNTIME LOGS GO TO FILES, not logcat: latest.log, incidents_latest.log and
               # the Rust ciris-server.log* under files/ciris/logs in the app's data dir.
               # Pulled HERE, in the always() collection step, because the per-platform
               # block `continue`s on a setup/login failure before its post-chat section --
               # a pull placed there ran only for legs that had already got past login
               # (2026-09-04, run 33901202920: iOS failed at login, no app logs shipped).
-              if [ -x "$ADB" ]; then
-                mkdir -p artifacts/logs/android; n=0
-                for f in $("$ADB" exec-out run-as ai.ciris.mobile.debug sh -c 'ls files/ciris/logs 2>/dev/null' 2>/dev/null | tr -d '\r'); do
-                  case "$f" in *.log|*.log.*) "$ADB" exec-out run-as ai.ciris.mobile.debug cat "files/ciris/logs/$f" > "artifacts/logs/android/$f" 2>/dev/null && n=$((n+1)) ;; esac
-                done
-                echo "  pulled $n android log file(s) into artifacts/logs/android"
-                ls artifacts/logs/android/incidents_latest.log artifacts/logs/android/incidents_*.log >/dev/null 2>&1 || echo "::warning::android: no incidents log pulled from the device -- the agent-side story will be missing"
-              fi
+              #
+              # AND IN THIS BRANCH, NOT THE OTHER ONE. This pull used to sit inside the
+              # `else` of the adb check — the branch that runs only when adb is
+              # MISSING, which is exactly when `adb exec-out` cannot work. On every
+              # real run adb was present, logcat was taken, and the app logs were
+              # silently skipped along with the warning meant to say so. The first
+              # receiver-verified trace negative (run 35171092823) reached android
+              # with no [DELIVERY-PROBE] lines to explain it, because none had ever
+              # been collected. A diagnostic that only runs when it cannot succeed
+              # is the same as no diagnostic, with a comment claiming otherwise.
+              mkdir -p artifacts/logs/android; n=0
+              for f in $("$ADB" exec-out run-as ai.ciris.mobile.debug sh -c 'ls files/ciris/logs 2>/dev/null' 2>/dev/null | tr -d '\r'); do
+                case "$f" in *.log|*.log.*) "$ADB" exec-out run-as ai.ciris.mobile.debug cat "files/ciris/logs/$f" > "artifacts/logs/android/$f" 2>/dev/null && n=$((n+1)) ;; esac
+              done
+              echo "  pulled $n android log file(s) into artifacts/logs/android"
+              ls artifacts/logs/android/incidents_latest.log artifacts/logs/android/incidents_*.log >/dev/null 2>&1 || echo "::warning::android: no incidents log pulled from the device -- the agent-side story will be missing"
+            else
+              echo "logcat unavailable (no adb executable at '$ADB')" > artifacts/logs/android-logcat.txt
+              echo "::warning::android: no adb executable at '$ADB' -- neither logcat nor the app's runtime logs could be collected"
             fi
           fi
           # THE iOS APP LOGS, on every leg outcome: the runtime's files/ciris/logs plus
@@ -1247,7 +1256,9 @@ jobs:
               # the question Android posed in run 33704781359.
               case "$plat" in
                 android) [ -f "artifacts/logs/android-logcat.txt" ] \
-                  || echo "  logs/android-logcat.txt (no device log — an app death cannot be diagnosed)" ;;
+                  || echo "  logs/android-logcat.txt (no device log — an app death cannot be diagnosed)"
+                         [ -d "artifacts/logs/android" ] && [ -n "$(ls artifacts/logs/android 2>/dev/null)" ] \
+                  || echo "  logs/android/ (no runtime logs pulled from the app — no [DELIVERY-PROBE] ladder, no incidents)" ;;
                 ios)     [ -f "artifacts/logs/ios-oslog.txt" ] \
                   || echo "  logs/ios-oslog.txt (no simulator log — an app death cannot be diagnosed)"
                          [ -f "artifacts/logs/ios-oslog-faults.txt" ] \

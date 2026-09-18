@@ -4,8 +4,10 @@ Runtime control endpoints.
 Provides control over agent runtime behavior and cognitive state transitions.
 """
 
+import asyncio
+import json
 import logging
-from typing import Annotated
+from typing import Annotated, Dict, Optional, Tuple
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
 
@@ -25,7 +27,14 @@ from .helpers import (
     get_runtime_control_service,
     validate_runtime_action,
 )
-from .schemas import RuntimeAction, RuntimeControlResponse, StateTransitionRequest, StateTransitionResponse
+from .schemas import (
+    CanonicalReceipt,
+    RuntimeAction,
+    RuntimeControlResponse,
+    StateTransitionRequest,
+    StateTransitionResponse,
+    TraceDeliveryReceipt,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +47,158 @@ router = APIRouter()
 
 # Valid cognitive states for transition
 VALID_COGNITIVE_STATES = {"WORK", "DREAM", "PLAY", "SOLITUDE"}
+
+
+# THE ACCESSOR'S SPELLING IS NOT OURS TO PIN. `delivery_receipt` is a Rust
+# accessor in a wheel we depend on but do not build, its payload has no schema
+# we can import, and the one canonical we can reach is two releases behind and
+# 404s the route — so the field names cannot be confirmed against a live
+# response. Reading a single guessed key would project `null` for every
+# canonical while the signed answer sat right there in the payload, and the
+# gate would report "unknown" forever with nothing to show for it.
+#
+# So: accept the spellings upstream is known to use, take the first one
+# actually present, and keep `raw_json` verbatim beside the projection. If all
+# of these are wrong, the raw payload in the response and in the gate log is
+# the evidence that says so — a projection that can be checked, rather than one
+# that fails silently.
+_HOLD_KEYS = ("newest_authored_held", "holds_trace", "holds_newest")
+_URL_SOURCE_KEYS = ("url_source", "url_from", "source")
+
+
+def _first_bool(*sources_and_keys: object) -> Optional[bool]:
+    """First real bool for any of `keys`, scanning `sources` in order.
+
+    Called as _first_bool(row, canonical, keys): the per-agent row wins over the
+    canonical-level aggregate, because the row is about us and the aggregate is
+    about everyone.
+    """
+    *sources, keys = sources_and_keys
+    assert isinstance(keys, tuple)
+    for src in sources:
+        if not isinstance(src, dict):
+            continue
+        for k in keys:
+            v = src.get(k)
+            if isinstance(v, bool):
+                return v
+    return None
+
+
+def _first_str(source: object, keys: Tuple[str, ...]) -> Optional[str]:
+    if not isinstance(source, dict):
+        return None
+    for k in keys:
+        v = source.get(k)
+        if isinstance(v, str) and v:
+            return v
+    return None
+
+
+@router.get(
+    "/runtime/delivery-receipt",
+    responses={
+        503: {"description": "This build has no delivery_receipt accessor (ciris-server < 0.5.208)"},
+    },
+)
+async def delivery_receipt(
+    request: Request,
+    auth: AuthAdminDep,
+) -> SuccessResponse[TraceDeliveryReceipt]:
+    """Did our traces actually land? Ask the canonicals, not ourselves.
+
+    `/v1/telemetry/*` and the node's `delivery_status()` report the PRODUCER's
+    preconditions — rooted, KEX present, envelopes sent. All three can be green
+    while nothing was stored at the far end, and that gap is why the
+    five-platform gate's trace rung was keyed on a counter the node did not
+    expose over HTTP (CIRISServer#487). This returns the RECEIVER's answer:
+    each canonical signs its receipt, and our node verifies it against its own
+    directory, checks the key's standing at the instant of the ask, and accepts
+    only a receipt bound to exactly what it asked.
+
+    Read it ONCE, at the end of a run — it costs an HTTP round-trip per
+    canonical. GET is still right: it takes nothing and changes nothing here;
+    the cost is why it is not folded into a status poll.
+
+    Requires ADMIN role.
+    """
+    from ciris_engine.logic.runtime.edge_runtime import read_delivery_receipt
+
+    agent_hash: Optional[str] = None
+    try:
+        from ciris_engine.logic.adapters.api.routes.my_data import _compute_agent_id_hash_from_signer
+
+        computed = _compute_agent_id_hash_from_signer()
+        # The helper answers "unknown" rather than raising when the engine is not
+        # wired; passing that through as a hash would ask about an agent that
+        # does not exist, so drop back to discovery instead.
+        agent_hash = computed if computed and computed != "unknown" else None
+    except Exception:  # noqa: BLE001 — discovery is the documented fallback
+        agent_hash = None
+
+    # OFF THE EVENT LOOP. The accessor makes a synchronous HTTP round-trip per
+    # canonical, and a slow or unreachable one would otherwise park the whole
+    # FastAPI loop thread for the cumulative timeout — a diagnostic that stalls
+    # the API it is diagnosing. asyncio.to_thread keeps the async boundary the
+    # adapter promises.
+    raw = await asyncio.to_thread(read_delivery_receipt, agent_id_hash=agent_hash)
+    if raw is None:
+        raise HTTPException(
+            status_code=503,
+            detail="delivery_receipt unavailable — ciris-server < 0.5.208 or the node is not folded in this process",
+        )
+
+    try:
+        payload = json.loads(raw)
+    except Exception:  # noqa: BLE001
+        payload = {}
+
+    verdict = payload.get("verdict") or {}
+    canonicals = []
+    for c in payload.get("canonicals") or []:
+        if not isinstance(c, dict):
+            continue
+
+        # WHICH AGENT'S ROW? A canonical serves many agents. When we know our
+        # own hash, take the row that names it. When we do NOT, only a SOLE row
+        # can be about us — picking the first of several would make the
+        # behind-vs-never-landed diagnosis depend on upstream list ordering,
+        # which is a coin flip wearing a boolean's clothes. Several rows and no
+        # hash is genuinely unknown, and says so.
+        agent_row: Optional[Dict[str, object]] = None
+        agents = [a for a in (c.get("agents") or []) if isinstance(a, dict)]
+        if agent_hash is not None:
+            agent_row = next((a for a in agents if a.get("agent_id_hash") == agent_hash), None)
+        elif len(agents) == 1:
+            agent_row = agents[0]
+
+        canonicals.append(
+            CanonicalReceipt(
+                key_id=c.get("key_id"),
+                holds_newest=_first_bool(agent_row, c, _HOLD_KEYS),
+                shipped_any=_first_bool(agent_row, c, ("shipped_any",)),
+                url=c.get("url"),
+                url_source=_first_str(c, _URL_SOURCE_KEYS),
+                error=c.get("error"),
+            )
+        )
+
+    return SuccessResponse(
+        data=TraceDeliveryReceipt(
+            available=True,
+            held_by_every_answering_canonical=verdict.get("newest_authored_held_by_every_answering_canonical"),
+            agent_id_hash=agent_hash,
+            canonicals_unreachable=verdict.get("canonicals_unreachable"),
+            canonicals_unverified=verdict.get("canonicals_unverified"),
+            canonicals_partial=verdict.get("canonicals_partial"),
+            canonicals_answered=verdict.get("canonicals_answered"),
+            discovery_incomplete=verdict.get("discovery_incomplete"),
+            identity_unavailable=verdict.get("identity_unavailable"),
+            canonicals=canonicals,
+            error=payload.get("error"),
+            raw_json=raw,
+        )
+    )
 
 
 @router.post(

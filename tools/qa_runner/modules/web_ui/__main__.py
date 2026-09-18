@@ -1095,7 +1095,8 @@ class DesktopAppTestRunner:
         which are now REACHABLE on every path (through 2.9.13 the trace checkbox
         lived on a step nothing routed to):
           - `toggle_announce_ownership` — announce, ON by default
-          - `toggle_trace_opt_in`       — send traces (consent:replication:v1)
+          - `trace_consent_yes` / `trace_consent_no` — send traces
+                                          (consent:replication:v1); REQUIRED, no default
           - `toggle_trace_analyze`      — be scored (CC#46 analyze)
           - `toggle_share_location`     — rough location, OFF by default
 
@@ -1305,17 +1306,24 @@ class DesktopAppTestRunner:
             # gap as the 2.9.13 sealed-consent regression and failed a build
             # whose consent screen was fine (same race as you_step, one screen
             # further on). A genuine regression still fails, 15s later.
-            if not await self.helper.wait_for_element("toggle_trace_opt_in", timeout=15000):
-                await self._dump_tree("join_federation:no-trace-toggle")
+            # SEND TRACES IS A QUESTION, NOT A SWITCH (ciris-client 0.5.223+):
+            # Yes / No, nothing pre-selected, and btn_next stays disabled until
+            # one is chosen — the age band's shape. So the driver ANSWERS it
+            # rather than toggling a default off. The reachability guard keeps
+            # its meaning: no `trace_consent_yes` on screen 2 is the 2.9.13
+            # sealed-consent regression (the disclosure carried no
+            # `replication` grant).
+            if not await self.helper.wait_for_element("trace_consent_yes", timeout=15000):
+                await self._dump_tree("join_federation:no-trace-question")
                 raise RuntimeError(
-                    "toggle_trace_opt_in is not reachable on the consent screen 15s after "
+                    "trace_consent_yes is not reachable on the consent screen 15s after "
                     "the announce toggle — this is the 2.9.13 sealed-consent regression "
                     "(the disclosure carried no `replication` grant)"
                 )
             if not announce:
                 await self.helper.click("toggle_announce_ownership")
-            if not trace_opt_in:
-                await self.helper.click("toggle_trace_opt_in")
+            if not await self.helper.click("trace_consent_yes" if trace_opt_in else "trace_consent_no"):
+                raise RuntimeError("failed to answer the send-traces question on screen 2")
             await asyncio.sleep(0.3)
             if not await self.helper.click("btn_next"):
                 raise RuntimeError("Failed to click btn_next on screen 2 (JOIN_FEDERATION)")

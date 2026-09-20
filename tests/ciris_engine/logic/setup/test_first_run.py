@@ -87,6 +87,11 @@ class TestFirstRunDetection:
     def test_is_first_run_with_user_env(self, tmp_path, monkeypatch):
         """Test not first run when .env exists in ~/ciris/."""
         monkeypatch.setenv("HOME", str(tmp_path))
+        # INSTALLED MODE MEANS NO NAMED HOME. Until get_config_paths() stopped
+        # appending ~/ciris unconditionally, a CIRIS_HOME leaked by an earlier
+        # test in the same xdist worker was invisible here; now it decides the
+        # answer, so this test says which mode it is testing.
+        monkeypatch.delenv("CIRIS_HOME", raising=False)
         monkeypatch.delenv("CIRIS_CONFIGURED", raising=False)
         ciris_dir = tmp_path / "ciris"
         ciris_dir.mkdir()
@@ -101,6 +106,48 @@ class TestFirstRunDetection:
         from ciris_engine.logic.setup.first_run import is_first_run
 
         assert is_first_run() is False
+
+
+class TestOneAnswerThroughoutTheBoot:
+    """get_config_paths() must not change its answer mid-boot.
+
+    main.py loads the home's .env BEFORE ensure_ciris_home_env() exports
+    CIRIS_HOME, and everything else (is_first_run, env_utils) asks afterwards.
+    If the list depends on whether that export has happened, one process reads
+    two different configurations — the exact fault this module was fixed for,
+    one level up.
+    """
+
+    def test_the_system_file_does_not_vanish_once_ciris_home_is_exported(self, tmp_path, monkeypatch):
+        from ciris_engine.logic.setup.first_run import get_config_paths
+
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.delenv("CIRIS_HOME", raising=False)
+        monkeypatch.delenv("CIRIS_CONFIG_DIR", raising=False)
+        work_dir = tmp_path / "work"
+        work_dir.mkdir()
+        monkeypatch.chdir(work_dir)
+
+        with patch("pathlib.Path.exists", lambda self: str(self) == "/etc/ciris" or Path.is_file(self)):
+            before = get_config_paths()
+            # what ensure_ciris_home_env() does to the environment, verbatim
+            monkeypatch.setenv("CIRIS_HOME", str(tmp_path / "ciris"))
+            after = get_config_paths()
+
+        assert before == after, "get_config_paths() answered differently before and after the CIRIS_HOME export"
+        assert Path("/etc/ciris/.env") in before
+
+    def test_a_named_home_elsewhere_never_reads_the_system_file(self, tmp_path, monkeypatch):
+        from ciris_engine.logic.setup.first_run import get_config_paths
+
+        home = tmp_path / "X"
+        home.mkdir()
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setenv("CIRIS_HOME", str(home))
+        monkeypatch.delenv("CIRIS_CONFIG_DIR", raising=False)
+
+        with patch("pathlib.Path.exists", lambda self: str(self) == "/etc/ciris" or Path.is_file(self)):
+            assert get_config_paths() == [home / ".env"]
 
 
 class TestMacOSPythonDetection:

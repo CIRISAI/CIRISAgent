@@ -687,8 +687,14 @@ async def test_resource_monitor_token_refresh_signal_no_ciris_home(resource_moni
         # Should not raise even without CIRIS_HOME
         await resource_monitor._check_token_refresh_signal()
     finally:
+        # RESTORING AN UNSET VAR MEANS DELETING IT. Leaving a temp dir in
+        # CIRIS_HOME leaked a now-removed path into every later test in this
+        # xdist worker; test_is_first_run_with_user_env only survived it
+        # because get_config_paths() used to append ~/ciris unconditionally.
         if original_env:
             os.environ["CIRIS_HOME"] = original_env
+        else:
+            os.environ.pop("CIRIS_HOME", None)
 
 
 @pytest.mark.asyncio
@@ -1289,8 +1295,14 @@ async def test_billing_provider_signal_token_refresh_no_ciris_home():
         finally:
             await provider.stop()
     finally:
+        # RESTORING AN UNSET VAR MEANS DELETING IT. Leaving a temp dir in
+        # CIRIS_HOME leaked a now-removed path into every later test in this
+        # xdist worker; test_is_first_run_with_user_env only survived it
+        # because get_config_paths() used to append ~/ciris unconditionally.
         if original_env:
             os.environ["CIRIS_HOME"] = original_env
+        else:
+            os.environ.pop("CIRIS_HOME", None)
 
 
 # ============================================================================

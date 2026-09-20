@@ -85,10 +85,21 @@ def get_config_paths() -> list[Path]:
     if home_env not in paths:
         paths.append(home_env)
 
-    # The site-wide file is a SYSTEM install's, i.e. the implicit ~/ciris
-    # default. A named home (CIRIS_HOME) or a detected one (dev cwd) is
+    # The site-wide file is a SYSTEM install's, i.e. the ~/ciris home. A home
+    # somewhere else — named with CIRIS_HOME, or detected as a dev cwd — is
     # complete on its own.
-    if not os.environ.get("CIRIS_HOME") and ciris_home == Path.home() / "ciris":
+    #
+    # THE TEST IS THE HOME, NOT WHETHER CIRIS_HOME IS EXPORTED YET. Keying on
+    # `not os.environ.get("CIRIS_HOME")` made this function answer differently
+    # depending on WHEN in the boot it was called: main.py runs load_boot_env()
+    # first (CIRIS_HOME unset → /etc/ciris/.env in the list, loaded), then
+    # ensure_ciris_home_env() EXPORTS CIRIS_HOME, and every later caller —
+    # is_first_run(), env_utils — got a list without it. A system install whose
+    # only config is /etc/ciris/.env therefore booted configured and then failed
+    # its own first-run check, which deletes the "stale" CIRIS_CONFIGURED it had
+    # just loaded and runs the wizard on a configured machine. One home, one
+    # answer, at every point in the boot.
+    if ciris_home == Path.home() / "ciris":
         system_config = Path("/etc/ciris/.env")
         if system_config.parent.exists():
             paths.append(system_config)

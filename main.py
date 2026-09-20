@@ -297,9 +297,18 @@ def _show_configuration_required_message() -> None:
     click.echo("  OPENAI_API_BASE=http://localhost:11434", err=True)
     click.echo("  OPENAI_MODEL=llama3", err=True)
     click.echo("", err=True)
+    # NAME THE FILE THIS PROCESS ACTUALLY READS. This used to print
+    # `~/.ciris/.env` and `./.env` — the first is the keys/secrets directory
+    # (never config), the second stopped being read when the cwd stopped being
+    # a home. An operator who followed either got a file the agent ignores.
     click.echo("Or mount a .env file at:", err=True)
-    click.echo("  ~/.ciris/.env", err=True)
-    click.echo("  ./.env", err=True)
+    try:
+        from ciris_engine.logic.setup.first_run import get_config_paths
+
+        for _p in get_config_paths():
+            click.echo(f"  {_p}", err=True)
+    except Exception:  # pragma: no cover - a banner must never stop the exit
+        click.echo("  <CIRIS_HOME>/.env", err=True)
     click.echo("=" * 70, err=True)
     sys.exit(1)
 

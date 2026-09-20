@@ -12,8 +12,30 @@ _ENV_LOADED = False
 _ENV_PATH: Optional[Path] = None
 
 
-def load_env_file(path: Path | str = Path(".env"), *, force: bool = False) -> None:
+def _home_env_path() -> Path:
+    """The home's .env — the first of `get_config_paths()` that exists, else the first named."""
+    from ciris_engine.logic.setup.first_run import get_config_paths
+
+    candidates = get_config_paths()
+    for candidate in candidates:
+        try:
+            if candidate.exists():
+                return candidate
+        except OSError:
+            continue
+    return candidates[0]
+
+
+def load_env_file(path: Path | str | None = None, *, force: bool = False) -> None:
+    """Read a .env into the fallback table `get_env_var` consults after os.environ.
+
+    With no `path` this is the HOME's .env (`first_run.get_config_paths()`),
+    never `./.env`: the cwd is wherever the operator happened to launch from,
+    and reading config from there is a second home by the back door.
+    """
     global _ENV_LOADED, _ENV_VALUES, _ENV_PATH
+    if path is None:
+        path = _home_env_path()
     if _ENV_LOADED and not force and Path(path) == _ENV_PATH:
         return
     try:

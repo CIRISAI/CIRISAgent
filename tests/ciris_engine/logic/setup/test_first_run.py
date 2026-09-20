@@ -294,9 +294,9 @@ class TestConfigPaths:
         paths = get_config_paths()
 
         assert paths[0].name == ".env"
-        # dev mode → cwd/.env first (matches the writer), ~/ciris/.env kept as fallback
-        assert paths[0] == tmp_path / ".env"
-        assert (tmp_path / "ciris" / ".env") in paths
+        # dev mode → cwd IS the home, and the home is the only home:
+        # ~/ciris/.env is somebody else's config, not a fallback.
+        assert paths == [tmp_path / ".env"]
 
     def test_get_config_paths_honors_ciris_home(self, tmp_path, monkeypatch):
         """CIRIS_HOME wins so first-run READS where setup WRITES.
@@ -318,6 +318,75 @@ class TestConfigPaths:
         assert paths[0] == home / ".env"
         # The read path and the write path now agree.
         assert get_default_config_path() == home / ".env"
+
+    def test_explicit_home_is_the_only_home(self, tmp_path, monkeypatch):
+        """CIRIS_HOME=X reads X/.env and nothing else — not ~/ciris, not /etc/ciris.
+
+        Regression for the two-homes boot: a run launched with CIRIS_HOME=X and
+        no X/.env used to fall through to ~/ciris/.env, take its CIRIS_DB_PATH /
+        CIRIS_DATA_DIR, and boot a fresh node key against an already-claimed
+        store — unclaimable (owner exists) and unowned (binding can't follow)
+        at once. Home X is home X.
+        """
+        home = tmp_path / "home_x"
+        home.mkdir()
+        user_ciris = tmp_path / "ciris"
+        user_ciris.mkdir()
+        (user_ciris / ".env").write_text(
+            'CIRIS_CONFIGURED="true"\nCIRIS_DB_PATH="%s"\n' % (user_ciris / "data" / "ciris_engine.db")
+        )
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setenv("CIRIS_HOME", str(home))
+        monkeypatch.delenv("CIRIS_CONFIG_DIR", raising=False)
+        monkeypatch.delenv("CIRIS_CONFIGURED", raising=False)
+        monkeypatch.delenv("CIRIS_FORCE_FIRST_RUN", raising=False)
+
+        from ciris_engine.logic.setup.first_run import get_config_paths, is_first_run
+
+        assert get_config_paths() == [home / ".env"]
+        # ~/ciris says "configured"; home X has no config → this IS a first run.
+        with patch("ciris_engine.logic.utils.path_resolution.is_managed", return_value=False):
+            assert is_first_run() is True
+
+    def test_load_boot_env_reads_only_the_home(self, tmp_path, monkeypatch):
+        """The boot loader takes the home's .env into os.environ and no other file."""
+        home = tmp_path / "home_x"
+        home.mkdir()
+        user_ciris = tmp_path / "ciris"
+        user_ciris.mkdir()
+        (user_ciris / ".env").write_text('CIRIS_DB_PATH="/somebody/elses/ciris_engine.db"\n')
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setenv("CIRIS_HOME", str(home))
+        monkeypatch.delenv("CIRIS_CONFIG_DIR", raising=False)
+        monkeypatch.delenv("CIRIS_DB_PATH", raising=False)
+
+        from ciris_engine.logic.setup.first_run import load_boot_env
+
+        # No X/.env: nothing is loaded, and home Y's database path never enters the process.
+        assert load_boot_env() == []
+        assert "CIRIS_DB_PATH" not in os.environ
+
+        (home / ".env").write_text('CIRIS_DB_PATH="%s"\n' % (home / "data" / "ciris_engine.db"))
+        assert load_boot_env() == [home / ".env"]
+        assert os.environ["CIRIS_DB_PATH"] == str(home / "data" / "ciris_engine.db")
+
+    def test_installed_mode_keeps_the_system_file(self, tmp_path, monkeypatch):
+        """Only the implicit ~/ciris home reads /etc/ciris/.env — a system install's file."""
+        monkeypatch.delenv("CIRIS_HOME", raising=False)
+        monkeypatch.delenv("CIRIS_CONFIG_DIR", raising=False)
+        monkeypatch.setenv("HOME", str(tmp_path))
+        work_dir = tmp_path / "work"
+        work_dir.mkdir()
+        monkeypatch.chdir(work_dir)
+
+        from ciris_engine.logic.setup.first_run import get_config_paths
+
+        paths = get_config_paths()
+        assert paths[0] == tmp_path / "ciris" / ".env"
+        if Path("/etc/ciris").exists():
+            assert paths[1:] == [Path("/etc/ciris/.env")]
+        else:
+            assert paths[1:] == []
 
     def test_get_config_paths_installed_mode(self, tmp_path, monkeypatch):
         """Test config paths in installed mode (no git repo, no explicit home).

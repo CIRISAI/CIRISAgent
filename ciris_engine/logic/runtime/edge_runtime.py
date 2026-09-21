@@ -644,6 +644,54 @@ def peer_is_silent(received_total: int, reprimes_done: int) -> bool:
     return received_total == 0 and reprimes_done >= SILENT_PEER_AFTER_REPRIMES
 
 
+def read_delivery_receipt(agent_id_hash: Optional[str] = None) -> Optional[str]:
+    """Ask each canonical whether it holds the newest trace this node authored.
+
+    Returns the accessor's verbatim JSON, or None when this build has no
+    `delivery_receipt` (ciris-server < 0.5.208).
+
+    IN-PROCESS BY NECESSITY, the same reason `delivery_status()` is logged from
+    here rather than called by the QA runner: the accessor reads this node's own
+    engine handle, so a separate process gets
+    `{"error": "no engine handle ..."}` no matter how healthy the node is.
+
+    ONCE, AT THE END — never in a wait loop. It makes an HTTP round-trip per
+    canonical, which is exactly why upstream kept it out of `delivery_status()`.
+    That is also why this is a plain function and not another probe tick: the
+    caller decides when the run is over, because only the caller knows.
+
+    NAME THE HASH. Given one, the node asks about that agent directly; without
+    one it discovers agents from its own signing key, which is correct for an
+    embedded agent but slower and capped.
+    """
+    try:
+        import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("[DELIVERY-RECEIPT] ciris_server unavailable: %s", exc)
+        return None
+    fn = getattr(ciris_server, "delivery_receipt", None)
+    if fn is None:
+        logger.info("[DELIVERY-RECEIPT] unavailable (ciris_server <0.5.208 — no delivery_receipt accessor)")
+        return None
+    try:
+        raw = fn(agent_id_hash=agent_id_hash) if agent_id_hash else fn()
+    except Exception as exc:  # noqa: BLE001 — diagnostics must never take the caller down
+        logger.warning("[DELIVERY-RECEIPT] accessor raised: %s", exc)
+        return None
+    text = raw if isinstance(raw, str) else _json_dumps_safe(raw)
+    logger.info("[DELIVERY-RECEIPT] %s", text)
+    return text
+
+
+def _json_dumps_safe(value: Any) -> str:
+    import json as _json
+
+    try:
+        return _json.dumps(value, default=str)
+    except Exception:  # noqa: BLE001
+        return str(value)
+
+
 def _spawn_delivery_rooting_probe(engine: Any, edge: Any) -> None:
     """One-shot background observability for the trace-delivery last mile.
 

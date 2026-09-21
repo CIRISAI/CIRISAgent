@@ -23,87 +23,115 @@ def _mark_first_run_logged() -> None:
 
 
 def get_config_paths() -> list[Path]:
-    """Get possible configuration file locations in priority order.
+    """The .env files this process may read, in priority order.
 
-    Uses path_resolution module to detect deployment mode and check appropriate locations.
+    ONE HOME. `get_ciris_home()` is the single resolver (managed /app →
+    CIRIS_HOME → Android/iOS sandbox → dev cwd → ~/ciris) and the .env this
+    process reads is THAT home's .env. `CIRIS_CONFIG_DIR` may put a config file
+    ahead of it (the HA add-on keeps config apart from data); nothing else is
+    consulted. The read path is the write path: `get_default_config_path()`
+    resolves the same way.
+
+    Until 2.11.3 this list ended with `~/ciris/.env` and `/etc/ciris/.env` as
+    "legacy fallbacks" whatever the home was, and main.py's boot loader merged
+    every one of them into os.environ. A run launched with CIRIS_HOME=X and no
+    X/.env therefore booted on X's keys and identity but on ~/ciris's
+    CIRIS_DB_PATH / CIRIS_DATA_DIR / AUDIT_LOG_PATH: a freshly minted node key
+    against an already-claimed store, which the server correctly refuses to
+    own AND refuses to let anyone claim. Two homes in one process is never
+    what the operator asked for — home X is home X.
 
     Returns:
-        List of paths to check for .env files, in priority order:
-        - Managed mode (Docker/CIRIS Manager):
-          1. /app/.env (manager-provided config)
-        - Android mode:
-          1. CIRIS_HOME/.env (app's files directory)
-        - iOS mode:
-          1. CIRIS_HOME/.env (app's files directory)
-        - Desktop/Server mode (all other cases):
-          1. CIRIS_CONFIG_DIR/.env (if env var set - for dev/testing)
-          2. ~/ciris/.env (user-specific config)
-          3. /etc/ciris/.env (system-wide config, Linux/Unix)
+        - Managed:      [/app/.env]
+        - Android/iOS:  [<sandbox home>/.env]
+        - Otherwise:    [CIRIS_CONFIG_DIR/.env] (when set) + [<home>/.env],
+                        plus [/etc/ciris/.env] ONLY when the home is the
+                        implicit ~/ciris default — a system install's
+                        site-wide file belongs to a home nobody named.
 
-        Note: As of 2.3.2, CWD-based path detection was removed for consistency.
-        Use CIRIS_CONFIG_DIR environment variable for explicit dev/test override.
         Note: ~/.ciris/ is for keys/secrets only, NOT config!
     """
     from ciris_engine.logic.utils.path_resolution import (
         get_ciris_home,
         is_android,
-        is_development_mode,
         is_ios,
         is_managed,
+        validate_path_safety,
     )
 
-    paths = []
-
-    # Managed mode: only check /app/.env
+    # Managed mode: only /app/.env — the manager owns the mount layout.
     if is_managed():
-        paths.append(Path("/app/.env"))
-        return paths
+        return [Path("/app/.env")]
 
-    # Android mode: use get_ciris_home() which handles Android-specific paths
-    if is_android():
-        ciris_home = get_ciris_home()
-        paths.append(ciris_home / ".env")
-        logger.info(f"Android mode: checking {ciris_home / '.env'}")
-        return paths
-
-    # iOS mode: use get_ciris_home() which handles iOS-specific paths
-    if is_ios():
-        ciris_home = get_ciris_home()
-        paths.append(ciris_home / ".env")
-        logger.info(f"iOS mode: checking {ciris_home / '.env'}")
-        return paths
-
-    # Honor CIRIS_HOME first so config + first-run detection resolve the SAME home
-    # the NODE uses. get_ciris_home() is the one canonical resolver (managed /app →
-    # $CIRIS_HOME → dev-mode → ~/ciris), and path_resolution exports CIRIS_HOME once
-    # resolved so every subprocess agrees. This branch previously hardcoded
-    # ~/ciris/ and ignored CIRIS_HOME: on any custom/dev home the node wrote its
-    # .env, identity, and the one-time `claim_pin` under CIRIS_HOME while first_run
-    # looked only at ~/ciris — a split home that left setup permanently "first run"
-    # and made the desktop self-claim unable to find the node's claim_pin.
     ciris_home = get_ciris_home()
-    paths.append(ciris_home / ".env")
 
-    # Legacy/installed fallback: the fixed ~/ciris location. Kept so an existing
-    # ~/ciris/.env still resolves when CIRIS_HOME is unset (then it equals
-    # ciris_home and is de-duped below).
-    user_ciris_dir = Path.home() / "ciris"
-    if (user_ciris_dir / ".env") not in paths:
-        paths.append(user_ciris_dir / ".env")
+    # App sandboxes: the one home the platform gave us.
+    if is_android() or is_ios():
+        logger.info(f"App sandbox: checking {ciris_home / '.env'}")
+        return [ciris_home / ".env"]
 
-    # Explicit override via CIRIS_CONFIG_DIR (for dev/testing)
+    paths: list[Path] = []
+
+    # Explicit config dir (HA add-on, dev/testing) goes first.
     config_dir_override = os.environ.get("CIRIS_CONFIG_DIR")
     if config_dir_override:
-        override_path = Path(config_dir_override) / ".env"
-        if override_path not in paths:
-            paths.insert(0, override_path)
+        try:
+            override_dir = validate_path_safety(Path(config_dir_override).expanduser(), context="CIRIS_CONFIG_DIR")
+            paths.append(override_dir / ".env")
+        except ValueError as e:
+            logger.warning(f"Invalid CIRIS_CONFIG_DIR, skipping: {e}")
 
-    # System config (Unix/Linux only, both modes)
-    system_config = Path("/etc/ciris/.env")
-    if system_config.parent.exists():  # Only add if /etc/ciris exists
-        paths.append(system_config)
+    home_env = ciris_home / ".env"
+    if home_env not in paths:
+        paths.append(home_env)
+
+    # The site-wide file is a SYSTEM install's, i.e. the ~/ciris home. A home
+    # somewhere else — named with CIRIS_HOME, or detected as a dev cwd — is
+    # complete on its own.
+    #
+    # THE TEST IS THE HOME, NOT WHETHER CIRIS_HOME IS EXPORTED YET. Keying on
+    # `not os.environ.get("CIRIS_HOME")` made this function answer differently
+    # depending on WHEN in the boot it was called: main.py runs load_boot_env()
+    # first (CIRIS_HOME unset → /etc/ciris/.env in the list, loaded), then
+    # ensure_ciris_home_env() EXPORTS CIRIS_HOME, and every later caller —
+    # is_first_run(), env_utils — got a list without it. A system install whose
+    # only config is /etc/ciris/.env therefore booted configured and then failed
+    # its own first-run check, which deletes the "stale" CIRIS_CONFIGURED it had
+    # just loaded and runs the wizard on a configured machine. One home, one
+    # answer, at every point in the boot.
+    if ciris_home == Path.home() / "ciris":
+        system_config = Path("/etc/ciris/.env")
+        if system_config.parent.exists():
+            paths.append(system_config)
 
     return paths
+
+
+def load_boot_env() -> list[Path]:
+    """Load the home's .env into os.environ before anything reads it.
+
+    Called by main.py before any ciris_engine import that resolves a path.
+    The real environment wins over the file (override=False), so an operator's
+    explicit `CIRIS_DB_PATH=… ciris-agent` still beats what setup wrote.
+
+    Returns the files that were loaded, in order, so the boot banner can say
+    which config this run is on.
+    """
+    try:
+        from dotenv import load_dotenv
+    except ImportError:  # dotenv is optional; the environment alone must do
+        return []
+
+    loaded: list[Path] = []
+    for config_path in get_config_paths():
+        try:
+            present = config_path.exists()
+        except OSError:
+            present = False
+        if present:
+            load_dotenv(config_path, override=False)
+            loaded.append(config_path)
+    return loaded
 
 
 def is_first_run() -> bool:

@@ -444,3 +444,80 @@ class ToolInfoResponse(BaseModel):
     category: str = Field("general", description="Tool category")
     cost: float = Field(0.0, description="Cost to execute the tool")
     when_to_use: Optional[str] = Field(None, description="Guidance on when to use the tool")
+
+
+class CanonicalReceipt(BaseModel):
+    """What ONE canonical said when asked whether it holds our newest trace.
+
+    Fields mirror `ciris_server.delivery_receipt()`'s `canonicals[]` entries.
+    Everything is optional because a canonical that could not be reached, whose
+    receipt did not verify, or whose answer was not bound to our ask, still
+    appears here — carrying the reason instead of the numbers. A missing value
+    is "we do not know", never "zero".
+    """
+
+    key_id: Optional[str] = Field(None, description="The canonical's node key id")
+    holds_newest: Optional[bool] = Field(
+        None,
+        description=(
+            "Does it hold the newest trace we authored? Projected from whichever spelling the "
+            "accessor used (newest_authored_held / holds_trace); null means the payload carried "
+            "none of them, NOT that the canonical said no — check raw_json."
+        ),
+    )
+    shipped_any: Optional[bool] = Field(
+        None,
+        description=(
+            "Has anything from this agent ever landed there? With holds_newest false, "
+            "True means the plane works and is behind; False means nothing ever landed."
+        ),
+    )
+    url: Optional[str] = Field(None, description="The read URL asked")
+    url_source: Optional[str] = Field(None, description="How that URL was derived (baked ip hint, or config override)")
+    error: Optional[str] = Field(None, description="Why this canonical contributed no numbers")
+
+
+class TraceDeliveryReceipt(BaseModel):
+    """The RECEIVER's signed assertion that our traces landed.
+
+    `delivery_status()` reports the producer's preconditions — rooted, KEX
+    present, envelopes sent. Those can all be green while nothing was stored at
+    the far end, which is why the five-platform gate's trace rung was keyed on a
+    counter the node did not expose over HTTP (CIRISServer#487). This carries the
+    other side's answer instead: each canonical signs `GET /v1/traces/receipt`
+    with its node key, and our node verifies it against its own directory,
+    checks the key's standing at the instant of the ask, and accepts only a
+    receipt whose signed agent, trace id and nonce are exactly what it asked.
+
+    `held_by_every_answering_canonical` is deliberately TRI-STATE:
+      True  — delivered.
+      False — a canonical that answered does not hold it; read `canonicals[]`.
+      None  — UNKNOWN, NOT ZERO. Nothing may read this as a failure.
+    """
+
+    available: bool = Field(..., description="False when this build has no delivery_receipt accessor")
+    held_by_every_answering_canonical: Optional[bool] = Field(
+        None, description="verdict.newest_authored_held_by_every_answering_canonical — tri-state"
+    )
+    agent_id_hash: Optional[str] = Field(None, description="The hash asked for; named rather than discovered")
+    canonicals_unreachable: Optional[int] = Field(None, description="Could not be asked")
+    canonicals_unverified: Optional[int] = Field(None, description="Answered, but the receipt did not verify")
+    canonicals_partial: Optional[int] = Field(None, description="Answered for some of what was asked")
+    canonicals_answered: Optional[int] = Field(
+        None,
+        description=(
+            "How many canonicals answered at all. Zero with a null verdict means nobody was "
+            "reached, which reads very differently from everyone answering and agreeing."
+        ),
+    )
+    discovery_incomplete: Optional[bool] = Field(None, description="The canonical set itself is not fully known")
+    identity_unavailable: Optional[bool] = Field(None, description="This node could not resolve its own identity")
+    canonicals: List[CanonicalReceipt] = Field(default_factory=list, description="Per-canonical detail")
+    error: Optional[str] = Field(None, description="Set when the accessor itself refused (e.g. no engine handle)")
+    raw_json: str = Field(
+        "",
+        description=(
+            "The accessor's verbatim payload. Kept as a string on purpose: the shape is upstream's "
+            "to change, and a diagnosis a week from now wants what it actually said, not our projection of it."
+        ),
+    )

@@ -123,9 +123,18 @@ def test_the_trace_gate_still_runs_and_still_asks_for_replication(raw: str) -> N
         "'ship' keys on envelopes_sent_total, which is blind to the replication "
         "plane (CIRISEdge#434) — the gate must require 'replication'"
     )
-    trace_branch = raw.split("python3 tools/dev/assert_traces_reached_canonical.py")[1][:600]
-    assert "::warning::" in trace_branch, "the non-enforced result is not surfaced at all"
-    assert "NOT enforced" in trace_branch, "the log does not say enforcement is off"
+    # THE WINDOW IS THE CASE STATEMENT, NOT A CHARACTER COUNT. This used to
+    # slice 600 chars after the invocation, which held until the receipt rung
+    # added its arguments and its own `4)` outcome with a comment explaining
+    # why unknown is not failure — and the `*)` warning fell off the end. A
+    # test that fails because a comment got longer is measuring the wrong
+    # thing: what must not drift is that the branch which CONSUMES the result
+    # says enforcement is off, wherever it sits.
+    after = raw.split("python3 tools/dev/assert_traces_reached_canonical.py")[1]
+    assert 'case "$trace_status" in' in after, "the result is not dispatched on at all"
+    case_block = after.split('case "$trace_status" in')[1].split("esac")[0]
+    assert "::warning::" in case_block, "the non-enforced result is not surfaced at all"
+    assert "NOT enforced" in case_block, "the log does not say enforcement is off"
 
 
 def test_the_interact_gate_is_still_fatal(raw: str) -> None:

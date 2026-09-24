@@ -128,7 +128,9 @@ class CIRISClient:
 
     # Convenience methods for primary agent interactions
 
-    async def interact(self, message: str, context: Optional[Dict[str, Any]] = None) -> InteractResponse:
+    async def interact(
+        self, message: str, context: Optional[Dict[str, Any]] = None, timeout: Optional[float] = None
+    ) -> InteractResponse:
         """Send message and get response from agent.
 
         This is the primary method for interacting with the agent.
@@ -137,16 +139,19 @@ class CIRISClient:
         Args:
             message: Message to send to the agent
             context: Optional context for the interaction
+            timeout: Client-side timeout for this call; defaults to one that
+                outlasts the server's interact deadline (see AgentResource.interact)
 
         Returns:
             InteractResponse with the agent's response and metadata
+            (check `outcome` / `timed_out` before treating `response` as a reply)
 
         Example:
             response = await client.interact("What is the weather like?")
             print(response.response)  # Agent's response text
             print(f"Processing took {response.processing_time_ms}ms")
         """
-        return await self.agent.interact(message, context)
+        return await self.agent.interact(message, context, timeout=timeout)
 
     async def ask(self, question: str, context: Optional[Dict[str, Any]] = None) -> str:
         """Ask a question and get just the response text.

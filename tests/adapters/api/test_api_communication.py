@@ -278,7 +278,7 @@ class TestAPICommunicationMetadata:
                 )
 
                 # Verify notification was attempted
-                mock_notify.assert_called_once_with("msg-123", "Message with notification")
+                mock_notify.assert_called_once_with("msg-123", "Message with notification", task_id=None)
 
     @pytest.mark.asyncio
     async def test_service_health_check(self, communication_service):

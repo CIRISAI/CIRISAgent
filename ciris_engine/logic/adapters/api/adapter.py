@@ -205,7 +205,14 @@ class ApiPlatform(Service):
         self.app.state.api_config = self.config
         self.app.state.agent_template = getattr(self.runtime, "agent_template", None)
         self.app.state.db_path = getattr(self.runtime.essential_config, "database_path", None)
-        logger.info(f"Injected API config with interaction_timeout={self.config.interaction_timeout}s")
+        logger.info(
+            "Injected API config with interaction_timeout=%s",
+            (
+                f"{self.config.interaction_timeout}s"
+                if self.config.interaction_timeout is not None
+                else "<LLM budget interact deadline>"
+            ),
+        )
 
         # Get service mappings from declarative configuration
         service_mappings = ApiServiceConfiguration.get_current_mappings_as_tuples()
@@ -393,6 +400,11 @@ class ApiPlatform(Service):
         """Set up message handling and correlation tracking."""
         # Store message ID to channel mapping for response routing
         self.app.state.message_channel_map = {}
+        # message_id -> task_id of the task that owns it (created for it, or
+        # the active channel task it was appended to). The SPEAK router uses
+        # it to deliver a reply only to a request its own task owns, so a
+        # timed-out task's late reply can never answer the next request.
+        self.app.state.message_task_map = {}
 
         # Create and assign message handler
         self.app.state.on_message = self._create_message_handler()
@@ -415,7 +427,13 @@ class ApiPlatform(Service):
                     # a channel that never drains can't grow unbounded.
                     _chan_queue = self.app.state.message_channel_map.setdefault(msg.channel_id, [])
                     _chan_queue.append(msg.message_id)
+                    _task_map = getattr(self.app.state, "message_task_map", None)
+                    if not isinstance(_task_map, dict):
+                        _task_map = {}
+                        self.app.state.message_task_map = _task_map
                     if len(_chan_queue) > 100:
+                        for _dropped in _chan_queue[:-100]:
+                            _task_map.pop(_dropped, None)
                         del _chan_queue[:-100]
 
                     # Create correlation
@@ -423,6 +441,12 @@ class ApiPlatform(Service):
 
                     # Pass to observer for task creation and get result
                     result = await self.message_observer.handle_incoming_message(msg)
+                    _owner = getattr(result, "task_id", None) if result else None
+                    # Only while the request is still queued: a reply that
+                    # already arrived (or a cleanup that already ran) must
+                    # not leave a stale entry behind.
+                    if isinstance(_owner, str) and _owner and msg.message_id in _chan_queue:
+                        _task_map[msg.message_id] = _owner
                     if result:
                         logger.info(f"Message {msg.message_id} passed to observer, result: {result.status}")
                         return result

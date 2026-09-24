@@ -8,6 +8,7 @@ The API interfaces may change without notice.
 """
 
 from datetime import datetime, timezone
+from enum import Enum
 from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
@@ -45,6 +46,23 @@ class InteractRequest(BaseModel):
     context: Optional[InteractionContext] = Field(None, description="Optional context")
 
 
+#: Client-side timeout for interact(), in seconds. The server answers every
+#: interact() by its own deadline — 195s against a hosted model, 900s against
+#: one on the user's own hardware (CIRISAgent#1186) — with outcome "timeout"
+#: when the agent is not done. The client must wait longer than that, or it
+#: gives up on an answer the server was about to send. The transport default
+#: (50s) is for ordinary endpoints and stays as it is.
+INTERACT_CLIENT_TIMEOUT_S = 930.0
+
+
+class InteractOutcome(str, Enum):
+    """How an interact() call ended. Mirrors the server's InteractOutcome."""
+
+    COMPLETE = "complete"
+    TIMEOUT = "timeout"
+    PAUSED = "paused"
+
+
 class InteractResponse(BaseModel):
     """Response from agent interaction."""
 
@@ -52,6 +70,20 @@ class InteractResponse(BaseModel):
     response: str = Field(..., description="Agent's response")
     state: str = Field(..., description="Agent's cognitive state after processing")
     processing_time_ms: int = Field(..., description="Time taken to process")
+    task_id: Optional[str] = Field(None, description="Task this interaction produced, if the server could name it")
+    #: Servers that predate the field send nothing; "complete" was the only
+    #: outcome they could express, so that is the honest default. An outcome
+    #: this SDK does not know yet is kept as the raw string.
+    outcome: Union[InteractOutcome, str] = Field(
+        InteractOutcome.COMPLETE,
+        description="complete: response is the agent's reply; timeout: the server's deadline passed and "
+        "response is a placeholder; paused: processor paused, message queued",
+    )
+
+    @property
+    def timed_out(self) -> bool:
+        """True when `response` is the still-processing placeholder, not a reply."""
+        return self.outcome == InteractOutcome.TIMEOUT
 
     # Aliases for backward compatibility
     @property
@@ -196,7 +228,10 @@ class AgentResource:
         return MessageSubmissionResponse(**result)
 
     async def interact(
-        self, message: str, context: Optional[Union[InteractionContext, Dict[str, Any]]] = None
+        self,
+        message: str,
+        context: Optional[Union[InteractionContext, Dict[str, Any]]] = None,
+        timeout: Optional[float] = None,
     ) -> InteractResponse:
         """Send message and get response (blocking - waits for response).
 
@@ -208,9 +243,13 @@ class AgentResource:
         Args:
             message: The message to send to the agent
             context: Optional context for the interaction
+            timeout: Client-side timeout for this call in seconds. Defaults to
+                INTERACT_CLIENT_TIMEOUT_S (or the transport timeout, if larger),
+                which outlasts the server's own interact deadline so the server
+                always gets to answer — with outcome "timeout" if need be.
 
         Returns:
-            InteractResponse with message_id, response, state, and timing
+            InteractResponse with message_id, response, state, timing, task_id and outcome
         """
         # Convert dict context to InteractionContext if needed
         if context and isinstance(context, dict):
@@ -219,7 +258,13 @@ class AgentResource:
 
         request_data = request.model_dump()
 
-        result = await self._transport.request("POST", "/v1/agent/interact", json=request_data)
+        if timeout is None:
+            transport_timeout = getattr(self._transport, "timeout", None)
+            timeout = INTERACT_CLIENT_TIMEOUT_S
+            if isinstance(transport_timeout, (int, float)) and transport_timeout > timeout:
+                timeout = float(transport_timeout)
+
+        result = await self._transport.request("POST", "/v1/agent/interact", json=request_data, timeout=timeout)
         assert result is not None
 
         return InteractResponse(**result)

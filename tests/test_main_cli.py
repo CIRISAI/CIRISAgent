@@ -26,27 +26,43 @@ class TestEnvironmentVariableLoading:
         assert hasattr(main_module, "main")
         assert callable(main_module.main)
 
-    @patch("main.Path")
-    @patch("main.load_dotenv")
-    def test_loads_env_priority_order(self, mock_load_dotenv, mock_path_class):
-        """Should respect priority order for .env files."""
-        # All paths exist
-        mock_paths = [MagicMock() for _ in range(3)]
-        for p in mock_paths:
-            p.exists.return_value = True
+    def test_loads_env_priority_order(self, tmp_path, monkeypatch):
+        """The boot load reads the home's .env, in order, and never overrides the environment.
 
-        # Import main to trigger .env loading
-        import importlib
+        This used to patch `main.Path` / `main.load_dotenv` and reload main.
+        main.py no longer keeps its own candidate list or its own dotenv import
+        — `first_run.load_boot_env()` is the one loader — so those attributes
+        are gone and the patch raised AttributeError. Test the loader itself,
+        which is also where the guarantee now lives: override=False, so an
+        operator's explicit `CIRIS_DB_PATH=… ciris-agent` still beats the file.
+        """
+        import dotenv
 
-        import main as main_module
+        from ciris_engine.logic.setup.first_run import load_boot_env
 
-        importlib.reload(main_module)
+        home = tmp_path / "home"
+        (home).mkdir()
+        (home / ".env").write_text("CIRIS_DB_PATH=/from/the/file\n")
+        monkeypatch.setenv("CIRIS_HOME", str(home))
+        monkeypatch.delenv("CIRIS_CONFIG_DIR", raising=False)
+        monkeypatch.setenv("CIRIS_DB_PATH", "/from/the/environment")
 
-        # Should have called load_dotenv with override=False
-        if mock_load_dotenv.called:
-            for call in mock_load_dotenv.call_args_list:
-                # Check that override=False is set
-                assert call[1].get("override") is False or call[1].get("override", True) is False
+        calls = []
+        real_load = dotenv.load_dotenv
+
+        def spy(path, **kwargs):
+            calls.append((Path(path), kwargs))
+            return real_load(path, **kwargs)
+
+        monkeypatch.setattr(dotenv, "load_dotenv", spy)
+
+        loaded = load_boot_env()
+
+        assert loaded == [home / ".env"]
+        assert [c[0] for c in calls] == [home / ".env"]
+        for _path, kwargs in calls:
+            assert kwargs.get("override") is False
+        assert os.environ["CIRIS_DB_PATH"] == "/from/the/environment", "the file overrode the real environment"
 
     def test_handles_missing_dotenv_import(self):
         """Should handle missing dotenv gracefully."""

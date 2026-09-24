@@ -566,6 +566,64 @@ def _try_lazy_init_billing_provider(request: Request, resource_monitor: Any) -> 
         return None
 
 
+# A FAILED CHECK IS NOT A BALANCE.
+#
+# CIRISBillingProvider runs with fail_open=False, so every failure — an expired
+# token, a timeout, a 5xx from billing — comes back as the same shape a real
+# empty account does: has_credit=False, credits_remaining=None. The only thing
+# that tells them apart is `reason`, and this route used to drop it on the
+# floor and answer HTTP 200 with zeros and purchase_required=True.
+#
+# That is how an expired one-hour Google ID token rendered as "0 credits" on a
+# desktop whose balance was 398 the whole time. The client has an auth-error
+# branch (401/503 → token refresh → retry) and never reached it, because the
+# 401 had been laundered into a balance one layer down. Three layers each
+# "handled" the failure and none of them said what it was.
+#
+# The status now says what happened. Only a real answer from billing renders
+# as a balance; an auth failure is a 401 the client already knows how to
+# handle, and an outage is a 503 — not an empty wallet with a Buy button.
+_AUTH_FAILURE_CATEGORIES = ("AUTH_EXPIRED",)
+_UNAVAILABLE_CATEGORY_PREFIXES = ("TIMEOUT", "CONNECTION_ERROR", "NETWORK_ERROR", "HTTP_")
+
+
+def _refusal_for_non_answer(result: Any) -> Optional[HTTPException]:
+    """The HTTP refusal a failed CreditCheckResult deserves, or None if it is a real answer.
+
+    Classified on `provider_metadata["error_category"]`, which
+    CIRISBillingProvider._handle_failure sets beside its human-readable
+    `reason`. The prose is deliberately NOT parsed: it is written for people and
+    may be reworded, and a classifier that keyed on it would turn the next
+    wording improvement back into "0 credits". No category (NO_CREDITS, older
+    providers) is a genuine answer and returns None. A FAIL_OPEN result has
+    has_credit=True and is never refused.
+    """
+    if getattr(result, "has_credit", False):
+        return None
+    meta = getattr(result, "provider_metadata", None) or {}
+    category = str(meta.get("error_category") or "") if isinstance(meta, dict) else ""
+    reason = str(getattr(result, "reason", None) or "")
+    if category in _AUTH_FAILURE_CATEGORIES:
+        return HTTPException(
+            status_code=401,
+            detail={
+                "error": "billing_auth_expired",
+                "message": "The billing credential has expired — sign in again to refresh it.",
+                "reason": reason,
+            },
+        )
+    if category.startswith(_UNAVAILABLE_CATEGORY_PREFIXES):
+        return HTTPException(
+            status_code=503,
+            detail={
+                "error": "billing_unavailable",
+                "message": "The billing service could not be reached — your balance is unchanged.",
+                "reason": reason,
+            },
+        )
+    return None
+
+
 def _build_mobile_credit_response(result: Any) -> CreditStatusResponse:
     """Build credit response for mobile/JWT mode (no API key)."""
     return CreditStatusResponse(
@@ -582,7 +640,13 @@ def _build_mobile_credit_response(result: Any) -> CreditStatusResponse:
     )
 
 
-@router.get("/credits", responses=RESPONSES_BILLING_503)
+@router.get(
+    "/credits",
+    responses={
+        **RESPONSES_BILLING_503,
+        401: {"description": "Billing credential expired — sign in again (reason: AUTH_EXPIRED)"},
+    },
+)
 async def get_credits(
     request: Request,
     auth: AuthObserverDep,
@@ -631,6 +695,14 @@ async def get_credits(
 
     # CIRISBillingProvider: mobile mode (no API key) or server mode
     if not os.getenv("CIRIS_BILLING_API_KEY"):
+        refusal = _refusal_for_non_answer(result)
+        if refusal is not None:
+            logger.warning(
+                "[BILLING_CREDITS] refusing to render a failed check as a balance: HTTP %d (%s)",
+                refusal.status_code,
+                getattr(result, "reason", None),
+            )
+            raise refusal
         logger.info(
             "[BILLING_CREDITS] Using CreditCheckResult (no API key): free=%s, paid=%s, has_credit=%s",
             result.free_uses_remaining,

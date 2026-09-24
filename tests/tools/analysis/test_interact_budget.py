@@ -59,10 +59,14 @@ def _synthetic(p_timeout: float, n: int = 400) -> dict:
 def test_ceiling_matches_the_closed_form() -> None:
     p = 0.10
     data = _synthetic(p)
+    # 5000 runs keeps this a unit test (3x40000 took ~100s under CI coverage and
+    # the runner killed the xdist worker). Binomial sd at the widest point
+    # (1 attempt, ~0.66) is ~0.007, so 0.025 is ~3.7 sd — and still far tighter
+    # than the gaps between attempt counts (0.66 / 0.96 / 0.996).
     for attempts in (1, 2, 3):
         expected = (1 - p**attempts) ** 4
-        got = ceiling(Config(consc_attempts=attempts, overhead=False), Sampler(data, seed=3), 40000)
-        assert got == pytest.approx(expected, abs=0.01)
+        got = ceiling(Config(consc_attempts=attempts, overhead=False), Sampler(data, seed=3), 5000)
+        assert got == pytest.approx(expected, abs=0.025)
 
 
 def test_a_ceiling_below_target_is_unreachable_not_a_big_number() -> None:

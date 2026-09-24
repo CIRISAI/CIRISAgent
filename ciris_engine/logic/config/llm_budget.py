@@ -71,7 +71,8 @@ def classify_provider(provider_id: Optional[str] = None, base_url: Optional[str]
     lowered = base_url.lower()
     if any(marker in lowered for marker in CLOUD_HOST_MARKERS):
         return ProviderClass.REMOTE
-    parsed = urlparse(base_url if "://" in base_url else f"http://{base_url}")
+    # A scheme-less "host:port/path" parses as a netloc once prefixed with "//".
+    parsed = urlparse(base_url if "://" in base_url else f"//{base_url}")
     host = (parsed.hostname or "").lower()
     if _host_is_local(host):
         return ProviderClass.LOCAL

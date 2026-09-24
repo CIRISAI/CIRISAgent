@@ -46,6 +46,13 @@ class TestClassifier:
     def test_url(self, url, expected):
         assert classify_provider(None, url) is expected
 
+    @pytest.mark.parametrize(
+        "url,expected",
+        [("jetson.local:11434/v1", L), ("192.168.1.5:8080", L), ("gpu-box:11434", L), ("api.groq.com/openai/v1", R)],
+    )
+    def test_scheme_less_url(self, url, expected):
+        assert classify_provider(None, url) is expected
+
     @pytest.mark.parametrize("pid", ["local", "local_inference", "mobile_local", "LOCAL", " localai "])
     def test_declared_local_wins_over_any_url(self, pid):
         assert classify_provider(pid, "https://some-tunnel.example.com/v1") is L

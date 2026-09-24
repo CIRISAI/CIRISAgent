@@ -27,6 +27,8 @@ from typing import Any, Dict, List
 import httpx
 from rich.console import Console
 
+from .interact_outcome import interact_timed_out
+
 logger = logging.getLogger(__name__)
 
 
@@ -191,12 +193,17 @@ class AIRTests:
 
         fresh_channel = f"air_qa_smoke_{uuid.uuid4().hex[:8]}"
         parallel_mode = os.environ.get("CIRIS_QA_PARALLEL_BACKENDS") == "1"
-        # Client timeout MUST stay above the server-side
-        # CIRIS_API_INTERACTION_TIMEOUT (default 55s, QA-runner-bumped
-        # to 180s under --parallel-backends). Otherwise the client
-        # gives up before the server can deliver either a real
-        # response OR its own "Still processing" timeout body.
-        interact_timeout = 200.0 if parallel_mode else 70.0
+        # Client timeout MUST stay above the server-side interact deadline
+        # (CIRIS_API_INTERACTION_TIMEOUT when set — the QA runner defaults it
+        # to 180s — else the LLM budget's 195s for a hosted/mock model).
+        # Otherwise the client gives up before the server can deliver either
+        # a real response OR its own timeout body, and the failure below
+        # loses its diagnostics.
+        try:
+            server_deadline = float(os.environ.get("CIRIS_API_INTERACTION_TIMEOUT") or 195.0)
+        except ValueError:
+            server_deadline = 195.0
+        interact_timeout = server_deadline + 20.0
 
         # Wall-clock the request so failure diagnostics can tell us
         # whether we hit the server-side ceiling (~180s under
@@ -216,7 +223,7 @@ class AIRTests:
         body = response.json()
         text = (body.get("data") or {}).get("response", "")
 
-        if text.startswith("Still processing"):
+        if interact_timed_out(body.get("data") or body):
             # Pull diagnostics so the failure trace tells us WHICH
             # stall this was rather than the third generic message
             # in a row. The test docstring named two distinct root

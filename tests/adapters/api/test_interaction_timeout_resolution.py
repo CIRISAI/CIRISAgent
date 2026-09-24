@@ -1,5 +1,6 @@
 """
-Regression tests for `_get_interaction_timeout` env-var resolution.
+Regression tests for `_get_interaction_timeout` resolution:
+env var > explicitly configured api_config > LLM budget (#1186).
 
 #791 air-test postgres-leg failure root cause: the server-side interact
 response-correlation window defaults to 55s, but the QA runner needed
@@ -17,11 +18,21 @@ operator overrides take effect regardless of how the
 These tests pin that contract.
 """
 
+import os
 from unittest.mock import MagicMock
 
 import pytest
 
 from ciris_engine.logic.adapters.api.routes.agent import _get_interaction_timeout
+from ciris_engine.logic.config import llm_budget
+
+
+@pytest.fixture(autouse=True)
+def _budget_reads_process_env_only(monkeypatch):
+    """The budget falls back to the home .env; keep a developer's .env out of it."""
+    monkeypatch.setattr(llm_budget, "get_env_var", lambda name, default=None: os.environ.get(name, default))
+    for var in ("CIRIS_LLM_BUDGET_PROFILE", "CIRIS_LLM_PROVIDER", "LLM_PROVIDER", "OPENAI_API_BASE", "CIRIS_OPENAI_API_BASE"):
+        monkeypatch.delenv(var, raising=False)
 
 
 def _make_request(api_config_timeout):
@@ -40,12 +51,47 @@ def _make_request(api_config_timeout):
     return req
 
 
+def _make_request_with_none_config():
+    req = MagicMock()
+    req.app.state.api_config.interaction_timeout = None
+    return req
+
+
 class TestInteractionTimeoutResolution:
     def test_default_when_no_config_no_env(self, monkeypatch):
+        """No env, no config: the LLM budget decides (#1186). A hosted
+        provider (the default with no base URL) gets the REMOTE deadline."""
         monkeypatch.delenv("CIRIS_API_INTERACTION_TIMEOUT", raising=False)
-        # 110.0 since #1013 — 55.0 sat below the median successful response,
-        # so a thought that PONDERed could never win against it.
-        assert _get_interaction_timeout(_make_request(None)) == 110.0
+        assert _get_interaction_timeout(_make_request(None)) == 195.0
+
+    def test_unset_config_uses_budget(self, monkeypatch):
+        """interaction_timeout=None is "not configured": the budget applies."""
+        monkeypatch.delenv("CIRIS_API_INTERACTION_TIMEOUT", raising=False)
+        assert _get_interaction_timeout(_make_request_with_none_config()) == 195.0
+
+    def test_local_provider_gets_local_deadline(self, monkeypatch):
+        """A model on the user's own hardware gets the LOCAL deadline."""
+        monkeypatch.delenv("CIRIS_API_INTERACTION_TIMEOUT", raising=False)
+        monkeypatch.setenv("OPENAI_API_BASE", "http://127.0.0.1:11434/v1")
+        assert _get_interaction_timeout(_make_request(None)) == 900.0
+        assert _get_interaction_timeout(_make_request_with_none_config()) == 900.0
+
+    def test_explicit_config_beats_budget(self, monkeypatch):
+        monkeypatch.delenv("CIRIS_API_INTERACTION_TIMEOUT", raising=False)
+        monkeypatch.setenv("CIRIS_LLM_BUDGET_PROFILE", "local")
+        assert _get_interaction_timeout(_make_request(90.0)) == 90.0
+
+    def test_non_numeric_or_nonpositive_config_is_ignored(self, monkeypatch):
+        monkeypatch.delenv("CIRIS_API_INTERACTION_TIMEOUT", raising=False)
+        assert _get_interaction_timeout(_make_request(0)) == 195.0
+        assert _get_interaction_timeout(_make_request(True)) == 195.0
+        # A bare MagicMock attribute (unconfigured test double) is not a number.
+        assert _get_interaction_timeout(MagicMock()) == 195.0
+
+    def test_env_var_beats_budget(self, monkeypatch):
+        monkeypatch.setenv("CIRIS_LLM_BUDGET_PROFILE", "local")
+        monkeypatch.setenv("CIRIS_API_INTERACTION_TIMEOUT", "42")
+        assert _get_interaction_timeout(_make_request(None)) == 42.0
 
     def test_config_value_when_no_env(self, monkeypatch):
         monkeypatch.delenv("CIRIS_API_INTERACTION_TIMEOUT", raising=False)

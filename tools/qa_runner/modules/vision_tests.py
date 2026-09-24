@@ -17,6 +17,7 @@ import httpx
 from rich.console import Console
 
 from .filter_test_helper import FilterTestHelper
+from .interact_outcome import interact_timed_out, is_still_processing_text
 
 logger = logging.getLogger(__name__)
 
@@ -186,7 +187,7 @@ class VisionTests:
             response_text = data["data"]["response"]
 
             # If we got "Still processing", wait for TASK_COMPLETE via SSE then get history
-            if "Still processing" in response_text and self.sse_helper:
+            if interact_timed_out(data["data"]) and self.sse_helper:
                 logger.info("Response is 'Still processing', waiting for TASK_COMPLETE via SSE...")
                 completed = self.sse_helper.wait_for_task_complete(timeout=45.0)
                 if completed:
@@ -198,7 +199,7 @@ class VisionTests:
                         if msg_time:
                             if isinstance(msg_time, str):
                                 msg_time = datetime.fromisoformat(msg_time.replace("Z", "+00:00"))
-                            if msg.is_agent and msg_time > submission_time and "Still processing" not in msg.content:
+                            if msg.is_agent and msg_time > submission_time and not is_still_processing_text(msg.content):
                                 response_text = msg.content
                                 logger.info(
                                     f"Found response from history after {submission_time}: {response_text[:100]}..."
@@ -272,7 +273,7 @@ class VisionTests:
             response_text = data["data"]["response"]
 
             # If we got "Still processing", wait for TASK_COMPLETE via SSE then get history
-            if "Still processing" in response_text and self.sse_helper:
+            if interact_timed_out(data["data"]) and self.sse_helper:
                 logger.info("Response is 'Still processing', waiting for TASK_COMPLETE via SSE...")
                 completed = self.sse_helper.wait_for_task_complete(timeout=45.0)
                 waited_for_completion = True
@@ -285,7 +286,7 @@ class VisionTests:
                         if msg_time:
                             if isinstance(msg_time, str):
                                 msg_time = datetime.fromisoformat(msg_time.replace("Z", "+00:00"))
-                            if msg.is_agent and msg_time > submission_time and "Still processing" not in msg.content:
+                            if msg.is_agent and msg_time > submission_time and not is_still_processing_text(msg.content):
                                 response_text = msg.content
                                 logger.info(
                                     f"Found response from history after {submission_time}: {response_text[:100]}..."

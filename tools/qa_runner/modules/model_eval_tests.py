@@ -20,6 +20,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+from .interact_outcome import interact_non_reply, is_still_processing_text
 from .memory_benchmark_tests import find_server_pid, format_size, get_children_memory
 
 def _accord_tee_dir() -> str:
@@ -481,8 +482,11 @@ class ModelEvalTests:
                     )
                 if resp.status_code == 200:
                     body = resp.json()
-                    response_text = body.get("data", {}).get("response") or body.get("response", "") or ""
-                    success = bool(response_text) and "Still processing" not in response_text
+                    data = body.get("data") or body
+                    response_text = data.get("response") or body.get("response", "") or ""
+                    # outcome/task_id, or the placeholder in ANY locale —
+                    # an English literal missed every non-English timeout.
+                    success = bool(response_text) and interact_non_reply(data) is None
                 else:
                     response_text = f"(HTTP {resp.status_code}: {resp.text[:120]})"
             except Exception as exc:
@@ -645,7 +649,7 @@ class ModelEvalTests:
                     content = (getattr(msg, "content", None) or "").strip()
                     if not content:
                         continue
-                    if "Still processing" in content:
+                    if is_still_processing_text(content):
                         last_placeholder = content
                         continue
                     return content

@@ -11,63 +11,17 @@ from ciris_engine.logic.utils import win_console as _win_console  # noqa: E402
 
 _win_console.setup()
 
-# Load environment variables from .env if present
-# Load from all standard config paths in priority order
-try:
-    from pathlib import Path
+# Load the home's .env, if there is one, before anything reads a path.
+#
+# ONE HOME. `first_run.get_config_paths()` is the single list of files this
+# process may read (managed /app → CIRIS_CONFIG_DIR → CIRIS_HOME → app sandbox
+# → dev cwd → ~/ciris). This block used to keep its own list that ended with
+# `~/ciris/.env` and `/etc/ciris/.env` whatever the home was, so a run launched
+# with CIRIS_HOME=X and no X/.env booted on X's keys but on ~/ciris's database.
+# The real environment still wins over the file (override=False).
+from ciris_engine.logic.setup.first_run import load_boot_env
 
-    from dotenv import load_dotenv
-
-    # Priority order (highest first):
-    # 1. CIRIS_CONFIG_DIR (if set, e.g., HA addon mode: /data/ciris)
-    # 2. CIRIS_HOME (if set, e.g., HA addon mode: /data/ciris)
-    # 3. ./ciris/.env (development)
-    # 4. ./.env (development)
-    # 5. ~/ciris/.env (user install)
-    # 6. /etc/ciris/.env (system install)
-    # Note: ~/.ciris/ is for keys/secrets only, NOT config!
-    config_paths = []
-
-    # Add CIRIS_CONFIG_DIR if set (HA addon mode, etc.)
-    if os.environ.get("CIRIS_CONFIG_DIR"):
-        try:
-            from ciris_engine.logic.utils.path_resolution import validate_path_safety
-
-            validated_config_dir = validate_path_safety(
-                Path(os.environ["CIRIS_CONFIG_DIR"]).expanduser(), context="CIRIS_CONFIG_DIR"
-            )
-            config_paths.append(validated_config_dir / ".env")
-        except (ValueError, ImportError) as e:
-            print(f"[CIRIS STARTUP] Warning: Invalid CIRIS_CONFIG_DIR, skipping: {e}")
-
-    # Add CIRIS_HOME if set and different from CIRIS_CONFIG_DIR
-    if os.environ.get("CIRIS_HOME"):
-        try:
-            from ciris_engine.logic.utils.path_resolution import validate_path_safety
-
-            validated_home = validate_path_safety(Path(os.environ["CIRIS_HOME"]).expanduser(), context="CIRIS_HOME")
-            ciris_home_env = validated_home / ".env"
-            if ciris_home_env not in config_paths:
-                config_paths.append(ciris_home_env)
-        except (ValueError, ImportError) as e:
-            print(f"[CIRIS STARTUP] Warning: Invalid CIRIS_HOME, skipping: {e}")
-
-    # Standard fallback paths
-    config_paths.extend(
-        [
-            Path.cwd() / "ciris" / ".env",
-            Path.cwd() / ".env",
-            Path.home() / "ciris" / ".env",
-            Path("/etc/ciris/.env"),
-        ]
-    )
-
-    for config_path in config_paths:
-        if config_path.exists():
-            load_dotenv(config_path, override=False)  # Don't override already-set vars
-
-except ImportError:
-    pass  # dotenv is optional; skip if not installed
+_loaded_env_files = load_boot_env()
 
 # =============================================================================
 # CRITICAL: Set CIRIS_HOME environment variable BEFORE any ciris_engine imports
@@ -131,11 +85,13 @@ try:
     from pathlib import Path as _P
 
     _env = _P(_ciris_home) / ".env"
-    if _env.exists():
-        print(f"[CIRIS STARTUP] Config: {_env} ({_env.stat().st_size} bytes)")
+    if _loaded_env_files:
+        for _f in _loaded_env_files:
+            print(f"[CIRIS STARTUP] Config: {_f} ({_f.stat().st_size} bytes)")
+        del _f
     else:
         print(f"[CIRIS STARTUP] Config: {_env} — NOT FOUND (first run will create it)")
-    del _env, _P
+    del _env, _P, _loaded_env_files
 except Exception:  # pragma: no cover
     pass
 
@@ -341,9 +297,18 @@ def _show_configuration_required_message() -> None:
     click.echo("  OPENAI_API_BASE=http://localhost:11434", err=True)
     click.echo("  OPENAI_MODEL=llama3", err=True)
     click.echo("", err=True)
+    # NAME THE FILE THIS PROCESS ACTUALLY READS. This used to print
+    # `~/.ciris/.env` and `./.env` — the first is the keys/secrets directory
+    # (never config), the second stopped being read when the cwd stopped being
+    # a home. An operator who followed either got a file the agent ignores.
     click.echo("Or mount a .env file at:", err=True)
-    click.echo("  ~/.ciris/.env", err=True)
-    click.echo("  ./.env", err=True)
+    try:
+        from ciris_engine.logic.setup.first_run import get_config_paths
+
+        for _p in get_config_paths():
+            click.echo(f"  {_p}", err=True)
+    except Exception:  # pragma: no cover - a banner must never stop the exit
+        click.echo("  <CIRIS_HOME>/.env", err=True)
     click.echo("=" * 70, err=True)
     sys.exit(1)
 

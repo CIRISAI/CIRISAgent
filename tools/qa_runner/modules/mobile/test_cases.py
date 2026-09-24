@@ -925,7 +925,7 @@ def test_setup_wizard(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRepo
     path (through 2.9.13 the trace checkbox lived on a step nothing routed to,
     so no production node could express trace consent at all):
       - toggle_announce_ownership  — announce, ON by default (floor for service)
-      - toggle_trace_opt_in        — send traces (consent:replication:v1)
+      - trace_consent_yes / _no    — send traces (consent:replication:v1); REQUIRED
       - toggle_trace_analyze       — be scored (CC#46 analyze)
       - toggle_share_location      — rough location, OFF by default
 
@@ -1051,23 +1051,29 @@ def test_setup_wizard(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRepo
         print(f"  [5/6] JOIN_FEDERATION: announce={announce}, traces={trace_opt_in}")
         if not client.wait_for_element("toggle_announce_ownership", timeout=15):
             return fail("consent", "toggle_announce_ownership not found on the consent screen")
-        if not client.is_visible("toggle_trace_opt_in"):
+        # SEND TRACES IS A QUESTION, NOT A SWITCH (ciris-client 0.5.223+): Yes /
+        # No, nothing pre-selected, btn_next disabled until answered — the age
+        # band's shape. The trace grant renders from the consent disclosure, so
+        # wait for it as web_ui does; its absence is still the 2.9.13
+        # sealed-consent regression.
+        if not client.wait_for_element("trace_consent_yes", timeout=15):
             return fail(
                 "consent_reachable",
-                "toggle_trace_opt_in is NOT reachable on the consent screen — this is "
+                "trace_consent_yes is NOT reachable on the consent screen — this is "
                 "the 2.9.13 sealed-consent regression (no node could ship a trace)",
             )
         print("      reachability OK: trace consent is on the path")
 
-        # Both default ON; click only to turn a choice OFF.
+        # Announce defaults ON; click only to turn it OFF. Send traces has no
+        # default and must be ANSWERED.
         if not announce:
             if not _click_or_tap(client, adb, "toggle_announce_ownership"):
                 return fail("consent", "failed to click toggle_announce_ownership")
             time.sleep(0.3)
-        if not trace_opt_in:
-            if not _click_or_tap(client, adb, "toggle_trace_opt_in"):
-                return fail("consent", "failed to click toggle_trace_opt_in")
-            time.sleep(0.3)
+        answer = "trace_consent_yes" if trace_opt_in else "trace_consent_no"
+        if not _click_or_tap(client, adb, answer):
+            return fail("consent", f"failed to click {answer}")
+        time.sleep(0.3)
 
         screenshot_path = f"/tmp/ciris_setup_consent_{int(time.time())}.png"
         adb.screenshot(screenshot_path)

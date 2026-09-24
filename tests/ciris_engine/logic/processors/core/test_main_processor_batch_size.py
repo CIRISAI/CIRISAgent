@@ -13,7 +13,7 @@ These tests pin:
   1. Default `thought_batch_size = 3` (12 parallel calls) — the cap that
      keeps WAKEUP within the typical structured-output throughput of
      mid-tier hosted backends.
-  2. Override via `EssentialConfig.workflow.thought_batch_size` works.
+  2. Override via `EssentialConfig.limits.thought_batch_size` works.
   3. The processor honors the configured value: 9 thoughts at batch=3
      produces 3 batches of 3.
   4. Backward-compat fallback: if `app_config.workflow` is None or the
@@ -119,18 +119,17 @@ def _make_processor(batch_size: int | None, *, workflow_present: bool = True) ->
     proc = AgentProcessor.__new__(AgentProcessor)
     proc.agent_occurrence_id = "test_occurrence"
 
-    # Build app_config with optional workflow.thought_batch_size
+    # Build app_config with optional limits.thought_batch_size (the field
+    # lives on OperationalLimitsConfig, not WorkflowConfig).
     if workflow_present:
+        workflow = SimpleNamespace(max_active_thoughts=100)
         if batch_size is None:
-            workflow = SimpleNamespace(max_active_thoughts=100)  # field absent
+            limits = SimpleNamespace()  # field absent
         else:
-            workflow = SimpleNamespace(
-                max_active_thoughts=100,
-                thought_batch_size=batch_size,
-            )
-        proc.app_config = SimpleNamespace(workflow=workflow)
+            limits = SimpleNamespace(thought_batch_size=batch_size)
+        proc.app_config = SimpleNamespace(workflow=workflow, limits=limits)
     else:
-        proc.app_config = SimpleNamespace(workflow=None)
+        proc.app_config = SimpleNamespace(workflow=None, limits=None)
 
     # state_manager.get_state() — return WAKEUP so no SHUTDOWN filtering
     state_mgr = MagicMock()
@@ -281,3 +280,32 @@ async def test_batch_size_does_not_change_total_processed(
         proc = _make_processor(batch_size=bs)
         n_processed = await proc._process_pending_thoughts_async()
         assert n_processed == n_thoughts, f"batch_size={bs}: processed {n_processed}/{n_thoughts}"
+
+
+@pytest.mark.asyncio
+async def test_real_essential_config_limits_value_is_honoured(
+    patch_persistence: dict[str, Any],
+) -> None:
+    """Regression: the processor used to read `workflow.thought_batch_size`,
+    a field that does not exist (WorkflowConfig is extra="forbid"), so a
+    configured `limits.thought_batch_size` was silently ignored and every
+    batch was 3."""
+    from ciris_engine.schemas.config.essential import EssentialConfig
+
+    patch_persistence["pending_thoughts"][:] = [_make_thought(f"th_{i}") for i in range(5)]
+    proc = _make_processor(batch_size=None)
+    cfg = EssentialConfig()
+    cfg.limits.thought_batch_size = 2
+    proc.app_config = cfg
+
+    gather_call_sizes: list[int] = []
+    real_gather = __import__("asyncio").gather
+
+    async def _spy_gather(*tasks, return_exceptions=False):
+        gather_call_sizes.append(len(tasks))
+        return await real_gather(*tasks, return_exceptions=return_exceptions)
+
+    with patch("ciris_engine.logic.processors.core.main_processor.asyncio.gather", _spy_gather):
+        await proc._process_pending_thoughts_async()
+
+    assert gather_call_sizes == [2, 2, 1]

@@ -42,7 +42,8 @@ class TestDMAOrchestrator:
         assert dma_orchestrator.dsdma is not None
         assert dma_orchestrator.action_selection_pdma_evaluator is not None
         assert dma_orchestrator.time_service is not None
-        assert dma_orchestrator.retry_limit == 3
+        # REMOTE budget profile (#1186): 90s x 2 attempts
+        assert dma_orchestrator.retry_limit == 2
         assert dma_orchestrator.timeout_seconds == 90.0
 
     def test_circuit_breakers_initialized(self, dma_orchestrator):
@@ -300,6 +301,22 @@ class TestDMAOrchestrator:
                 assert isinstance(result, ActionSelectionDMAResult)
                 assert result.selected_action == HandlerActionType.SPEAK
                 assert result.rationale == "Best action based on DMA results"
+                # No process_thought ran here, so no deadline: static per-try x attempts.
+                assert mock_run.call_args.kwargs["deadline"] is None
+
+                # With a thought deadline, ASPDMA spends from it (#1186).
+                from ciris_engine.logic.config.llm_budget import Deadline
+
+                deadline = Deadline(50.0)
+                sample_thought_item.start_deadline(deadline)
+                await dma_orchestrator.run_action_selection(
+                    sample_thought_item,
+                    mock_thought,
+                    sample_processing_context,
+                    sample_initial_dma_results,
+                    "default",
+                )
+                assert mock_run.call_args.kwargs["deadline"] is deadline
 
     @pytest.mark.asyncio
     async def test_run_action_selection_with_conscience_retry(
@@ -386,23 +403,77 @@ class TestDMAOrchestrator:
 
     # Configuration Tests
 
+    @staticmethod
+    def _build(mock_ethical_pdma, mock_csdma, mock_dsdma, mock_action_selection_pdma, mock_time_service, app_config=None):
+        return DMAOrchestrator(
+            ethical_pdma_evaluator=mock_ethical_pdma,
+            csdma_evaluator=mock_csdma,
+            dsdma=mock_dsdma,
+            action_selection_pdma_evaluator=mock_action_selection_pdma,
+            time_service=mock_time_service,
+            app_config=app_config,
+        )
+
     def test_default_config_values(
         self,
+        budget_env,
         mock_ethical_pdma,
         mock_csdma,
         mock_dsdma,
         mock_action_selection_pdma,
         mock_time_service,
     ):
-        """Test that default configuration values are used when app_config is None."""
-        orchestrator = DMAOrchestrator(
-            ethical_pdma_evaluator=mock_ethical_pdma,
-            csdma_evaluator=mock_csdma,
-            dsdma=mock_dsdma,
-            action_selection_pdma_evaluator=mock_action_selection_pdma,
-            time_service=mock_time_service,
-            app_config=None,  # No config
+        """With no app_config the DMA knobs still come from the budget profile (REMOTE)."""
+        orchestrator = self._build(
+            mock_ethical_pdma, mock_csdma, mock_dsdma, mock_action_selection_pdma, mock_time_service
         )
-
-        assert orchestrator.retry_limit == 3
+        assert orchestrator.retry_limit == 2
         assert orchestrator.timeout_seconds == 90.0
+
+    @pytest.mark.parametrize(
+        "env, attempts, per_try",
+        [
+            ({"CIRIS_LLM_BUDGET_PROFILE": "local"}, 1, 300.0),
+            ({"OPENAI_API_BASE": "http://jetson.local:11434/v1"}, 1, 300.0),
+            ({"CIRIS_DMA_TIMEOUT": "123"}, 2, 123.0),  # the old env knob still works, via resolve_budget
+            ({"CIRIS_DMA_ATTEMPTS": "3"}, 3, 90.0),
+        ],
+    )
+    def test_dma_knobs_follow_the_budget_profile(
+        self,
+        budget_env,
+        env,
+        attempts,
+        per_try,
+        mock_ethical_pdma,
+        mock_csdma,
+        mock_dsdma,
+        mock_action_selection_pdma,
+        mock_time_service,
+    ):
+        budget_env.update(env)
+        orchestrator = self._build(
+            mock_ethical_pdma, mock_csdma, mock_dsdma, mock_action_selection_pdma, mock_time_service
+        )
+        assert (orchestrator.retry_limit, orchestrator.timeout_seconds) == (attempts, per_try)
+
+    @pytest.mark.asyncio
+    async def test_thought_deadline_is_passed_to_every_dma(self, dma_orchestrator, sample_thought_item):
+        """The queue item's deadline reaches run_dma_with_retries for PDMA/CSDMA/DSDMA."""
+        from ciris_engine.logic.config.llm_budget import Deadline
+
+        deadline = Deadline(100.0)
+        sample_thought_item.start_deadline(deadline)
+        with patch("ciris_engine.logic.processors.support.dma_orchestrator.run_dma_with_retries") as mock_run:
+            mock_run.return_value = MagicMock()
+            await dma_orchestrator.run_dmas(sample_thought_item)
+        assert mock_run.call_count == 3
+        assert all(c.kwargs["deadline"] is deadline for c in mock_run.call_args_list)
+
+    def test_bounce_item_shares_the_thought_deadline(self, sample_thought_item):
+        from ciris_engine.logic.config.llm_budget import Deadline
+
+        deadline = Deadline(100.0)
+        sample_thought_item.start_deadline(deadline)
+        bounce = DMAOrchestrator._make_bounce_thought_item(sample_thought_item, "preamble")
+        assert bounce.deadline is deadline

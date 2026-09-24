@@ -13,7 +13,6 @@ import pytest
 
 # Import the SUT
 from ciris_engine.logic.dma.dma_executor import (
-    DMA_RETRY_LIMIT,
     run_action_selection_pdma,
     run_csdma,
     run_dma_with_retries,

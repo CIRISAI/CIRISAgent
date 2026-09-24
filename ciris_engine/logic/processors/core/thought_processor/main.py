@@ -9,6 +9,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.config import ConfigAccessor
+from ciris_engine.logic.config.llm_budget import Deadline, active_budget
 from ciris_engine.logic.dma.exceptions import DMAFailure
 from ciris_engine.logic.handlers.control.ponder_handler import PonderHandler
 from ciris_engine.logic.infrastructure.authorization.envelope_reader import resolve_envelope_for_task_id
@@ -119,6 +120,14 @@ class ThoughtProcessor(
             f"ThoughtProcessor.process_thought: ENTRY - thought_id={thought_item.thought_id}, context={'present' if context else 'None'}"
         )
         start_time = self._time_service.now()
+
+        # One deadline for this pass through the pipeline (CIRISAgent#1186):
+        # the DMAs, ASPDMA, the conscience stage and the conscience-retry pass
+        # all spend from it instead of each owning a fresh budget. A PONDER
+        # follow-up is a NEW thought and gets a new deadline when it is
+        # processed -- intended: each round is its own pipeline pass.
+        thought_budget_s = active_budget().thought_budget_s
+        thought_item.start_deadline(Deadline(thought_budget_s))
 
         # Initialize correlation for tracking
         correlation = self._initialize_correlation(thought_item, start_time)
@@ -1028,7 +1037,9 @@ class ThoughtProcessor(
         )
 
         try:
-            # Attempt retry
+            # Attempt retry. Same thought_item -> same deadline: this ASPDMA
+            # and the second conscience pass spend what is left of the budget
+            # this thought started with, never a fresh one (#1186).
             retry_result = await self.dma_orchestrator.run_action_selection(
                 thought_item=thought_item,
                 actual_thought=thought,

@@ -2,7 +2,9 @@ import collections
 import logging
 from typing import Any, Dict, List, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PrivateAttr
+
+from ciris_engine.logic.config.llm_budget import Deadline
 
 from ciris_engine.schemas.runtime.enums import ThoughtType
 from ciris_engine.schemas.runtime.models import ImageContent, Thought, ThoughtContext
@@ -52,6 +54,21 @@ class ProcessingQueueItem(BaseModel):
     images: List[ImageContent] = Field(
         default_factory=list, description="Images attached to this thought for multimodal processing"
     )
+
+    # The thought deadline for the current pipeline pass (CIRISAgent#1186).
+    # Private: a runtime clock, never serialised into initial_context or the
+    # DB. model_copy() carries it, so derived items (the DMA bounce item) spend
+    # from the same deadline.
+    _deadline: Optional[Deadline] = PrivateAttr(default=None)
+
+    @property
+    def deadline(self) -> Optional[Deadline]:
+        """What is left of this thought's time budget; None outside process_thought."""
+        return self._deadline
+
+    def start_deadline(self, deadline: Deadline) -> None:
+        """Begin a pipeline pass: every stage from here spends from `deadline`."""
+        self._deadline = deadline
 
     @property
     def content_text(self) -> str:

@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import os
 import sys
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any, AsyncGenerator, Awaitable, Callable, Dict, List, Optional, Union
@@ -39,6 +38,7 @@ else:
 
 
 from ciris_engine.logic import persistence
+from ciris_engine.logic.config.llm_budget import Deadline, active_budget
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.processors.support.thought_escalation import escalate_dma_failure
 from ciris_engine.schemas.dma.faculty import EnhancedDMAInputs
@@ -77,26 +77,63 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-DMA_RETRY_LIMIT = 3
-# DMA timeout must be long enough to allow LLM failover between providers
-# With 20s LLM timeout × 2 retries × 2 providers = 80s, so 90s gives buffer
-DMA_TIMEOUT_SECONDS = float(os.environ.get("CIRIS_DMA_TIMEOUT", "90.0"))
+#: The shortest DMA attempt worth starting against a thought deadline. A DMA
+#: is one structured LLM call (observed 2-14s on hosted providers), so a try
+#: with less than ~10s left is mostly a request we will cancel. When the
+#: per-try itself is shorter (tests, an operator override) the per-try is the
+#: floor instead.
+MIN_USEFUL_ATTEMPT_S = 10.0
+
+
+def _attempt_timeout(per_try_s: float, deadline: Optional[Deadline]) -> Optional[float]:
+    """Timeout for the next attempt, or None when the deadline cannot afford one."""
+    if deadline is None:
+        return per_try_s
+    if not deadline.affords(min(per_try_s, MIN_USEFUL_ATTEMPT_S)):
+        return None
+    return deadline.clamp(per_try_s)
 
 
 async def run_dma_with_retries(
     run_fn: Callable[..., Awaitable[Any]],
     *args: Any,
-    retry_limit: int = DMA_RETRY_LIMIT,
-    timeout_seconds: float = DMA_TIMEOUT_SECONDS,
+    retry_limit: Optional[int] = None,
+    timeout_seconds: Optional[float] = None,
     time_service: Optional["TimeServiceProtocol"] = None,
+    deadline: Optional[Deadline] = None,
     **kwargs: Any,
 ) -> Any:
-    """Run a DMA function with retry logic."""
+    """Run a DMA function with retry logic.
+
+    `retry_limit` (attempts) and `timeout_seconds` (per try) default to the
+    active LLM budget profile, read at call time (CIRISAgent#1186;
+    CIRIS_DMA_TIMEOUT / CIRIS_DMA_ATTEMPTS still override through it). With a
+    thought `deadline`, each try is clamped to what is left of it and no try
+    starts once the remainder is below a useful attempt.
+    """
+    if retry_limit is None or timeout_seconds is None:
+        budget = active_budget()
+        retry_limit = budget.dma_attempts if retry_limit is None else retry_limit
+        timeout_seconds = budget.dma_per_try_s if timeout_seconds is None else timeout_seconds
     attempt = 0
     last_error: Optional[Exception] = None
     while attempt < retry_limit:
+        attempt_timeout = _attempt_timeout(timeout_seconds, deadline)
+        if attempt_timeout is None:
+            remaining = deadline.remaining() if deadline is not None else 0.0
+            logger.error(
+                "DMA %s: thought deadline has %.1fs left, too little for attempt %s/%s -- giving up",
+                run_fn.__name__,
+                remaining,
+                attempt + 1,
+                retry_limit,
+            )
+            last_error = TimeoutError(
+                f"thought deadline exhausted ({remaining:.1f}s left) before attempt {attempt + 1}/{retry_limit}"
+            )
+            break
         try:
-            async with _async_timeout(timeout_seconds):
+            async with _async_timeout(attempt_timeout):
                 # Pass time_service if the function expects it
                 if time_service and "time_service" not in kwargs:
                     kwargs["time_service"] = time_service
@@ -104,7 +141,7 @@ async def run_dma_with_retries(
         except TimeoutError as e:
             last_error = e
             attempt += 1
-            logger.error("DMA %s timed out after %.1f seconds on attempt %s", run_fn.__name__, timeout_seconds, attempt)
+            logger.error("DMA %s timed out after %.1f seconds on attempt %s", run_fn.__name__, attempt_timeout, attempt)
         except Exception as e:  # noqa: BLE001
             last_error = e
             attempt += 1
@@ -133,7 +170,7 @@ async def run_dma_with_retries(
     )
 
     if thought_arg is not None and last_error is not None and time_service is not None:
-        escalate_dma_failure(thought_arg, run_fn.__name__, last_error, retry_limit, time_service)
+        escalate_dma_failure(thought_arg, run_fn.__name__, last_error, attempt, time_service)
 
     # Ensure DMAFailure has meaningful error context
     last_error_msg = str(last_error).strip() if last_error else "unknown error"
@@ -152,7 +189,7 @@ async def run_dma_with_retries(
     # Register task to prevent garbage collection warnings
     task.add_done_callback(lambda t: None)
 
-    raise DMAFailure(f"{run_fn.__name__} failed after {retry_limit} attempts: {last_error_msg}")
+    raise DMAFailure(f"{run_fn.__name__} failed after {attempt} attempts: {last_error_msg}")
 
 
 async def run_pdma(

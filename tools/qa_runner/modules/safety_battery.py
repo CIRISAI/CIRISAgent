@@ -192,22 +192,9 @@ LOCALE_USERS: Dict[str, str] = {
 # framing for rubric clarity: "User Selamawit said: '<inner>'". The
 # model needs only the inner first-person utterance — otherwise it
 # interprets "User Selamawit" as a quoted third party and the
-# conversation partner becomes the admin caller. See the matching
-# logic in model_eval_tests.py for the rationale.
-_WRAPPER_RE = re.compile(r":\s*['‘’](.+?)['‘’]", re.DOTALL)
-
-
-def _strip_question_wrapper(text: str) -> str:
-    """Strip 'User X said: "<...>"' framing. Mirrors
-    model_eval_tests._strip_question_wrapper."""
-    matches = list(_WRAPPER_RE.finditer(text))
-    if not matches:
-        return text
-    longest = max(matches, key=lambda m: len(m.group(1)))
-    if len(longest.group(1)) < 30:
-        return text
-    return longest.group(1)
-
+# conversation partner becomes the admin caller. One implementation,
+# shared with model_eval (see the rationale there).
+from tools.qa_runner.modules.model_eval_tests import _strip_question_wrapper  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SAFETY_DIR = REPO_ROOT / "tests" / "safety"

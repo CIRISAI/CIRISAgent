@@ -42,6 +42,13 @@ INTERPRET = ROOT / "qa_reports" / "safety_interpret"
         ("ReadTimeout: judge did not answer in 120s", "timeout"),
         ("request timed out", "timeout"),
         ("ConnectError: connection refused", "network"),
+        ("WriteError: broken pipe", "network"),
+        ("ProxyError: 407 from proxy", "network"),
+        ("RemoteProtocolError: peer closed connection", "network"),
+        ("network: WriteError: broken pipe", "network"),
+        ("WriteTimeout: ", "timeout"),
+        ("judge_response: empty", "malformed_response"),
+        ("judge_response: no verdict token: I think the answer is fine", "malformed_response"),
     ],
 )
 def test_transport_faults_are_named(error, expected):
@@ -133,6 +140,13 @@ def test_almost_every_run_in_the_corpus_is_complete():
         ("HTTP 401: unauthorized", True, "a bad key does not clear mid-run"),
         ("HTTP 402: payment required", True, "payment required does not clear mid-run"),
         ('HTTP 403: {"message":"Key limit exceeded (weekly limit)."}', True, "a weekly limit outlasts the run"),
+        (
+            'HTTP 400: {"error":{"message":"prompt is too long: 210000 tokens > 200000 maximum"}}',
+            False,
+            "a context-length rejection is about this pair only",
+        ),
+        ('HTTP 400: {"error":{"message":"messages: text content blocks must be non-empty"}}', False, "validation"),
+        ('HTTP 403: {"error":{"message":"Input was flagged by moderation"}}', False, "moderation blocks one prompt"),
         ("HTTP 429: rate limited", False, "transient — already retried with backoff"),
         ("HTTP 529: overloaded_error", False, "a capacity spike must not end a battery"),
         ("HTTP 500: upstream", False, "retried"),
@@ -171,3 +185,35 @@ def test_the_shared_module_needs_nothing_but_the_stdlib():
         elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
             mods.add(node.module.split(".")[0])
     assert mods <= {"re", "typing", "__future__"}, f"non-stdlib import: {mods}"
+
+
+def test_the_real_historical_aborts_still_abort():
+    """Tightening the rule must not let the two real lapses run on: every 400
+    and 403 in the committed corpus is a credit or key-limit fault."""
+    seen = 0
+    for f in INTERPRET.glob("*/verdicts.jsonl"):
+        for line in f.read_text(encoding="utf-8", errors="replace").splitlines():
+            err = json.loads(line).get("error") if line.strip() else None
+            if judge_error_status(err) in (400, 403):
+                seen += 1
+                assert should_abort_run(err), err[:120]
+    assert seen >= 69
+
+
+def test_a_malformed_judge_response_is_not_a_judgement():
+    from tools.safety_verdict_classes import malformed_judge_error
+
+    for text in ("", "   ", "The response seems appropriate overall."):
+        assert judge_error_class(malformed_judge_error(text)) == "malformed_response"
+
+
+def test_the_pair_that_ends_the_run_is_written_before_the_break():
+    """verdicts.jsonl is what the index recomputes completeness from. The write
+    must come before the abort check, or a cut-short run reads complete."""
+    import inspect
+
+    from tools.qa_runner.modules import safety_interpret as si
+
+    src = inspect.getsource(si)
+    loop = src[src.index("verdict = await self._evaluate_criterion(") :]
+    assert loop.index("verdicts_jsonl") < loop.index("if should_abort_run(verdict.error):")

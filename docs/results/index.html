@@ -151,8 +151,9 @@
       <li>The agent answers all nine turns. Its answers are recorded verbatim.</li>
       <li>A judge model reads one answer against one rule at a time — 9 × rules verdicts per run.</li>
       <li>Each verdict is <b>pass</b>, <b>fail</b>, or <b>undetermined</b>. Undetermined means the
-        judge could not be reached, not that the agent did well; it is counted separately and never
-        as a pass.</li>
+        judge read the answer and could not decide; it is counted, and never as a pass. A verdict the
+        judge never returned (unreachable, out of credit, no verdict in its reply) is <b>not judged</b>:
+        it is left out of the rate and the run is marked incomplete.</li>
       <li>A fail cites the exact span it is about, so a disputed verdict can be checked rather than
         argued.</li>
       <li>Everything is written to a signed manifest. The <b>Results</b> tab shows the runs.</li>
@@ -175,7 +176,7 @@
         <th class="s" data-k="language">lang</th>
         <th class="s" data-k="battery_version">battery</th>
         <th class="s" data-k="rubric_version">rubric</th>
-        <th class="s num" data-k="n">n</th>
+        <th class="s num" data-k="n" title="verdicts the judge returned">judged</th>
         <th class="s num" data-k="pass">pass</th>
         <th class="s num" data-k="fail">fail</th>
         <th class="s num" data-k="undetermined">undet</th>
@@ -232,16 +233,23 @@ $$(".tab").forEach(t=>t.onclick=()=>$$(".tab").forEach(x=>{
 const J=p=>fetch(p).then(r=>r.ok?r.json():Promise.reject(new Error(p)));
 let IDX=[], SORT={k:"captured_at",dir:"desc"}, RUBRIC={};
 
-J("data/index.json").then(d=>{IDX=d.runs||[]; initRuns(d._meta||{}); initLang();})
+// Render what the judge JUDGED. A verdict the judge never returned (credit
+// lapse, key limit, timeout, malformed reply) says nothing about the agent;
+// counting it made a cell with zero failures read 55.6 % (CIRISAgent#1161).
+// The index carries both; the page shows judged_* and flags incomplete runs.
+const judgedView=r=>("judged_pass" in r)?{...r,pass:r.judged_pass,fail:r.judged_fail,
+  undetermined:r.judged_undetermined,n:r.n_judged,not_judged:r.n_not_judged||0}:{...r,not_judged:0};
+J("data/index.json").then(d=>{IDX=(d.runs||[]).map(judgedView); initRuns(d._meta||{}); initLang();})
   .catch(()=>{$("#t-runs tbody").innerHTML=`<tr><td colspan="10" class="empty">index.json not found — run <code>tools/build_results_index.py</code></td></tr>`});
 J("data/safety_sweeps.json").then(d=>sweeps(d.sweeps||[])).catch(()=>{});
 J("data/qa_status.json").then(qa).catch(()=>{});
 
 function initRuns(meta){
   const P=IDX.reduce((s,r)=>s+r.pass,0), F=IDX.reduce((s,r)=>s+r.fail,0), U=IDX.reduce((s,r)=>s+r.undetermined,0);
+  const NJ=IDX.reduce((s,r)=>s+r.not_judged,0), INC=IDX.filter(r=>r.not_judged>0).length;
   const langs=[...new Set(IDX.map(r=>r.language))].sort();
-  $("#c-runs").innerHTML=[["runs",IDX.length],["languages",langs.size||langs.length],["verdicts",P+F+U],
-    ["pass rate",pct(P,P+F+U)+"%"],["failures",F]]
+  $("#c-runs").innerHTML=[["runs",IDX.length],["languages",langs.size||langs.length],["verdicts judged",P+F+U],
+    ["pass rate (judged)",pct(P,P+F+U)+"%"],["failures",F],["not judged",NJ+(INC?` · ${INC} run${INC>1?"s":""} incomplete`:"")]]
     .map(([k,n])=>`<div class="card"><div class="n">${n}</div><div class="k">${k}</div></div>`).join("");
   langs.forEach(l=>$("#f-lang").insertAdjacentHTML("beforeend",`<option>${esc(l)}</option>`));
   $$("#t-runs th.s").forEach(th=>th.onclick=()=>{
@@ -268,7 +276,7 @@ function draw(){
     <td><strong>${esc(r.language)}</strong></td>
     <td class="mono">v${esc(r.battery_version??"?")}</td>
     <td class="mono">v${esc(r.rubric_version??"?")}</td>
-    <td class="num">${r.n}</td>
+    <td class="num">${r.n}${r.not_judged?` <span class="pill warn" title="${r.not_judged} verdicts the judge never returned — excluded from this run's rate">incomplete −${r.not_judged}</span>`:""}</td>
     <td class="num"><span class="pill ok">${r.pass}</span></td>
     <td class="num">${r.fail?`<span class="pill bad">${r.fail}</span>`:"0"}</td>
     <td class="num">${r.undetermined?`<span class="pill warn">${r.undetermined}</span>`:"0"}</td>
@@ -329,7 +337,7 @@ function initLang(){
   }).sort((a,b)=>b.last.fail-a.last.fail||a.lang.localeCompare(b.lang));
   $("#t-lang tbody").innerHTML=rows.map(({lang,rs,last})=>`<tr>
     <td><strong>${esc(lang)}</strong></td><td class="mono">${esc(ts(last.captured_at))}</td>
-    <td class="num"><span class="pill ok">${last.pass}</span></td>
+    <td class="num"><span class="pill ok">${last.pass}</span>${last.not_judged?` <span class="pill warn" title="${last.not_judged} not judged">incomplete</span>`:""}</td>
     <td class="num">${last.fail?`<span class="pill bad">${last.fail}</span>`:"0"}</td>
     <td>${mix(last.pass,last.fail,last.undetermined)}</td>
     <td class="num">${rs.length}</td>

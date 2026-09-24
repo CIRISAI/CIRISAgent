@@ -209,6 +209,7 @@ from tools.safety_verdict_classes import (  # noqa: E402
     TERMINAL_JUDGE_STATUSES,
     judge_error_class,
     judge_error_status,
+    malformed_judge_error,
     should_abort_run,
 )
 
@@ -688,6 +689,13 @@ class SafetyInterpretTests:
                 )
                 verdict = await self._evaluate_criterion(crit, qid, stage, question_text, response_text, row, rubric_id)
                 self._verdicts.append(verdict)
+                # Persist BEFORE any abort: verdicts.jsonl is what the results
+                # index recomputes completeness from, so the pair that ended the
+                # run must be in it — otherwise a run cut short reads complete,
+                # and one cut at its first pair has no JSONL at all.
+                with open(verdicts_jsonl, "a", encoding="utf-8") as f:
+                    f.write(json.dumps(self._verdict_to_jsonl_row(verdict, capture_manifest), ensure_ascii=False))
+                    f.write("\n")
                 # STOP ON A FAULT THAT WILL NOT SELF-HEAL (CIRISAgent#1161 ask 3).
                 # 429/529 are retried inside _evaluate_criterion; a 400 "credit
                 # balance too low" or 403 "weekly limit" will still be true for
@@ -706,9 +714,6 @@ class SafetyInterpretTests:
                         f"[dim]{(verdict.error or '')[:300]}[/dim]\n"
                     )
                     break
-                with open(verdicts_jsonl, "a", encoding="utf-8") as f:
-                    f.write(json.dumps(self._verdict_to_jsonl_row(verdict, capture_manifest), ensure_ascii=False))
-                    f.write("\n")
                 self._display_verdict(verdict)
 
             if self._terminal_judge_error:
@@ -895,12 +900,7 @@ class SafetyInterpretTests:
                         else:
                             wait_s = min(BACKOFF_BASE_S * (2**attempt), BACKOFF_CAP_S)
                         await asyncio.sleep(wait_s)
-                    except (
-                        httpx.ReadTimeout,
-                        httpx.ConnectError,
-                        httpx.ReadError,
-                        httpx.RemoteProtocolError,
-                    ) as net_exc:
+                    except httpx.TransportError as net_exc:  # timeouts, network, protocol, proxy
                         last_error = f"network: {type(net_exc).__name__}: {net_exc}"
                         if attempt == MAX_RETRIES - 1:
                             break
@@ -932,6 +932,10 @@ class SafetyInterpretTests:
 
             verdict, cited_span = _parse_judge_output(judge_text)
             cited_offset = response_text.find(cited_span) if cited_span else -1
+            # Only an explicit UNDETERMINED token is a judgement. An empty
+            # `choices`, empty content, or text with no verdict token means the
+            # judge did not answer the question asked.
+            response_error = None if _VERDICT_RE.search(judge_text) else malformed_judge_error(judge_text)
 
             return CriterionVerdict(
                 question_id=question_id,
@@ -946,8 +950,12 @@ class SafetyInterpretTests:
                 interpreter_task_id=None,
                 interpreter_query=args.get("query"),
                 duration_s=duration,
+                error=response_error,
             )
         except Exception as exc:
+            # A transport fault that escaped the retry loop is still "the judge
+            # never answered" — label it so judge_error_class counts it unjudged.
+            label = "network: " if isinstance(exc, httpx.TransportError) else ""
             return CriterionVerdict(
                 question_id=question_id,
                 response_id=row.get("agent_task_id"),
@@ -959,7 +967,7 @@ class SafetyInterpretTests:
                 cited_offset=-1,
                 interpreter_kind="foundation_model",
                 duration_s=time.time() - start_time,
-                error=f"{type(exc).__name__}: {exc}",
+                error=f"{label}{type(exc).__name__}: {exc}",
             )
 
     def _verdict_to_jsonl_row(self, v: CriterionVerdict, capture_manifest: Dict[str, Any]) -> Dict[str, Any]:
@@ -1164,8 +1172,8 @@ def _parse_judge_output(judge_text: str) -> Tuple[str, str]:
 
     Tolerant: accepts the strict format from JUDGE_PROMPT_TEMPLATE plus
     common variations. Returns ('undetermined', '') if neither verdict
-    token is present in the text — the calling code records this as an
-    error attached to the verdict.
+    token is present in the text — the calling code records this as a
+    `judge_response:` error (malformed_judge_error), so it is counted unjudged.
     """
     if not judge_text:
         return "undetermined", ""

@@ -270,39 +270,33 @@ class TestOpenAICompatibleClient:
         # So we can't assert_called_once on it
 
     @pytest.mark.asyncio
-    async def test_call_llm_structured_retry_logic(self, llm_service):
-        """Test retry logic for transient failures."""
+    async def test_call_llm_structured_transport_error_is_not_retried(self, llm_service):
+        """A connection error surfaces on its FIRST occurrence (#1186).
+
+        The enclosing DMA / conscience per-try is the one layer that retries
+        transport errors; retrying here as well multiplied the HTTP timeout.
+        """
         call_count = 0
-        sleep_calls = []
 
         async def mock_create(*args, **kwargs):
             nonlocal call_count
             call_count += 1
-            if call_count < 3:
-                raise APIConnectionError(request=MagicMock(), message="Connection failed")
-
-            mock_completion = MagicMock()
-            mock_completion.usage = MagicMock(total_tokens=100, prompt_tokens=80, completion_tokens=20)
-            return MockResponse(message="Success after retry"), mock_completion
-
-        async def mock_sleep(duration):
-            sleep_calls.append(duration)
+            raise APIConnectionError(request=MagicMock(), message="Connection failed")
 
         llm_service.instruct_client.chat.completions.create_with_completion = mock_create
 
-        # Mock asyncio.sleep to avoid real delays (saves ~3 seconds)
-        with patch("asyncio.sleep", mock_sleep):
-            result, usage = await llm_service.call_llm_structured(
-                messages=[{"role": "user", "content": "Test"}],
-                response_model=MockResponse,
-                max_tokens=1024,
-                temperature=0.0,
-            )
+        with patch("asyncio.sleep", AsyncMock()) as mock_sleep:
+            with pytest.raises(RuntimeError) as exc_info:
+                await llm_service.call_llm_structured(
+                    messages=[{"role": "user", "content": "Test"}],
+                    response_model=MockResponse,
+                    max_tokens=1024,
+                    temperature=0.0,
+                )
 
-        assert result.message == "Success after retry"
-        assert call_count == 3  # Failed twice, succeeded on third
-        # Verify exponential backoff was called
-        assert len(sleep_calls) == 2
+        assert call_count == 1
+        mock_sleep.assert_not_called()
+        assert isinstance(exc_info.value.__cause__, APIConnectionError)
 
     @pytest.mark.asyncio
     async def test_call_llm_structured_circuit_breaker_open(self, llm_service):
@@ -361,21 +355,19 @@ class TestOpenAICompatibleClient:
         llm_service.instruct_client.chat.completions.create_with_completion.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_call_llm_structured_max_retries_exceeded(self, llm_service):
-        """Test max retries exceeded."""
+    async def test_call_llm_structured_rate_limit_left_to_the_bus(self, llm_service):
+        """A 429 is raised once, named as a rate limit, for the LLM bus's polite backoff."""
         llm_service.instruct_client.chat.completions.create_with_completion = AsyncMock(
             side_effect=RateLimitError(message="Rate limit exceeded", response=MagicMock(), body={})
         )
 
-        # Mock asyncio.sleep to avoid real delays (saves ~3 seconds)
         with patch("asyncio.sleep", AsyncMock()):
-            with pytest.raises(RateLimitError):
+            with pytest.raises(RuntimeError, match="rate limit"):
                 await llm_service.call_llm_structured(
                     messages=[{"role": "user", "content": "Test"}], response_model=MockResponse
                 )
 
-        # Should retry max_retries times
-        assert llm_service.instruct_client.chat.completions.create_with_completion.call_count == 3
+        assert llm_service.instruct_client.chat.completions.create_with_completion.call_count == 1
 
     def test_get_status(self, llm_service):
         """Test _get_status method."""
@@ -400,13 +392,18 @@ class TestOpenAICompatibleClient:
 
     @pytest.mark.asyncio
     async def test_retry_with_backoff(self, llm_service):
-        """Test exponential backoff retry logic."""
+        """Remediable 400s are retried with exponential backoff."""
+        import httpx
+        from openai import BadRequestError
+
         call_times = []
+        message = "This model's maximum context length is 8192 tokens"
+        response = httpx.Response(400, request=httpx.Request("POST", "https://api.example.com/v1/chat/completions"))
 
         async def mock_func(*args, **kwargs):
             call_times.append(asyncio.get_event_loop().time())
             if len(call_times) < 3:
-                raise APIConnectionError(request=MagicMock(), message="Connection failed")
+                raise BadRequestError(message=message, response=response, body={"error": {"message": message}})
             return MockResponse(message="Success"), MagicMock()
 
         # Mock sleep to track delays
@@ -417,6 +414,7 @@ class TestOpenAICompatibleClient:
             sleep_calls.append(delay)
             return await original_sleep(0.01)  # Short sleep for testing
 
+        llm_service.max_retries = 3
         with patch("asyncio.sleep", mock_sleep):
             result, _ = await llm_service._retry_with_backoff(mock_func, [], MockResponse, 1024, 0.0)
 
@@ -524,7 +522,7 @@ class TestOpenAICompatibleClient:
 
         # Mock asyncio.sleep to avoid real delays (saves ~3 seconds)
         with patch("asyncio.sleep", AsyncMock()):
-            with pytest.raises(APIConnectionError):
+            with pytest.raises(RuntimeError):
                 await llm_service.call_llm_structured(
                     messages=[{"role": "user", "content": "Test"}], response_model=MockResponse
                 )

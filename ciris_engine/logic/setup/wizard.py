@@ -210,6 +210,31 @@ def create_env_file(
 
 """
 
+    # THE DECLARED PROVIDER ID MUST SURVIVE SETUP (#1186).
+    #
+    # It used to be written only for google/anthropic; for local,
+    # local_inference, groq, ... it lived only in the comment above, so the
+    # runtime had to guess from the URL whether the model was on the desk or
+    # in a datacenter — and a local server behind a tunnel or on a hostname
+    # got a cloud time budget. LLM_PROVIDER is the variable the settings
+    # screen rewrites (routes/setup/config.py), so writing the same name here
+    # keeps a later settings change from being shadowed.
+    #
+    # It must not change which client is built. The SDK selector
+    # (_detect_provider_from_env) maps groq/together/openrouter/
+    # openai_compatible to OPENAI_COMPATIBLE — what OPENAI_API_BASE already
+    # selects on this branch — and lets ids it does not know (local,
+    # local_inference, mobile_local, ...) fall through to key-based detection.
+    # google/anthropic write their own line; "openai" is left out because it
+    # would flip an openai + custom-base setup from OPENAI_COMPATIBLE to OPENAI,
+    # and it is remote by URL anyway.
+    provider_id = llm_provider.strip()
+    provider_declaration = (
+        f'LLM_PROVIDER="{_env_quoted(provider_id)}"\n'
+        if provider_id and provider_id not in ("openai", "google", "anthropic")
+        else ""
+    )
+
     if llm_provider == "openai":
         content += f"""# OpenAI Configuration
 OPENAI_API_KEY="{llm_api_key}"
@@ -252,7 +277,7 @@ LLM_PROVIDER="anthropic"
 OPENAI_API_KEY="{llm_api_key}"
 OPENAI_API_BASE="{llm_base_url}"
 OPENAI_MODEL="{llm_model}"
-
+{provider_declaration}
 """
         # If using CIRIS LLM proxy, also set billing token and instructor mode
         if "ciris.ai" in llm_base_url.lower() or "ciris-services" in llm_base_url.lower():

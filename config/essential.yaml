@@ -11,7 +11,11 @@ database:
 services:
   llm_endpoint: "https://api.openai.com/v1"
   llm_model: "gpt-4o-mini"
+  # Not read for the HTTP timeout any more: timeouts come from the LLM budget
+  # profile (ciris_engine/logic/config/llm_budget.py; #1186) so desktop and
+  # mobile (which never loads this file) match. Override with CIRIS_LLM_TIMEOUT.
   llm_timeout: 60
+  # Remediation attempts for fixable 400s only; transport errors are not retried here.
   llm_max_retries: 3
 
 # Security and audit settings

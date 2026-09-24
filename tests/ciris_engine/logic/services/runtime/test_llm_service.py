@@ -61,61 +61,40 @@ async def test_llm_service_call_structured(llm_service):
 
 
 @pytest.mark.asyncio
-async def test_llm_service_retry_logic(llm_service):
-    """Test LLM retry logic on failures."""
-    # Mock to fail twice then succeed
+async def test_llm_service_does_not_retry_transport_errors(llm_service):
+    """A connection error is raised on its first occurrence, not retried (#1186).
+
+    The enclosing DMA / conscience per-try is the one layer that retries
+    transport errors; a second layer here multiplied the HTTP timeout.
+    """
+    import httpx
+    from openai import APIConnectionError
+    from pydantic import BaseModel
+
+    class TestResponse(BaseModel):
+        test: str
+
     call_count = 0
-    sleep_calls = []
 
     async def mock_create(*args, **kwargs):
         nonlocal call_count
         call_count += 1
-        if call_count < 3:
-            # Simulate an API connection error (which is retryable)
-            import httpx
-            from openai import APIConnectionError
-
-            # APIConnectionError requires a request parameter
-            mock_request = httpx.Request("POST", "https://api.openai.com/v1/chat/completions")
-            raise APIConnectionError(request=mock_request)
-
-        # Create a simple dict as response
-        from pydantic import BaseModel
-
-        class TestResponse(BaseModel):
-            test: str
-
-        # Return tuple (response, completion)
-        mock_completion = MagicMock()
-        mock_completion.usage = MagicMock(prompt_tokens=50, completion_tokens=20)
-        return TestResponse(test="data"), mock_completion
-
-    async def mock_sleep(duration):
-        sleep_calls.append(duration)
+        raise APIConnectionError(request=httpx.Request("POST", "https://api.openai.com/v1/chat/completions"))
 
     with patch.object(
         llm_service.instruct_client.chat.completions, "create_with_completion", AsyncMock(side_effect=mock_create)
     ):
-        # Mock asyncio.sleep to avoid real delays (saves ~3 seconds)
-        with patch("asyncio.sleep", mock_sleep):
-            from pydantic import BaseModel
+        with patch("asyncio.sleep", AsyncMock()) as mock_sleep:
+            with pytest.raises(RuntimeError):
+                await llm_service.call_llm_structured(
+                    messages=[{"role": "user", "content": "Test"}],
+                    response_model=TestResponse,
+                    max_tokens=1024,
+                    temperature=0.0,
+                )
 
-            class TestResponse(BaseModel):
-                test: str
-
-            result, usage = await llm_service.call_llm_structured(
-                messages=[{"role": "user", "content": "Test"}],
-                response_model=TestResponse,
-                max_tokens=1024,
-                temperature=0.0,
-            )
-
-            assert result.test == "data"
-            assert call_count == 3  # Failed twice, succeeded on third
-            # Verify exponential backoff was called (1.0s, then 2.0s)
-            assert len(sleep_calls) == 2
-            assert sleep_calls[0] == 1.0
-            assert sleep_calls[1] == 2.0
+    assert call_count == 1
+    mock_sleep.assert_not_called()
 
 
 @pytest.mark.asyncio

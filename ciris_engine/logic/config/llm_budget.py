@@ -168,6 +168,27 @@ def active_budget() -> LLMBudgetProfile:
     return resolve_budget(provider_id, base_url)
 
 
+#: The shortest attempt worth starting against a thought deadline. An honest
+#: call answers in 2-14s (2026-09-04 RCA; the 87K-token veto ~9s), so a try
+#: with less than ~10s left is mostly a request we will cancel -- it spends
+#: provider capacity and returns nothing. When the per-try itself is shorter
+#: (tests, an operator override) the per-try is the floor instead.
+MIN_USEFUL_ATTEMPT_S = 10.0
+
+
+def attempt_timeout(per_try_s: float, deadline: Optional["Deadline"]) -> Optional[float]:
+    """Timeout for the next attempt, or None when the deadline cannot afford one.
+
+    No deadline -> the static per-try, unchanged. Shared by every stage that
+    retries under the thought deadline (DMAs, consciences, second-pass DMAs).
+    """
+    if deadline is None:
+        return per_try_s
+    if not deadline.affords(min(per_try_s, MIN_USEFUL_ATTEMPT_S)):
+        return None
+    return deadline.clamp(per_try_s)
+
+
 class Deadline:
     """An absolute point in time a piece of work must finish by.
 

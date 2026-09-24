@@ -64,7 +64,11 @@ class ServiceEndpointsConfig(BaseModel):
 
     llm_endpoint: str = Field("https://api.openai.com/v1", description="LLM API endpoint URL")
     llm_model: str = Field("gpt-4o-mini", description="LLM model identifier")
-    llm_timeout: int = Field(30, description="LLM request timeout in seconds")
+    llm_timeout: int = Field(
+        30,
+        description="DEPRECATED: not read. The LLM HTTP timeout comes from the LLM budget profile "
+        "(ciris_engine/logic/config/llm_budget.py; override with CIRIS_LLM_TIMEOUT). #1186",
+    )
     llm_max_retries: int = Field(3, description="Maximum LLM retry attempts")
 
     model_config = ConfigDict(defer_build=True, extra="forbid")

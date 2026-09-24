@@ -38,7 +38,7 @@ else:
 
 
 from ciris_engine.logic import persistence
-from ciris_engine.logic.config.llm_budget import Deadline, active_budget
+from ciris_engine.logic.config.llm_budget import MIN_USEFUL_ATTEMPT_S, Deadline, active_budget, attempt_timeout
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.processors.support.thought_escalation import escalate_dma_failure
 from ciris_engine.schemas.dma.faculty import EnhancedDMAInputs
@@ -64,10 +64,10 @@ from ciris_engine.schemas.types import JSONDict
 from .action_selection_pdma import ActionSelectionPDMAEvaluator
 from .csdma import CSDMAEvaluator
 from .dsaspdma import DSASPDMAEvaluator
-from .msaspdma import MSASPDMAEvaluator
 from .dsdma_base import BaseDSDMA
 from .exceptions import DMAFailure
 from .idma import IDMAEvaluator
+from .msaspdma import MSASPDMAEvaluator
 from .pdma import EthicalPDMAEvaluator
 from .tsaspdma import TSASPDMAEvaluator
 
@@ -77,23 +77,12 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
 #: The shortest DMA attempt worth starting against a thought deadline. A DMA
 #: is one structured LLM call (observed 2-14s on hosted providers), so a try
 #: with less than ~10s left is mostly a request we will cancel. When the
 #: per-try itself is shorter (tests, an operator override) the per-try is the
 #: floor instead.
-MIN_USEFUL_ATTEMPT_S = 10.0
-
-
-def _attempt_timeout(per_try_s: float, deadline: Optional[Deadline]) -> Optional[float]:
-    """Timeout for the next attempt, or None when the deadline cannot afford one."""
-    if deadline is None:
-        return per_try_s
-    if not deadline.affords(min(per_try_s, MIN_USEFUL_ATTEMPT_S)):
-        return None
-    return deadline.clamp(per_try_s)
-
-
 async def run_dma_with_retries(
     run_fn: Callable[..., Awaitable[Any]],
     *args: Any,
@@ -118,8 +107,8 @@ async def run_dma_with_retries(
     attempt = 0
     last_error: Optional[Exception] = None
     while attempt < retry_limit:
-        attempt_timeout = _attempt_timeout(timeout_seconds, deadline)
-        if attempt_timeout is None:
+        this_try_s = attempt_timeout(timeout_seconds, deadline)
+        if this_try_s is None:
             remaining = deadline.remaining() if deadline is not None else 0.0
             logger.error(
                 "DMA %s: thought deadline has %.1fs left, too little for attempt %s/%s -- giving up",
@@ -133,7 +122,7 @@ async def run_dma_with_retries(
             )
             break
         try:
-            async with _async_timeout(attempt_timeout):
+            async with _async_timeout(this_try_s):
                 # Pass time_service if the function expects it
                 if time_service and "time_service" not in kwargs:
                     kwargs["time_service"] = time_service
@@ -141,7 +130,7 @@ async def run_dma_with_retries(
         except TimeoutError as e:
             last_error = e
             attempt += 1
-            logger.error("DMA %s timed out after %.1f seconds on attempt %s", run_fn.__name__, attempt_timeout, attempt)
+            logger.error("DMA %s timed out after %.1f seconds on attempt %s", run_fn.__name__, this_try_s, attempt)
         except Exception as e:  # noqa: BLE001
             last_error = e
             attempt += 1

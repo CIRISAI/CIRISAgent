@@ -32,9 +32,24 @@ All CIRIS-specific environment variables use the `CIRIS_` prefix to avoid confli
 - `CIRIS_LIMITS_MAX_ACTIVE_THOUGHTS` - Maximum thoughts in queue (default: 50)
 - `CIRIS_LIMITS_ROUND_DELAY_SECONDS` - Processing round delay (default: 5.0)
 - `CIRIS_LIMITS_MOCK_LLM_ROUND_DELAY` - Mock LLM delay (default: 0.1)
-- `CIRIS_LIMITS_DMA_RETRY_LIMIT` - DMA retry attempts (default: 3)
-- `CIRIS_LIMITS_DMA_TIMEOUT_SECONDS` - DMA timeout (default: 30.0)
-- `CIRIS_LIMITS_CONSCIENCE_RETRY_LIMIT` - Conscience retry attempts (default: 2)
+- `CIRIS_LIMITS_DMA_RETRY_LIMIT`, `CIRIS_LIMITS_DMA_TIMEOUT_SECONDS`, `CIRIS_LIMITS_CONSCIENCE_RETRY_LIMIT` - **deprecated, not read**; use the LLM budget variables below
+
+### LLM Time Budgets (#1186)
+Every timeout and attempt count on the LLM path comes from one of two profiles, chosen by where the model runs
+(`ciris_engine/logic/config/llm_budget.py`). Each variable below overrides one value of the active profile.
+
+| Variable | Remote default | Local default | Meaning |
+|---|---|---|---|
+| `CIRIS_LLM_BUDGET_PROFILE` | auto | auto | Force `local` or `remote`; otherwise the declared provider id, then the base URL's host, decides |
+| `CIRIS_LLM_TIMEOUT` | 45 | 240 | One HTTP request to the model (s) |
+| `CIRIS_DMA_TIMEOUT` / `CIRIS_DMA_ATTEMPTS` | 90 / 2 | 300 / 1 | One DMA attempt (s) / attempts |
+| `CIRIS_CONSCIENCE_TIMEOUT` / `CIRIS_CONSCIENCE_ATTEMPTS` | 45 / 4 | 240 / 1 | One conscience-shard attempt (s) / attempts |
+| `CIRIS_THOUGHT_BUDGET` | 190 | 890 | Everything one thought may spend; stages get the remainder |
+| `CIRIS_API_INTERACTION_TIMEOUT` | 195 | 900 | How long `/v1/agent/interact` waits for the reply |
+
+Local means the model runs on hardware the user controls (a declared `local`/`local_inference` provider, or a
+loopback, private, `.local` or Tailscale host). Local gets one long try because cancelling a request does not
+free the slot on common local servers, so a retry would queue behind the call it abandoned.
 
 ### Telemetry Configuration
 - `CIRIS_TELEMETRY_ENABLED` - Enable telemetry collection (default: false)

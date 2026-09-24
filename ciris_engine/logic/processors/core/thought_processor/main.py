@@ -3,13 +3,14 @@ ThoughtProcessor: Core orchestration logic for H3ERE pipeline.
 Main coordinator that executes the 7 phases of ethical reasoning.
 """
 
+import asyncio
 import logging
 import os
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
+from typing import Any, Awaitable, Callable, Coroutine, Dict, List, Optional, Tuple, TypeVar
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.config import ConfigAccessor
-from ciris_engine.logic.config.llm_budget import Deadline, active_budget
+from ciris_engine.logic.config.llm_budget import Deadline, active_budget, attempt_timeout
 from ciris_engine.logic.dma.exceptions import DMAFailure
 from ciris_engine.logic.handlers.control.ponder_handler import PonderHandler
 from ciris_engine.logic.infrastructure.authorization.envelope_reader import resolve_envelope_for_task_id
@@ -59,6 +60,26 @@ from .round_complete import RoundCompletePhase
 from .start_round import RoundInitializationPhase
 
 logger = logging.getLogger(__name__)
+
+_T = TypeVar("_T")
+
+
+async def _within_thought_deadline(thought_item: Any, call: Coroutine[Any, Any, _T]) -> _T:
+    """Run one second-pass DMA (TSASPDMA / DSASPDMA / MSASPDMA) inside the thought deadline.
+
+    These evaluators are called directly rather than through
+    run_dma_with_retries, so without this they were the one LLM path the
+    thought budget did not bound (#1186). One attempt, clamped to the
+    remainder; a timeout raises into the caller's existing fallback. The
+    coroutine's body does not run until awaited, so a spent deadline sends no
+    request: it is closed unstarted.
+    """
+    deadline = getattr(thought_item, "deadline", None)
+    per_try = attempt_timeout(active_budget().dma_per_try_s, deadline if isinstance(deadline, Deadline) else None)
+    if per_try is None:
+        call.close()
+        raise TimeoutError("second-pass DMA: LLM API timeout -- the thought deadline cannot afford an attempt")
+    return await asyncio.wait_for(call, timeout=per_try)
 
 
 class ThoughtProcessor(
@@ -535,13 +556,16 @@ class ThoughtProcessor(
                         rationale="TSASPDMA-CORRECTION: Evaluator unavailable",
                     )
 
-                correction_result = await run_tsaspdma_correction(
-                    evaluator=evaluator,
-                    requested_tool_name=tool_name,
-                    available_tools=all_tools,
-                    aspdma_reasoning=action_result.rationale or "",
-                    original_thought=thought_item,
-                    time_service=self._time_service,
+                correction_result = await _within_thought_deadline(
+                    thought_item,
+                    run_tsaspdma_correction(
+                        evaluator=evaluator,
+                        requested_tool_name=tool_name,
+                        available_tools=all_tools,
+                        aspdma_reasoning=action_result.rationale or "",
+                        original_thought=thought_item,
+                        time_service=self._time_service,
+                    ),
                 )
 
                 # If correction returned TOOL, verify the corrected tool exists
@@ -626,15 +650,18 @@ class ThoughtProcessor(
                     if context_enrichment:
                         logger.info(f"TSASPDMA-CONTEXT: Passing {len(context_enrichment)} context enrichment results")
 
-            tsaspdma_result = await run_tsaspdma(
-                evaluator=evaluator,
-                tool_name=tool_name,
-                tool_info=tool_info,
-                aspdma_reasoning=action_result.rationale or "",
-                original_thought=thought_item,
-                context=None,
-                time_service=self._time_service,
-                context_enrichment=context_enrichment,
+            tsaspdma_result = await _within_thought_deadline(
+                thought_item,
+                run_tsaspdma(
+                    evaluator=evaluator,
+                    tool_name=tool_name,
+                    tool_info=tool_info,
+                    aspdma_reasoning=action_result.rationale or "",
+                    original_thought=thought_item,
+                    context=None,
+                    time_service=self._time_service,
+                    context_enrichment=context_enrichment,
+                ),
             )
 
             logger.info(
@@ -707,12 +734,15 @@ class ThoughtProcessor(
         try:
             from ciris_engine.logic.dma.dma_executor import run_dsaspdma
 
-            dsaspdma_result = await run_dsaspdma(
-                evaluator=evaluator,
-                aspdma_result=action_result,
-                original_thought=thought_item,
-                context=thought_context,
-                time_service=self._time_service,
+            dsaspdma_result = await _within_thought_deadline(
+                thought_item,
+                run_dsaspdma(
+                    evaluator=evaluator,
+                    aspdma_result=action_result,
+                    original_thought=thought_item,
+                    context=thought_context,
+                    time_service=self._time_service,
+                ),
             )
 
             # Emit VERB_SECOND_PASS_RESULT — closes the prior asymmetry where
@@ -764,12 +794,15 @@ class ThoughtProcessor(
         try:
             from ciris_engine.logic.dma.dma_executor import run_msaspdma
 
-            msaspdma_result = await run_msaspdma(
-                evaluator=evaluator,
-                aspdma_result=action_result,
-                original_thought=thought_item,
-                context=thought_context,
-                time_service=self._time_service,
+            msaspdma_result = await _within_thought_deadline(
+                thought_item,
+                run_msaspdma(
+                    evaluator=evaluator,
+                    aspdma_result=action_result,
+                    original_thought=thought_item,
+                    context=thought_context,
+                    time_service=self._time_service,
+                ),
             )
 
             await self._emit_verb_second_pass_result_event(
@@ -921,16 +954,10 @@ class ThoughtProcessor(
         if isinstance(params, DeferParams):
             return {
                 "rights_basis": list(params.rights_basis),
-                "primary_need_category": (
-                    params.needs_category.value if params.needs_category else None
-                ),
-                "secondary_need_categories": [
-                    cat.value for cat in params.secondary_needs_categories
-                ],
+                "primary_need_category": (params.needs_category.value if params.needs_category else None),
+                "secondary_need_categories": [cat.value for cat in params.secondary_needs_categories],
                 "domain_hint": params.domain_hint.value if params.domain_hint else None,
-                "operational_reason": (
-                    params.reason_code.value if params.reason_code else None
-                ),
+                "operational_reason": (params.reason_code.value if params.reason_code else None),
                 "defer_reason": params.reason,
                 "defer_until": params.defer_until,
             }
@@ -1177,19 +1204,12 @@ class ThoughtProcessor(
         h = conscience_result.epistemic_humility_check
         if h is not None:
             if scores:
-                lines.append(
-                    f"[IRIS-H] certainty={h.epistemic_certainty:.2f} "
-                    f"recommended={h.recommended_action}"
-                )
+                lines.append(f"[IRIS-H] certainty={h.epistemic_certainty:.2f} " f"recommended={h.recommended_action}")
             elif h.identified_uncertainties:
                 lines.append(f"[IRIS-H] recommended={h.recommended_action}")
             if h.identified_uncertainties:
-                unc_label = get_string(
-                    language, "conscience.retry_uncertainties_label", default="uncertainties"
-                )
-                lines.append(
-                    f"  {unc_label}: " + "; ".join(u[:120] for u in h.identified_uncertainties[:4])
-                )
+                unc_label = get_string(language, "conscience.retry_uncertainties_label", default="uncertainties")
+                lines.append(f"  {unc_label}: " + "; ".join(u[:120] for u in h.identified_uncertainties[:4]))
 
         return "\n".join(lines)
 
@@ -1211,14 +1231,10 @@ class ThoughtProcessor(
 
         # Structured per-shard detail — gives ASPDMA concrete pivot targets.
         shard_detail = (
-            self._build_structured_shard_detail(conscience_result, language=language)
-            if conscience_result
-            else ""
+            self._build_structured_shard_detail(conscience_result, language=language) if conscience_result else ""
         )
 
-        header = get_string(
-            language, "conscience.retry_header", default="**CONSCIENCE OVERRIDE GUIDANCE:**"
-        )
+        header = get_string(language, "conscience.retry_header", default="**CONSCIENCE OVERRIDE GUIDANCE:**")
         intro = get_string(
             language,
             "conscience.retry_intro",
@@ -1241,9 +1257,7 @@ class ThoughtProcessor(
             ),
         )
 
-        base_guidance = (
-            f"{intro}\n\n{shard_detail}\n\n" if shard_detail else f"{intro}\n\n"
-        )
+        base_guidance = f"{intro}\n\n{shard_detail}\n\n" if shard_detail else f"{intro}\n\n"
 
         if updated_observation:
             logger.info("[CONSCIENCE_RETRY] Including new observation in retry_guidance")

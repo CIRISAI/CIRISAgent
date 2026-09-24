@@ -10,12 +10,12 @@ from pydantic import BaseModel, Field
 
 from ciris_engine.constants import DEFAULT_OPENAI_MODEL_NAME
 from ciris_engine.logic import persistence
-from ciris_engine.logic.config.llm_budget import Deadline
+from ciris_engine.logic.config.llm_budget import MIN_USEFUL_ATTEMPT_S, Deadline, attempt_timeout
 from ciris_engine.logic.registries.base import ServiceRegistry
 from ciris_engine.logic.utils.constants import get_accord_text
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
-from ciris_engine.schemas.conscience.context import ConscienceCheckContext
 from ciris_engine.schemas.config.llm_budget import REMOTE_PROFILE, LLMBudgetProfile
+from ciris_engine.schemas.conscience.context import ConscienceCheckContext
 from ciris_engine.schemas.conscience.core import (
     ConscienceCheckResult,
     ConscienceStatus,
@@ -96,26 +96,6 @@ class ConscienceConfig(BaseModel):
         )
 
 
-#: The shortest attempt worth starting against a thought deadline. An honest
-#: conscience call answers in 2-14s (2026-09-04 RCA; the 87K-token veto ~9s),
-#: so a try with less than ~10s left is mostly a request we will cancel -- it
-#: spends provider capacity and returns nothing. When the per-try itself is
-#: shorter (tests, an operator override) the per-try is the floor instead.
-MIN_USEFUL_ATTEMPT_S = 10.0
-
-
-def attempt_timeout(per_try_s: float, deadline: Optional[Deadline]) -> Optional[float]:
-    """Timeout for the next attempt, or None when the deadline cannot afford one.
-
-    No deadline -> the static per-try, unchanged.
-    """
-    if deadline is None:
-        return per_try_s
-    if not deadline.affords(min(per_try_s, MIN_USEFUL_ATTEMPT_S)):
-        return None
-    return deadline.clamp(per_try_s)
-
-
 def deadline_of(context: Any) -> Optional[Deadline]:
     """The thought deadline a conscience context carries, if any (mocks carry none)."""
     candidate = getattr(context, "deadline", None)
@@ -137,10 +117,7 @@ MSG_INVALID_LLM_RESULT = "Invalid result type from LLM"
 # LLM-output schemas live in `ciris_engine/schemas/conscience/core.py` —
 # imported here for backward compat. New consumers should import directly
 # from the schemas module.
-from ciris_engine.schemas.conscience.core import (  # noqa: E402,F401
-    CoherenceResult,
-    EntropyResult,
-)
+from ciris_engine.schemas.conscience.core import CoherenceResult, EntropyResult  # noqa: E402,F401
 
 
 class _BaseConscience(ConscienceInterface):
@@ -302,7 +279,10 @@ class _BaseConscience(ConscienceInterface):
             if timeout is None:
                 logger.warning(
                     "[CONSCIENCE] %s: thought deadline has %.1fs left, too little for attempt %d/%d -- giving up",
-                    name, deadline.remaining() if deadline else 0.0, attempt, retries + 1,
+                    name,
+                    deadline.remaining() if deadline else 0.0,
+                    attempt,
+                    retries + 1,
                 )
                 out_of_time = True
                 break
@@ -311,13 +291,18 @@ class _BaseConscience(ConscienceInterface):
             try:
                 result = await asyncio.wait_for(sink.llm.call_llm_structured(**kwargs), timeout=timeout)
                 if attempt > 1:
-                    logger.info("[CONSCIENCE] %s: answered on attempt %d after %.1fs", name, attempt, time.monotonic() - t0)
+                    logger.info(
+                        "[CONSCIENCE] %s: answered on attempt %d after %.1fs", name, attempt, time.monotonic() - t0
+                    )
                 return result
             except asyncio.TimeoutError as e:
                 last = e
                 logger.warning(
                     "[CONSCIENCE] %s: no answer within the facility budget (%.0fs) on attempt %d/%d%s",
-                    name, timeout, attempt, retries + 1,
+                    name,
+                    timeout,
+                    attempt,
+                    retries + 1,
                     " -- retrying with a fresh call" if attempt <= retries else " -- giving up",
                 )
             except Exception as e:  # noqa: BLE001 - categorised below, never swallowed
@@ -326,7 +311,12 @@ class _BaseConscience(ConscienceInterface):
                     last = e
                     logger.warning(
                         "[CONSCIENCE] %s: %s on attempt %d/%d after %.1fs -- retrying with a fresh call (%s)",
-                        name, cat, attempt, retries + 1, time.monotonic() - t0, str(e)[:160],
+                        name,
+                        cat,
+                        attempt,
+                        retries + 1,
+                        time.monotonic() - t0,
+                        str(e)[:160],
                     )
                     continue
                 raise
@@ -493,9 +483,7 @@ class EntropyConscience(_BaseConscience):
         # migration plan; "Lift SPEAK-only short-circuits to {SPEAK, TOOL}").
         # Other verbs are handled by EOV/EpistemicHumility or are outer-exempt.
         if action.selected_action not in (HandlerActionType.SPEAK, HandlerActionType.TOOL):
-            self._update_trace_correlation(
-                correlation, True, "Verb out of Entropy scope (SPEAK+TOOL only)", start_time
-            )
+            self._update_trace_correlation(correlation, True, "Verb out of Entropy scope (SPEAK+TOOL only)", start_time)
             return ConscienceCheckResult(
                 status=ConscienceStatus.PASSED,
                 passed=True,
@@ -532,7 +520,9 @@ class EntropyConscience(_BaseConscience):
                 text, image_context, language=self._resolve_language(context)
             )
             if hasattr(sink, "llm"):
-                entropy_eval, _ = await self._call_llm_with_budget(sink, deadline=deadline_of(context),
+                entropy_eval, _ = await self._call_llm_with_budget(
+                    sink,
+                    deadline=deadline_of(context),
                     messages=messages,
                     response_model=EntropyResult,
                     handler_name="entropy_conscience",
@@ -551,8 +541,7 @@ class EntropyConscience(_BaseConscience):
                 # default logs tight.
                 alt_count = len(entropy_eval.alternative_meanings)
                 logger.info(
-                    "[CONSCIENCE] EntropyConscience: entropy=%.2f "
-                    "actual_is_representative=%s alternatives=%d",
+                    "[CONSCIENCE] EntropyConscience: entropy=%.2f " "actual_is_representative=%s alternatives=%d",
                     entropy,
                     entropy_eval.actual_is_representative,
                     alt_count,
@@ -695,7 +684,9 @@ class CoherenceConscience(_BaseConscience):
                 user_message=self._extract_user_message(context),
             )
             if hasattr(sink, "llm"):
-                coherence_eval, _ = await self._call_llm_with_budget(sink, deadline=deadline_of(context),
+                coherence_eval, _ = await self._call_llm_with_budget(
+                    sink,
+                    deadline=deadline_of(context),
                     messages=messages,
                     response_model=CoherenceResult,
                     handler_name="coherence_conscience",
@@ -816,7 +807,9 @@ class OptimizationVetoConscience(_BaseConscience):
 
         try:
             if hasattr(sink, "llm"):
-                result, _ = await self._call_llm_with_budget(sink, deadline=deadline_of(context),
+                result, _ = await self._call_llm_with_budget(
+                    sink,
+                    deadline=deadline_of(context),
                     messages=messages,
                     response_model=OptimizationVetoResult,
                     handler_name="optimization_veto_conscience",
@@ -952,7 +945,9 @@ class EpistemicHumilityConscience(_BaseConscience):
 
         try:
             if hasattr(sink, "llm"):
-                result, _ = await self._call_llm_with_budget(sink, deadline=deadline_of(context),
+                result, _ = await self._call_llm_with_budget(
+                    sink,
+                    deadline=deadline_of(context),
                     messages=messages,
                     response_model=EpistemicHumilityResult,
                     handler_name="epistemic_humility_conscience",

@@ -180,6 +180,7 @@ class TestInteractEndpoint:
             expected_response = "Hello! How can I help you?\n\n📝 Privacy Notice: We forget about you in 14 days unless you say otherwise. Visit /v1/consent to manage your data preferences."
             assert data["data"]["response"] == expected_response
             assert data["data"]["state"] == "WORK"
+            assert data["data"]["outcome"] == "complete"
             assert "message_id" in data["data"]
             assert "processing_time_ms" in data["data"]
         finally:
@@ -208,6 +209,9 @@ class TestInteractEndpoint:
             assert "data" in data  # Response structure check
             assert "Still processing" in data["data"]["response"]
             assert data["data"]["processing_time_ms"] >= 100
+            # #1059: say it timed out, instead of making callers match a
+            # localized placeholder.
+            assert data["data"]["outcome"] == "timeout"
         finally:
             app.dependency_overrides.clear()
 

@@ -88,6 +88,25 @@ class InteractRequest(BaseModel):
     )
 
 
+class InteractOutcome(str, Enum):
+    """How an interact() call ended (#1059).
+
+    The HTTP status is 200 for all three and `response` always carries text,
+    so a caller that only reads `response` keeps working. A caller that needs
+    to know whether that text is the agent's answer reads this instead of
+    matching the placeholder — which is localized, so string matching breaks
+    for every agent not running in English.
+    """
+
+    #: `response` is the agent's reply.
+    COMPLETE = "complete"
+    #: The deadline passed first. `response` is the localized still-processing
+    #: placeholder; the task keeps running and its reply lands in history.
+    TIMEOUT = "timeout"
+    #: The processor is paused; the message is queued, `response` says so.
+    PAUSED = "paused"
+
+
 class InteractResponse(BaseModel):
     """Response from agent interaction."""
 
@@ -109,6 +128,11 @@ class InteractResponse(BaseModel):
     #: Optional because the correlation is best-effort: a paused or timed-out
     #: interaction has no task to name, and None there is honest.
     task_id: Optional[str] = Field(None, description="Task ID this interaction produced, if resolvable")
+    outcome: InteractOutcome = Field(
+        InteractOutcome.COMPLETE,
+        description="complete: response is the agent's reply; timeout: deadline passed, the task is still "
+        "running and its reply will appear in history; paused: processor paused, message queued",
+    )
 
 
 class MessageRequest(BaseModel):
@@ -218,9 +242,13 @@ class ChannelList(BaseModel):
 # Message tracking for interact functionality
 _message_responses: dict[str, str] = {}
 _response_events: dict[str, asyncio.Event] = {}
+#: The task whose SPEAK answered a waiting interact(), keyed by message_id.
+#: Written by the delivery path, which knows the speaking task; read once by
+#: interact() so it can name the task without a persistence scan.
+_message_task_ids: dict[str, str] = {}
 
 
-async def store_message_response(message_id: str, response: str) -> None:
+async def store_message_response(message_id: str, response: str, task_id: Optional[str] = None) -> None:
     """Store a response and notify waiting request."""
     import os
 
@@ -232,6 +260,8 @@ async def store_message_response(message_id: str, response: str) -> None:
     event = _response_events.get(message_id)
     if event:
         logger.info(f"[STORE_RESPONSE] Event found for {message_id}, setting it")
+        if task_id:
+            _message_task_ids[message_id] = task_id
         event.set()
     else:
         # No waiter for this message_id. This is EXPECTED for async
@@ -665,6 +695,30 @@ def _resolve_task_id_for_message(message_id: str) -> Optional[str]:
     return None
 
 
+def _task_id_for_interaction(message_id: str, request: Optional[Request] = None) -> Optional[str]:
+    """The task that owns this interaction, cheapest source first.
+
+    1. The task whose SPEAK was delivered to this message (delivery knows it).
+    2. The adapter's message_id -> task_id map, written when the observer
+       returns — the only source that is right under task-append, where the
+       message was folded into an existing task whose correlation_id is a
+       different message.
+    3. The persistence scan by correlation_id (#1011).
+
+    Call before `_cleanup_interaction_tracking`, which drops 1 and 2.
+    """
+    delivered = _message_task_ids.get(message_id)
+    if delivered:
+        return delivered
+    if request is not None:
+        task_map = getattr(request.app.state, "message_task_map", None)
+        if isinstance(task_map, dict):
+            mapped = task_map.get(message_id)
+            if isinstance(mapped, str) and mapped:
+                return mapped
+    return _resolve_task_id_for_message(message_id)
+
+
 def _create_paused_response(
     message_id: str, cognitive_state: str, processing_time: int
 ) -> SuccessResponse[InteractResponse]:
@@ -678,6 +732,7 @@ def _create_paused_response(
             ),
             state=cognitive_state,
             processing_time_ms=processing_time,
+            outcome=InteractOutcome.PAUSED,
         )
     )
 
@@ -715,43 +770,42 @@ async def _check_processor_pause_status(
 
 
 def _get_interaction_timeout(request: Request) -> float:
-    """Get interaction timeout from env var, config, or default.
+    """How long interact() waits for the agent's reply before answering TIMEOUT.
 
     Resolution order (highest priority first):
-      1. `CIRIS_API_INTERACTION_TIMEOUT` env var — operator override
-         that wins even when a stored `APIAdapterConfig` is being used.
-         The adapter's `_load_config` flow has a known shape where
-         passing an `APIAdapterConfig` object discards the env-loaded
-         config (adapter.py:_apply_adapter_config), so the env var
-         needs to be re-checked here for the QA / load-test path to
-         actually bump the server-side correlation window.
-      2. `request.app.state.api_config.interaction_timeout` — value
-         injected by the adapter at startup.
-      3. 55.0 — production default for longer processing.
+      1. `CIRIS_API_INTERACTION_TIMEOUT` env var — operator override that
+         wins even when a stored `APIAdapterConfig` is in use. The adapter's
+         `_load_config` flow can discard the env-loaded config when it is
+         handed an `APIAdapterConfig` object (adapter.py:_apply_adapter_config),
+         so the env var is re-checked here on every call.
+      2. `request.app.state.api_config.interaction_timeout` — only when it
+         was explicitly configured (a positive number). None means "not set".
+      3. `active_budget().interact_deadline_s` (#1186) — the deadline for the
+         primary LLM provider: 195s for a hosted model, 900s for one running
+         on the user's own hardware. The budget is sized so a reply that
+         needs a PONDER round still lands inside it; a fixed 110s was a coin
+         flip for local models (#1013).
     """
     import os
 
     env_timeout = os.environ.get("CIRIS_API_INTERACTION_TIMEOUT")
     if env_timeout:
         try:
-            return float(env_timeout)
+            value = float(env_timeout)
+            if value > 0:
+                return value
         except ValueError:
-            pass  # malformed env var — fall through to config / default
+            pass  # malformed env var — fall through to config / budget
 
-    # 55.0 -> 110.0 (#1013). The old default sat BELOW the median successful
-    # response. Measured on an Amharic safety-battery run: every seed thought
-    # that reached SPEAK took 54-100s, surviving only because the caller's HTTP
-    # client held the connection past this deadline. One question pondered twice
-    # — 100.1s, then 82.0s, still deliberating at 182s — and got the timeout
-    # string, which the battery graded as the agent's answer and failed on
-    # script ratio, an English literal containing no Ethiopic.
-    #
-    # A timeout most successful responses exceed is a coin flip, and PONDER —
-    # a designed action meaning "I need another round" — always loses it.
-    timeout = 110.0
-    if hasattr(request.app.state, "api_config"):
-        timeout = request.app.state.api_config.interaction_timeout
-    return timeout
+    api_config = getattr(request.app.state, "api_config", None)
+    configured = getattr(api_config, "interaction_timeout", None) if api_config is not None else None
+    # bool is an int subclass; a stray True must not become a 1s deadline.
+    if isinstance(configured, (int, float)) and not isinstance(configured, bool) and configured > 0:
+        return float(configured)
+
+    from ciris_engine.logic.config.llm_budget import active_budget
+
+    return float(active_budget().interact_deadline_s)
 
 
 def _get_current_cognitive_state(request: Request) -> str:
@@ -769,7 +823,11 @@ def _cleanup_interaction_tracking(message_id: str, request: Optional[Request] = 
     """
     _response_events.pop(message_id, None)
     _message_responses.pop(message_id, None)
+    _message_task_ids.pop(message_id, None)
     if request is not None:
+        task_map = getattr(request.app.state, "message_task_map", None)
+        if isinstance(task_map, dict):
+            task_map.pop(message_id, None)
         chan_map = getattr(request.app.state, "message_channel_map", {})
         if isinstance(chan_map, dict):
             for queue in chan_map.values():
@@ -1006,6 +1064,7 @@ async def interact(request: Request, body: InteractRequest, auth: AuthObserverDe
             response_content += "\n\n---\n" + air_reminder
 
         # Clean up and calculate timing
+        task_id = _task_id_for_interaction(message_id, request)
         _cleanup_interaction_tracking(message_id, request)
         processing_time_ms = int((datetime.now(timezone.utc) - start_time).total_seconds() * 1000)
 
@@ -1015,7 +1074,8 @@ async def interact(request: Request, body: InteractRequest, auth: AuthObserverDe
             response=response_content,
             state=_get_current_cognitive_state(request),
             processing_time_ms=processing_time_ms,
-            task_id=_resolve_task_id_for_message(message_id),
+            task_id=task_id,
+            outcome=InteractOutcome.COMPLETE,
         )
 
         return SuccessResponse(data=response)
@@ -1023,7 +1083,14 @@ async def interact(request: Request, body: InteractRequest, auth: AuthObserverDe
     except asyncio.TimeoutError:
         import os
 
-        # Clean up
+        # The task exists and keeps running; name it so the caller can follow
+        # it in history. Resolve before cleanup, which drops the map entry.
+        timed_out_task_id = _task_id_for_interaction(message_id, request)
+
+        # Clean up. Removing message_id from the channel queue is what keeps
+        # the task's late SPEAK from being delivered to the NEXT request on
+        # this channel: delivery matches by task, and this message no longer
+        # has a waiter (api_communication._handle_api_interaction_response).
         _cleanup_interaction_tracking(message_id, request)
 
         # A timeout is a real degradation — the agent did not deliver a
@@ -1050,6 +1117,8 @@ async def interact(request: Request, body: InteractRequest, auth: AuthObserverDe
             ),
             state="WORK",
             processing_time_ms=int(timeout * 1000),  # Use actual timeout value
+            task_id=timed_out_task_id,
+            outcome=InteractOutcome.TIMEOUT,
         )
 
         return SuccessResponse(data=response)

@@ -13,7 +13,7 @@ These tests pin:
   1. Default `thought_batch_size = 3` (12 parallel calls) — the cap that
      keeps WAKEUP within the typical structured-output throughput of
      mid-tier hosted backends.
-  2. Override via `EssentialConfig.workflow.thought_batch_size` works.
+  2. Override via `EssentialConfig.limits.thought_batch_size` works.
   3. The processor honors the configured value: 9 thoughts at batch=3
      produces 3 batches of 3.
   4. Backward-compat fallback: if `app_config.workflow` is None or the
@@ -30,7 +30,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from ciris_engine.schemas.config.essential import OperationalLimitsConfig
-
 
 # ────────────────────────────── config schema ────────────────────────────
 
@@ -96,6 +95,7 @@ def patch_persistence(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         "ciris_engine.logic.processors.core.main_processor.persistence.update_thought_status",
         _update_status,
     )
+
     # Stub the batch-context prefetch
     async def _prefetch(*_args: Any, **_kwargs: Any) -> Any:
         return None
@@ -119,18 +119,17 @@ def _make_processor(batch_size: int | None, *, workflow_present: bool = True) ->
     proc = AgentProcessor.__new__(AgentProcessor)
     proc.agent_occurrence_id = "test_occurrence"
 
-    # Build app_config with optional workflow.thought_batch_size
+    # Build app_config with optional limits.thought_batch_size (the field
+    # lives on OperationalLimitsConfig, not WorkflowConfig).
     if workflow_present:
+        workflow = SimpleNamespace()
         if batch_size is None:
-            workflow = SimpleNamespace(max_active_thoughts=100)  # field absent
+            limits = SimpleNamespace(max_active_thoughts=100)  # batch size absent
         else:
-            workflow = SimpleNamespace(
-                max_active_thoughts=100,
-                thought_batch_size=batch_size,
-            )
-        proc.app_config = SimpleNamespace(workflow=workflow)
+            limits = SimpleNamespace(thought_batch_size=batch_size, max_active_thoughts=100)
+        proc.app_config = SimpleNamespace(workflow=workflow, limits=limits)
     else:
-        proc.app_config = SimpleNamespace(workflow=None)
+        proc.app_config = SimpleNamespace(workflow=None, limits=None)
 
     # state_manager.get_state() — return WAKEUP so no SHUTDOWN filtering
     state_mgr = MagicMock()
@@ -173,9 +172,7 @@ async def test_batch_size_3_splits_9_thoughts_into_3_batches(
 
     assert n_processed == 9
     assert proc._process_single_thought.await_count == 9
-    assert gather_call_sizes == [3, 3, 3], (
-        f"expected 3 batches of 3, got batch sizes {gather_call_sizes}"
-    )
+    assert gather_call_sizes == [3, 3, 3], f"expected 3 batches of 3, got batch sizes {gather_call_sizes}"
 
 
 @pytest.mark.asyncio
@@ -281,3 +278,67 @@ async def test_batch_size_does_not_change_total_processed(
         proc = _make_processor(batch_size=bs)
         n_processed = await proc._process_pending_thoughts_async()
         assert n_processed == n_thoughts, f"batch_size={bs}: processed {n_processed}/{n_thoughts}"
+
+
+@pytest.mark.asyncio
+async def test_real_essential_config_limits_value_is_honoured(
+    patch_persistence: dict[str, Any],
+) -> None:
+    """Regression: the processor used to read `workflow.thought_batch_size`,
+    a field that does not exist (WorkflowConfig is extra="forbid"), so a
+    configured `limits.thought_batch_size` was silently ignored and every
+    batch was 3."""
+    from ciris_engine.schemas.config.essential import EssentialConfig
+
+    patch_persistence["pending_thoughts"][:] = [_make_thought(f"th_{i}") for i in range(5)]
+    proc = _make_processor(batch_size=None)
+    cfg = EssentialConfig()
+    cfg.limits.thought_batch_size = 2
+    proc.app_config = cfg
+
+    gather_call_sizes: list[int] = []
+    real_gather = __import__("asyncio").gather
+
+    async def _spy_gather(*tasks, return_exceptions=False):
+        gather_call_sizes.append(len(tasks))
+        return await real_gather(*tasks, return_exceptions=return_exceptions)
+
+    with patch("ciris_engine.logic.processors.core.main_processor.asyncio.gather", _spy_gather):
+        await proc._process_pending_thoughts_async()
+
+    assert gather_call_sizes == [2, 2, 1]
+
+
+# --------------------------------------------------------------------------
+# max_active_thoughts lives on limits too (#1186): reading it off `workflow`
+# pinned every agent at 10 whatever the config said.
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_limits_max_active_thoughts_caps_a_round(patch_persistence: dict[str, Any]) -> None:
+    patch_persistence["pending_thoughts"][:] = [_make_thought(f"th_{i}") for i in range(9)]
+    proc = _make_processor(batch_size=3)
+    proc.app_config.limits.max_active_thoughts = 4
+    assert await proc._process_pending_thoughts_async() == 4
+
+
+@pytest.mark.asyncio
+async def test_a_workflow_max_active_thoughts_is_not_read(patch_persistence: dict[str, Any]) -> None:
+    """The old, wrong location must not come back: a value there is ignored."""
+    patch_persistence["pending_thoughts"][:] = [_make_thought(f"th_{i}") for i in range(30)]
+    proc = _make_processor(batch_size=3)
+    del proc.app_config.limits.max_active_thoughts
+    proc.app_config.workflow.max_active_thoughts = 30
+    assert await proc._process_pending_thoughts_async() == 10
+
+
+@pytest.mark.asyncio
+async def test_real_config_takes_up_to_50_per_round(patch_persistence: dict[str, Any]) -> None:
+    from ciris_engine.schemas.config.essential import EssentialConfig
+
+    patch_persistence["pending_thoughts"][:] = [_make_thought(f"th_{i}") for i in range(60)]
+    proc = _make_processor(batch_size=3)
+    proc.app_config = EssentialConfig()
+    assert proc.app_config.limits.max_active_thoughts == 50
+    assert await proc._process_pending_thoughts_async() == 50

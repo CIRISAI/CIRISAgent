@@ -93,10 +93,13 @@ SERVER_ENV = {
     # fresh task — defeats the per-question isolation we need.
     "CIRIS_DISABLE_TASK_APPEND": "1",
     # Each interact call fans through the full DMA + conscience pipeline
-    # (~12 live LLM hops). Default 55s truncates Stage-5 crisis chains
-    # which routinely run 2-4 minutes on Together gemma. Per-question
-    # timeout in the module is 1800s; this is the agent-side ceiling.
-    "CIRIS_API_INTERACTION_TIMEOUT": "1800",
+    # (~12 live LLM hops). Stage-5 crisis chains routinely run 2-4 minutes
+    # on Together gemma. This is the agent-side ceiling; it sits a minute
+    # BELOW the module's 1800s client timeout so the server always gets to
+    # answer (outcome=timeout) before the client gives up. It only started
+    # applying once module SERVER_ENV beat the runner's generic 180s default
+    # (server.apply_module_server_env); before that it was silently 180s.
+    "CIRIS_API_INTERACTION_TIMEOUT": "1740",
 }
 
 # Force --wipe-data on every run for signed-artifact reproducibility.
@@ -192,22 +195,10 @@ LOCALE_USERS: Dict[str, str] = {
 # framing for rubric clarity: "User Selamawit said: '<inner>'". The
 # model needs only the inner first-person utterance — otherwise it
 # interprets "User Selamawit" as a quoted third party and the
-# conversation partner becomes the admin caller. See the matching
-# logic in model_eval_tests.py for the rationale.
-_WRAPPER_RE = re.compile(r":\s*['‘’](.+?)['‘’]", re.DOTALL)
-
-
-def _strip_question_wrapper(text: str) -> str:
-    """Strip 'User X said: "<...>"' framing. Mirrors
-    model_eval_tests._strip_question_wrapper."""
-    matches = list(_WRAPPER_RE.finditer(text))
-    if not matches:
-        return text
-    longest = max(matches, key=lambda m: len(m.group(1)))
-    if len(longest.group(1)) < 30:
-        return text
-    return longest.group(1)
-
+# conversation partner becomes the admin caller. One implementation,
+# shared with model_eval (see the rationale there).
+from tools.qa_runner.modules.interact_outcome import interact_non_reply  # noqa: E402
+from tools.qa_runner.modules.model_eval_tests import _strip_question_wrapper  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SAFETY_DIR = REPO_ROOT / "tests" / "safety"
@@ -803,6 +794,17 @@ class SafetyBatteryTests:
             data = body.get("data") or {}
             response_text = data.get("response") or body.get("response") or ""
             task_id = data.get("task_id") or body.get("task_id")
+            # A timed-out interact() is HTTP 200 with the localized
+            # still-processing placeholder in `response`. Grading that text as
+            # the agent's answer is the #1059 bug: success=true, error=null,
+            # and the judge scores a placeholder.
+            non_reply = interact_non_reply(data if data else body)
+            if non_reply is not None:
+                error: Optional[str] = non_reply.value
+            elif not response_text:
+                error = "empty response body"
+            else:
+                error = None
             return BatteryResult(
                 question_id=q["question_id"],
                 question_version=q["question_version"],
@@ -812,8 +814,8 @@ class SafetyBatteryTests:
                 response_text=response_text,
                 response_task_id=task_id,
                 duration_s=duration,
-                success=bool(response_text),
-                error=None if response_text else "empty response body",
+                success=error is None,
+                error=error,
             )
         except Exception as exc:
             return BatteryResult(

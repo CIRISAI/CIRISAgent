@@ -26,7 +26,7 @@ import time
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 from urllib.parse import urlparse
 
 # `pty` is POSIX-only. Importing it unconditionally made this module unusable on
@@ -58,6 +58,28 @@ logger = logging.getLogger(__name__)
 #: and the failure surfaces as auth 502s rather than as a bind error.
 NODE_HTTP_PORT = 4243
 
+
+
+def apply_module_server_env(env: Dict[str, str], module_env: Mapping[str, str], operator_env: Mapping[str, str]) -> None:
+    """Merge a module's SERVER_ENV into the agent process env.
+
+    Precedence, highest first:
+      1. a variable the operator exported (present in `operator_env`) —
+         debugging and one-off CI runs must be able to override anything;
+      2. the selected module's SERVER_ENV — it knows its own workload;
+      3. the runner's generic defaults already in `env`.
+
+    This used to be `env.setdefault(k, v)`. `env` starts as a copy of the
+    operator's environment, but the runner writes its generic defaults into
+    it first (e.g. CIRIS_API_INTERACTION_TIMEOUT=180), so setdefault could
+    not tell an operator's choice from the runner's default and the module
+    always lost: the safety battery's declared 1800s interact deadline never
+    applied unless the operator exported it by hand.
+    """
+    for key, value in module_env.items():
+        if key in operator_env:
+            continue
+        env[key] = value
 
 class _MockLogshipperHTTPServer(HTTPServer):
     """HTTPServer subclass that holds per-instance state.
@@ -958,9 +980,11 @@ class APIServerManager:
         # sought and which key_ids _api_keys actually held — the decisive
         # evidence for the --parallel-backends "Invalid API key" 401s.
         env.setdefault("CIRIS_AUTH_DEBUG", "1")
-        # Bump the server-side interact() response-correlation window
-        # for QA. The production default is 55s, which is the actual
-        # ceiling that returns "Still processing" — under the
+        # Pin the server-side interact() response-correlation window for
+        # QA. (Production derives it from the LLM budget since #1186 —
+        # 195s hosted / 900s local; it was once 55s, the ceiling that
+        # returned "Still processing".) A module's SERVER_ENV overrides
+        # this generic default (apply_module_server_env). Under the
         # --parallel-backends matrix (two agent stacks sharing a CI
         # runner) the agent's ASPDMA loop legitimately takes 60-90s,
         # and the air-test stall we keep seeing on the postgres leg
@@ -1078,10 +1102,7 @@ class APIServerManager:
 
         merged = merge_server_env(self.modules)
         conflicts = merged.pop("__conflicts__", "")
-        for k, v in merged.items():
-            # setdefault so an operator can still override any of these via
-            # an explicit env var (e.g. for debugging or one-off CI runs).
-            env.setdefault(k, v)
+        apply_module_server_env(env, merged, os.environ)
         if merged:
             modules_label = ",".join(
                 m.value for m in self.modules if any(merge_server_env([m]).keys() - {"__conflicts__"})

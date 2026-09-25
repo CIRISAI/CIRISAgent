@@ -708,8 +708,18 @@ class TestRetryStateManagement:
         assert retry_state["original_request_id"] == "abc123"
 
 
+def _check_local_endpoint(base_url: str) -> bool:
+    """Ask the REAL methods, and require the static and instance forms to agree."""
+    from ciris_engine.logic.services.runtime.llm_service.service import OpenAICompatibleClient
+
+    static_answer = OpenAICompatibleClient._is_local_url(base_url)
+    instance_answer = object.__new__(OpenAICompatibleClient)._is_local_endpoint(base_url)
+    assert static_answer == instance_answer, f"_is_local_url and _is_local_endpoint disagree on {base_url!r}"
+    return static_answer
+
+
 class TestIsLocalEndpoint:
-    """Tests for _is_local_endpoint detection logic.
+    """Tests for _is_local_url / _is_local_endpoint (both delegate to classify_provider).
 
     CIRIS always disables model reasoning on local endpoints since it provides
     its own reasoning structure via the DMA pipeline. This test ensures local
@@ -784,6 +794,8 @@ class TestIsLocalEndpoint:
             "https://llm01.ciris.ai/v1",
             "https://llm01.ciris-services-1.ai/v1",
             "https://generativelanguage.googleapis.com/v1",
+            # The two copies used to disagree here; deepinfra is a cloud host.
+            "https://api.deepinfra.com/v1/openai",
         ]
 
         for url in cloud_urls:
@@ -796,50 +808,3 @@ class TestIsLocalEndpoint:
         assert not _check_local_endpoint(None)  # type: ignore
 
 
-def _check_local_endpoint(base_url: str) -> bool:
-    """Helper to test local endpoint detection logic.
-
-    Mirrors the logic in OpenAICompatibleClient._is_local_endpoint.
-    """
-    if not base_url:
-        return False
-
-    base_url_lower = base_url.lower()
-
-    # Cloud providers that handle reasoning themselves or don't support it
-    cloud_providers = [
-        "ciris.ai",
-        "ciris-services",
-        "openrouter.ai",
-        "together.xyz",
-        "api.together",
-        "openai.com",
-        "api.openai",
-        "anthropic.com",
-        "api.anthropic",
-        "googleapis.com",
-        "generativelanguage.googleapis",
-        "groq.com",
-        "api.groq",
-    ]
-
-    if any(provider in base_url_lower for provider in cloud_providers):
-        return False
-
-    # Local indicators: localhost, local IPs, .local hostnames, common local ports
-    local_indicators = [
-        "localhost",
-        "127.0.0.1",
-        "0.0.0.0",
-        "192.168.",
-        "10.0.",
-        "10.1.",
-        "172.16.",
-        ".local",
-        ":11434",  # Ollama default port
-        ":8080",  # llama.cpp default port
-        ":1234",  # LM Studio default port
-        ":8000",  # vLLM default port
-    ]
-
-    return any(indicator in base_url_lower for indicator in local_indicators)

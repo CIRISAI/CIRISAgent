@@ -19,6 +19,9 @@ from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from ciris_engine.logic.config.llm_budget import resolve_budget
+from ciris_engine.schemas.config.llm_budget import LOCAL_PROFILE
+
 # ---------------------------------------------------------------------------
 # Environment variable names (single source of truth)
 # ---------------------------------------------------------------------------
@@ -139,9 +142,12 @@ class MobileLocalLLMConfig(BaseModel):
         description="How long to wait for the server to become healthy after start().",
     )
     request_timeout_seconds: float = Field(
-        default=60.0,
+        default=LOCAL_PROFILE.llm_http_timeout_s,
         gt=0.0,
-        description="Per-request timeout for inference calls.",
+        description=(
+            "Per-request timeout for inference calls. Defaults to the LOCAL LLM budget profile's "
+            "HTTP timeout (ciris_engine/logic/config/llm_budget.py, #1186)."
+        ),
     )
     health_interval_seconds: float = Field(
         default=15.0,
@@ -284,7 +290,11 @@ def load_config_from_env() -> MobileLocalLLMConfig:
         host=os.environ.get(ENV_SERVER_HOST, defaults.host),
         port=_env_int(ENV_SERVER_PORT, defaults.port),
         ready_timeout_seconds=_env_float(ENV_READY_TIMEOUT, defaults.ready_timeout_seconds),
-        request_timeout_seconds=_env_float(ENV_REQUEST_TIMEOUT, defaults.request_timeout_seconds),
+        # An explicit adapter override wins; otherwise the LOCAL budget profile
+        # (which honours CIRIS_LLM_TIMEOUT) sets it, as for every other local provider.
+        request_timeout_seconds=_env_float(
+            ENV_REQUEST_TIMEOUT, resolve_budget("mobile_local", None).llm_http_timeout_s
+        ),
         health_interval_seconds=_env_float(ENV_HEALTH_INTERVAL, defaults.health_interval_seconds),
         min_total_ram_gb_e2b=_env_float(ENV_MIN_RAM_GB, defaults.min_total_ram_gb_e2b),
         min_free_disk_gb=_env_float(ENV_MIN_FREE_DISK_GB, defaults.min_free_disk_gb),

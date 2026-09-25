@@ -99,11 +99,22 @@ class ComponentBuilder:
 
     def _build_conscience_registry(self, time_service: Any, benchmark_mode: bool) -> Any:
         """Build and configure the conscience registry."""
+        from ciris_engine.logic.config.llm_budget import active_budget
         from ciris_engine.logic.conscience.core import ConscienceConfig
 
         config = self.runtime._ensure_config()
         registry = conscienceRegistry()
-        conscience_config = ConscienceConfig()
+        # Per-try timeout and attempt count from the primary provider's budget
+        # profile (CIRISAgent#1186): REMOTE 45s x 4, LOCAL 240s x 1.
+        budget = active_budget()
+        conscience_config = ConscienceConfig.from_budget(budget)
+        logger.info(
+            "[LLM_BUDGET] conscience: %.0fs x %d attempts (%s profile, thought budget %.0fs)",
+            budget.conscience_per_try_s,
+            budget.conscience_attempts,
+            budget.provider_class.value,
+            budget.thought_budget_s,
+        )
 
         # UpdatedStatusConscience runs first, even in benchmark mode (no LLM calls)
         registry.register_conscience(

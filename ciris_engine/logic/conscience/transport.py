@@ -122,7 +122,10 @@ def transport_failure_reason(shard: str, exc: BaseException, category: Optional[
     look at the network, the key, or the model name.
     """
     cat = category or categorize_conscience_error(exc)
-    return f"{shard} DID NOT RUN — {cat} reaching the model ({type(exc).__name__}: {exc}). " "This is not a judgement about the action."
+    return (
+        f"{shard} DID NOT RUN — {cat} reaching the model ({type(exc).__name__}: {exc}). "
+        "This is not a judgement about the action."
+    )
 
 
 def unavailable_result(
@@ -152,6 +155,41 @@ def unavailable_result(
     category = categorize_conscience_error(exc)
     reason = transport_failure_reason(shard, exc, category)
     logger.error("%s: transport failure (%s), check did not run: %s", shard, category, exc)
+
+    kwargs: Dict[str, Any] = {}
+    if check_timestamp is not None:
+        kwargs["check_timestamp"] = check_timestamp
+    result: "ConscienceCheckResult" = ConscienceCheckResult(
+        status=ConscienceStatus.ERROR,
+        passed=False,
+        reason=reason,
+        check_ran=False,
+        **kwargs,
+    )
+    return result
+
+
+def unusable_answer_result(
+    shard: str, exc: BaseException, check_timestamp: Optional[datetime] = None
+) -> "ConscienceCheckResult":
+    """The result when the model was reached but its answer could not be used.
+
+    Schema failure after reasks, a content filter, context length, a missing
+    LLM sink, or a reply of the wrong type. Entropy and coherence used to fall
+    back to a preset score here (0.1 / 0.9) and judge on it -- a passing
+    number the model never produced. Same shape as `unavailable_result`:
+    fails CLOSED, `check_ran=False` (so the processor does not retry into the
+    same fault), and a reason that names what went wrong instead of reading
+    as a judgement about the action.
+    """
+    from ciris_engine.schemas.conscience.core import ConscienceCheckResult, ConscienceStatus
+
+    category = categorize_conscience_error(exc)
+    reason = (
+        f"{shard} DID NOT RUN — the model's answer could not be used ({category}; "
+        f"{type(exc).__name__}: {exc}). This is not a judgement about the action."
+    )
+    logger.error("%s: no usable answer (%s), check did not run: %s", shard, category, exc)
 
     kwargs: Dict[str, Any] = {}
     if check_timestamp is not None:

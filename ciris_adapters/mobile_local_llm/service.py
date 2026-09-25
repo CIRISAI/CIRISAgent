@@ -306,6 +306,10 @@ class MobileLocalLLMService(BaseService, LLMServiceProtocol):
             base_url=self._config.base_url(),
             api_key="local",  # loopback server ignores the token
             timeout=self._config.request_timeout_seconds,
+            # No SDK retries: its default (2) re-sent a timed-out request to a
+            # one-slot local server, tripling the wait (#1186). instructor's
+            # default here is a single attempt.
+            max_retries=0,
         )
         patched = instructor.patch(client)
 

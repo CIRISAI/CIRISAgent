@@ -18,7 +18,9 @@ from ciris_engine.schemas.dma.results import (
 logger = logging.getLogger(__name__)
 from ciris_engine.schemas.conscience.core import (
     CoherenceCheckResult,
+    CoherenceResult,
     EntropyCheckResult,
+    EntropyResult,
     EpistemicHumilityResult,
     OptimizationVetoResult,
 )
@@ -682,7 +684,7 @@ def idma(context: Optional[List[str]] = None) -> IDMAResult:
 from typing import List, Optional
 
 from .responses_action_selection import action_selection, aspdma_llm_result, dsaspdma_llm_result, tsaspdma_llm_result
-from .responses_epistemic import coherence, entropy
+from .responses_epistemic import coherence, coherence_raw, entropy, entropy_raw
 from .responses_feedback import epistemic_humility, optimization_veto
 
 _RESPONSE_MAP: Dict[Any, Callable[..., Any]] = {
@@ -698,6 +700,8 @@ _RESPONSE_MAP: Dict[Any, Callable[..., Any]] = {
     TSASPDMALLMResult: tsaspdma_llm_result,  # Gemini-compatible TSASPDMA schema
     EntropyCheckResult: entropy,
     CoherenceCheckResult: coherence,
+    EntropyResult: entropy_raw,  # what EntropyConscience actually requests
+    CoherenceResult: coherence_raw,  # what CoherenceConscience actually requests
 }
 
 

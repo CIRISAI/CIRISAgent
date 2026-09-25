@@ -422,9 +422,16 @@ class AgentProcessor:
                 pending_thoughts = shutdown_thoughts
                 logger.info(f"In SHUTDOWN state - filtering to {len(shutdown_thoughts)} shutdown-related thoughts only")
 
+            # limits.max_active_thoughts (OperationalLimitsConfig). Reading it
+            # off `workflow`, where it does not exist, pinned every agent at 10
+            # regardless of config (#1186). This caps thoughts taken per round;
+            # LLM burst concurrency is still thought_batch_size below.
             max_active = 10
-            if hasattr(self.app_config, "workflow") and self.app_config.workflow:
-                max_active = getattr(self.app_config.workflow, "max_active_thoughts", 10)
+            limits_cfg = getattr(self.app_config, "limits", None)
+            if limits_cfg is not None:
+                configured_max = getattr(limits_cfg, "max_active_thoughts", 10)
+                if isinstance(configured_max, int) and configured_max >= 1:
+                    max_active = configured_max
 
             limited_thoughts = pending_thoughts[:max_active]
 
@@ -438,16 +445,20 @@ class AgentProcessor:
             processed_count = 0
             failed_count = 0
 
-            # Read from EssentialConfig.workflow.thought_batch_size. Each
-            # thought fans out to ~4 parallel conscience LLM calls, so a
-            # batch of N produces ~4N concurrent structured-output requests
-            # in burst. Default 3 (=12 concurrent LLM calls) sized for
-            # rate-limited backends; bump up only if your backend can
+            # Read from EssentialConfig.limits.thought_batch_size (it lives on
+            # OperationalLimitsConfig; reading it off `workflow` always fell
+            # back to 3). Each thought fans out to ~4 parallel conscience LLM
+            # calls, so a batch of N produces ~4N concurrent structured-output
+            # requests in burst. Default 3 (=12 concurrent LLM calls) sized
+            # for rate-limited backends; bump up only if your backend can
             # absorb the burst without queueing past the conscience
             # timeout. See essential.py:thought_batch_size.
             batch_size = 3
-            if hasattr(self.app_config, "workflow") and self.app_config.workflow:
-                batch_size = getattr(self.app_config.workflow, "thought_batch_size", 3)
+            limits = getattr(self.app_config, "limits", None)
+            if limits is not None:
+                configured = getattr(limits, "thought_batch_size", 3)
+                if isinstance(configured, int) and configured >= 1:
+                    batch_size = configured
 
             for i in range(0, len(limited_thoughts), batch_size):
                 try:

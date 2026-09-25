@@ -64,7 +64,11 @@ class ServiceEndpointsConfig(BaseModel):
 
     llm_endpoint: str = Field("https://api.openai.com/v1", description="LLM API endpoint URL")
     llm_model: str = Field("gpt-4o-mini", description="LLM model identifier")
-    llm_timeout: int = Field(30, description="LLM request timeout in seconds")
+    llm_timeout: int = Field(
+        30,
+        description="DEPRECATED: not read. The LLM HTTP timeout comes from the LLM budget profile "
+        "(ciris_engine/logic/config/llm_budget.py; override with CIRIS_LLM_TIMEOUT). #1186",
+    )
     llm_max_retries: int = Field(3, description="Maximum LLM retry attempts")
 
     model_config = ConfigDict(defer_build=True, extra="forbid")
@@ -122,9 +126,19 @@ class OperationalLimitsConfig(BaseModel):
     )
     round_delay_seconds: float = Field(5.0, description="Delay between processing rounds")
     mock_llm_round_delay: float = Field(0.1, description="Reduced delay for mock LLM testing")
-    dma_retry_limit: int = Field(3, description="Maximum DMA evaluation retries")
-    dma_timeout_seconds: float = Field(30.0, description="DMA evaluation timeout")
-    conscience_retry_limit: int = Field(2, description="Maximum conscience evaluation retries")
+    # DEPRECATED, read by nothing (CIRISAgent#1186). Kept only so existing
+    # config files (config/essential.yaml sets all three) and
+    # CIRIS_LIMITS_* env vars still load under extra="forbid". DMA and
+    # conscience timeouts/attempts come from the LLM budget profile
+    # (ciris_engine/logic/config/llm_budget.py): set CIRIS_DMA_TIMEOUT,
+    # CIRIS_DMA_ATTEMPTS, CIRIS_CONSCIENCE_TIMEOUT, CIRIS_CONSCIENCE_ATTEMPTS.
+    dma_retry_limit: int = Field(3, description="DEPRECATED, unused: use CIRIS_DMA_ATTEMPTS (LLM budget profile)")
+    dma_timeout_seconds: float = Field(
+        30.0, description="DEPRECATED, unused: use CIRIS_DMA_TIMEOUT (LLM budget profile)"
+    )
+    conscience_retry_limit: int = Field(
+        2, description="DEPRECATED, unused: use CIRIS_CONSCIENCE_ATTEMPTS (LLM budget profile)"
+    )
 
     model_config = ConfigDict(defer_build=True, extra="forbid")
 
@@ -143,7 +157,13 @@ class WorkflowConfig(BaseModel):
     """Workflow configuration for agent processing."""
 
     max_rounds: int = Field(10, description="Maximum rounds of processing before automatic pause")
-    round_timeout_seconds: float = Field(300.0, description="Timeout for each processing round")
+    round_timeout_seconds: float = Field(
+        300.0,
+        description=(
+            "DEPRECATED, applied nowhere. One thought's time is bounded by the LLM budget "
+            "profile's thought_budget_s (CIRIS_THOUGHT_BUDGET), CIRISAgent#1186"
+        ),
+    )
     enable_auto_defer: bool = Field(True, description="Automatically defer when hitting limits")
 
     model_config = ConfigDict(defer_build=True, extra="forbid")

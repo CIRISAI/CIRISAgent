@@ -1,5 +1,7 @@
 """Configuration schema for API adapter."""
 
+from typing import Optional
+
 from pydantic import BaseModel, Field
 
 from ciris_engine.constants import DEFAULT_API_HOST, DEFAULT_API_PORT
@@ -40,9 +42,17 @@ class APIAdapterConfig(BaseModel):
     auth_enabled: bool = Field(default=True, description="Enable authentication")
 
     # Timeout configuration
-    #: 55.0 -> 110.0 (#1013) — kept in lockstep with the resolver default in
-    #: routes/agent.py. Two defaults for one knob is how they drift apart.
-    interaction_timeout: float = Field(default=110.0, description="Timeout for agent interactions in seconds")
+    #: None means "use the LLM time budget" (#1186): the interact deadline is
+    #: `active_budget().interact_deadline_s` — 195s against a hosted model,
+    #: 900s against one on the user's own hardware. A number here is an
+    #: explicit operator choice and wins over the budget; only the
+    #: CIRIS_API_INTERACTION_TIMEOUT env var beats it. There is deliberately
+    #: no numeric default: a second default for one knob is how the two
+    #: drifted apart before (55s here vs 110s in the resolver, #1013).
+    interaction_timeout: Optional[float] = Field(
+        default=None,
+        description="Timeout for agent interactions in seconds; None uses the LLM budget's interact deadline",
+    )
 
     # Proxy configuration
     proxy_path: str = Field(

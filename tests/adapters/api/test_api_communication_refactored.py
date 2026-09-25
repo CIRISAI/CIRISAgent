@@ -127,7 +127,8 @@ class TestHandleApiInteractionResponse:
 
         await api_communication_service._handle_api_interaction_response("api_test", "Response content")
 
-        mock_store.assert_called_once_with("msg-123", "Response content")
+        # No reasoning scope here, so the speaking task is unknown: FIFO fallback.
+        mock_store.assert_called_once_with("msg-123", "Response content", task_id=None)
         # FIFO pop(0) consumes the id; the channel key remains with an empty queue
         assert mock_app_state.message_channel_map["api_test"] == []
 

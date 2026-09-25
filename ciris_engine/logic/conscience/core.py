@@ -10,9 +10,11 @@ from pydantic import BaseModel, Field
 
 from ciris_engine.constants import DEFAULT_OPENAI_MODEL_NAME
 from ciris_engine.logic import persistence
+from ciris_engine.logic.config.llm_budget import MIN_USEFUL_ATTEMPT_S, Deadline, attempt_timeout
 from ciris_engine.logic.registries.base import ServiceRegistry
 from ciris_engine.logic.utils.constants import get_accord_text
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
+from ciris_engine.schemas.config.llm_budget import REMOTE_PROFILE, LLMBudgetProfile
 from ciris_engine.schemas.conscience.context import ConscienceCheckContext
 from ciris_engine.schemas.conscience.core import (
     ConscienceCheckResult,
@@ -64,15 +66,40 @@ class ConscienceConfig(BaseModel):
     # is defined and applied nowhere. On 2026-09-04 four conscience calls hung
     # in parallel for ~5 minutes and the thought was forced to PONDER with no
     # record of which call never answered. This budget is sized to ONE honest
-    # call (observed 2-14s; the 87K-token veto call ~9s), retried once with a
-    # fresh request, and it wins over the provider's stack by cancelling it.
+    # call (observed 2-14s; the 87K-token veto call ~9s), retried with a fresh
+    # request, and it wins over the provider's stack by cancelling it.
+    #
+    # The defaults mirror the shipped REMOTE budget profile (CIRISAgent#1186:
+    # 45s x 4 attempts); the runtime builds this from `active_budget()` via
+    # `from_budget`, so a LOCAL provider gets one long try instead. When the
+    # thought carries a Deadline, each attempt is additionally clamped to what
+    # is left of it (see `_BaseConscience._call_llm_with_budget`).
     llm_call_timeout_seconds: float = Field(
-        default=45.0, gt=0, description="Wall-clock budget for one conscience LLM call before it is cancelled and retried"
+        default=REMOTE_PROFILE.conscience_per_try_s,
+        gt=0,
+        description="Wall-clock budget for one conscience LLM call before it is cancelled and retried",
     )
     llm_call_retries: int = Field(
-        default=1, ge=0, le=3, description="Fresh attempts after a timed-out or schema-failed conscience LLM call"
+        default=REMOTE_PROFILE.conscience_attempts - 1,
+        ge=0,
+        le=4,  # LLMBudgetProfile.conscience_attempts is 1..5
+        description="Fresh attempts after a timed-out or schema-failed conscience LLM call (attempts - 1)",
     )
     entropy_threshold: float = Field(default=0.40, description="Maximum entropy allowed")
+
+    @classmethod
+    def from_budget(cls, profile: LLMBudgetProfile) -> "ConscienceConfig":
+        """The conscience knobs of one LLM budget profile; thresholds keep their defaults."""
+        return cls(
+            llm_call_timeout_seconds=profile.conscience_per_try_s,
+            llm_call_retries=profile.conscience_attempts - 1,
+        )
+
+
+def deadline_of(context: Any) -> Optional[Deadline]:
+    """The thought deadline a conscience context carries, if any (mocks carry none)."""
+    candidate = getattr(context, "deadline", None)
+    return candidate if isinstance(candidate, Deadline) else None
 
 
 logger = logging.getLogger(__name__)
@@ -81,7 +108,13 @@ logger = logging.getLogger(__name__)
 MSG_SINK_UNAVAILABLE_ALLOWING = "Sink service unavailable, allowing action"
 MSG_SINK_UNAVAILABLE = "Sink service unavailable"
 MSG_NO_CONTENT = "No content to evaluate"
-from .transport import LLM_FAULT_CATEGORIES, categorize_conscience_error, is_transport_failure, unavailable_result
+from .transport import (
+    LLM_FAULT_CATEGORIES,
+    categorize_conscience_error,
+    is_transport_failure,
+    unavailable_result,
+    unusable_answer_result,
+)
 
 MSG_SINK_NO_LLM = "Sink does not have LLM service"
 MSG_INVALID_LLM_RESULT = "Invalid result type from LLM"
@@ -90,10 +123,7 @@ MSG_INVALID_LLM_RESULT = "Invalid result type from LLM"
 # LLM-output schemas live in `ciris_engine/schemas/conscience/core.py` —
 # imported here for backward compat. New consumers should import directly
 # from the schemas module.
-from ciris_engine.schemas.conscience.core import (  # noqa: E402,F401
-    CoherenceResult,
-    EntropyResult,
-)
+from ciris_engine.schemas.conscience.core import CoherenceResult, EntropyResult  # noqa: E402,F401
 
 
 class _BaseConscience(ConscienceInterface):
@@ -215,8 +245,8 @@ class _BaseConscience(ConscienceInterface):
         )
         persistence.update_correlation(update_req, self._time_service)
 
-    async def _call_llm_with_budget(self, sink: Any, **kwargs: Any) -> Any:
-        """One structured call under the facility's own timeout, retried once.
+    async def _call_llm_with_budget(self, sink: Any, *, deadline: Optional[Deadline] = None, **kwargs: Any) -> Any:
+        """One structured call under the facility's own timeout, retried.
 
         Mirrors `sink.llm.call_llm_structured(**kwargs)` exactly, so every shard
         calls it the same way. Three outcomes, each named in the log:
@@ -228,31 +258,57 @@ class _BaseConscience(ConscienceInterface):
                         caller's transport branch turns into unavailable_result
                         (fail-closed, check_ran=False, no processor retry)
           LLM fault  -> (schema validation, context length, content filter)
-                        one fresh attempt; exhausted -> re-raised to the
+                        a fresh attempt; exhausted -> re-raised to the
                         caller's existing fail-closed fallback
           transport  -> re-raised immediately: the provider already retried and
                         the bus already failed over; spending the budget again
                         here is what #1049 removed
 
+        `deadline` is the thought's (CIRISAgent#1186). Each attempt's timeout
+        is clamped to what is left of it, and no attempt starts once the
+        remainder is below a useful try (`MIN_USEFUL_ATTEMPT_S`); running out
+        that way ends in the same "LLM API timeout" TimeoutError, so the
+        fail-closed classification is unchanged. Without a deadline the budget
+        is the static per-try x attempts.
+
         A cancellation does not trip the provider's circuit breaker -- the
         facility running out of patience is not evidence the provider is down.
         """
-        timeout = float(getattr(self.config, "llm_call_timeout_seconds", 45.0))
-        retries = int(getattr(self.config, "llm_call_retries", 1))
+        per_try = float(getattr(self.config, "llm_call_timeout_seconds", REMOTE_PROFILE.conscience_per_try_s))
+        retries = int(getattr(self.config, "llm_call_retries", REMOTE_PROFILE.conscience_attempts - 1))
         name = kwargs.get("handler_name", type(self).__name__)
         last: Optional[BaseException] = None
+        attempts_made = 0
+        out_of_time = False
         for attempt in range(1, retries + 2):
+            timeout = attempt_timeout(per_try, deadline)
+            if timeout is None:
+                logger.warning(
+                    "[CONSCIENCE] %s: thought deadline has %.1fs left, too little for attempt %d/%d -- giving up",
+                    name,
+                    deadline.remaining() if deadline else 0.0,
+                    attempt,
+                    retries + 1,
+                )
+                out_of_time = True
+                break
+            attempts_made = attempt
             t0 = time.monotonic()
             try:
                 result = await asyncio.wait_for(sink.llm.call_llm_structured(**kwargs), timeout=timeout)
                 if attempt > 1:
-                    logger.info("[CONSCIENCE] %s: answered on attempt %d after %.1fs", name, attempt, time.monotonic() - t0)
+                    logger.info(
+                        "[CONSCIENCE] %s: answered on attempt %d after %.1fs", name, attempt, time.monotonic() - t0
+                    )
                 return result
             except asyncio.TimeoutError as e:
                 last = e
                 logger.warning(
                     "[CONSCIENCE] %s: no answer within the facility budget (%.0fs) on attempt %d/%d%s",
-                    name, timeout, attempt, retries + 1,
+                    name,
+                    timeout,
+                    attempt,
+                    retries + 1,
                     " -- retrying with a fresh call" if attempt <= retries else " -- giving up",
                 )
             except Exception as e:  # noqa: BLE001 - categorised below, never swallowed
@@ -261,14 +317,24 @@ class _BaseConscience(ConscienceInterface):
                     last = e
                     logger.warning(
                         "[CONSCIENCE] %s: %s on attempt %d/%d after %.1fs -- retrying with a fresh call (%s)",
-                        name, cat, attempt, retries + 1, time.monotonic() - t0, str(e)[:160],
+                        name,
+                        cat,
+                        attempt,
+                        retries + 1,
+                        time.monotonic() - t0,
+                        str(e)[:160],
                     )
                     continue
                 raise
-        assert last is not None
-        if isinstance(last, asyncio.TimeoutError):
+        if out_of_time or last is None or isinstance(last, asyncio.TimeoutError):
+            # Timed out, or the thought deadline ran out before (another)
+            # attempt could start -- even if the previous try was a schema
+            # fault. Either way no answer arrived in time; the wording "LLM API
+            # timeout" is what categorize_conscience_error maps to TIMEOUT.
             raise TimeoutError(
-                f"{name}: LLM API timeout -- no answer within the facility budget ({retries + 1} x {timeout:.0f}s)"
+                f"{name}: LLM API timeout -- no answer within the facility budget "
+                f"({attempts_made} of {retries + 1} attempts x {per_try:.0f}s"
+                f"{'; thought deadline exhausted' if out_of_time else ''})"
             ) from last
         raise last
 
@@ -423,9 +489,7 @@ class EntropyConscience(_BaseConscience):
         # migration plan; "Lift SPEAK-only short-circuits to {SPEAK, TOOL}").
         # Other verbs are handled by EOV/EpistemicHumility or are outer-exempt.
         if action.selected_action not in (HandlerActionType.SPEAK, HandlerActionType.TOOL):
-            self._update_trace_correlation(
-                correlation, True, "Verb out of Entropy scope (SPEAK+TOOL only)", start_time
-            )
+            self._update_trace_correlation(correlation, True, "Verb out of Entropy scope (SPEAK+TOOL only)", start_time)
             return ConscienceCheckResult(
                 status=ConscienceStatus.PASSED,
                 passed=True,
@@ -451,7 +515,6 @@ class EntropyConscience(_BaseConscience):
             )
 
         # Inline the entropy evaluation
-        entropy = 0.1  # Default safe value
         entropy_user_prompt: Optional[str] = None
         try:
             # Get textual image context info (NOT raw images - prevents injection attacks)
@@ -462,7 +525,9 @@ class EntropyConscience(_BaseConscience):
                 text, image_context, language=self._resolve_language(context)
             )
             if hasattr(sink, "llm"):
-                entropy_eval, _ = await self._call_llm_with_budget(sink, 
+                entropy_eval, _ = await self._call_llm_with_budget(
+                    sink,
+                    deadline=deadline_of(context),
                     messages=messages,
                     response_model=EntropyResult,
                     handler_name="entropy_conscience",
@@ -481,8 +546,7 @@ class EntropyConscience(_BaseConscience):
                 # default logs tight.
                 alt_count = len(entropy_eval.alternative_meanings)
                 logger.info(
-                    "[CONSCIENCE] EntropyConscience: entropy=%.2f "
-                    "actual_is_representative=%s alternatives=%d",
+                    "[CONSCIENCE] EntropyConscience: entropy=%.2f " "actual_is_representative=%s alternatives=%d",
                     entropy,
                     entropy_eval.actual_is_representative,
                     alt_count,
@@ -493,17 +557,18 @@ class EntropyConscience(_BaseConscience):
                 entropy_alternatives = list(entropy_eval.alternative_meanings)
                 entropy_actual_is_representative = entropy_eval.actual_is_representative
             else:
-                entropy_alternatives = []
-                entropy_actual_is_representative = None
+                return unusable_answer_result(
+                    "EntropyConscience",
+                    TypeError(f"{MSG_INVALID_LLM_RESULT}: {type(entropy_eval).__name__}"),
+                    ts_datetime,
+                )
         except Exception as e:
-            # FAIL FAST on transport (#1049). Continuing here would judge the
-            # action against `entropy`'s pre-call default -- a confident number
-            # the model never produced.
+            # FAIL CLOSED either way. Continuing would judge the action against
+            # `entropy`'s pre-call default -- a passing number the model never
+            # produced (#1049 for transport; #1186 for every other error).
             if is_transport_failure(e):
                 return unavailable_result("EntropyConscience", e, ts_datetime)
-            logger.error(f"EntropyConscience: Error evaluating entropy: {e}", exc_info=True)
-            entropy_alternatives = []
-            entropy_actual_is_representative = None
+            return unusable_answer_result("EntropyConscience", e, ts_datetime)
 
         passed = entropy <= self.config.entropy_threshold
         status = ConscienceStatus.PASSED if passed else ConscienceStatus.FAILED
@@ -611,7 +676,6 @@ class CoherenceConscience(_BaseConscience):
             )
 
         # Inline the coherence evaluation
-        coherence = 0.9  # Default safe value
         coherence_user_prompt: Optional[str] = None
         try:
             # Get textual image context info (NOT raw images - prevents injection attacks)
@@ -625,7 +689,9 @@ class CoherenceConscience(_BaseConscience):
                 user_message=self._extract_user_message(context),
             )
             if hasattr(sink, "llm"):
-                coherence_eval, _ = await self._call_llm_with_budget(sink, 
+                coherence_eval, _ = await self._call_llm_with_budget(
+                    sink,
+                    deadline=deadline_of(context),
                     messages=messages,
                     response_model=CoherenceResult,
                     handler_name="coherence_conscience",
@@ -636,14 +702,19 @@ class CoherenceConscience(_BaseConscience):
                 )
             else:
                 raise RuntimeError(MSG_SINK_NO_LLM)
-            if isinstance(coherence_eval, CoherenceResult):
-                coherence = float(coherence_eval.coherence)
+            if not isinstance(coherence_eval, CoherenceResult):
+                return unusable_answer_result(
+                    "CoherenceConscience",
+                    TypeError(f"{MSG_INVALID_LLM_RESULT}: {type(coherence_eval).__name__}"),
+                    ts_datetime,
+                )
+            coherence = float(coherence_eval.coherence)
         except Exception as e:
-            # FAIL FAST on transport (#1049) — see EntropyConscience above; the
-            # default `coherence` would otherwise be reported as a measurement.
+            # FAIL CLOSED either way — see EntropyConscience above; the default
+            # `coherence` would otherwise be reported as a measurement.
             if is_transport_failure(e):
                 return unavailable_result("CoherenceConscience", e, ts_datetime)
-            logger.error(f"CoherenceConscience: Error evaluating coherence: {e}", exc_info=True)
+            return unusable_answer_result("CoherenceConscience", e, ts_datetime)
 
         passed = coherence >= self.config.coherence_threshold
         status = ConscienceStatus.PASSED if passed else ConscienceStatus.FAILED
@@ -746,7 +817,9 @@ class OptimizationVetoConscience(_BaseConscience):
 
         try:
             if hasattr(sink, "llm"):
-                result, _ = await self._call_llm_with_budget(sink, 
+                result, _ = await self._call_llm_with_budget(
+                    sink,
+                    deadline=deadline_of(context),
                     messages=messages,
                     response_model=OptimizationVetoResult,
                     handler_name="optimization_veto_conscience",
@@ -882,7 +955,9 @@ class EpistemicHumilityConscience(_BaseConscience):
 
         try:
             if hasattr(sink, "llm"):
-                result, _ = await self._call_llm_with_budget(sink, 
+                result, _ = await self._call_llm_with_budget(
+                    sink,
+                    deadline=deadline_of(context),
                     messages=messages,
                     response_model=EpistemicHumilityResult,
                     handler_name="epistemic_humility_conscience",

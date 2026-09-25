@@ -20,6 +20,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+from .interact_outcome import interact_non_reply, is_still_processing_text
 from .memory_benchmark_tests import find_server_pid, format_size, get_children_memory
 
 def _accord_tee_dir() -> str:
@@ -78,31 +79,64 @@ LOCALE_USERS: Dict[str, str] = {
 # it interprets "User Hauwa" as someone-being-quoted-by-jeff and the
 # conversation partner becomes the qa_runner admin.
 #
-# CRITICAL: anchor on the colon-space-quote pattern ("`: '`") so we only
-# strip ACTUAL wrappers. A naive "longest single-quoted span" heuristic
-# corrupts ordinary English questions containing contractions ("I've ...
-# doesn't") because it picks up apostrophes as quote delimiters and silently
-# truncates the payload. The colon anchor is present in every v3 wrapper but
-# absent before contractions in non-wrapper questions.
-_WRAPPER_RE = re.compile(r":\s*['‘’](.+?)['‘’]", re.DOTALL)
+# CRITICAL: anchor on the colon + opening-quote pattern (": '", ": «",
+# ":「", ...) so we only strip ACTUAL wrappers, and pair each opener with its
+# own closer. The corpus uses ' ‘’ " “” « » 「」 depending on locale; a
+# regex that only knows single quotes leaves fr/it/ja/ko/pt/ru/uk/zh wrapped.
+#
+# An apostrophe-like closer (' or ’) followed directly by a letter is a
+# contraction or suffix ("I don't", "Elif'in"), never the end of the quote —
+# a lazy `'(.+?)'` match stopped there and silently truncated en q04 to
+# "...hears voices. I don", or fell below the length floor and sent the
+# third-person wrapper to the agent.
+_WRAPPER_OPEN_RE = re.compile(r"[:：]\s*(['‘\"“„«「『‹])")
+_WRAPPER_CLOSERS = {
+    "'": "'’",
+    "‘": "’'",
+    '"': '"”',
+    "“": "”\"",
+    "„": "“”",
+    "«": "»",
+    "「": "」",
+    "『": "』",
+    "‹": "›",
+}
+_APOSTROPHE_CLOSERS = "'’"
+_WRAPPER_MIN_INNER = 30
+
+
+def _find_wrapper_close(text: str, start: int, closers: str) -> int:
+    """Index of the first closer at or after ``start`` that ends the quote, or -1."""
+    for i in range(start, len(text)):
+        ch = text[i]
+        if ch not in closers:
+            continue
+        if ch in _APOSTROPHE_CLOSERS and i + 1 < len(text) and text[i + 1].isalpha():
+            continue  # contraction / suffix, not the closing quote
+        return i
+    return -1
 
 
 def _strip_question_wrapper(text: str) -> str:
-    """Strip 'User X said: "<...>"' style framing from a v3 question.
+    """Strip 'User X said: "<...>"' style framing from a v3/v4 question.
 
-    Returns the longest `: '<inner>'` span (where <inner> is at least 30
-    chars) if the colon-space-quote framing is present. Falls back to the
+    Returns the longest `: <open><inner><close>` span (where <inner> is at
+    least 30 chars) if colon + quote framing is present. Falls back to the
     original text otherwise — older question sets without explicit wrapper
     framing pass through unchanged, and questions containing contractions
     or quotation aren't corrupted.
     """
-    matches = list(_WRAPPER_RE.finditer(text))
-    if not matches:
+    best = ""
+    for m in _WRAPPER_OPEN_RE.finditer(text):
+        close = _find_wrapper_close(text, m.end(), _WRAPPER_CLOSERS[m.group(1)])
+        if close < 0:
+            continue
+        inner = text[m.end() : close].strip()
+        if len(inner) > len(best):
+            best = inner
+    if len(best) < _WRAPPER_MIN_INNER:
         return text
-    longest = max(matches, key=lambda m: len(m.group(1)))
-    if len(longest.group(1)) < 30:
-        return text
-    return longest.group(1)
+    return best
 
 
 @dataclass(frozen=True)
@@ -448,8 +482,11 @@ class ModelEvalTests:
                     )
                 if resp.status_code == 200:
                     body = resp.json()
-                    response_text = body.get("data", {}).get("response") or body.get("response", "") or ""
-                    success = bool(response_text) and "Still processing" not in response_text
+                    data = body.get("data") or body
+                    response_text = data.get("response") or body.get("response", "") or ""
+                    # outcome/task_id, or the placeholder in ANY locale —
+                    # an English literal missed every non-English timeout.
+                    success = bool(response_text) and interact_non_reply(data) is None
                 else:
                     response_text = f"(HTTP {resp.status_code}: {resp.text[:120]})"
             except Exception as exc:
@@ -612,7 +649,7 @@ class ModelEvalTests:
                     content = (getattr(msg, "content", None) or "").strip()
                     if not content:
                         continue
-                    if "Still processing" in content:
+                    if is_still_processing_text(content):
                         last_placeholder = content
                         continue
                     return content

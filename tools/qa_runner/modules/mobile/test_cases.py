@@ -17,6 +17,7 @@ from typing import List, Optional, Tuple
 from .adb_helper import ADBHelper
 from .ui_automator import UIAutomator
 from tools.qa_runner.modules.mobile.llm_preflight import PROVIDER_BASE_URLS
+from tools.qa_runner.modules.web_ui.shell_nav import Shell, detect_shell, row_tag, walk_circles_sync
 
 
 class TestResult(Enum):
@@ -307,6 +308,15 @@ class TestServerClient:
             return []
         return [e.get("testTag", "") for e in body.get("elements", [])]
 
+    def on_screen_tags(self) -> List[str]:
+        """Tags ON SCREEN: the tree's `visible` flag (ciris-client 0.5.206+), else
+        every positioned tag. The tree never forgets a composed element, so a
+        closed My things sheet still lists its instruments; this does not."""
+        status, body = self._request("GET", "/tree", timeout=5)
+        if status != 200:
+            return []
+        return [e.get("testTag", "") for e in body.get("elements", []) if e.get("visible", True)]
+
     def is_visible(self, test_tag: str) -> bool:
         """Positioned-in-the-composition check via /tree.
 
@@ -385,6 +395,38 @@ def _click_or_tap(client: TestServerClient, adb: ADBHelper, test_tag: str) -> bo
         adb.tap(*coords)
         return True
     return False
+
+
+def _reach_surface(client: "TestServerClient", adb: ADBHelper, surface: str) -> Optional[str]:
+    """Open `surface` (an EpistemicNav id, e.g. `nodes`) through whichever shell
+    the app renders. None on success, else why not (CIRISAgent#1181).
+
+    Same decision as the desktop runner's `DesktopAppHelper.reach_surface`: the
+    circles shell (ciris-client 0.5.224+) walks shell_nav's route; the old rail
+    (<= 0.5.223) opens the compact drawer, expands collapsed groups until the
+    `nav_epistemic_<id>` row appears, and clicks it.
+    """
+    if detect_shell(client.tags()) == Shell.CIRCLES:
+        return walk_circles_sync(surface, client.on_screen_tags, lambda tag: _click_or_tap(client, adb, tag))
+    tag = row_tag(surface)
+    if not client.is_visible(tag):
+        if client.is_visible("btn_nav_drawer_open"):
+            print("      opening nav drawer")
+            _click_or_tap(client, adb, "btn_nav_drawer_open")
+            time.sleep(1)
+        for group in sorted(t for t in client.tags() if t.startswith("nav_group_")):
+            if client.is_visible(tag):
+                break
+            print(f"      expanding sidebar group {group}")
+            _click_or_tap(client, adb, group)
+            if client.wait_for_element(tag, timeout=3):
+                break
+    if not client.is_visible(tag):
+        return f"{tag!r} not in the tree after opening the drawer and the sidebar groups"
+    print(f"      clicking {tag}")
+    if not _click_or_tap(client, adb, tag):
+        return f"click on {tag!r} did not take"
+    return None
 
 
 def _wizard_entered(adb: ADBHelper, config: dict, ui: UIAutomator, timeout: float = 15.0) -> bool:
@@ -1357,19 +1399,10 @@ def test_catchup_add_fedid(adb: ADBHelper, ui: UIAutomator, config: dict) -> Tes
         # ── Step 1: reach the entry point (Manage Nodes surface) ──────────
         print("  [2/5] Reaching Manage Nodes → btn_add_federation_id...")
         if not client.is_visible("btn_add_federation_id"):
-            # Canonical path: (drawer on compact) → Manage group → Nodes row.
-            if not client.is_visible("nav_epistemic_nodes"):
-                if client.is_visible("btn_nav_drawer_open"):
-                    print("      opening nav drawer")
-                    _click_or_tap(client, adb, "btn_nav_drawer_open")
-                    time.sleep(1)
-                if not client.is_visible("nav_epistemic_nodes") and client.is_visible("nav_group_manage"):
-                    print("      expanding sidebar group nav_group_manage")
-                    _click_or_tap(client, adb, "nav_group_manage")
-                    client.wait_for_element("nav_epistemic_nodes", timeout=3)
-            if client.is_visible("nav_epistemic_nodes"):
-                print("      clicking nav_epistemic_nodes")
-                _click_or_tap(client, adb, "nav_epistemic_nodes")
+            nav_err = _reach_surface(client, adb, "nodes")
+            if nav_err:
+                print(f"      Manage Nodes route did not resolve: {nav_err}")
+            else:
                 client.wait_for_element("btn_add_federation_id", timeout=5)
 
         if not client.is_visible("btn_add_federation_id"):

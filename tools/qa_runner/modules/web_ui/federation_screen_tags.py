@@ -34,6 +34,9 @@ from typing import Dict, List, Optional
 # NavSurface.LayerGlobalCommons ("layer-global-commons"). The legacy
 # constant name is kept for callers that historically imported
 # NAV_EPISTEMIC_NETWORK; it now points at the new tag.
+# The row tag is the same in the circles shell (ciris-client 0.5.224+), where it
+# sits at circle_global_commons -> tab_rules; the hops live in shell_nav.py
+# (CIRISAgent#1181), never here.
 NAV_EPISTEMIC_NETWORK = "nav_epistemic_layer_global_commons"
 NAV_EPISTEMIC_LAYER_GLOBAL_COMMONS = "nav_epistemic_layer_global_commons"
 

@@ -76,6 +76,7 @@ from .browser_helper import BrowserConfig, ensure_playwright_installed
 from .desktop_app_helper import DesktopAppConfig, DesktopAppHelper, attribute_device_failure, check_desktop_app_running
 from .federation_walk_test import FederationWalkTest
 from .server_manager import ServerConfig
+from .shell_nav import CIRCLES_ROUTES, circles_elements, detect_shell
 from .test_cases import WebUITestConfig
 from .test_runner import WebUITestRunner, run_web_ui_tests
 
@@ -851,31 +852,36 @@ class DesktopAppTestRunner:
     async def _logout(self) -> None:
         """Log out, by whichever route this install actually offers.
 
-        THE ROUTE DEPENDS ON THE INSTALL, and there are three of them:
+        THE ROUTE DEPENDS ON THE INSTALL. Every route ends on Screen.Settings ->
+        `btn_logout` (SettingsScreen.kt) except the agent home's governance menu:
 
-        * `nav_epistemic_account` -> Screen.Settings -> `btn_logout` (ciris-client
-          0.5.216+, CIRISClient#51). Present in BOTH modes by construction -- the
-          client's own `narrowingIsPurelySubtractive` rule forbids a surface that
-          appears only when narrowed -- so this is the route to prefer.
-        * `btn_governance_menu` -> `menu_logout`: the top bar, which lives on the
-          AGENT home only. A run-without-AI install lands on the node home
-          (Contacts) and has no top bar.
-        * `nav_epistemic_agent_settings` -> `btn_logout`: pre-0.5.216, and only
-          where `hasAgent` keeps the Agent group.
+        * the Account surface (`account`), present in BOTH modes by construction
+          (CIRISClient#51; the client's `narrowingIsPurelySubtractive` rule forbids
+          a surface that appears only when narrowed), so it is tried first:
+            - circles shell (0.5.224+, CIRISAgent#1181): `btn_my_things` ->
+              `nav_instrument_devices_keys` -> `nav_epistemic_account`;
+            - old rail (0.5.216 - 0.5.223): the `nav_epistemic_account` row.
+        * `btn_governance_menu` -> `menu_logout`: the old top bar, on the AGENT
+          home only. A run-without-AI install lands on the node home (Contacts).
+        * the agent Settings surface (`agent-settings`):
+            - circles shell: `btn_my_things` -> `nav_instrument_this_node` ->
+              `nav_epistemic_agent_settings` (every build's, per CirclesNav.kt);
+            - old rail: pre-0.5.216, and only where `hasAgent` keeps the Agent group.
 
         Ordered so the newest route wins and the old ones remain drivable, because
-        this harness pins a client that moves under it several times a day. Each
-        sidebar route is REVEALED, not merely waited for: the row can be in a
-        collapsed group or below the fold, and presence in /tree is not
-        drivability (CIRISClient#39).
+        this harness pins a client that moves under it several times a day. The
+        hops are shell_nav's (via helper.reach_surface), which picks the shell from
+        what is on screen; on the old rail each row is REVEALED, not merely waited
+        for (CIRISClient#39).
         """
+        misses: List[str] = []
 
-        async def _sidebar_to_logout(tag: str, what: str) -> bool:
-            if await self.helper.reveal_sidebar_row(tag):
+        async def _surface_to_logout(surface: str, what: str) -> bool:
+            err = await self.helper.reach_surface(surface)
+            if err:
+                misses.append(f"{what}: {err}")
                 return False
-            self._log(f"logout via {what}: {tag} -> btn_logout")
-            if not await self.helper.click(tag):
-                raise RuntimeError(f"{tag} was on screen and the click did not take")
+            self._log(f"logout via {what} -> btn_logout")
             # SCROLL IT ON SCREEN. Settings is a long surface and logout sits at the
             # bottom of it: on iOS (run 34306647597) the account route was taken
             # correctly and then `btn_logout` was "composed but off screen", which
@@ -885,7 +891,7 @@ class DesktopAppTestRunner:
                 if not await self.helper.wait_for_element("btn_logout", timeout=10000):
                     await self._dump_tree("reset:btn_logout")
                     raise RuntimeError(
-                        f"btn_logout is not reachable on the surface behind {tag} "
+                        f"btn_logout is not reachable on the surface behind {what} "
                         "(not on screen after scrolling it into view)"
                     )
             if not await self.helper.click("btn_logout"):
@@ -893,11 +899,11 @@ class DesktopAppTestRunner:
             await asyncio.sleep(1.5)
             return True
 
-        # 1. The account surface (both modes, both chromes).
-        if await _sidebar_to_logout("nav_epistemic_account", "the Account surface"):
+        # 1. The account surface (both modes, both shells).
+        if await _surface_to_logout("account", "the Account surface"):
             return
 
-        # 2. The agent home's top bar.
+        # 2. The agent home's top bar (old rail only).
         if await self.helper.is_element_visible("btn_governance_menu"):
             self._log("logout via the governance menu: btn_governance_menu -> menu_logout")
             if not await self.helper.click("btn_governance_menu"):
@@ -909,18 +915,24 @@ class DesktopAppTestRunner:
                 raise RuntimeError("Failed to click menu_logout")
             await asyncio.sleep(1.5)
             return
+        misses.append("btn_governance_menu: not on screen")
 
-        # 3. Pre-0.5.216 Settings, where the Agent group survives.
-        if await _sidebar_to_logout("nav_epistemic_agent_settings", "Settings (pre-0.5.216)"):
+        # 3. Settings (circles: under This node; old rail: pre-0.5.216 Agent group).
+        if await _surface_to_logout("agent-settings", "the Settings surface"):
             return
 
         await self._dump_tree("reset:logout")
-        groups = [e.test_tag for e in await self.helper.get_elements() if e.test_tag.startswith("nav_group_")]
+        tags = [e.test_tag for e in await self.helper.get_elements()]
+        groups = [t for t in tags if t.startswith("nav_group_")]
         raise RuntimeError(
-            "no logout route on this install: neither nav_epistemic_account (0.5.216+), "
-            "btn_governance_menu (the agent home's top bar) nor nav_epistemic_agent_settings "
-            f"is reachable. Sidebar groups on screen: {groups or 'none'}. On a run-without-AI "
-            "install that means the owner cannot sign out at all (CIRISClient#51)."
+            "no logout route on this install. Looked for, circles shell (0.5.224+): "
+            f"{' -> '.join(CIRCLES_ROUTES['account'])} and "
+            f"{' -> '.join(CIRCLES_ROUTES['agent-settings'])}; old rail: nav_epistemic_account "
+            "(0.5.216+), btn_governance_menu (the agent home's top bar), nav_epistemic_agent_settings. "
+            f"Shell detected: {detect_shell(tags).value}. Circles-shell elements in the tree: "
+            f"{circles_elements(tags) or 'none'}. Sidebar groups on screen: {groups or 'none'}. "
+            f"Misses: {'; '.join(misses)}. On a run-without-AI install that means the owner "
+            "cannot sign out at all (CIRISClient#51)."
         )
 
     async def test_reset_device_flow(self) -> bool:
@@ -1757,29 +1769,19 @@ class DesktopAppTestRunner:
             fed_label = f"qa-catchup-{int(time.time())}"
 
         # ── Reach the entry point ─────────────────────────────────────
-        # Canonical path: EpistemicSidebar → Manage group (nav_group_manage)
-        # → Nodes surface (nav_epistemic_nodes) → btn_add_federation_id.
+        # Canonical path, per shell (shell_nav, CIRISAgent#1181):
+        #   circles (0.5.224+): btn_my_things → nav_instrument_this_node → nav_epistemic_nodes
+        #   old rail:           nav_group_manage → nav_epistemic_nodes (revealed)
+        # → btn_add_federation_id.
         async def reach_entry():
             self._log("Looking for btn_add_federation_id (Manage Nodes surface)")
             if await self.helper.is_element_present("btn_add_federation_id"):
                 return
-            # Expand the Manage group if the Nodes row isn't visible yet.
-            if not await self.helper.is_element_present("nav_epistemic_nodes"):
-                if await self.helper.is_element_present("nav_group_manage"):
-                    self._log("Expanding sidebar group nav_group_manage")
-                    await self.helper.click("nav_group_manage")
-                    try:
-                        await self.helper.wait_for_element("nav_epistemic_nodes", timeout=3000)
-                    except Exception:  # noqa: BLE001
-                        pass
-            if await self.helper.is_element_present("nav_epistemic_nodes"):
-                self._log("Clicking nav_epistemic_nodes")
-                await self.helper.click("nav_epistemic_nodes")
-                try:
-                    await self.helper.wait_for_element("btn_add_federation_id", timeout=5000)
-                except Exception:  # noqa: BLE001
-                    pass
-                if await self.helper.is_element_present("btn_add_federation_id"):
+            nav_err = await self.helper.reach_surface("nodes")
+            if nav_err:
+                self._log(f"Manage Nodes route did not resolve: {nav_err}")
+            else:
+                if await self.helper.wait_for_optional_element("btn_add_federation_id", timeout=5000):
                     return
             # Fallback: scan the element tree for any Manage-Nodes-ish nav row.
             elements = await self.helper.get_elements()
@@ -1787,6 +1789,9 @@ class DesktopAppTestRunner:
                 e.test_tag
                 for e in elements
                 if "node" in e.test_tag.lower() and ("nav" in e.test_tag.lower() or "manage" in e.test_tag.lower())
+                # An instrument is a list, not the surface: clicking This node and
+                # stopping would "try" a candidate that can never land (#1181).
+                and not e.test_tag.startswith("nav_instrument_")
             ]
             for tag in nav_candidates:
                 self._log(f"trying nav candidate: {tag}")
@@ -4432,8 +4437,8 @@ async def run_flow_specs(args: argparse.Namespace) -> int:
                 continue
             # REACH THE STARTING SCREEN FIRST. A flow states where it starts
             # (its first step's `requires: screen:`) and never encodes the hop;
-            # the sidebar walk is the harness's job, by the client's own tag
-            # rule (desktop_app_helper.navigate_to_surface). The step's own
+            # the walk is the harness's job, through whichever shell the client
+            # renders (desktop_app_helper.navigate_to_surface -> shell_nav). The step's own
             # `requires` then asserts arrival, so a hop that did not land is
             # reported as "this flow cannot start here", with the drivable set.
             start = spec.steps[0].requires.screen if spec.steps else None
@@ -4443,7 +4448,7 @@ async def run_flow_specs(args: argparse.Namespace) -> int:
                 if nav_err:
                     print(f"\n FLOW {spec.flow} — could not reach its starting screen {start!r}: {nav_err}")
                 else:
-                    print(f"\n FLOW {spec.flow} — on {start!r} via the sidebar")
+                    print(f"\n FLOW {spec.flow} — on {start!r} via the app's navigation")
             runner = FlowRunner(helper, platform=platform, artifacts=artifacts)
             ok = await runner.run(spec)
             report = runner.write_report(spec)

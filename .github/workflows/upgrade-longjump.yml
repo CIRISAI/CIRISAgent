@@ -71,6 +71,34 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p /tmp/fixture
+          # Newest 100 artifacts as one JSON array, written once and reused by
+          # both lookups below. A page that still fails after its retries fails
+          # the step loudly -- never a silently shorter list.
+          list_artifacts() {
+            local out=/tmp/artifacts.json
+            if [ ! -s "$out" ]; then
+              local pages=/tmp/artifact-pages
+              rm -rf "$pages"; mkdir -p "$pages"
+              for page in 1 2 3 4; do
+                local ok=0
+                for attempt in 1 2 3 4 5; do
+                  if gh api "repos/${{ github.repository }}/actions/artifacts?per_page=25&page=$page" \
+                       --jq '.artifacts' > "$pages/$page.json" 2>/dev/null \
+                     && jq -e 'type == "array"' "$pages/$page.json" >/dev/null 2>&1; then
+                    ok=1; break
+                  fi
+                  echo "artifact listing page $page attempt $attempt failed; retrying" >&2
+                  sleep $((attempt * 3))
+                done
+                if [ "$ok" != 1 ]; then
+                  echo "::error::Could not list artifacts (page $page) after 5 attempts; the fixture cannot be chosen." >&2
+                  exit 1
+                fi
+              done
+              jq -s 'add' "$pages"/*.json > "$out"
+            fi
+            echo "$out"
+          }
           if [ -n "${{ inputs.fixture-artifact }}" ]; then
             NAME="${{ inputs.fixture-artifact }}"
           else
@@ -79,9 +107,14 @@ jobs:
             # previous release is a weaker test than one from three releases back,
             # and retention silently shortens the jump over time. Log which one we
             # got so a shrinking jump is visible rather than assumed.
-            NAME=$(gh api "repos/${{ github.repository }}/actions/artifacts?per_page=100" \
-              --jq '[.artifacts[] | select(.name|test("upgrade-fixture")) | select(.expired==false)]
-                    | sort_by(.created_at) | .[0].name // empty')
+            #
+            # The listing is fetched as four pages of 25 (the same newest 100),
+            # each retried. GitHub's artifacts endpoint intermittently returns
+            # truncated JSON for this repo ("unexpected end of JSON input" at
+            # per_page=100 and 30 while 50 and 10 answered, 2026-09-25), and a
+            # single unretried call failed the job before any database booted.
+            NAME=$(jq -r '[.[] | select(.name|test("upgrade-fixture")) | select(.expired==false)]
+                          | sort_by(.created_at) | .[0].name // empty' "$(list_artifacts)")
           fi
           if [ -z "$NAME" ]; then
             echo "::error::No unexpired upgrade fixture exists. The capture steps produce them; if none survive, the long jump is untested and this job cannot pretend otherwise."
@@ -90,8 +123,7 @@ jobs:
           echo "Booting against fixture: $NAME"
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
           gh run download ${{ inputs.fixture-run-id }} -n "$NAME" -D /tmp/fixture 2>/dev/null \
-            || gh api "repos/${{ github.repository }}/actions/artifacts?per_page=100" \
-                 --jq ".artifacts[] | select(.name==\"$NAME\") | .id" | head -1 | \
+            || jq -r --arg n "$NAME" '.[] | select(.name==$n) | .id' "$(list_artifacts)" | head -1 | \
                xargs -I{} sh -c 'gh api repos/${{ github.repository }}/actions/artifacts/{}/zip > /tmp/f.zip && unzip -q -o /tmp/f.zip -d /tmp/fixture'
           find /tmp/fixture -name '*.db' -printf '  %f %s bytes\n' || true
 

@@ -422,9 +422,16 @@ class AgentProcessor:
                 pending_thoughts = shutdown_thoughts
                 logger.info(f"In SHUTDOWN state - filtering to {len(shutdown_thoughts)} shutdown-related thoughts only")
 
+            # limits.max_active_thoughts (OperationalLimitsConfig). Reading it
+            # off `workflow`, where it does not exist, pinned every agent at 10
+            # regardless of config (#1186). This caps thoughts taken per round;
+            # LLM burst concurrency is still thought_batch_size below.
             max_active = 10
-            if hasattr(self.app_config, "workflow") and self.app_config.workflow:
-                max_active = getattr(self.app_config.workflow, "max_active_thoughts", 10)
+            limits_cfg = getattr(self.app_config, "limits", None)
+            if limits_cfg is not None:
+                configured_max = getattr(limits_cfg, "max_active_thoughts", 10)
+                if isinstance(configured_max, int) and configured_max >= 1:
+                    max_active = configured_max
 
             limited_thoughts = pending_thoughts[:max_active]
 

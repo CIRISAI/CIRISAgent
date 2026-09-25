@@ -370,7 +370,7 @@ class TestEntropyConscience:
 
     @pytest.mark.asyncio
     @patch("ciris_engine.logic.conscience.core.persistence")
-    async def test_check_llm_error_uses_default(
+    async def test_check_llm_error_fails_closed(
         self,
         mock_persistence,
         mock_service_registry,
@@ -380,7 +380,7 @@ class TestEntropyConscience:
         action_speak,
         context_with_thought,
     ):
-        """Test that LLM errors use default safe entropy value"""
+        """An error that is not transport must not pass on a preset score the model never produced (#1186)."""
         mock_sink_with_llm.llm.call_llm_structured.side_effect = Exception("LLM error")
 
         conscience = EntropyConscience(
@@ -392,9 +392,11 @@ class TestEntropyConscience:
 
         result = await conscience.check(action_speak, context_with_thought)
 
-        # Default entropy is 0.1, which is below threshold 0.4
-        assert result.passed is True
-        assert result.entropy_score == 0.1
+        assert result.passed is False
+        assert result.check_ran is False
+        assert result.entropy_score is None
+        assert "DID NOT RUN" in (result.reason or "")
+        assert "could not be used" in (result.reason or "")
 
     def test_create_entropy_messages(self, mock_service_registry, conscience_config, mock_time_service):
         """Test _create_entropy_messages generates proper messages"""
@@ -511,7 +513,7 @@ class TestCoherenceConscience:
 
     @pytest.mark.asyncio
     @patch("ciris_engine.logic.conscience.core.persistence")
-    async def test_check_llm_error_uses_default(
+    async def test_check_llm_error_fails_closed(
         self,
         mock_persistence,
         mock_service_registry,
@@ -521,7 +523,7 @@ class TestCoherenceConscience:
         action_speak,
         context_with_thought,
     ):
-        """Test that LLM errors use default safe coherence value"""
+        """An error that is not transport must not pass on a preset score the model never produced (#1186)."""
         mock_sink_with_llm.llm.call_llm_structured.side_effect = Exception("LLM error")
 
         conscience = CoherenceConscience(
@@ -533,9 +535,11 @@ class TestCoherenceConscience:
 
         result = await conscience.check(action_speak, context_with_thought)
 
-        # Default coherence is 0.9, which is above threshold 0.6
-        assert result.passed is True
-        assert result.coherence_score == 0.9
+        assert result.passed is False
+        assert result.check_ran is False
+        assert result.coherence_score is None
+        assert "DID NOT RUN" in (result.reason or "")
+        assert "could not be used" in (result.reason or "")
 
     def test_create_coherence_messages(self, mock_service_registry, conscience_config, mock_time_service):
         """Test _create_coherence_messages generates proper messages"""
@@ -874,3 +878,35 @@ class TestEpistemicHumilityConscience:
         assert "CIRIS-EH" in messages[1].content
         assert messages[2].role == "user"
         assert "test action" in user_prompt
+
+
+class TestPresetScoresNeverJudge:
+    """A reply of the wrong type is no answer either: it must not fall through to a preset score."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("shard_cls", ["EntropyConscience", "CoherenceConscience"])
+    async def test_wrong_type_reply_fails_closed(
+        self,
+        shard_cls,
+        monkeypatch,
+        mock_service_registry,
+        conscience_config,
+        mock_time_service,
+        mock_sink_with_llm,
+        action_speak,
+        context_with_thought,
+    ):
+        from unittest.mock import MagicMock
+
+        import ciris_engine.logic.conscience.core as core_mod
+
+        monkeypatch.setattr(core_mod, "persistence", MagicMock())
+        mock_sink_with_llm.llm.call_llm_structured.return_value = ("not a result model", None)
+        conscience = getattr(core_mod, shard_cls)(
+            service_registry=mock_service_registry,
+            config=conscience_config,
+            time_service=mock_time_service,
+            sink=mock_sink_with_llm,
+        )
+        result = await conscience.check(action_speak, context_with_thought)
+        assert result.passed is False and result.check_ran is False

@@ -108,7 +108,13 @@ logger = logging.getLogger(__name__)
 MSG_SINK_UNAVAILABLE_ALLOWING = "Sink service unavailable, allowing action"
 MSG_SINK_UNAVAILABLE = "Sink service unavailable"
 MSG_NO_CONTENT = "No content to evaluate"
-from .transport import LLM_FAULT_CATEGORIES, categorize_conscience_error, is_transport_failure, unavailable_result
+from .transport import (
+    LLM_FAULT_CATEGORIES,
+    categorize_conscience_error,
+    is_transport_failure,
+    unavailable_result,
+    unusable_answer_result,
+)
 
 MSG_SINK_NO_LLM = "Sink does not have LLM service"
 MSG_INVALID_LLM_RESULT = "Invalid result type from LLM"
@@ -509,7 +515,6 @@ class EntropyConscience(_BaseConscience):
             )
 
         # Inline the entropy evaluation
-        entropy = 0.1  # Default safe value
         entropy_user_prompt: Optional[str] = None
         try:
             # Get textual image context info (NOT raw images - prevents injection attacks)
@@ -552,17 +557,18 @@ class EntropyConscience(_BaseConscience):
                 entropy_alternatives = list(entropy_eval.alternative_meanings)
                 entropy_actual_is_representative = entropy_eval.actual_is_representative
             else:
-                entropy_alternatives = []
-                entropy_actual_is_representative = None
+                return unusable_answer_result(
+                    "EntropyConscience",
+                    TypeError(f"{MSG_INVALID_LLM_RESULT}: {type(entropy_eval).__name__}"),
+                    ts_datetime,
+                )
         except Exception as e:
-            # FAIL FAST on transport (#1049). Continuing here would judge the
-            # action against `entropy`'s pre-call default -- a confident number
-            # the model never produced.
+            # FAIL CLOSED either way. Continuing would judge the action against
+            # `entropy`'s pre-call default -- a passing number the model never
+            # produced (#1049 for transport; #1186 for every other error).
             if is_transport_failure(e):
                 return unavailable_result("EntropyConscience", e, ts_datetime)
-            logger.error(f"EntropyConscience: Error evaluating entropy: {e}", exc_info=True)
-            entropy_alternatives = []
-            entropy_actual_is_representative = None
+            return unusable_answer_result("EntropyConscience", e, ts_datetime)
 
         passed = entropy <= self.config.entropy_threshold
         status = ConscienceStatus.PASSED if passed else ConscienceStatus.FAILED
@@ -670,7 +676,6 @@ class CoherenceConscience(_BaseConscience):
             )
 
         # Inline the coherence evaluation
-        coherence = 0.9  # Default safe value
         coherence_user_prompt: Optional[str] = None
         try:
             # Get textual image context info (NOT raw images - prevents injection attacks)
@@ -697,14 +702,19 @@ class CoherenceConscience(_BaseConscience):
                 )
             else:
                 raise RuntimeError(MSG_SINK_NO_LLM)
-            if isinstance(coherence_eval, CoherenceResult):
-                coherence = float(coherence_eval.coherence)
+            if not isinstance(coherence_eval, CoherenceResult):
+                return unusable_answer_result(
+                    "CoherenceConscience",
+                    TypeError(f"{MSG_INVALID_LLM_RESULT}: {type(coherence_eval).__name__}"),
+                    ts_datetime,
+                )
+            coherence = float(coherence_eval.coherence)
         except Exception as e:
-            # FAIL FAST on transport (#1049) — see EntropyConscience above; the
-            # default `coherence` would otherwise be reported as a measurement.
+            # FAIL CLOSED either way — see EntropyConscience above; the default
+            # `coherence` would otherwise be reported as a measurement.
             if is_transport_failure(e):
                 return unavailable_result("CoherenceConscience", e, ts_datetime)
-            logger.error(f"CoherenceConscience: Error evaluating coherence: {e}", exc_info=True)
+            return unusable_answer_result("CoherenceConscience", e, ts_datetime)
 
         passed = coherence >= self.config.coherence_threshold
         status = ConscienceStatus.PASSED if passed else ConscienceStatus.FAILED

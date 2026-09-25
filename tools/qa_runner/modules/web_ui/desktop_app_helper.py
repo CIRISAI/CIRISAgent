@@ -18,6 +18,8 @@ from typing import Any, Dict, List, Optional
 import time
 import httpx
 
+from .shell_nav import Shell, detect_shell, row_tag, surface_for_screen, walk_circles
+
 
 @dataclass
 class DesktopAppConfig:
@@ -685,8 +687,37 @@ class DesktopAppHelper:
             await asyncio.sleep(0.2)
         return f"{tag!r} is not on screen after opening each sidebar group ({groups or 'no nav_group_* rows'})"
 
+    async def shell(self) -> Shell:
+        """Which navigation shell this install renders (shell_nav.detect_shell)."""
+        return detect_shell([e.test_tag for e in await self.get_elements()])
+
+    async def reach_surface(self, surface: str) -> Optional[str]:
+        """Open the surface `surface` (an EpistemicNav id, e.g. `account`, `nodes`)
+        through whichever shell is on screen. None on success, else why not.
+
+        The one navigation entry point (CIRISAgent#1181): the circles shell
+        (ciris-client 0.5.224+) walks shell_nav's route; the old rail reveals
+        the `nav_epistemic_<id>` row -- drawer, collapsed group, fold -- and
+        clicks it, exactly as every call site did before.
+        """
+        if await self.shell() == Shell.CIRCLES:
+            return await walk_circles(self, surface)
+        tag = row_tag(surface)
+        reveal_err = await self.reveal_sidebar_row(tag)
+        if reveal_err:
+            return reveal_err
+        try:
+            if not await self.click(tag):
+                return f"click on {tag!r} did not succeed"
+        except RuntimeError as e:
+            return f"click on {tag!r} failed: {e}"
+        return None
+
     async def navigate_to_surface(self, screen_name: str, timeout_ms: int = 8000) -> Optional[str]:
-        """Reach `screen_name` through the EpistemicSidebar. None on success, else why not.
+        """Reach `screen_name` through the app's navigation. None on success, else why not.
+
+        On the circles shell (0.5.224+) this is shell_nav's route for the
+        screen's surface; everything below is the old rail's walk, unchanged.
 
         This is how a CSD flow gets to its starting screen: the flow's first
         `requires: screen:` names where it starts, and this walks there so the
@@ -703,6 +734,13 @@ class DesktopAppHelper:
         """
         current = await self.get_screen()
         if current == screen_name:
+            return None
+        if await self.shell() == Shell.CIRCLES:
+            err = await walk_circles(self, surface_for_screen(screen_name))
+            if err:
+                return err
+            if not await self.wait_for_screen(screen_name, timeout=timeout_ms):
+                return f"walked the circles route to {screen_name!r} but the screen is {await self.get_screen()!r}"
             return None
         tag = surface_tag(screen_name)
         if not await self.is_element_visible(tag):
@@ -906,8 +944,20 @@ class DesktopAppHelper:
         # Sidebar-driven navigation — the EpistemicSidebar is always rendered
         # post-login (no toggle). Click the nav row directly, then wait for
         # the destination's root testTag.
+        if menu_tag.startswith("nav_epistemic_") and await self.shell() == Shell.CIRCLES:
+            # Circles shell (0.5.224+, CIRISAgent#1181): no groups to expand;
+            # the route is circle -> tab -> row, walked by shell_nav.
+            if await walk_circles(self, menu_tag[len("nav_epistemic_") :].replace("_", "-")):
+                return False
+            if screen_name == "Global Commons":
+                try:
+                    return await self.wait_for_element("screen_network_hub", timeout=timeout_ms)
+                except RuntimeError:
+                    return False
+            return await self.wait_for_screen(screen_name, timeout=timeout_ms)
+
         if menu_tag.startswith("nav_epistemic_"):
-            # Each surface lives in a collapsible group; the active group is
+            # Old rail (<= 0.5.223). Each surface lives in a collapsible group; the active group is
             # expanded on render and others are collapsed. If the destination
             # row isn't visible yet, expand its group first via the
             # nav_group_<id> header (also a testableClickable).

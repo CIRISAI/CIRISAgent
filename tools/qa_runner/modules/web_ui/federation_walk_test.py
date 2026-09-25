@@ -63,7 +63,9 @@ INVALID_NODE_CODE = "CIRIS-V1-INVALID"
 
 # The federation hub's nav target — the Global Commons layer in the Commons
 # group (2.9.6: the standalone Network surface was deleted). navigate_to() maps
-# this to the `nav_epistemic_layer_global_commons` sidebar row; verification is
+# this to the `nav_epistemic_layer_global_commons` row -- revealed in the old
+# rail, or reached as circle_global_commons -> tab_rules -> row in the circles
+# shell (0.5.224+, shell_nav.py, CIRISAgent#1181); verification is
 # via the NETWORK_HUB root testTag, the real source of truth.
 NETWORK_SCREEN_NAME = "Global Commons"
 
@@ -245,10 +247,9 @@ class FederationWalkTest:
         """Best-effort back-nav to the Network hub between screen visits.
 
         The canonical "drop me at the hub" path is the EpistemicSidebar's
-        Global Commons row (helper.navigate_to("Network") still works as the
-        alias) — the sidebar is always visible post-login, so a single click
-        on `nav_epistemic_layer_global_commons` reliably routes back to the
-        hub. We try a legacy back button first for screens that have one,
+        Global Commons row, reached through whichever shell the client renders
+        (helper.navigate_to -> shell_nav; `nav_epistemic_layer_global_commons`
+        is the row in both). We try a legacy back button first for screens that have one,
         then fall through to sidebar nav.
         """
         # Try the system back button (common testTag) then re-verify hub root.

@@ -422,6 +422,20 @@ class WisdomAdvice(BaseModel):
     model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
+class GuidanceOrigin(str, Enum):
+    """Who produced a GuidanceResponse.
+
+    Only WISE_AUTHORITY guidance can carry a signature worth verifying. A
+    DOMAIN_AUTO_DEFERRAL is a machine routing notice from the wise bus (a
+    request needs a licensed domain handler); it is unsigned by design and says
+    so here, instead of putting a constant label in ``signature`` that a
+    verifier would read as a forgery (#967).
+    """
+
+    WISE_AUTHORITY = "wise_authority"
+    DOMAIN_AUTO_DEFERRAL = "domain_auto_deferral"
+
+
 class GuidanceResponse(BaseModel):
     """WA guidance response."""
 
@@ -430,6 +444,10 @@ class GuidanceResponse(BaseModel):
     reasoning: str
     wa_id: str
     signature: str
+    origin: GuidanceOrigin = Field(
+        default=GuidanceOrigin.WISE_AUTHORITY,
+        description="Who produced this response; a non-WA origin carries an empty (unsigned) signature",
+    )
 
     # NEW: Aggregated advice from multiple providers
     advice: Optional[List[WisdomAdvice]] = Field(default=None, description="Per-provider capability-tagged advice")

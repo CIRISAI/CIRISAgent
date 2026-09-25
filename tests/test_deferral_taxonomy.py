@@ -4,7 +4,11 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from ciris_engine.logic.buses.prohibitions import COMMUNITY_MODERATION_CAPABILITIES, PROHIBITED_CAPABILITIES
+from ciris_engine.logic.buses.prohibitions import (
+    COMMUNITY_MODERATION_CAPABILITIES,
+    PROHIBITED_CAPABILITIES,
+    get_capability_category,
+)
 from ciris_engine.logic.buses.wise_bus import WiseBus
 from ciris_engine.schemas.services.agent_credits import DomainCategory
 from ciris_engine.schemas.services.authority_core import GuidanceRequest
@@ -18,7 +22,6 @@ from ciris_engine.schemas.services.deferral_taxonomy import (
     get_need_category_for_prohibition_category,
     get_rights_basis_for_need_category,
 )
-from ciris_engine.logic.buses.prohibitions import get_capability_category
 
 
 def test_every_domain_category_has_needs_mapping() -> None:
@@ -126,3 +129,40 @@ async def test_wisebus_auto_deferral_attaches_taxonomy_metadata() -> None:
     assert deferral_context.reason_code == DeferralOperationalReason.LICENSED_DOMAIN_REQUIRED
     assert deferral_context.needs_category == DeferralNeedCategory.JUSTICE_AND_LEGAL_AGENCY
     assert "access_to_justice" in deferral_context.rights_basis
+
+
+@pytest.mark.asyncio
+async def test_wisebus_auto_deferral_is_typed_as_an_unsigned_routing_notice() -> None:
+    """#967: the domain auto-deferral is a machine routing notice, not a WA decision.
+
+    It used to carry signature="domain_auto_deferral" -- a constant label that a
+    verifier would read as a forged Ed25519 signature, not as "unsigned". It now
+    carries an empty signature (which is_unverifiable_legacy_signature reads as
+    unsigned) and says what it is in a typed origin field.
+    """
+    from ciris_engine.schemas.services.authority_core import GuidanceOrigin, is_unverifiable_legacy_signature
+
+    bus = WiseBus(service_registry=MagicMock(), time_service=MagicMock())
+    bus.send_deferral = AsyncMock(return_value=True)
+
+    response = await bus.request_guidance(
+        GuidanceRequest(
+            context="Should I provide legal advice?",
+            options=["yes", "no"],
+            recommendation=None,
+            capability="legal_advice",
+        ),
+        agent_tier=1,
+    )
+
+    assert response.origin == GuidanceOrigin.DOMAIN_AUTO_DEFERRAL
+    assert response.signature == ""
+    assert is_unverifiable_legacy_signature(response.signature)
+    # The old constant was not recognisable as unsigned -- the reason for this change.
+    assert not is_unverifiable_legacy_signature("domain_auto_deferral")
+
+
+def test_wa_guidance_defaults_to_wise_authority_origin() -> None:
+    from ciris_engine.schemas.services.authority_core import GuidanceOrigin, GuidanceResponse
+
+    assert GuidanceResponse(reasoning="r", wa_id="wa", signature="sig").origin == GuidanceOrigin.WISE_AUTHORITY

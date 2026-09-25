@@ -13,7 +13,7 @@ from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.infrastructure.base import BusMetrics
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.agent_credits import DomainCategory, DomainDeferralRequired
-from ciris_engine.schemas.services.authority_core import GuidanceRequest, GuidanceResponse
+from ciris_engine.schemas.services.authority_core import GuidanceOrigin, GuidanceRequest, GuidanceResponse
 from ciris_engine.schemas.services.context import DeferralContext, GuidanceContext
 from ciris_engine.schemas.services.deferral_taxonomy import (
     DeferralOperationalReason,
@@ -684,7 +684,11 @@ class WiseBus(BaseBus[WiseAuthorityService]):
                 return GuidanceResponse(
                     reasoning=deferral_signal.reason,
                     wa_id="wisebus_domain_deferral",
-                    signature="domain_auto_deferral",
+                    # A routing notice, not a WA decision: unsigned, and typed as such
+                    # (#967). Empty is what is_unverifiable_legacy_signature reads as
+                    # "unsigned"; a constant label would read as a forged signature.
+                    signature="",
+                    origin=GuidanceOrigin.DOMAIN_AUTO_DEFERRAL,
                     custom_guidance=(
                         f"This request requires a licensed {deferral_signal.category.value} handler. "
                         f"{'Deferral sent to CIRISNode for routing.' if success else 'No WA service available for routing.'}"

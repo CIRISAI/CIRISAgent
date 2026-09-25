@@ -153,21 +153,25 @@ async def test_reveal_names_the_row_it_could_not_bring_on_screen() -> None:
 
 
 def test_logout_prefers_the_route_that_exists_in_both_modes() -> None:
-    """CIRISClient#51's fix routes logout through `nav_epistemic_account` ->
+    """CIRISClient#51's fix routes logout through the Account surface ->
     Screen.Settings, present in both modes; the top bar lives on the agent home
-    only, and `nav_epistemic_agent_settings` disappears when hasAgent=false.
-    Order matters: newest first, older ones still drivable."""
+    only, and the agent Settings row disappears from the old rail when
+    hasAgent=false. Order matters: newest first, older ones still drivable.
+    The hops themselves belong to shell_nav via helper.reach_surface, which
+    knows both the circles shell and the old rail (CIRISAgent#1181; behaviour is
+    pinned in tests/tools/qa_runner/test_shell_nav.py)."""
     import inspect
 
     from tools.qa_runner.modules.web_ui.__main__ import DesktopAppTestRunner
 
     src = inspect.getsource(DesktopAppTestRunner._logout)
-    account = src.index("nav_epistemic_account")
+    account = src.index('_surface_to_logout("account"')
     governance = src.index('is_element_visible("btn_governance_menu")')
-    legacy = src.index('_sidebar_to_logout("nav_epistemic_agent_settings"')
+    legacy = src.index('_surface_to_logout("agent-settings"')
     assert account < governance < legacy, "the account route must be tried first"
-    # Every sidebar route is revealed, never merely awaited.
-    assert "reveal_sidebar_row(tag)" in src
+    # Every route goes through the one shell-aware helper, never a hand-coded hop.
+    assert "self.helper.reach_surface(surface)" in src
+    assert "nav_group_" not in src.replace('startswith("nav_group_")', "")
     # And a client with no route at all says so in the product's terms.
     assert "cannot sign out at all (CIRISClient#51)" in src
 

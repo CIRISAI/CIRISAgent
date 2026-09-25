@@ -68,7 +68,7 @@ class SecurityReportResponse(BaseModel):
     high_count: int = 0
     medium_count: int = 0
     low_count: int = 0
-    safe_to_import: bool = True
+    safe_to_import: bool = False  # fails closed (#1203): only a completed scan may clear a skill
     summary: str = ""
     findings: List[SecurityFindingResponse] = Field(default_factory=list)
 

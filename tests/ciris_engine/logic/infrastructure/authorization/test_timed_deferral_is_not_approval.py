@@ -58,7 +58,9 @@ from ciris_engine.logic.handlers.control.defer_handler import DeferHandler
 from ciris_engine.logic.infrastructure.authorization.envelope_reader import resolve_task_envelope
 from ciris_engine.logic.infrastructure.authorization.tool_approval import (
     PENDING_TOOL_APPROVAL_KEY,
+    TOOL_APPROVAL_DETAIL_KEY,
     build_approval_deferral,
+    encode_tool_approval_detail,
     envelope_approves_tool,
 )
 from ciris_engine.logic.processors.core.thought_processor.main import ThoughtProcessor
@@ -473,7 +475,10 @@ async def test_defer_handler_arms_no_timer_when_awaiting_tool_approval() -> None
     params = DeferParams(
         reason="I want to pay this invoice",
         defer_until="2026-08-01T01:00:00+00:00",
-        context={PENDING_TOOL_APPROVAL_KEY: APPROVAL_TOOL},
+        context={
+            PENDING_TOOL_APPROVAL_KEY: APPROVAL_TOOL,
+            TOOL_APPROVAL_DETAIL_KEY: encode_tool_approval_detail(None, APPROVAL_TOOL),
+        },
     )
 
     info = await handler._schedule_time_based_deferral(params, _thought_row(), "unchanged")

@@ -67,7 +67,9 @@ class SkillSecurityReport(BaseModel):
     low_count: int = 0
     info_count: int = 0
     findings: List[SkillSecurityFinding] = Field(default_factory=list)
-    safe_to_import: bool = Field(True, description="Overall recommendation")
+    # Fails CLOSED (#1203): a report that never reached the verdict below --
+    # unrun, partially built, or constructed by a new path -- must read unsafe.
+    safe_to_import: bool = Field(False, description="Overall recommendation; False unless the scan cleared it")
     summary: str = Field("", description="Plain English summary")
 
     model_config = ConfigDict(extra="forbid", defer_build=True)
@@ -223,20 +225,20 @@ class SkillSecurityScanner:
         findings.extend(self._check_typosquatting(skill.name))
         findings.extend(self._check_metadata_consistency(skill))
 
-        # Build report
+        # Build report; the verdict is part of construction, not a later step
+        critical_count = sum(1 for f in findings if f.severity == Severity.CRITICAL)
+        high_count = sum(1 for f in findings if f.severity == Severity.HIGH)
         report = SkillSecurityReport(
             skill_name=skill.name,
             total_findings=len(findings),
-            critical_count=sum(1 for f in findings if f.severity == Severity.CRITICAL),
-            high_count=sum(1 for f in findings if f.severity == Severity.HIGH),
+            critical_count=critical_count,
+            high_count=high_count,
             medium_count=sum(1 for f in findings if f.severity == Severity.MEDIUM),
             low_count=sum(1 for f in findings if f.severity == Severity.LOW),
             info_count=sum(1 for f in findings if f.severity == Severity.INFO),
             findings=findings,
+            safe_to_import=critical_count == 0 and high_count == 0,
         )
-
-        # Determine safety
-        report.safe_to_import = report.critical_count == 0 and report.high_count == 0
         report.summary = self._build_summary(report)
 
         return report

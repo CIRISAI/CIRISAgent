@@ -49,16 +49,49 @@ STAGES: Tuple[Tuple[str, Sequence[str], bool], ...] = (
 
 @dataclass(frozen=True)
 class Config:
-    """Every budget the interact path has. Defaults = main @ 2.11.5, desktop."""
+    """Every budget the interact path has. Defaults = main @ 2.11.5, desktop,
+    i.e. BEFORE the #1186 budget profiles; `Config.from_profile` / `shipped()`
+    give what the agent runs now."""
 
     deadline: float = 110.0  # api/routes/agent.py _get_interaction_timeout
     consc_per_try: float = 45.0  # ConscienceConfig.llm_call_timeout_seconds
-    consc_attempts: int = 2  # ConscienceConfig.llm_call_retries = 1
+    consc_attempts: int = 2  # ConscienceConfig.llm_call_retries = 1 (2.11.5)
     consc_quorum: int = 4  # shards that must answer (4 today; lowering it is a SAFETY call)
-    dma_per_try: float = 90.0  # dma_orchestrator DMA_TIMEOUT_SECONDS
+    dma_per_try: float = 90.0  # dma_orchestrator per-try at 2.11.5 (then 90s x 3 attempts)
     dma_attempts: int = 1
     propagate: bool = False  # SRE deadline propagation: each call gets the REMAINDER
     overhead: bool = True  # add the measured per-interact overhead
+
+    @classmethod
+    def from_profile(cls, profile: object, **overrides: object) -> "Config":
+        """The budgets the agent SHIPS for one LLMBudgetProfile (CIRISAgent#1186).
+
+        The defaults above stay "today" -- the README's before/after narrative
+        is written against them. This is the "after": the profile's per-try x
+        attempts for DMAs and consciences, and deadline propagation on (the
+        agent clamps each try to the thought's remaining budget). The toy's
+        deadline is what the caller waits (interact_deadline_s); the agent
+        propagates the slightly tighter thought_budget_s, which the toy's
+        overhead term approximates. Duck-typed so the toy never imports the
+        engine.
+        """
+        fields: Dict[str, object] = dict(
+            deadline=float(getattr(profile, "interact_deadline_s")),
+            consc_per_try=float(getattr(profile, "conscience_per_try_s")),
+            consc_attempts=int(getattr(profile, "conscience_attempts")),
+            dma_per_try=float(getattr(profile, "dma_per_try_s")),
+            dma_attempts=int(getattr(profile, "dma_attempts")),
+            propagate=True,
+        )
+        fields.update(overrides)
+        return cls(**fields)  # type: ignore[arg-type]
+
+
+def shipped(provider_class: str = "remote") -> Config:
+    """Config.from_profile for a profile as shipped in the engine (lazy import)."""
+    from ciris_engine.schemas.config.llm_budget import PROFILES, ProviderClass
+
+    return Config.from_profile(PROFILES[ProviderClass(provider_class)])
 
 
 class Sampler:

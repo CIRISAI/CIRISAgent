@@ -9,7 +9,7 @@ import pytest
 from tools.analysis.interact_budget import explore
 from tools.analysis.interact_budget.extract_latency import extract, unique_logs
 from tools.analysis.interact_budget.local_provider import conscience_stage
-from tools.analysis.interact_budget.pipeline import SHARDS, Config, Sampler, ceiling, simulate, solve_deadline
+from tools.analysis.interact_budget.pipeline import SHARDS, Config, Sampler, ceiling, shipped, simulate, solve_deadline
 
 SNAPSHOT = Path("tools/analysis/interact_budget/latency.2026-09-23.json")
 
@@ -92,3 +92,23 @@ def test_on_a_bound_box_zombies_cost_more_than_freed_slots() -> None:
 def test_the_snapshot_and_cli_run(capsys: pytest.CaptureFixture) -> None:
     assert explore.main(["ceiling", "--latency", str(SNAPSHOT)]) == 0
     assert "ceiling" in capsys.readouterr().out
+
+
+def test_the_shipped_remote_profile_is_what_the_toy_models_as_after() -> None:
+    """Config() is "today" (the README's baseline); shipped() is the REMOTE
+    profile the agent now runs: 45s x 4 consciences, 90s x 2 DMAs, propagated
+    deadline. Keep the two in step with ciris_engine/schemas/config/llm_budget.py."""
+    today, after = Config(), shipped("remote")
+    assert (today.consc_per_try, today.consc_attempts, today.dma_per_try, today.deadline) == (45.0, 2, 90.0, 110.0)
+    assert (after.consc_per_try, after.consc_attempts) == (45.0, 4)
+    assert (after.dma_per_try, after.dma_attempts) == (90.0, 2)
+    assert after.deadline == 195.0 and after.propagate is True
+    local = shipped("local")
+    assert (local.consc_per_try, local.consc_attempts, local.dma_attempts) == (240.0, 1, 1)
+
+
+def test_shipped_remote_replies_more_often_than_today() -> None:
+    d = json.loads(SNAPSHOT.read_text())
+    today = simulate(Config(), Sampler(d, seed=5), 3000)["success"]
+    after = simulate(shipped("remote"), Sampler(d, seed=5), 3000)["success"]
+    assert after > today

@@ -209,8 +209,12 @@ async def process_thought_with_conscience(thought_item):
 ### Configuration
 ```yaml
 # From essential.yaml
-conscience_retry_limit: 2  # Maximum recursive ASPDMA attempts
+conscience_retry_limit: 2  # DEPRECATED: not read by any code path
 ```
+
+**Note (#1186):** the implemented conscience retry is a single re-run of ASPDMA and the conscience stage,
+and it spends from the same thought deadline as the first pass. Per-shard LLM timeouts and attempt counts
+come from the LLM budget profile (`ciris_engine/logic/config/llm_budget.py`: remote 45s x 4, local 240s x 1).
 
 ## Additional Protection Layers
 

@@ -16,6 +16,7 @@ import aiofiles
 from ciris_engine.config.ciris_services import get_billing_url
 from ciris_engine.logic.buses import BusManager
 from ciris_engine.logic.config.config_accessor import ConfigAccessor
+from ciris_engine.logic.config.llm_budget import classify_provider, primary_provider_declaration, resolve_budget
 from ciris_engine.logic.persistence import get_sqlite_db_full_path
 from ciris_engine.logic.registries.base import Priority, ServiceRegistry
 
@@ -46,6 +47,7 @@ from ciris_engine.logic.services.runtime.llm_service import OpenAICompatibleClie
 from ciris_engine.logic.utils.path_resolution import get_data_dir
 from ciris_engine.protocols.services import LLMService, TelemetryService
 from ciris_engine.schemas.config.essential import EssentialConfig
+from ciris_engine.schemas.config.llm_budget import ProviderClass
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.manifest import ServiceManifest
 from ciris_engine.schemas.services.capabilities import LLMCapabilities
@@ -53,38 +55,23 @@ from ciris_engine.schemas.services.capabilities import LLMCapabilities
 logger = logging.getLogger(__name__)
 
 
-def _is_loopback_or_lan(url: str) -> bool:
-    """Is this endpoint on the loopback interface or a private network?
+def _is_loopback_or_lan(url: str, provider_id: Optional[str] = None) -> bool:
+    """Does this provider run on hardware the user controls (loopback, LAN, overlay)?
 
     A TOPOLOGY question, and only that. It decides whether a provider is
     "local_primary"; it must never be used to decide WHO a provider is — that
     conflation is CIRISAgent#1063.
 
-    The previous implementation was a substring scan:
-
-        any(x in url.lower() for x in ["localhost","127.0.0.1","192.168.","10.","172.16."])
-
-    which matched `"10."` anywhere in a URL (a version segment, a port, a
-    hostname) and covered only 172.16/16 of the private 172.16/12 range. This
-    parses the host and asks the ipaddress module, so the answer is the real one.
+    Delegates to the one provider classifier (``classify_provider``,
+    ciris_engine/logic/config/llm_budget.py, #1186), so the service name, the
+    ``is_local`` metadata and the time budget cannot disagree. That classifier
+    parses the host rather than substring-matching the URL (``"10."`` once
+    matched a version segment) and covers all of 172.16/12, link-local, CGNAT
+    overlays and ``.local`` names.
     """
-    from urllib.parse import urlparse
-
-    if not url:
+    if not url and not provider_id:
         return False
-    host = (urlparse(url).hostname or "").strip().lower()
-    if not host:
-        return False
-    if host in ("localhost", "127.0.0.1", "::1") or host.endswith(".local"):
-        return True
-    try:
-        import ipaddress
-
-        addr = ipaddress.ip_address(host)
-        return bool(addr.is_private or addr.is_loopback or addr.is_link_local)
-    except ValueError:
-        # A hostname we cannot resolve here. Not demonstrably local, so no.
-        return False
+    return classify_provider(provider_id, url) is ProviderClass.LOCAL
 
 
 class ServiceInitializer:
@@ -1033,25 +1020,18 @@ This directory contains critical cryptographic keys for the CIRIS system.
             return getattr(config.services, attr_name, default)
         return default
 
-    def _resolve_llm_timeout(self, config: Any, base_url: Optional[str]) -> int:
-        """Resolve the per-call LLM timeout, accounting for local inference.
+    @staticmethod
+    def _resolve_llm_timeout(base_url: Optional[str], provider_id: Optional[str] = None) -> int:
+        """The HTTP timeout for one LLM request to this provider.
 
-        Cloud providers default to 20s so two retries across two providers fit
-        the 90s DMA budget. Local inference servers (Ollama / llama.cpp / vLLM
-        on localhost or a LAN box) are single-provider and an order of
-        magnitude slower — a small model on modest hardware can take well over
-        a minute to emit a full structured DMA response. A 20s default starves
-        them into spurious timeouts, so local URLs default to 300s instead.
-        An explicit CIRIS_LLM_TIMEOUT always wins.
+        Timeouts come from the LLM budget profile,
+        ciris_engine/logic/config/llm_budget.py (#1186): the provider class
+        (local vs remote) picks the profile, and CIRIS_LLM_TIMEOUT overrides
+        it. ``services.llm_timeout`` in essential.yaml is no longer read, so a
+        desktop (which loads essential.yaml) and a phone (which does not) get
+        the same timeout for the same provider.
         """
-        explicit = int(os.environ.get("CIRIS_LLM_TIMEOUT", "0"))
-        if explicit:
-            return explicit
-        effective_url = (base_url or "").lower()
-        is_local = any(x in effective_url for x in ("localhost", "127.0.0.1", "192.168.", "10.", "172.16."))
-        if is_local:
-            return int(self._get_llm_service_config_value(config, "llm_timeout_local", 300))
-        return int(self._get_llm_service_config_value(config, "llm_timeout", 20))
+        return int(resolve_budget(provider_id, base_url).llm_http_timeout_s)
 
     async def _initialize_llm_services(self, config: Any, modules_to_load: Optional[List[str]] = None) -> None:
         """Initialize LLM service(s) based on configuration.
@@ -1164,7 +1144,8 @@ This directory contains critical cryptographic keys for the CIRIS system.
         # Needed by BOTH the model default below and the service name further
         # down; computed once, here, so the two cannot disagree about it.
         effective_url = base_url or ""
-        is_local_provider = _is_loopback_or_lan(effective_url)
+        declared_provider_id, _ = primary_provider_declaration()
+        is_local_provider = _is_loopback_or_lan(effective_url, declared_provider_id)
 
         # Get model name — a default model is only meaningful WITHIN a vendor.
         #
@@ -1229,10 +1210,8 @@ This directory contains critical cryptographic keys for the CIRIS system.
                 effective_url or "<default url>",
             )
 
-        # LLM timeout - reduced default to 20s to allow failover within DMA timeout budget
-        # With 90s DMA timeout: 20s × 2 retries × 2 providers = 80s < 90s
-        # Can be overridden via CIRIS_LLM_TIMEOUT for slow providers
-        llm_timeout = self._resolve_llm_timeout(config, base_url)
+        # Timeouts come from the LLM budget profile, ciris_engine/logic/config/llm_budget.py (#1186).
+        llm_timeout = self._resolve_llm_timeout(base_url, declared_provider_id)
 
         # Provider-specific instructor mode defaults
         default_instructor_modes = {
@@ -1250,7 +1229,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
             api_key=api_key,
             instructor_mode=instructor_mode,
             timeout_seconds=llm_timeout,
-            # Reduced from 3 to 2 to fit within DMA timeout budget
+            # Remediation attempts for fixable 400s only; transport errors are never retried here (#1186).
             max_retries=self._get_llm_service_config_value(config, "llm_max_retries", 2),
             provider=provider,
         )
@@ -1441,8 +1420,8 @@ This directory contains critical cryptographic keys for the CIRIS system.
             self._get_llm_service_config_value(config, "llm_model", "llama3.2"),
         )
 
-        # Use same timeout as primary LLM (20s default for failover budget)
-        llm_timeout = self._resolve_llm_timeout(config, base_url)
+        # Timeouts come from the LLM budget profile, ciris_engine/logic/config/llm_budget.py (#1186).
+        llm_timeout = self._resolve_llm_timeout(base_url)
 
         # Create config
         llm_config = OpenAIConfig(
@@ -1451,7 +1430,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
             api_key=api_key,
             instructor_mode=os.environ.get("INSTRUCTOR_MODE", "JSON"),
             timeout_seconds=llm_timeout,
-            # Reduced from 3 to 2 to fit within DMA timeout budget
+            # Remediation attempts for fixable 400s only; transport errors are never retried here (#1186).
             max_retries=self._get_llm_service_config_value(config, "llm_max_retries", 2),
         )
 
@@ -1520,8 +1499,8 @@ This directory contains critical cryptographic keys for the CIRIS system.
         # Use CIRIS-recommended model for fallback
         model_name = os.environ.get("CIRIS_PROXY_MODEL", "claude-sonnet-4-20250514")
 
-        # Use same timeout as primary LLM
-        llm_timeout = self._resolve_llm_timeout(config, base_url)
+        # Timeouts come from the LLM budget profile, ciris_engine/logic/config/llm_budget.py (#1186).
+        llm_timeout = self._resolve_llm_timeout(base_url)
 
         llm_config = OpenAIConfig(
             base_url=base_url,
@@ -1562,8 +1541,8 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
         This enables providers added via the API to survive restarts.
         """
-        from ciris_engine.logic.persistence.llm_providers import LLMProviderConfig, list_providers
-        from ciris_engine.logic.services.runtime.llm_service import OpenAIConfig
+        from ciris_engine.logic.persistence.llm_providers import list_providers
+        from ciris_engine.logic.services.runtime.llm_service.service import runtime_provider_config
         from ciris_engine.schemas.services.capabilities import LLMCapabilities
 
         if not self.config_service or not self.service_registry:
@@ -1596,27 +1575,9 @@ This directory contains critical cryptographic keys for the CIRIS system.
                         logger.debug(f"Provider '{provider_name}' already registered, skipping")
                         continue
 
-                    # Create LLM config
-                    api_key = config.api_key
-                    if not api_key and config.provider_id in ("local", "local_inference"):
-                        api_key = "local"
-
-                    # Use longer timeout for local endpoints (Jetson, llama.cpp, etc.)
-                    is_local = (
-                        config.provider_id in ("local", "local_inference")
-                        or "localhost" in config.base_url
-                        or "192.168." in config.base_url
-                        or ".local" in config.base_url
-                    )
-                    timeout = 120 if is_local else 60  # 2 min for local, 1 min for cloud
-
-                    llm_config = OpenAIConfig(
-                        base_url=config.base_url,
-                        model_name=config.model,
-                        api_key=api_key,
-                        instructor_mode="JSON",
-                        timeout_seconds=timeout,
-                        max_retries=2,
+                    # Timeout from the LLM budget profile for this provider (#1186).
+                    llm_config = runtime_provider_config(
+                        config.provider_id, config.base_url, config.model, config.api_key
                     )
 
                     # Create and start service

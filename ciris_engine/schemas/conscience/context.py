@@ -39,6 +39,17 @@ class ConscienceCheckContext(BaseModel):
         None, description="IDMAResult from the reasoning stack (fragility / k_eff / phase)"
     )
 
+    # The thought's deadline (ciris_engine.logic.config.llm_budget.Deadline,
+    # CIRISAgent#1186): set once when the thought starts processing, so each
+    # conscience LLM attempt is clamped to what is left of it rather than
+    # getting a fresh budget. A runtime clock object, not data: excluded from
+    # serialisation. Typed Any because schemas must not import the logic
+    # layer; consumers read it through conscience.core.deadline_of(), which
+    # accepts only a real Deadline. None -> static per-try x attempts.
+    deadline: Optional[Any] = Field(
+        None, exclude=True, description="Thought Deadline (llm_budget.Deadline) the conscience stage spends from"
+    )
+
     # Additional context can be added via extra fields
     model_config = ConfigDict(
         extra="allow",  # Allow additional context fields

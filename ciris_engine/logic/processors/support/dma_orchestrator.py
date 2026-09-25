@@ -1,8 +1,8 @@
 import asyncio
 import logging
-import os
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
+from ciris_engine.logic.config.llm_budget import Deadline, active_budget
 from ciris_engine.logic.dma.action_selection_pdma import ActionSelectionPDMAEvaluator
 from ciris_engine.logic.dma.csdma import CSDMAEvaluator
 from ciris_engine.logic.dma.dsaspdma import DSASPDMAEvaluator
@@ -50,6 +50,12 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _deadline_of(thought_item: Any) -> Optional[Deadline]:
+    """The thought deadline a queue item carries (None for items built outside process_thought)."""
+    candidate = getattr(thought_item, "deadline", None)
+    return candidate if isinstance(candidate, Deadline) else None
+
+
 class DMAOrchestrator:
     def __init__(
         self,
@@ -79,15 +85,13 @@ class DMAOrchestrator:
         self.llm_service = llm_service
         self.memory_service = memory_service
 
-        self.retry_limit = getattr(app_config.workflow, "DMA_RETRY_LIMIT", 3) if app_config else 3
-        # DMA timeout can be overridden via environment variable for slow LLM providers
-        # Should be higher than CIRIS_LLM_TIMEOUT to allow for retries
-        # Default 90s matches dma_executor.py: 20s LLM timeout × 2 retries × 2 providers = 80s + buffer
-        dma_timeout_env = os.environ.get("CIRIS_DMA_TIMEOUT")
-        if dma_timeout_env:
-            self.timeout_seconds = float(dma_timeout_env)
-        else:
-            self.timeout_seconds = getattr(app_config.workflow, "DMA_TIMEOUT_SECONDS", 90.0) if app_config else 90.0
+        # Per-try timeout and attempt count come from the active LLM budget
+        # profile (CIRISAgent#1186): REMOTE 90s x 2, LOCAL 300s x 1, with
+        # CIRIS_DMA_TIMEOUT / CIRIS_DMA_ATTEMPTS applied inside resolve_budget.
+        # Each try is further clamped to the thought's deadline at call time.
+        budget = active_budget()
+        self.retry_limit = budget.dma_attempts
+        self.timeout_seconds = budget.dma_per_try_s
 
         self._circuit_breakers: Dict[str, CircuitBreaker] = {
             "ethical_pdma": CircuitBreaker("ethical_pdma"),
@@ -133,6 +137,7 @@ class DMAOrchestrator:
                 processing_context,
                 retry_limit=self.retry_limit,
                 timeout_seconds=self.timeout_seconds,
+                deadline=_deadline_of(thought_item),
                 time_service=self.time_service,
                 ethical_result=dma_results["ethical_pdma"],
                 csdma_result=dma_results["csdma"],
@@ -171,6 +176,7 @@ class DMAOrchestrator:
                 context,
                 retry_limit=self.retry_limit,
                 timeout_seconds=self.timeout_seconds,
+                deadline=_deadline_of(thought_item),
                 time_service=self.time_service,
             )
         )
@@ -548,6 +554,7 @@ class DMAOrchestrator:
                     processing_context,
                     retry_limit=self.retry_limit,
                     timeout_seconds=self.timeout_seconds,
+                    deadline=_deadline_of(thought_item),
                     time_service=self.time_service,
                 )
             )
@@ -565,6 +572,7 @@ class DMAOrchestrator:
                     processing_context,
                     retry_limit=self.retry_limit,
                     timeout_seconds=self.timeout_seconds,
+                    deadline=_deadline_of(thought_item),
                     time_service=self.time_service,
                 )
             )
@@ -583,6 +591,7 @@ class DMAOrchestrator:
                         dsdma_context or DMAMetadata(),
                         retry_limit=self.retry_limit,
                         timeout_seconds=self.timeout_seconds,
+                        deadline=_deadline_of(thought_item),
                         time_service=self.time_service,
                     )
                 )
@@ -719,6 +728,7 @@ class DMAOrchestrator:
                 triaged,
                 retry_limit=self.retry_limit,
                 timeout_seconds=self.timeout_seconds,
+                deadline=_deadline_of(thought_item),
                 time_service=self.time_service,
             )
         except Exception as e:

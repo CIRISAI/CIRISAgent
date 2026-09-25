@@ -624,9 +624,14 @@ class TestGetInteractionTimeout:
         if hasattr(mock_request.app.state, "api_config"):
             delattr(mock_request.app.state, "api_config")
 
-        timeout = _get_interaction_timeout(mock_request)
+        with patch(
+            "ciris_engine.logic.config.llm_budget.active_budget",
+            return_value=Mock(interact_deadline_s=195.0),
+        ):
+            timeout = _get_interaction_timeout(mock_request)
 
-        assert timeout == 110.0  # 110.0 since #1013 — 55.0 sat below the median successful response
+        # No config: the LLM budget's interact deadline (#1186).
+        assert timeout == 195.0
 
     def test_get_interaction_timeout_from_config(self, monkeypatch):
         """Test timeout from API config."""
@@ -651,9 +656,14 @@ class TestGetInteractionTimeout:
         if hasattr(mock_request.app.state, "api_config"):
             delattr(mock_request.app.state, "api_config")
 
-        timeout = _get_interaction_timeout(mock_request)
+        with patch(
+            "ciris_engine.logic.config.llm_budget.active_budget",
+            return_value=Mock(interact_deadline_s=195.0),
+        ):
+            timeout = _get_interaction_timeout(mock_request)
 
-        assert timeout == 110.0  # 110.0 since #1013 — 55.0 sat below the median successful response
+        # No config: the LLM budget's interact deadline (#1186).
+        assert timeout == 195.0
 
 
 class TestGetCurrentCognitiveState:

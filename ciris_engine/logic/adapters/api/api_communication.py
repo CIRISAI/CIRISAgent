@@ -5,7 +5,7 @@ Communication service for API adapter.
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from ciris_engine.logic.services.base_service import BaseService
 from ciris_engine.protocols.services.governance.communication import CommunicationServiceProtocol
@@ -103,6 +103,83 @@ class APICommunicationService(BaseService, CommunicationServiceProtocol):
         )
         return True
 
+    @staticmethod
+    def _speaking_task_id() -> Optional[str]:
+        """The task whose SPEAK is being delivered, if this call is inside one.
+
+        SPEAK reaches `send_message` through `send_message_sync`, called
+        inline by the handler, so the reasoning scope the ActionDispatcher
+        sets around the handler (CIRISAgent#938) is still the current context
+        here. Its task_id is the speaking task. When the scope carries only a
+        thought id, the thought names its source task.
+        """
+        from ciris_engine.logic.infrastructure.authorization.reasoning_scope import current_reasoning_scope
+
+        scope = current_reasoning_scope()
+        if scope is None:
+            return None
+        if scope.task_id:
+            return scope.task_id
+        if not scope.thought_id:
+            return None
+        try:
+            import os
+
+            from ciris_engine.logic import persistence
+
+            thought = persistence.get_thought_by_id(scope.thought_id, os.environ.get("AGENT_OCCURRENCE_ID", "default"))
+            source_task_id = getattr(thought, "source_task_id", None) if thought is not None else None
+            return str(source_task_id) if source_task_id else None
+        except Exception as exc:  # noqa: BLE001 — correlation is best-effort
+            logger.debug("[API_INTERACTION] could not resolve task for thought %s: %s", scope.thought_id, exc)
+            return None
+
+    def _claim_waiting_message_id(
+        self, channel_id: str, queue: List[str], speaking_task_id: Optional[str]
+    ) -> Optional[Tuple[str, Optional[str]]]:
+        """Pick (and remove) the waiting request this SPEAK answers, or None.
+
+        Returns (message_id, owning task_id) so interact() can name the task.
+
+        A reply goes to a request its own task owns — never to whichever
+        request happens to be next on the channel. FIFO matching delivered a
+        timed-out task's late SPEAK to the user's NEXT question, which then
+        showed the previous question's answer.
+
+        - Speaking task known: the oldest queued message_id that task owns
+          (with task-append one task can own several). None of them waiting
+          means the reply is late — its request timed out and left the queue,
+          or it was an async submission already answered. It reaches no live
+          request; it is already in channel history via the speak correlation.
+        - Speaking task unknown (a SPEAK from outside the reasoning loop):
+          plain FIFO, the old behaviour. Timed-out requests have already been
+          removed from the queue by interact()'s cleanup, so FIFO here only
+          ever sees requests that are still waiting.
+        """
+        task_map = getattr(getattr(self, "_app_state", None), "message_task_map", None)
+        if not isinstance(task_map, dict):
+            task_map = {}
+
+        if speaking_task_id is None:
+            message_id = queue.pop(0)
+            owner = task_map.pop(message_id, None)
+            return message_id, owner if isinstance(owner, str) else None
+
+        for index, candidate in enumerate(queue):
+            if task_map.get(candidate) == speaking_task_id:
+                del queue[index]
+                task_map.pop(candidate, None)
+                return candidate, speaking_task_id
+
+        logger.info(
+            "[API_INTERACTION] SPEAK from task %s on channel %s has no waiting request of its own "
+            "(timed out or async); not delivering it to another request. Waiting: %s",
+            speaking_task_id,
+            channel_id,
+            [(mid, task_map.get(mid)) for mid in queue],
+        )
+        return None
+
     async def _handle_api_interaction_response(self, channel_id: str, content: str) -> None:
         """Handle API interaction response storage if applicable.
 
@@ -145,10 +222,10 @@ class APICommunicationService(BaseService, CommunicationServiceProtocol):
                 )
                 return
 
-            # FIFO: this response answers the OLDEST pending request on the
-            # channel. pop(0) both retrieves and removes it — so the next
-            # response correlates to the next request, no clobbering.
-            message_id = queue.pop(0)
+            claimed = self._claim_waiting_message_id(channel_id, queue, self._speaking_task_id())
+            if claimed is None:
+                return
+            message_id, owning_task_id = claimed
 
             logger.info(
                 f"[API_INTERACTION] Processing channel_id={channel_id}, content_len={len(content)}, "
@@ -158,7 +235,7 @@ class APICommunicationService(BaseService, CommunicationServiceProtocol):
             from ciris_engine.logic.adapters.api.routes.agent import store_message_response
 
             logger.info(f"[API_INTERACTION] About to store: message_id={message_id}, content='{content}'")
-            await store_message_response(message_id, content)
+            await store_message_response(message_id, content, task_id=owning_task_id)
             logger.info(f"Stored interact response for message {message_id} in channel {channel_id}")
         except Exception as e:
             # Was DEBUG — a real exception here means a queued

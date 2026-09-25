@@ -168,6 +168,8 @@ class TestDualLLMService:
         monkeypatch.setenv("CIRIS_OPENAI_API_KEY_2", "test-api-key-2")
         monkeypatch.setenv("CIRIS_OPENAI_API_BASE_2", "https://custom.api.com/v1")
         monkeypatch.setenv("CIRIS_OPENAI_MODEL_NAME_2", "custom-model")
+        monkeypatch.delenv("CIRIS_LLM_TIMEOUT", raising=False)
+        monkeypatch.delenv("CIRIS_LLM_BUDGET_PROFILE", raising=False)
 
         with patch("ciris_engine.logic.runtime.service_initializer.OpenAICompatibleClient") as MockLLMClient:
             mock_llm_instance = AsyncMock()
@@ -183,7 +185,10 @@ class TestDualLLMService:
             assert second_config.api_key == "test-api-key-2"
             assert second_config.base_url == "https://custom.api.com/v1"
             assert second_config.model_name == "custom-model"
-            assert second_config.timeout_seconds == 30  # From primary config
+            # From the LLM budget profile, not services.llm_timeout (#1186): a cloud URL is REMOTE.
+            from ciris_engine.schemas.config.llm_budget import REMOTE_PROFILE
+
+            assert second_config.timeout_seconds == int(REMOTE_PROFILE.llm_http_timeout_s)
             assert second_config.max_retries == 3  # From primary config
 
     @pytest.mark.asyncio

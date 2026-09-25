@@ -99,6 +99,10 @@ class ConscienceExecutionPhase:
             round_number=None,
             system_snapshot=dma_results or {},  # Store DMA results in system_snapshot
             idma_result=idma_result,
+            # The thought's deadline (#1186). The conscience-retry pass calls
+            # this step again with the SAME thought_item, so it spends the
+            # remainder, never a fresh budget.
+            deadline=getattr(thought_item, "deadline", None),
         )
 
         # CRITICAL: Run bypass consciences FIRST, even for exempt actions

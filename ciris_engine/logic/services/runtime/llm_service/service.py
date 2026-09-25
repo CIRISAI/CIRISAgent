@@ -10,11 +10,14 @@ import json
 import logging
 import os
 import re
+import sys
 import time
 from enum import Enum
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, Type, Union, cast
+from json import JSONDecodeError
+from typing import Any, Awaitable, Callable, Dict, List, NoReturn, Optional, Tuple, Type, Union, cast
 from urllib.parse import urlparse
 
+import httpx
 import instructor
 from openai import (
     APIConnectionError,
@@ -25,6 +28,8 @@ from openai import (
     RateLimitError,
 )
 from pydantic import BaseModel, ConfigDict, Field
+from pydantic import ValidationError as PydanticValidationError
+from tenacity import AsyncRetrying, retry_if_exception_type, stop_after_attempt
 
 
 class LLMProvider(str, Enum):
@@ -36,12 +41,14 @@ class LLMProvider(str, Enum):
     OPENAI_COMPATIBLE = "openai_compatible"  # For OpenRouter, Groq, Together, etc.
 
 
+from ciris_engine.logic.config.llm_budget import LOCAL_PROVIDER_IDS, classify_provider, resolve_budget
 from ciris_engine.logic.registries.circuit_breaker import CircuitBreaker, CircuitBreakerConfig, CircuitBreakerError
 from ciris_engine.logic.services.base_service import BaseService
 from ciris_engine.protocols.services import LLMService as LLMServiceProtocol
 from ciris_engine.protocols.services.graph.telemetry import TelemetryServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.protocols.services.runtime.llm import MessageDict
+from ciris_engine.schemas.config.llm_budget import ProviderClass
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.protocols_core import LLMStatus, LLMUsageStatistics
 from ciris_engine.schemas.runtime.resources import ResourceUsage
@@ -847,6 +854,107 @@ class OpenAIConfig(BaseModel):
         return []
 
 
+#: Attempts ``_retry_with_backoff`` makes when a 400 is one the model can fix
+#: (context length, content filter). It never retries transport errors.
+DEFAULT_REMEDIATION_ATTEMPTS = 2
+
+
+def runtime_provider_config(
+    provider_id: Optional[str], base_url: str, model: str, api_key: Optional[str]
+) -> OpenAIConfig:
+    """The OpenAIConfig for a provider added at runtime or restored from persistence.
+
+    The HTTP timeout comes from the LLM budget profile for this provider
+    (ciris_engine/logic/config/llm_budget.py, #1186), so a provider added from
+    the settings screen gets the same timeout it gets after a restart. A
+    declared local provider needs no key; local servers ignore the value.
+    """
+    budget = resolve_budget(provider_id, base_url)
+    key = api_key or ""
+    if not key and (provider_id or "").strip().lower() in LOCAL_PROVIDER_IDS:
+        key = "local"
+    return OpenAIConfig(
+        base_url=base_url,
+        model_name=model,
+        api_key=key,
+        instructor_mode="JSON",
+        timeout_seconds=int(budget.llm_http_timeout_s),
+        max_retries=DEFAULT_REMEDIATION_ATTEMPTS,
+    )
+
+
+#: How many times instructor may ask the model again after an answer that did
+#: not fit the schema. Each reask is a fresh HTTP call.
+_INSTRUCTOR_REASK_ATTEMPTS = 2
+
+
+def _instructor_reask_error_types() -> Tuple[Type[Exception], ...]:
+    """The errors instructor raises when the model ANSWERED but the answer did not parse.
+
+    These, and only these, are worth a reask: the model is up and the next
+    attempt carries the validation error back to it.
+    """
+    found: List[Type[Exception]] = [PydanticValidationError, JSONDecodeError]
+    # From instructor.core, NOT `import instructor.exceptions`: importing that
+    # shim makes `instructor.exceptions` an attribute of the package, which
+    # would silently switch on the InstructorRetryException branch of
+    # _handle_general_exception (dormant in production today).
+    try:
+        import instructor.core.exceptions as exceptions_module
+    except ImportError:  # pragma: no cover - layout differs across instructor versions
+        return tuple(found)
+    for name in ("ValidationError", "AsyncValidationError"):
+        candidate = getattr(exceptions_module, name, None)
+        if isinstance(candidate, type) and issubclass(candidate, Exception):
+            found.append(candidate)
+    return tuple(found)
+
+
+_INSTRUCTOR_REASK_ERRORS = _instructor_reask_error_types()
+
+
+def _instructor_reask_policy() -> AsyncRetrying:
+    """instructor's retry policy: reask on schema failures, never on transport failures.
+
+    instructor's integer ``max_retries`` builds a tenacity policy that retries
+    EVERY exception, so a request that timed out was silently sent again and
+    each call could cost twice the HTTP timeout before anything above it heard
+    about it. Transport errors (timeouts, refused connections, 5xx, 429) now
+    surface on their first occurrence; the per-try of the enclosing stage is
+    the one layer that retries them (#1186).
+
+    Built per call: a tenacity policy keeps per-run state on the object, and
+    calls run concurrently.
+    """
+    return AsyncRetrying(
+        stop=stop_after_attempt(_INSTRUCTOR_REASK_ATTEMPTS),
+        retry=retry_if_exception_type(_INSTRUCTOR_REASK_ERRORS),
+    )
+
+
+def _transport_error_types() -> Tuple[Type[Exception], ...]:
+    """Errors that mean the provider did not answer: timeouts, connections, 429, 5xx.
+
+    The OpenAI SDK wraps httpx; the native Anthropic SDK has its own classes;
+    the Google SDK lets httpx errors through. Anthropic's are included only if
+    that SDK is already loaded — only the native Anthropic client can raise
+    them, and importing it here would cost every other deployment the import.
+    """
+    found: List[Type[Exception]] = [APIConnectionError, RateLimitError, InternalServerError, httpx.TransportError]
+    anthropic = sys.modules.get("anthropic")
+    if anthropic is not None:
+        for name in ("APIConnectionError", "RateLimitError", "InternalServerError"):
+            candidate = getattr(anthropic, name, None)
+            if isinstance(candidate, type) and issubclass(candidate, Exception):
+                found.append(candidate)
+    return tuple(found)
+
+
+def _is_timeout_exception(error: BaseException) -> bool:
+    """A timeout by type, for SDK errors whose message does not say so (httpx.ReadTimeout(''))."""
+    return isinstance(error, (TimeoutError, httpx.TimeoutException)) or "timeout" in type(error).__name__.lower()
+
+
 def _env(*names: str) -> str:
     """Get first non-empty value from env var names (CIRIS_ prefix checked first)."""
     for name in names:
@@ -1038,18 +1146,21 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                 "Stack trace will show where this is being called from."
             )
 
-        # Initialize retry configuration. APIConnectionError + RateLimitError
-        # were the original retryable set; BadRequestError is now retryable too
-        # because some 400s are LLM-fault and remediable (context-length,
-        # max_tokens overrun, content-filter). The retry loop categorizes each
-        # caught BadRequestError via `_categorize_llm_error` and only injects a
-        # remediation message + retries if the category is in
-        # `LLM_ERROR_REMEDIATIONS`. Non-remediable 400s (auth, malformed
-        # request, etc.) raise immediately from inside the retry loop.
+        # Retry configuration for `_retry_with_backoff`, which is now ONLY the
+        # remediation layer: some 400s are LLM-fault and fixable (context
+        # length, max_tokens overrun, content filter). The loop categorizes
+        # each BadRequestError via `_categorize_llm_error` and retries, with a
+        # remediation message, only if the category is in
+        # `LLM_ERROR_REMEDIATIONS`; other 400s raise immediately.
+        #
+        # Transport errors (timeouts, connection errors, 429, 5xx) are NOT
+        # retried here: they are converted and raised on first occurrence, and
+        # the per-try of the enclosing stage is the one layer that retries
+        # them (#1186). Retrying a timeout here multiplied the HTTP timeout.
         self.max_retries = min(getattr(self.openai_config, "max_retries", 3), 3)
         self.base_delay = 1.0
         self.max_delay = 30.0
-        self.retryable_exceptions = (APIConnectionError, RateLimitError, BadRequestError)
+        self.retryable_exceptions: Tuple[Type[Exception], ...] = (BadRequestError,)
         # Note: We can't check for instructor.exceptions.InstructorRetryException at import time
         # because it might not exist. We'll check it at runtime instead.
         # AuthenticationError + other non-BadRequest APIStatusErrors stay non-retryable.
@@ -1277,8 +1388,9 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             self._init_openai_client(api_key, base_url, model_name, timeout, "json")
             return
 
-        # Create async Anthropic client
-        self.client = anthropic.AsyncAnthropic(api_key=api_key, timeout=timeout)
+        # Create async Anthropic client. SDK retries off, as for OpenAI: the SDK
+        # default (2) retried timeouts inside one call, tripling it (#1186).
+        self.client = anthropic.AsyncAnthropic(api_key=api_key, timeout=timeout, max_retries=0)
 
         # Use instructor with Anthropic - ANTHROPIC_TOOLS mode for best results
         self.instruct_client = instructor.from_anthropic(self.client, mode=instructor.Mode.ANTHROPIC_TOOLS)
@@ -1364,11 +1476,16 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         # Use instructor's from_provider for Google with async support
         # Pass api_key directly to instructor (it creates the genai.Client internally)
         # Format: "google/model-name"
+        # The genai client has no timeout unless given one (milliseconds), and
+        # retries nothing unless given retry_options, which we leave unset.
+        from google.genai import types as genai_types
+
         provider_string = f"google/{model_name}"
         self.instruct_client = instructor.from_provider(
             provider_string,
             async_client=True,
             api_key=api_key,
+            http_options=genai_types.HttpOptions(timeout=int(timeout * 1000)),
         )
         # Store a reference to the genai module for potential direct access
         self.client = genai
@@ -1789,21 +1906,19 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                 logger.debug("[LLM_REQUEST] Starting instructor call...")
 
                 try:
-                    # max_retries=2: instructor v2's native reask for
-                    # pydantic.ValidationError. On schema mismatch, instructor
-                    # auto-injects a per-provider-formatted remediation message
-                    # (e.g. "Validation Error found:\n{exception}\nRecall the
-                    # function correctly...") into the next attempt's messages
-                    # and re-calls. This handles 90% of recoverable schema
-                    # errors at the LLM-call layer; our outer
-                    # `_retry_with_backoff` then catches API-level errors
-                    # (context_length, content_filter, BadRequest) and injects
+                    # max_retries: instructor's native reask, and ONLY that.
+                    # On schema mismatch instructor injects a per-provider
+                    # remediation message ("Validation Error found:\n...") and
+                    # re-calls. Transport errors are NOT retried here (see
+                    # _instructor_reask_policy); they surface on first
+                    # occurrence. Our outer `_retry_with_backoff` handles
+                    # remediable 400s (context_length, content_filter) with
                     # CIRIS-specific remediation per `LLM_ERROR_REMEDIATIONS`.
                     response, completion = await self.instruct_client.chat.completions.create_with_completion(
                         model=self.model_name,
                         messages=cast(Any, msg_list),
                         response_model=resp_model,
-                        max_retries=2,
+                        max_retries=_instructor_reask_policy(),
                         **temp_param,
                         **token_param,
                         **seed_param,
@@ -1838,9 +1953,15 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                 self._handle_auth_error(e)
                 raise
 
-            except (APIConnectionError, RateLimitError, InternalServerError) as e:
+            except _transport_error_types() as e:
+                # The provider did not answer. Raise on the FIRST occurrence,
+                # in the same shape these errors had when instructor wrapped
+                # them: TimeoutError for a timeout (the wording the conscience
+                # fail-closed path and _categorize_llm_error key on), and a
+                # circuit-breaker failure recorded for everything but a 429.
+                # Retrying is the enclosing stage's per-try's job (#1186).
                 self._handle_provider_error(e)
-                raise
+                self._raise_categorized(e, resp_model.__name__, thought_id=thought_id, already_tracked=True)
 
             except BadRequestError:
                 # Re-raise raw so `_retry_with_backoff` can categorize it via
@@ -1879,6 +2000,12 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             except CircuitBreakerError:
                 logger.warning("LLM service circuit breaker is open, failing fast")
                 raise
+
+            except BadRequestError as e:
+                # `_retry_with_backoff` has had its remediation attempt (or
+                # judged the 400 not remediable). Name the fault the way every
+                # other failure is named (#1066) rather than leak the raw 400.
+                self._raise_categorized(e, response_model.__name__, thought_id=thought_id)
 
             except TimeoutError as e:
                 last_exception = e
@@ -2156,98 +2283,20 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
 
     @staticmethod
     def _is_local_url(base_url: str) -> bool:
-        """Static check: is this URL a positively-identified local LLM server?
+        """Is this URL a local LLM server (vLLM, llama.cpp, Ollama, LM Studio)?
 
-        Mirrors :meth:`_is_local_endpoint` but is callable from static contexts
-        (notably :meth:`_build_reasoning_off_extras`, which has no `self`).
-        Both are kept in lock-step — if you change one, change the other.
+        Delegates to the one provider classifier (``classify_provider``,
+        ciris_engine/logic/config/llm_budget.py, #1186) so the reasoning-off
+        decision and the time budget can never disagree about what is local.
+        Callable from static contexts (``_build_reasoning_off_extras``).
         """
         if not base_url:
             return False
-        base_url_lower = base_url.lower()
-        cloud_providers = (
-            "ciris.ai",
-            "ciris-services",
-            "openrouter.ai",
-            "together.xyz",
-            "api.together",
-            "openai.com",
-            "api.openai",
-            "anthropic.com",
-            "api.anthropic",
-            "googleapis.com",
-            "generativelanguage.googleapis",
-            "groq.com",
-            "api.groq",
-            "deepinfra.com",
-            "api.deepinfra",
-        )
-        if any(provider in base_url_lower for provider in cloud_providers):
-            return False
-        local_indicators = (
-            "localhost",
-            "127.0.0.1",
-            "0.0.0.0",
-            "192.168.",
-            "10.0.",
-            "10.1.",
-            "172.16.",
-            ".local",
-            ":11434",  # Ollama
-            ":8080",  # llama.cpp
-            ":1234",  # LM Studio
-            ":8000",  # vLLM
-        )
-        return any(indicator in base_url_lower for indicator in local_indicators)
+        return classify_provider(None, base_url) is ProviderClass.LOCAL
 
     def _is_local_endpoint(self, base_url: str) -> bool:
-        """Check if the endpoint is a local LLM server (not a cloud provider).
-
-        Returns True for local endpoints like llama.cpp, vLLM, ollama, LM Studio.
-        These need reasoning disabled since CIRIS provides its own reasoning.
-        """
-        if not base_url:
-            return False
-
-        base_url_lower = base_url.lower()
-
-        # Cloud providers that handle reasoning themselves or don't support it
-        cloud_providers = [
-            "ciris.ai",
-            "ciris-services",
-            "openrouter.ai",
-            "together.xyz",
-            "api.together",
-            "openai.com",
-            "api.openai",
-            "anthropic.com",
-            "api.anthropic",
-            "googleapis.com",
-            "generativelanguage.googleapis",
-            "groq.com",
-            "api.groq",
-        ]
-
-        if any(provider in base_url_lower for provider in cloud_providers):
-            return False
-
-        # Local indicators: localhost, local IPs, .local hostnames, common local ports
-        local_indicators = [
-            "localhost",
-            "127.0.0.1",
-            "0.0.0.0",
-            "192.168.",
-            "10.0.",
-            "10.1.",
-            "172.16.",
-            ".local",
-            ":11434",  # Ollama default port
-            ":8080",  # llama.cpp default port
-            ":1234",  # LM Studio default port
-            ":8000",  # vLLM default port
-        ]
-
-        return any(indicator in base_url_lower for indicator in local_indicators)
+        """Instance form of :meth:`_is_local_url`, used for request logging."""
+        return self._is_local_url(base_url)
 
     def _log_completion_details(self, completion: Any, image_count: int, thought_id: Optional[str]) -> None:
         """Log completion details for debugging."""
@@ -2402,6 +2451,48 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                 f"Model: {error_details['model']}, CB State: {error_details['circuit_breaker_state']}. "
                 f"Provider returned internal server error: {e}"
             )
+
+    def _raise_categorized(
+        self,
+        e: Exception,
+        resp_model_name: str,
+        *,
+        thought_id: Optional[str] = None,
+        already_tracked: bool = False,
+    ) -> NoReturn:
+        """Log, record and re-raise a provider failure in its categorized form.
+
+        The same categorization instructor-wrapped failures always got: a
+        TimeoutError for a timeout, RuntimeError naming 503 / 429 / context
+        length / content filter otherwise, a circuit-breaker failure for
+        everything but a rate limit, and the original error as the cause.
+        """
+        if not already_tracked:
+            self._track_error(e)
+            self._total_errors += 1
+            self.last_error = _root_provider_error(e)
+            self.last_fault_code = _root_provider_fault(e)
+        error_context = LLMErrorContext(
+            model=self.model_name,
+            provider=self.openai_config.base_url or "default",
+            response_model=resp_model_name,
+            circuit_breaker_state=self.circuit_breaker.state.value,
+            consecutive_failures=self.circuit_breaker.consecutive_failures,
+            thought_id=thought_id,
+        )
+        if _is_timeout_exception(e) and not _is_timeout_error(str(e).lower()):
+            # The handler below categorizes by message; say what the type already knows.
+            logger.error(
+                "LLM call FAILED — model=%s provider=%s response_model=%s: %s (timeout)",
+                error_context.model,
+                error_context.provider,
+                resp_model_name,
+                type(e).__name__,
+            )
+            self.circuit_breaker.record_failure()
+            raise TimeoutError("LLM API timeout - circuit breaker activated") from e
+        _handle_instructor_retry_exception(e, error_context, self.circuit_breaker)
+        raise RuntimeError(f"LLM call failed ({type(e).__name__})") from e  # pragma: no cover - handler always raises
 
     def _handle_general_exception(self, e: Exception, resp_model_name: str) -> None:
         """Handle general exceptions including instructor retry exceptions."""

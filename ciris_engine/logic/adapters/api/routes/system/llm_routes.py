@@ -841,7 +841,7 @@ async def add_provider(
     - api_key is required
     - base_url is optional (uses provider defaults)
     """
-    from ciris_engine.logic.services.runtime.llm_service.service import OpenAICompatibleClient, OpenAIConfig
+    from ciris_engine.logic.services.runtime.llm_service.service import OpenAICompatibleClient, runtime_provider_config
     from ciris_engine.schemas.services.capabilities import LLMCapabilities
 
     registry = get_global_registry()
@@ -935,20 +935,10 @@ async def add_provider(
         )
 
     try:
-        # For local servers, use "local" as the API key (convention for local inference)
-        api_key = body.api_key
-        if not api_key and body.provider_id == "local":
-            api_key = "local"
-
-        # Create config
-        llm_config = OpenAIConfig(
-            base_url=body.base_url,
-            model_name=body.model,
-            api_key=api_key or "",
-            instructor_mode="JSON",
-            timeout_seconds=30,
-            max_retries=2,
-        )
+        # Same config the provider gets when restored after a restart: timeout
+        # from the LLM budget profile for this provider (#1186), and a declared
+        # local provider ("local", "local_inference", ...) needs no API key.
+        llm_config = runtime_provider_config(body.provider_id, body.base_url, body.model or "", body.api_key)
 
         # Create and start service
         service = OpenAICompatibleClient(

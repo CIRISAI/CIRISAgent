@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from ciris_engine.logic.config import llm_budget
 from ciris_engine.logic.dma.action_selection_pdma import ActionSelectionPDMAEvaluator
 from ciris_engine.logic.dma.csdma import CSDMAEvaluator
 from ciris_engine.logic.dma.dsdma_base import BaseDSDMA
@@ -54,14 +55,22 @@ def mock_action_selection_pdma():
 def mock_app_config():
     """Mock application configuration."""
     config = MagicMock()
-    config.workflow.DMA_RETRY_LIMIT = 3
-    config.workflow.DMA_TIMEOUT_SECONDS = 90.0
     config.workflow.max_rounds = 5
     return config
 
 
 @pytest.fixture
+def budget_env(monkeypatch):
+    """Isolate the LLM budget from the host's .env / os.environ: an empty table
+    resolves to the REMOTE profile; tests add CIRIS_* keys to change it."""
+    table: dict[str, str] = {}
+    monkeypatch.setattr(llm_budget, "get_env_var", lambda name, default=None: table.get(name, default))
+    return table
+
+
+@pytest.fixture
 def dma_orchestrator(
+    budget_env,
     mock_ethical_pdma,
     mock_csdma,
     mock_dsdma,

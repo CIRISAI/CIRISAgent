@@ -75,8 +75,8 @@ from tools.qa_runner.platform_procs import temp_path
 from .browser_helper import BrowserConfig, ensure_playwright_installed
 from .desktop_app_helper import DesktopAppConfig, DesktopAppHelper, attribute_device_failure, check_desktop_app_running
 from .federation_walk_test import FederationWalkTest
-from .shell_nav import CIRCLES_ROUTES, circles_elements, detect_shell
 from .server_manager import ServerConfig
+from .shell_nav import CIRCLES_ROUTES, circles_elements, detect_shell
 from .test_cases import WebUITestConfig
 from .test_runner import WebUITestRunner, run_web_ui_tests
 
@@ -1788,8 +1788,7 @@ class DesktopAppTestRunner:
             nav_candidates = [
                 e.test_tag
                 for e in elements
-                if "node" in e.test_tag.lower()
-                and ("nav" in e.test_tag.lower() or "manage" in e.test_tag.lower())
+                if "node" in e.test_tag.lower() and ("nav" in e.test_tag.lower() or "manage" in e.test_tag.lower())
                 # An instrument is a list, not the surface: clicking This node and
                 # stopping would "try" a candidate that can never land (#1181).
                 and not e.test_tag.startswith("nav_instrument_")

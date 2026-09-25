@@ -396,7 +396,12 @@ async def test_an_unreachable_hop_names_what_the_shell_showed() -> None:
 async def test_reach_surface_on_the_old_rail_reveals_the_row_as_before() -> None:
     app = _RailApp()
     assert await app.reach_surface("layer-family") is None
-    assert app.clicks == ["nav_group_agent", "nav_group_agent", "nav_group_commons-layers", "nav_epistemic_layer_family"]
+    assert app.clicks == [
+        "nav_group_agent",
+        "nav_group_agent",
+        "nav_group_commons-layers",
+        "nav_epistemic_layer_family",
+    ]
     assert app.screen == "LayerFamily"
 
 

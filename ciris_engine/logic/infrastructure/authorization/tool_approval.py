@@ -298,7 +298,35 @@ def pending_tool_from_deferral_context(deferral_context: object) -> Optional[str
     if not isinstance(value, str):
         return None
     value = value.strip()
-    return value or None
+    if not value:
+        return None
+    # The display is a precondition of the grant (#1084). DeferParams.context
+    # is model-authorable, so a DEFER from the reasoning loop could name a tool
+    # under PENDING_TOOL_APPROVAL_KEY without the structured detail the approval
+    # screen renders. Mint an envelope only when the detail is present, parses,
+    # and names the same tool -- so a human can never approve a grant the
+    # screen could not show them.
+    if not _detail_names_tool(deferral_context.get(TOOL_APPROVAL_DETAIL_KEY), value):
+        logger.warning(
+            "Deferral names tool %r for approval without matching %s; no approval envelope will be issued",
+            value,
+            TOOL_APPROVAL_DETAIL_KEY,
+        )
+        return None
+    return value
+
+
+def _detail_names_tool(detail: object, tool_name: str) -> bool:
+    """True when ``detail`` is an encoded approval detail for exactly ``tool_name``."""
+    import json
+
+    if not isinstance(detail, str) or not detail.strip():
+        return False
+    try:
+        payload = json.loads(detail)
+    except ValueError:
+        return False
+    return isinstance(payload, dict) and payload.get("name") == tool_name
 
 
 __all__ = [

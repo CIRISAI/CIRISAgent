@@ -29,9 +29,15 @@ from ciris_engine.logic.infrastructure.authorization.envelope_issuer import (
     issue_authority_envelope,
     issue_system_component_envelope,
 )
+from ciris_engine.logic.infrastructure.authorization.tool_approval import PENDING_TOOL_APPROVAL_KEY
 from ciris_engine.logic.infrastructure.authorization.tool_approval import (
-    PENDING_TOOL_APPROVAL_KEY,
-    build_approval_deferral,
+    TOOL_APPROVAL_DETAIL_KEY as TOOL_APPROVAL_DETAIL_KEY,
+)
+from ciris_engine.logic.infrastructure.authorization.tool_approval import build_approval_deferral
+from ciris_engine.logic.infrastructure.authorization.tool_approval import (
+    encode_tool_approval_detail as encode_tool_approval_detail,
+)
+from ciris_engine.logic.infrastructure.authorization.tool_approval import (
     envelope_approves_tool,
     pending_tool_from_deferral_context,
     tool_requires_approval,
@@ -482,7 +488,12 @@ def test_wa_service_issues_a_narrow_approval_envelope() -> None:
     WiseAuthorityService._attach_tool_approval_envelope(
         service,
         guidance_context_dict=ctx,
-        deferral_info={"context": {PENDING_TOOL_APPROVAL_KEY: APPROVAL_TOOL}},
+        deferral_info={
+            "context": {
+                PENDING_TOOL_APPROVAL_KEY: APPROVAL_TOOL,
+                TOOL_APPROVAL_DETAIL_KEY: encode_tool_approval_detail(None, APPROVAL_TOOL),
+            }
+        },
         guidance_task_id="guidance_task_1",
         agent_occurrence_id="default",
         wa_id="wa-2026-08-01-ABC123",
@@ -516,3 +527,44 @@ def test_no_envelope_issued_when_the_deferral_was_not_an_approval_request() -> N
             wa_id="wa-2026-08-01-ABC123",
         )
         assert ctx == {}, f"unexpected grant issued for deferral_info={deferral_info!r}"
+
+
+class TestDisplayIsAPreconditionOfTheGrant:
+    """#1084: DeferParams.context is model-authorable. A tool may be granted only when
+    the deferral carries the structured detail the approval screen renders, naming
+    that same tool -- so a human can never approve what the screen could not show."""
+
+    def _ctx(self, **extra):
+        return {PENDING_TOOL_APPROVAL_KEY: APPROVAL_TOOL, **extra}
+
+    def test_bare_tool_name_grants_nothing(self):
+        from ciris_engine.logic.infrastructure.authorization.tool_approval import pending_tool_from_deferral_context
+
+        assert pending_tool_from_deferral_context(self._ctx()) is None
+
+    def test_detail_for_a_different_tool_grants_nothing(self):
+        from ciris_engine.logic.infrastructure.authorization.tool_approval import pending_tool_from_deferral_context
+
+        ctx = self._ctx(**{TOOL_APPROVAL_DETAIL_KEY: encode_tool_approval_detail(None, "some_other_tool")})
+        assert pending_tool_from_deferral_context(ctx) is None
+
+    def test_unparseable_detail_grants_nothing(self):
+        from ciris_engine.logic.infrastructure.authorization.tool_approval import pending_tool_from_deferral_context
+
+        assert pending_tool_from_deferral_context(self._ctx(**{TOOL_APPROVAL_DETAIL_KEY: "{not json"})) is None
+
+    def test_the_gate_built_deferral_still_round_trips(self):
+        from ciris_engine.logic.infrastructure.authorization.tool_approval import (
+            build_approval_deferral,
+            pending_tool_from_deferral_context,
+        )
+        from ciris_engine.schemas.actions.parameters import SpeakParams
+        from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
+        from ciris_engine.schemas.runtime.enums import HandlerActionType
+
+        original = ActionSelectionDMAResult(
+            selected_action=HandlerActionType.SPEAK, action_parameters=SpeakParams(content="x"), rationale="r"
+        )
+        defer = build_approval_deferral(tool_name=APPROVAL_TOOL, original_action=original)
+        # Persisted deferral contexts are string maps; the gate's values already are.
+        assert pending_tool_from_deferral_context(dict(defer.action_parameters.context)) == APPROVAL_TOOL

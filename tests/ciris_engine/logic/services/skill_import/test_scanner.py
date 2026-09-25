@@ -274,3 +274,21 @@ class TestReport:
             report.total_findings
             == report.critical_count + report.high_count + report.medium_count + report.low_count + report.info_count
         )
+
+
+class TestVerdictFailsClosed:
+    """#1203: a security verdict whose default is allow inverts the control.
+    Only a completed scan may clear a skill; every other construction reads unsafe."""
+
+    def test_report_default_is_unsafe(self):
+        from ciris_engine.logic.services.skill_import.scanner import SkillSecurityReport
+
+        assert SkillSecurityReport(skill_name="never-scanned").safe_to_import is False
+
+    def test_api_model_default_is_unsafe(self):
+        from ciris_engine.logic.adapters.api.routes.system.skill_import import SecurityReportResponse
+
+        assert SecurityReportResponse().safe_to_import is False
+
+    def test_a_completed_clean_scan_still_clears(self, scanner):
+        assert scanner.scan(_make_skill("Summarise the user's calendar for today.")).safe_to_import is True

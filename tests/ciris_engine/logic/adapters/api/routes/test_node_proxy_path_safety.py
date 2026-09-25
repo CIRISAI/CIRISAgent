@@ -83,7 +83,10 @@ def test_the_prefix_check_alone_would_have_allowed_the_traversal() -> None:
     ],
 )
 def test_only_the_substrate_surface_is_forwarded(path: str, owned: bool) -> None:
-    """Everything else must keep 404ing.
+    """Which prefixes are KNOWN node surface (502 when the node is down).
+
+    Since #1213 other unmatched paths are forwarded too, but answer 404 when the
+    node cannot be reached -- see TestUnmatchedPathsReachTheNode.
 
     `wa/manual-defer` is not arbitrary: TestNoBypassEndpoints asserts that route
     does NOT exist. When this proxy was a catch-all it answered 502 for it, and
@@ -142,3 +145,69 @@ class TestHeaderForwarding:
 
         out = _forwardable_headers([("Host", "x"), ("Connection", "keep-alive"), ("Accept", "*/*")])
         assert out == {"Accept": "*/*"}
+
+
+class TestUnmatchedPathsReachTheNode:
+    """#1213: the node's newer surfaces (drive, notes, contacts, families...) 404'd on
+    the agent's port, so the client told people their node was too old. Unmatched
+    `/v1` paths now reach the node -- without ever letting a route look present
+    because the node is down."""
+
+    @staticmethod
+    def _client(monkeypatch, *, node_status=None, node_down=False):
+        import httpx
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        from ciris_engine.logic.adapters.api.routes import node_proxy
+
+        seen = []
+
+        class _FakeAsyncClient:
+            def __init__(self, *a, **k):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *a):
+                return False
+
+            async def request(self, method, url, **kwargs):
+                seen.append((method, url))
+                if node_down:
+                    raise httpx.ConnectError("connection refused")
+                return httpx.Response(node_status, json={"from": "node"}, headers={"content-type": "application/json"})
+
+        monkeypatch.setattr(node_proxy.httpx, "AsyncClient", _FakeAsyncClient)
+        app = FastAPI()
+        app.include_router(node_proxy.router, prefix="/v1")
+        return TestClient(app), seen
+
+    @pytest.mark.parametrize(
+        "path", ["drive/list", "notes", "contacts", "families/abc", "communities", "safety/moderation"]
+    )
+    def test_node_surfaces_are_forwarded(self, monkeypatch, path):
+        client, seen = self._client(monkeypatch, node_status=200)
+        r = client.get(f"/v1/{path}")
+        assert r.status_code == 200 and r.json() == {"from": "node"}
+        assert seen == [("GET", f"http://127.0.0.1:4243/v1/{path}")]
+
+    def test_the_nodes_own_404_comes_back_as_404(self, monkeypatch):
+        client, _ = self._client(monkeypatch, node_status=404)
+        assert client.post("/v1/partnership/discord_123/defer", json={}).status_code == 404
+
+    def test_an_unreachable_node_never_makes_an_unknown_route_look_present(self, monkeypatch):
+        """The property the old catch-all broke: absent must not become 502."""
+        client, _ = self._client(monkeypatch, node_down=True)
+        assert client.post("/v1/partnership/discord_123/defer", json={}).status_code == 404
+        assert client.get("/v1/drive/list").status_code == 404
+
+    def test_a_known_node_prefix_still_reports_the_node_as_down(self, monkeypatch):
+        client, _ = self._client(monkeypatch, node_down=True)
+        assert client.get("/v1/setup/owned-nodes").status_code == 502
+
+    def test_a_malformed_unknown_path_is_absent_not_forwarded(self, monkeypatch):
+        client, seen = self._client(monkeypatch, node_status=200)
+        assert client.get("/v1/drive/a b").status_code == 404
+        assert seen == []

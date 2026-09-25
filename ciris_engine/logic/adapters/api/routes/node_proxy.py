@@ -29,9 +29,25 @@ client cannot tell the difference, which is the point.
 This is the same move as `routes/node_identity.py`, generalised: the agent
 surfaces the node rather than handing the client a second address to know about.
 
-DELIBERATELY NOT A GENERAL PROXY. It forwards only what the brain does not serve,
-never rewrites, and adds no authentication of its own — the node applies its own
-(claim-remote answers 401 without a session, and still does through here).
+It forwards only what the brain does not serve, never rewrites, and adds no
+authentication of its own — the node applies its own (claim-remote answers 401
+without a session, and still does through here).
+
+TWO TIERS (CIRISAgent#1213). The allow-list below forwarded four prefixes, so
+every newer node surface — drive, files, notes, contacts, families, communities,
+safety and more — answered 404 on the agent's port, and the client read that,
+correctly by contract, as "this node is too old for this feature". Enumerating
+prefixes is the same mistake the `/v1/setup` comment warns about one level down:
+a list of someone else's surface is wrong the moment they add a route.
+
+  * KNOWN node prefixes: forwarded; an unreachable node is a 502 ("the thing
+    behind me did not answer"), as before.
+  * ANY OTHER `/v1` path the brain does not serve: also forwarded, and the
+    node's answer returned verbatim — including its own 404, so an absent route
+    is still a 404. If the node cannot be reached, the answer is 404, NOT 502.
+    That keeps the property the catch-all once broke (see NODE_OWNED_PREFIXES):
+    a route can never appear to exist merely because the node is down, so a
+    check that proves a bypass route is absent still proves it.
 """
 
 from __future__ import annotations
@@ -60,7 +76,9 @@ _TIMEOUT_SECONDS = 30.0
 _DROP = {"connection", "keep-alive", "transfer-encoding", "upgrade", "content-length", "host"}
 
 
-#: The ONLY paths forwarded. Everything else keeps answering 404.
+#: The KNOWN node prefixes: forwarded, and a 502 when the node is unreachable.
+#: Other unmatched `/v1` paths are forwarded too since #1213, but answer 404 when
+#: the node cannot be reached — see the module docstring.
 #:
 #: This started as a catch-all over `/v1/{path:path}` and that was wrong. Every
 #: unknown path then answered 502 instead of 404, which broke two tests and, more
@@ -187,16 +205,15 @@ def _safe_forward_path(path: str) -> Optional[str]:
 )
 async def forward_to_node(path: str, request: Request) -> Response:
     """Forward one node-owned `/v1` request to the node, verbatim both ways."""
-    if not _is_node_owned(path):
-        # Not ours and not the node's: the honest answer is that it does not
-        # exist. Returning anything else makes every absent route look like an
-        # infrastructure problem.
-        raise HTTPException(status_code=404, detail="Not Found")
+    known_node_prefix = _is_node_owned(path)
 
     safe_path = _safe_forward_path(path)
     if safe_path is None:
         # Traversal, an absolute path, or a character with no business in a REST
         # path. Not forwarded, and not echoed back either.
+        if not known_node_prefix:
+            # Not a path any route could have: it does not exist.
+            raise HTTPException(status_code=404, detail="Not Found")
         logger.warning("Node proxy: refusing a malformed path (%d chars)", len(path))
         raise HTTPException(status_code=400, detail="Malformed path")
 
@@ -214,6 +231,12 @@ async def forward_to_node(path: str, request: Request) -> Response:
                 params=request.query_params,
             )
     except Exception as e:
+        if not known_node_prefix:
+            # Neither the brain nor a reachable node serves this path. Claiming
+            # "the node did not answer" would make an absent route look like an
+            # infrastructure problem (and would let a route look present because
+            # the node is down) -- the honest answer is that it does not exist.
+            raise HTTPException(status_code=404, detail="Not Found")
         # The node being unreachable is a DIFFERENT fact from the route not
         # existing, and a client that cannot tell them apart retries the wrong
         # thing. 502 says "the thing behind me did not answer".

@@ -6,11 +6,11 @@ from typing import List
 from ciris_engine.schemas.runtime.canonical_peer import CanonicalBootstrapPeer
 
 # Version information
-CIRIS_VERSION = "2.12.0-stable"
+CIRIS_VERSION = "2.12.1-stable"
 ACCORD_VERSION = "1.2-Beta"
 CIRIS_VERSION_MAJOR = 2
 CIRIS_VERSION_MINOR = 12
-CIRIS_VERSION_PATCH = 0
+CIRIS_VERSION_PATCH = 1
 CIRIS_VERSION_BUILD = 0
 CIRIS_VERSION_STAGE = "stable"
 CIRIS_CODENAME = "Context Engineering"  # Codename for this release

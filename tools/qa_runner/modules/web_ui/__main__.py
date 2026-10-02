@@ -81,6 +81,16 @@ from .test_cases import WebUITestConfig
 from .test_runner import WebUITestRunner, run_web_ui_tests
 
 
+def setup_is_rendered(screen: str, elements: List[object]) -> bool:
+    """The Setup wizard is on screen: named Setup AND something is composed.
+
+    The name alone is not proof (CIRISClient#149): the client can report the
+    navigation target while the Startup splash -- with no drivable elements --
+    is still what the user sees.
+    """
+    return screen == "Setup" and len(elements) > 0
+
+
 @dataclass
 class DesktopTestResult:
     """Result of a desktop app test."""
@@ -1159,10 +1169,18 @@ class DesktopAppTestRunner:
             deadline = time.time() + 45
             screen = ""
             clicked_local = False
+            setup_named_but_empty = False
             while time.time() < deadline:
                 screen = await self.helper.get_screen() or ""
                 if screen == "Setup":
-                    return
+                    # POSITIVE OBSERVATION, not the name alone (CIRISClient#149):
+                    # the client's /screen can report the navigation TARGET while
+                    # Startup is still what's rendered, with an empty tree. A
+                    # green here then fails the first wizard step with a
+                    # misleading "element not found".
+                    if setup_is_rendered(screen, await self.helper.get_elements()):
+                        return
+                    setup_named_but_empty = True
                 if screen == "Login" and not clicked_local:
                     if await self.helper.is_element_present("btn_local_login"):
                         self._log("first run starts at the Login chooser — selecting local signup")
@@ -1175,6 +1193,13 @@ class DesktopAppTestRunner:
                 await asyncio.sleep(0.5)
 
             await self._dump_tree("wait_for_setup_wizard")
+            if setup_named_but_empty:
+                raise RuntimeError(
+                    "Setup wizard never rendered within 45s: the client reported screen 'Setup' "
+                    "but nothing was composed (empty element tree) -- the app is still on "
+                    "Startup. See the client's kmp_app.log for its setup-status checks "
+                    "(CIRISClient#149: a refused :4243/v1/setup/status is not retried)."
+                )
             raise RuntimeError(f"Setup wizard did not appear within 45s (last screen '{screen}')")
 
         await self.run_test("wait_for_setup_wizard", wait_for_setup)

@@ -40,6 +40,14 @@ def main() -> None:
             server_mode = True
             break
 
+    # The node this process starts must know what device it is on (server
+    # 0.5.220 / persist v53: SELF and FAMILY content does not replicate to a
+    # server-class node). The bare `ciris-agent` is a person's desktop install;
+    # the flags above are headless. Set before anything spawns the node.
+    from ciris_engine.logic.runtime.device_class import HostDeviceClass, declare_device_class
+
+    declare_device_class(HostDeviceClass.SERVER if server_mode else HostDeviceClass.LAPTOP)
+
     # "Run without AI" (CIRISAgent#1149): the owner chose a node with no brain.
     # Asked before anything from the engine is imported; if set, the process
     # is ciris-server and the client and nothing else.
@@ -317,6 +325,9 @@ def _run_server_mode() -> None:
 def server() -> None:
     """Entry point for ciris-server command (headless API server)."""
     from ciris_engine import node_only
+    from ciris_engine.logic.runtime.device_class import HostDeviceClass, declare_device_class
+
+    declare_device_class(HostDeviceClass.SERVER)
 
     cfg = node_only.node_only_config()
     if cfg is not None:

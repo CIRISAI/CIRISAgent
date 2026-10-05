@@ -386,6 +386,13 @@ def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Opti
     """
     global _node_thread, _node_error, _node_ready
 
+    # `main.py` started directly (container / hosted) reaches here without the
+    # CLI having declared a class: say `server` explicitly. A value set earlier
+    # (the `ciris-agent` desktop path, the client's spawn, an operator) wins.
+    from ciris_engine.logic.runtime.device_class import HostDeviceClass, declare_device_class
+
+    declare_device_class(HostDeviceClass.SERVER)
+
     if os.environ.get("CIRIS_NODE_FOLD", "true").strip().lower() in ("0", "false", "no", "off"):
         logger.info("Node fold disabled (CIRIS_NODE_FOLD=false) — federation/self/accord routes NOT served on 4243")
         return

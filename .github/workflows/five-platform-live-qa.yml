@@ -1028,6 +1028,17 @@ jobs:
                  echo "::warning::$plat traces did not reach canonical (NOT enforced — upstream KEX/replication revamp in flight)" ;;
             esac
 
+            # BACKEND MEMORY, while the platform is still standing. The agent's node
+            # is folded into the backend process, so this is what a 4 GB laptop or a
+            # phone pays for agent + node. ciris-server 0.5.222 raised the
+            # canonical's resting RSS ~800 MB -> ~1.3 GB and how much of that is
+            # per-node is not yet known; this samples after the flow's activity and
+            # again after an idle minute so a release can be compared with the last.
+            # REPORT-ONLY: the sampler always exits 0 and writes null with a reason
+            # when it cannot read a number.
+            python3 tools/dev/sample_backend_memory.py --platform "$plat" --target "$target" \
+              --idle-secs 60 --out "artifacts/memory-$plat.json" || true
+
               # THE TILE REFLECTS WHAT IS ENFORCED. It used to require both halves,
               # which was right while both were fatal — writing it after only the
               # chat step had put a green tile on a red job and hidden which

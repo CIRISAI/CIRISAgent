@@ -173,7 +173,12 @@ def _spawn_headless_node(extra_args: Optional[list] = None) -> "subprocess.Popen
         cmd = [sys.executable, "-m", "ciris_server", "--headless"]
     if extra_args:
         cmd.extend(extra_args)
-    return subprocess.Popen(cmd, env=os.environ.copy())
+    env = os.environ.copy()
+    # The desktop app's node is the person's own computer, not infrastructure:
+    # under persist v53 (S1) a server-class node stops receiving its owner's
+    # self and family content. An explicit setting wins.
+    env.setdefault("CIRIS_DEVICE_CLASS", "laptop")
+    return subprocess.Popen(cmd, env=env)
 
 
 def _run_desktop_mode() -> None:

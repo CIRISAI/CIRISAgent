@@ -127,7 +127,9 @@ class ServiceTelemetryData(BaseModel):
     uptime_seconds: Optional[float] = Field(None, description="Service uptime in seconds")
     error_count: Optional[int] = Field(None, description="Number of errors")
     requests_handled: Optional[int] = Field(None, description="Total requests handled")
-    error_rate: Optional[float] = Field(None, description="Error rate percentage")
+    error_rate: Optional[float] = Field(
+        None, description="Error rate as a ratio 0.0-1.0 (error_count / requests_handled), not a percentage"
+    )
     memory_mb: Optional[float] = Field(None, description="Memory usage in MB")
     custom_metrics: Optional[Dict[str, Union[int, float, str]]] = Field(None, description="Service-specific metrics")
 
@@ -214,7 +216,9 @@ class AggregatedTelemetryResponse(BaseModel):
     system_healthy: bool = Field(..., description="Overall system health")
     services_online: int = Field(..., description="Number of healthy services")
     services_total: int = Field(..., description="Total number of services")
-    overall_error_rate: float = Field(..., description="System-wide error rate")
+    overall_error_rate: float = Field(
+        ..., description="System-wide error rate as a ratio 0.0-1.0 (mean of per-service error_rate)"
+    )
     overall_uptime_seconds: int = Field(..., description="Minimum uptime across services")
     total_errors: int = Field(..., description="Total errors across all services")
     total_requests: int = Field(..., description="Total requests handled")

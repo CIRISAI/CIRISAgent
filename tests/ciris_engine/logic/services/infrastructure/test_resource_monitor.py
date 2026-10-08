@@ -182,37 +182,32 @@ async def test_resource_monitor_check_available(resource_monitor):
 
 
 @pytest.mark.asyncio
-async def test_resource_monitor_signal_bus(resource_monitor, signal_bus):
-    """Test signal bus integration."""
-    # Track emitted signals
+async def test_resource_monitor_signal_bus(resource_monitor, signal_bus, monkeypatch):
+    """Each level adds its ladder action, capped per resource."""
+    monkeypatch.setattr(_rm_service, "_release_process_memory", _fake_release([]))
     emitted_signals = []
 
     async def signal_handler(signal: str, resource: str):
         emitted_signals.append((signal, resource))
 
-    # Register handlers
-    signal_bus.register("throttle", signal_handler)
-    signal_bus.register("defer", signal_handler)
-    signal_bus.register("reject", signal_handler)
+    for signal in ("reclaim", "throttle", "shed"):
+        signal_bus.register(signal, signal_handler)
 
-    # Set budget with different actions
     resource_monitor.budget.cpu_percent.action = ResourceAction.THROTTLE
-    resource_monitor.budget.memory_mb.action = ResourceAction.DEFER
-    resource_monitor.budget.tokens_hour.action = ResourceAction.REJECT
+    resource_monitor.budget.thoughts_active.action = ResourceAction.SHED
+    resource_monitor.budget.tokens_hour.action = ResourceAction.WARN
 
-    # Trigger critical limits
-    resource_monitor.snapshot.cpu_average_1m = 76  # Exceeds critical (75)
-    resource_monitor.snapshot.memory_mb = 3841  # Exceeds critical (3840)
-    resource_monitor.snapshot.tokens_used_hour = 9501  # Exceeds critical (9500)
+    resource_monitor.snapshot.cpu_average_1m = 81  # CRITICAL, but capped at THROTTLE
+    resource_monitor.snapshot.thoughts_active = 50  # CRITICAL, cap SHED
+    resource_monitor.snapshot.tokens_used_hour = 9501  # HIGH, cap WARN -> logs only
 
-    # Check limits
     await resource_monitor._check_limits()
 
-    # Verify signals were emitted
-    assert len(emitted_signals) >= 3
+    assert ("reclaim", "cpu_percent") in emitted_signals
     assert ("throttle", "cpu_percent") in emitted_signals
-    assert ("defer", "memory_mb") in emitted_signals
-    assert ("reject", "tokens_hour") in emitted_signals
+    assert ("shed", "cpu_percent") not in emitted_signals
+    assert [s for s, r in emitted_signals if r == "thoughts_active"] == ["reclaim", "throttle", "shed"]
+    assert not [s for s, r in emitted_signals if r == "tokens_hour"]
 
 
 @pytest.mark.asyncio
@@ -245,44 +240,29 @@ async def test_resource_monitor_is_healthy(resource_monitor):
 
 
 @pytest.mark.asyncio
-async def test_resource_monitor_cooldown(resource_monitor, signal_bus):
-    """Test action cooldown functionality."""
-    # Track emitted signals
+async def test_resource_monitor_cooldown(resource_monitor, signal_bus, monkeypatch):
+    """Within one level the cooldown paces repeat RECLAIMs; THROTTLE is latched, not repeated."""
+    monkeypatch.setattr(_rm_service, "_release_process_memory", _fake_release([]))
     emitted_signals = []
 
     async def signal_handler(signal: str, resource: str):
-        emitted_signals.append((signal, resource, resource_monitor.time_service.now()))
+        emitted_signals.append((signal, resource))
 
-    signal_bus.register("defer", signal_handler)
+    signal_bus.register("reclaim", signal_handler)
+    signal_bus.register("throttle", signal_handler)
+    resource_monitor.budget.thoughts_active.cooldown_seconds = 1
+    high = resource_monitor.budget.thoughts_active.critical
 
-    # Set short cooldown for testing
-    resource_monitor.budget.memory_mb.cooldown_seconds = 1
-    resource_monitor.budget.memory_mb.action = ResourceAction.DEFER
-
-    # The monitor now acts on its own memory signal: the built-in handler
-    # releases and writes the post-release RSS back into the snapshot. This
-    # test is about the cooldown, not the release, so re-assert the
-    # over-critical reading before every check rather than assume it persists.
-    over_critical = resource_monitor.budget.memory_mb.critical + 1
-
-    # First check should emit signal
-    resource_monitor.snapshot.memory_mb = over_critical
+    resource_monitor.snapshot.thoughts_active = high
     await resource_monitor._check_limits()
-    initial_count = len(emitted_signals)
-    assert initial_count == 1  # Should have one signal
+    assert emitted_signals == [("reclaim", "thoughts_active"), ("throttle", "thoughts_active")]
 
-    # Immediate second check should not emit due to cooldown
-    resource_monitor.snapshot.memory_mb = over_critical
     await resource_monitor._check_limits()
-    assert len(emitted_signals) == initial_count
+    assert len(emitted_signals) == 2  # within cooldown: nothing repeats
 
-    # Wait for cooldown
     await asyncio.sleep(1.1)
-
-    # Now should emit again
-    resource_monitor.snapshot.memory_mb = over_critical
     await resource_monitor._check_limits()
-    assert len(emitted_signals) > initial_count
+    assert emitted_signals[2:] == [("reclaim", "thoughts_active")]  # RECLAIM repeats, THROTTLE does not
 
 
 def test_resource_monitor_get_capabilities(resource_monitor):
@@ -639,34 +619,30 @@ async def test_resource_monitor_spend_credit_no_provider(resource_budget, temp_d
 
 
 @pytest.mark.asyncio
-async def test_resource_monitor_shutdown_action(resource_budget, temp_db, time_service, signal_bus):
-    """Test that SHUTDOWN action emits shutdown signal."""
+async def test_resource_monitor_drain_action(resource_budget, temp_db, time_service, signal_bus, monkeypatch):
+    """A DRAIN cap emits drain at CRITICAL only, and never at HIGH."""
+    monkeypatch.setattr(_rm_service, "_release_process_memory", _fake_release([]))
     emitted_signals = []
 
     async def signal_handler(signal: str, resource: str):
         emitted_signals.append((signal, resource))
 
-    signal_bus.register("shutdown", signal_handler)
-
+    signal_bus.register("drain", signal_handler)
     monitor = ResourceMonitorService(
-        budget=resource_budget,
-        db_path=temp_db,
-        time_service=time_service,
-        signal_bus=signal_bus,
+        budget=resource_budget, db_path=temp_db, time_service=time_service, signal_bus=signal_bus
     )
+    drained = []
+    monitor.pressure._request_drain = drained.append
+    monitor.budget.thoughts_active.action = ResourceAction.DRAIN
 
-    # Set SHUTDOWN action for thoughts_active
-    monitor.budget.thoughts_active.action = ResourceAction.SHUTDOWN
-    monitor.budget.thoughts_active.critical = 50
-
-    # Exceed critical threshold
-    monitor.snapshot.thoughts_active = 51
-
-    # Check limits
+    monitor.snapshot.thoughts_active = monitor.budget.thoughts_active.critical  # HIGH
     await monitor._check_limits()
+    assert emitted_signals == []
 
-    # Verify shutdown signal was emitted
-    assert ("shutdown", "thoughts_active") in emitted_signals
+    monitor.snapshot.thoughts_active = monitor.budget.thoughts_active.limit  # CRITICAL
+    await monitor._check_limits()
+    assert ("drain", "thoughts_active") in emitted_signals
+    assert len(drained) == 1
 
 
 @pytest.mark.asyncio
@@ -1625,51 +1601,40 @@ def _fake_release(calls):
 
 
 @pytest.mark.asyncio
-async def test_memory_defer_actually_releases_memory(resource_monitor, monkeypatch):
-    """Crossing the memory threshold must do more than log: the built-in
-    handler releases, and the snapshot reflects the post-release figure so the
-    next check and the next prompt alert are not judged on a stale sample."""
+async def test_memory_reclaim_actually_releases_memory(resource_monitor, monkeypatch):
+    """ELEVATED memory must do more than log: RECLAIM releases, and the
+    snapshot reflects the post-release figure so the next check and the next
+    prompt alert are not judged on a stale sample."""
     calls: list = []
     monkeypatch.setattr(_rm_service, "_release_process_memory", _fake_release(calls))
 
-    resource_monitor.budget.memory_mb.action = ResourceAction.DEFER
-    resource_monitor.snapshot.memory_mb = resource_monitor.budget.memory_mb.critical + 1
+    resource_monitor.snapshot.memory_mb = resource_monitor.budget.memory_mb.warning + 1
     await resource_monitor._check_limits()
 
-    assert calls == ["resource_monitor:defer"]
+    assert calls == ["resource_monitor:reclaim"]
     assert resource_monitor.snapshot.memory_mb == 600
     metrics = resource_monitor._collect_custom_metrics()
     assert metrics["memory_release_count"] == 1.0
     assert metrics["memory_released_mb_total"] == 300.0
     assert metrics["memory_last_release_mb"] == 300.0
-    assert metrics["resource_signal_defer_total"] == 1.0
+    assert metrics["resource_signal_reclaim_total"] == 1.0
+    assert metrics["resource_pressure_level_memory_mb"] == 1.0
 
 
 @pytest.mark.asyncio
-async def test_non_memory_signals_are_counted_but_do_not_release(resource_monitor, monkeypatch):
+async def test_warn_cap_logs_but_does_not_reclaim(resource_monitor, monkeypatch):
     calls: list = []
     monkeypatch.setattr(_rm_service, "_release_process_memory", _fake_release(calls))
 
-    resource_monitor.snapshot.tokens_used_hour = resource_monitor.budget.tokens_hour.critical + 1
+    resource_monitor.budget.tokens_hour.action = ResourceAction.WARN
+    resource_monitor.snapshot.tokens_used_hour = resource_monitor.budget.tokens_hour.limit + 1
     await resource_monitor._check_limits()
 
     assert calls == []
     metrics = resource_monitor._collect_custom_metrics()
-    assert metrics["resource_signal_defer_total"] == 1.0
+    assert "resource_signal_reclaim_total" not in metrics
+    assert metrics["resource_pressure_level_tokens_hour"] == 3.0
     assert metrics["memory_release_count"] == 0.0
-
-
-@pytest.mark.asyncio
-async def test_shutdown_signal_on_memory_does_not_release(resource_monitor, monkeypatch):
-    calls: list = []
-    monkeypatch.setattr(_rm_service, "_release_process_memory", _fake_release(calls))
-
-    resource_monitor.budget.memory_mb.action = ResourceAction.SHUTDOWN
-    resource_monitor.snapshot.memory_mb = resource_monitor.budget.memory_mb.critical + 1
-    await resource_monitor._check_limits()
-
-    assert calls == []
-    assert (resource_monitor._collect_custom_metrics())["resource_signal_shutdown_total"] == 1.0
 
 
 @pytest.mark.asyncio
@@ -1704,5 +1669,5 @@ async def test_record_release_accepts_a_release_done_elsewhere(resource_monitor)
 
 
 def test_monitor_is_subscribed_to_its_own_signals(resource_monitor, signal_bus):
-    for signal in ("throttle", "defer", "reject", "shutdown"):
+    for signal in ("reclaim", "throttle", "shed", "drain", "throttle_lifted", "shed_lifted"):
         assert resource_monitor._on_resource_signal in signal_bus._handlers[signal], signal

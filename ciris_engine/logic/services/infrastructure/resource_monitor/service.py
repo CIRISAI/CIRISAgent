@@ -28,10 +28,22 @@ from ciris_engine.schemas.services.credit_gate import (
 )
 from ciris_engine.schemas.services.resources_core import (
     MemoryReleaseResult,
+    PressureLevel,
     ResourceAction,
     ResourceBudget,
     ResourceLimit,
     ResourceSnapshot,
+)
+
+from .pressure import LATCHED_ACTIONS, LEVEL_ORDER, ResourcePressureGate, actions_for_level, level_rank, lifted_signal
+
+#: Every pressure signal the monitor itself counts (and, for RECLAIM, acts on).
+_PRESSURE_SIGNALS = (
+    ResourceAction.RECLAIM.value,
+    ResourceAction.THROTTLE.value,
+    ResourceAction.SHED.value,
+    ResourceAction.DRAIN.value,
+    *(lifted_signal(action) for action in LATCHED_ACTIONS),
 )
 
 logger = logging.getLogger(__name__)
@@ -44,10 +56,7 @@ class ResourceSignalBus:
         # Handlers are `async def (signal, resource)`; what register() receives is
         # a coroutine function, i.e. a Callable returning an Awaitable, not a Future.
         self._handlers: Dict[str, List[Callable[[str, str], Awaitable[None]]]] = {
-            "throttle": [],
-            "defer": [],
-            "reject": [],
-            "shutdown": [],
+            **{signal: [] for signal in _PRESSURE_SIGNALS},  # see pressure.py for the contract
             "token_refreshed": [],  # ciris.ai token refresh signal
         }
 
@@ -84,7 +93,6 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
 
         self._token_history: Deque[Tuple[datetime, int]] = deque(maxlen=86400)
         self._cpu_history: Deque[float] = deque(maxlen=60)
-        self._last_action_time: Dict[str, datetime] = {}
         self._process = psutil.Process()
         self._monitoring = False  # For backward compatibility with tests
 
@@ -103,7 +111,7 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
         self._ciris_home: Optional[Path] = None  # Cached CIRIS_HOME path
 
         # The monitor is its own first subscriber. Until it was, every
-        # throttle/defer/reject/shutdown it emitted went to an empty handler
+        # pressure signal it emitted went to an empty handler
         # list: crossing the memory warning produced one log line and nothing
         # else. Registering here, not in the initializer, means a monitor
         # constructed anywhere -- tests, node-only, a future host -- is wired.
@@ -111,8 +119,17 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
         self._last_release: Optional[MemoryReleaseResult] = None
         self._release_count = 0
         self._released_total_mb = 0
-        for signal in ("throttle", "defer", "reject", "shutdown"):
+        for signal in _PRESSURE_SIGNALS:
             self.signal_bus.register(signal, self._on_resource_signal)
+
+        # Current pressure level of every resource above NORMAL, and when it
+        # last logged / reclaimed (the cooldown paces repeats within a level).
+        self._levels: Dict[str, PressureLevel] = {}
+        self._last_repeat: Dict[str, datetime] = {}
+
+        # The subscriber that acts. Registered after the monitor's own handler
+        # so on a shared emit the monitor counts first and the gate latches second.
+        self.pressure = ResourcePressureGate(self.signal_bus)
 
     def get_service_type(self) -> ServiceType:
         """Get service type."""
@@ -213,39 +230,121 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
         limit_config: ResourceLimit = getattr(self.budget, name)
         if current_value >= limit_config.critical:
             self.snapshot.critical.append(f"{name}: {current_value}/{limit_config.limit}")
-            await self._take_action(name, limit_config, "critical")
         elif current_value >= limit_config.warning:
             self.snapshot.warnings.append(f"{name}: {current_value}/{limit_config.limit}")
-            await self._take_action(name, limit_config, "warning")
 
-    async def _take_action(self, resource: str, config: ResourceLimit, level: str) -> None:
-        last_action = self._last_action_time.get(f"{resource}_{level}")
-        current_time = self.time_service.now() if self.time_service else datetime.now(timezone.utc)
-        if last_action and current_time - last_action < timedelta(seconds=config.cooldown_seconds):
+        previous = self._levels.get(name, PressureLevel.NORMAL)
+        level = self._next_level(limit_config, previous, current_value)
+        if level != previous:
+            await self._change_level(name, limit_config, previous, level, current_value)
+        elif level != PressureLevel.NORMAL:
+            await self._repeat_level(name, limit_config, level, current_value)
+
+    @staticmethod
+    def _threshold(config: ResourceLimit, level: PressureLevel) -> int:
+        if level == PressureLevel.CRITICAL:
+            return config.limit
+        if level == PressureLevel.HIGH:
+            return config.critical
+        return config.warning
+
+    @staticmethod
+    def _hysteresis(config: ResourceLimit) -> int:
+        """How far below a level's threshold the value must fall to leave it.
+
+        A quarter of the warning-to-limit band (at least 1), so a reading
+        hovering on a threshold does not flap an action on and off every tick.
+        """
+        return max(1, (config.limit - config.warning) // 4)
+
+    def _raw_level(self, config: ResourceLimit, value: int) -> PressureLevel:
+        for level in reversed(LEVEL_ORDER[1:]):
+            if value >= self._threshold(config, level):
+                return level
+        return PressureLevel.NORMAL
+
+    def _next_level(self, config: ResourceLimit, previous: PressureLevel, value: int) -> PressureLevel:
+        """Rise at once to the highest threshold met; fall one level at a time
+        only while the value is clearly below the current level's threshold."""
+        raw = self._raw_level(config, value)
+        if level_rank(raw) >= level_rank(previous):
+            return raw
+        level = previous
+        band = self._hysteresis(config)
+        while level != PressureLevel.NORMAL and value < self._threshold(config, level) - band:
+            level = LEVEL_ORDER[level_rank(level) - 1]
+        return level
+
+    async def _change_level(
+        self, name: str, config: ResourceLimit, previous: PressureLevel, level: PressureLevel, value: int
+    ) -> None:
+        before = actions_for_level(previous, config.action)
+        after = actions_for_level(level, config.action)
+        if level == PressureLevel.NORMAL:
+            self._levels.pop(name, None)
+        else:
+            self._levels[name] = level
+        self._last_repeat[name] = self._now()
+
+        rising = level_rank(level) > level_rank(previous)
+        log = logger.warning if rising and config.action != ResourceAction.LOG else logger.info
+        log(
+            "Resource %s pressure %s -> %s (value %s; elevated %s / high %s / critical %s; cap %s); in force: %s",
+            name,
+            previous.value,
+            level.value,
+            value,
+            config.warning,
+            config.critical,
+            config.limit,
+            config.action.value,
+            ", ".join(action.value for action in after) or "none",
+        )
+        for action in after:
+            if action not in before:
+                await self.signal_bus.emit(action.value, name)
+        for action in before:
+            if action not in after and action in LATCHED_ACTIONS:
+                await self.signal_bus.emit(lifted_signal(action), name)
+
+    async def _repeat_level(self, name: str, config: ResourceLimit, level: PressureLevel, value: int) -> None:
+        """Still at a non-NORMAL level: once per cooldown, log again and re-RECLAIM.
+
+        THROTTLE and SHED are latched and need no repeat; DRAIN is one-shot.
+        RECLAIM is the one action that does its work per emit, so a resource
+        that stays up keeps giving memory back.
+        """
+        now = self._now()
+        last = self._last_repeat.get(name)
+        if last and now - last < timedelta(seconds=config.cooldown_seconds):
             return
-        action = config.action
-        logger.warning("Resource %s hit %s threshold, action: %s", resource, level, action)
-        if action == ResourceAction.THROTTLE:
-            await self.signal_bus.emit("throttle", resource)
-        elif action == ResourceAction.DEFER:
-            await self.signal_bus.emit("defer", resource)
-        elif action == ResourceAction.REJECT:
-            await self.signal_bus.emit("reject", resource)
-        elif action == ResourceAction.SHUTDOWN:
-            await self.signal_bus.emit("shutdown", resource)
-        self._last_action_time[f"{resource}_{level}"] = current_time
+        self._last_repeat[name] = now
+        actions = actions_for_level(level, config.action)
+        logger.warning(
+            "Resource %s still at %s pressure (value %s); in force: %s",
+            name,
+            level.value,
+            value,
+            ", ".join(action.value for action in actions) or "none",
+        )
+        if ResourceAction.RECLAIM in actions:
+            await self.signal_bus.emit(ResourceAction.RECLAIM.value, name)
+
+    def get_pressure_levels(self) -> Dict[str, PressureLevel]:
+        """Resources currently above NORMAL and their level."""
+        return dict(self._levels)
 
     async def _on_resource_signal(self, signal: str, resource: str) -> None:
         """Built-in subscriber for the monitor's own signals.
 
-        Memory is the one resource where the right response is to *give some
-        back* rather than to do less: freed memory that the allocators are
-        holding is not ours to keep on a phone. Every other signal is counted so
-        an emit is never silent, and left for the processor to act on.
+        RECLAIM is the monitor's own to perform: freed memory that the
+        allocators are holding is not ours to keep on a phone. Every signal is
+        counted so an emit is never silent; THROTTLE, SHED and DRAIN are acted
+        on by the pressure gate's readers.
         """
         self._signal_counts[signal] = self._signal_counts.get(signal, 0) + 1
-        if resource == "memory_mb" and signal in ("throttle", "defer", "reject"):
-            await self.release_memory(trigger=f"resource_monitor:{signal}")
+        if signal == ResourceAction.RECLAIM.value:
+            await self.release_memory(trigger="resource_monitor:reclaim")
 
     def record_release(self, result: MemoryReleaseResult) -> None:
         """Fold a release into the monitor's state, wherever it was performed.
@@ -452,6 +551,10 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
         }
         for signal, count in self._signal_counts.items():
             metrics[f"resource_signal_{signal}_total"] = float(count)
+        metrics.update(self.pressure.collect_metrics())
+        for resource in ("memory_mb", "cpu_percent", "tokens_hour", "tokens_day", "thoughts_active"):
+            level = self._levels.get(resource, PressureLevel.NORMAL)
+            metrics[f"resource_pressure_level_{resource}"] = float(level_rank(level))
 
         if self.credit_provider:
             metrics["credit_provider_enabled"] = 1.0

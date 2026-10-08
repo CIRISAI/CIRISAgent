@@ -14,6 +14,7 @@ from ciris_engine.logic import persistence
 from ciris_engine.logic.adapters.document_parser import DocumentParser
 from ciris_engine.logic.buses import BusManager
 from ciris_engine.logic.secrets.service import SecretsService
+from ciris_engine.logic.services.infrastructure.resource_monitor.pressure import pressure_gate_of
 from ciris_engine.logic.utils.localization import resolve_language_for_new_task
 from ciris_engine.logic.utils.task_thought_factory import create_seed_thought_for_task, create_task
 from ciris_engine.logic.utils.thought_utils import generate_thought_id
@@ -27,6 +28,9 @@ def _resolve_observer_task_language(msg: Any) -> Optional[str]:
     field carries the resolved user/channel signal already."""
     user_lang = getattr(msg, "preferred_language", None)
     return resolve_language_for_new_task(user_lang=user_lang)
+
+
+from ciris_engine.logic.utils.hard_kill import terminate_immediately
 from ciris_engine.protocols.services.infrastructure.resource_monitor import ResourceMonitorServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.runtime.enums import ThoughtType
@@ -34,8 +38,8 @@ from ciris_engine.schemas.runtime.messages import MessageHandlingResult, Message
 from ciris_engine.schemas.runtime.models import TaskContext
 from ciris_engine.schemas.services.credit_gate import CreditAccount, CreditContext, CreditSpendRequest
 from ciris_engine.schemas.services.filters_core import FilterPriority, FilterResult
+from ciris_engine.schemas.services.resources_core import ResourceAction
 from ciris_engine.schemas.types import JSONDict
-from ciris_engine.logic.utils.hard_kill import terminate_immediately
 
 logger = logging.getLogger(__name__)
 
@@ -970,6 +974,15 @@ class BaseObserver(Generic[MessageT], ABC):
         # Check if this is the agent's own message
         is_agent_message = self._is_agent_message(msg)
 
+        # SHED: runtime self-protection closes admission while a resource is
+        # under CRITICAL pressure. Refused before credit is charged and before
+        # any task exists, with a typed status the adapter can surface (the API
+        # answers 503 + Retry-After). The accord check above still ran.
+        if not is_agent_message:
+            shed_result = self._refuse_if_shedding(msg, msg_id, channel_id)
+            if shed_result is not None:
+                return shed_result
+
         # Enforce credit policy if configured (may raise CreditDenied/CreditCheckFailed)
         await self._enforce_credit_policy(msg)
 
@@ -1048,6 +1061,28 @@ class BaseObserver(Generic[MessageT], ABC):
             channel_id=channel_id,
             task_priority=task_priority,
             existing_task_updated=obs_result.existing_task_updated if obs_result else False,
+        )
+
+    def _refuse_if_shedding(self, msg: MessageT, msg_id: str, channel_id: str) -> Optional[MessageHandlingResult]:
+        """A RESOURCE_SHED result when admission is closed, else None."""
+        gate = pressure_gate_of(self._get_resource_monitor(msg))
+        if gate is None:
+            return None
+        holders = gate.resources(ResourceAction.SHED)
+        if not holders:
+            return None
+        gate.note_shed_refusal()
+        logger.warning(
+            "[OBSERVER] Message %s in channel %s REFUSED: admission closed by resource pressure (shed: %s)",
+            msg_id,
+            channel_id,
+            ", ".join(holders),
+        )
+        return MessageHandlingResult(
+            status=MessageHandlingStatus.RESOURCE_SHED,
+            message_id=msg_id,
+            channel_id=channel_id,
+            shed_resources=holders,
         )
 
     async def _enhance_message(self, msg: MessageT) -> MessageT:

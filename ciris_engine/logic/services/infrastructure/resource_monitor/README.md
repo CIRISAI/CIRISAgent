@@ -13,7 +13,7 @@ The Resource Monitor Service is a critical infrastructure component that serves 
 
 ### Sustainable Adaptive Coherence
 - **Resource Sustainability**: Enforces the 4GB RAM target to enable deployment in constrained environments (edge devices, rural clinics, developing regions)
-- **Adaptive Response**: Implements graduated protective actions (throttle → defer → reject → shutdown) based on resource pressure
+- **Adaptive Response**: Implements graduated self-protection (reclaim → throttle → shed, drain only if configured) driven by per-resource pressure levels
 - **Coherence Protection**: Prevents resource exhaustion that would degrade decision-making quality or cause system failures
 
 ### Enabling Diverse Flourishing
@@ -51,15 +51,24 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
 | **Tokens/Hour** | 10k limit / 8k warn / 9.5k critical | Rolling hour | Rate limiting |
 | **Tokens/Day** | 100k limit / 80k warn / 95k critical | Rolling day | Cost control |
 | **Active Thoughts** | 50 limit / 40 warn / 48 critical | Real-time | Processing queue |
-| **Disk Space** | 100MB limit / 80 warn / 95 critical | Real-time | Storage management |
+| **Disk Space** | 100 / 80 / 95 (unit undefined) | **Not checked** | Reserved until its unit is defined |
 
 ### Resource Actions Hierarchy
 
+Runtime self-protection, not agent decisions: none of these is an H3ERE action.
+
 ```
-LOG → WARN → THROTTLE → DEFER → REJECT → SHUTDOWN
-  ↑                                           ↑
-Minor issues                            System protection
+Pressure level   threshold      action it adds (cumulative, capped per resource)
+NORMAL           -              -
+ELEVATED         >= warning     RECLAIM   release memory and caches to the OS
+HIGH             >= critical    THROTTLE  bounded extra delay between processing rounds
+CRITICAL         >= limit       SHED      no new tasks activated; new inbound work refused (503)
+                                DRAIN     graceful runtime shutdown -- only if the cap is DRAIN
 ```
+
+A level lifts only once the value is a quarter of the warning-to-limit band
+below that level's threshold (hysteresis). `ResourceLimit.action` is the cap:
+the strongest action the resource may reach. LOG and WARN caps only log.
 
 ## 🔧 Technical Implementation
 
@@ -97,33 +106,25 @@ class ResourceSignalBus:
     """Event bus for resource-driven protective actions"""
 
     async def emit(self, signal: str, resource: str) -> None:
-        # Signals: "throttle", "defer", "reject", "shutdown"
-        # Enables other services to respond to resource pressure
+        # Signals: "reclaim", "throttle", "shed", "drain" when an action comes
+        # into force for a resource; "throttle_lifted", "shed_lifted" when it
+        # goes out of force. ResourcePressureGate (pressure.py) latches them.
 ```
 
 ## 🚨 Protective Action System
 
 ### Graduated Response Model
 
-1. **THROTTLE** (Performance Degradation)
-   - Slower processing to reduce resource pressure
-   - Used for: CPU overload
-   - Maintains functionality while reducing load
-
-2. **DEFER** (Queue Management)
-   - Delay non-critical operations
-   - Used for: Memory pressure, token rates
-   - Prioritizes essential operations
-
-3. **REJECT** (Request Limiting)
-   - Refuse new requests when resources critical
-   - Used for: Daily token limits
-   - Protects existing operations
-
-4. **SHUTDOWN** (System Protection)
-   - Graceful shutdown when resources exhausted
-   - Last resort protection mechanism
-   - Prevents system crash/corruption
+1. **RECLAIM** (ELEVATED) -- the monitor releases memory (`release_memory`), and
+   again once per cooldown while the resource stays up.
+2. **THROTTLE** (HIGH) -- `AgentProcessor` doubles the round delay (at least
+   +1 s, at most +10 s). Never applied in SHUTDOWN.
+3. **SHED** (CRITICAL) -- admission control. `WorkProcessor` activates no new
+   tasks (queued tasks wait; in-flight thoughts finish) and `BaseObserver`
+   refuses new inbound messages with `MessageHandlingStatus.RESOURCE_SHED`; the
+   API answers 503 with `Retry-After`.
+4. **DRAIN** (CRITICAL, explicit cap only) -- `request_global_shutdown()`, the
+   runtime's normal graceful shutdown. Never `os._exit`, `execv` or a signal.
 
 ### Cooldown System
 - Prevents action spam during resource pressure
@@ -170,18 +171,13 @@ class ResourceSignalBus:
 
 ### Default Resource Budget (4GB Target)
 ```python
-# Memory: Critical at 3.75GB of 4GB limit
-memory_mb = ResourceLimit(limit=4096, warning=3072, critical=3840, action=DEFER)
-
-# CPU: Throttle when sustained high usage
+# action = the cap on the ladder
+memory_mb = ResourceLimit(limit=1024, warning=768, critical=960, action=SHED)
 cpu_percent = ResourceLimit(limit=80, warning=60, critical=75, action=THROTTLE)
-
-# Tokens: Rate limiting for cost control
-tokens_hour = ResourceLimit(limit=10000, warning=8000, critical=9500, action=DEFER)
-tokens_day = ResourceLimit(limit=100000, warning=80000, critical=95000, action=REJECT)
-
-# Thoughts: Processing queue management
-thoughts_active = ResourceLimit(limit=50, warning=40, critical=48, action=DEFER)
+tokens_hour = ResourceLimit(limit=10000, warning=8000, critical=9500, action=THROTTLE)
+tokens_day = ResourceLimit(limit=100000, warning=80000, critical=95000, action=SHED)
+thoughts_active = ResourceLimit(limit=50, warning=40, critical=48, action=SHED)
+disk_mb = ResourceLimit(limit=100, warning=80, critical=95, action=WARN)  # not checked
 ```
 
 ## 🔄 Service Lifecycle
@@ -291,7 +287,7 @@ This aligns with the modular architecture pattern used by other infrastructure s
 
 ### Direct 4GB RAM Enforcement
 1. **Hard Limits**: Enforces 4GB memory limit with graduated warnings at 3GB and critical at 3.75GB
-2. **Protective Actions**: Implements DEFER actions when memory pressure builds, preventing OOM conditions
+2. **Protective Actions**: Reclaims memory at ELEVATED, throttles at HIGH, sheds new work at CRITICAL, preventing OOM conditions
 3. **Real-time Monitoring**: 1-second monitoring loop catches memory growth before it becomes critical
 4. **Historical Tracking**: Enables identification of memory usage patterns for optimization
 

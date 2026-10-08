@@ -12,6 +12,7 @@ from ciris_engine.logic import persistence
 from ciris_engine.logic.config import ConfigAccessor
 from ciris_engine.logic.processors.core.thought_processor import ThoughtProcessor
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
+from ciris_engine.logic.services.infrastructure.resource_monitor.pressure import pressure_gate_of
 from ciris_engine.logic.utils.context_utils import build_dispatch_context
 from ciris_engine.logic.utils.shutdown_manager import (
     get_global_shutdown_reason,
@@ -27,6 +28,7 @@ from ciris_engine.schemas.processors.states import AgentState
 from ciris_engine.schemas.runtime.core import AgentIdentityRoot
 from ciris_engine.schemas.runtime.enums import ThoughtStatus
 from ciris_engine.schemas.runtime.models import Thought
+from ciris_engine.schemas.services.resources_core import ResourceAction
 from ciris_engine.schemas.services.runtime_control import PipelineState
 from ciris_engine.schemas.telemetry.core import (
     CorrelationType,
@@ -1150,6 +1152,21 @@ class AgentProcessor:
                 delay = 10.0  # Slower pace in solitude
             elif current_state == AgentState.DREAM:
                 delay = 5.0  # Check dream state periodically
+
+        # THROTTLE: a resource past its threshold slows the loop by a bounded
+        # amount. Never applied to SHUTDOWN, which must not be slowed down.
+        if current_state != AgentState.SHUTDOWN:
+            gate = pressure_gate_of(self.services.resource_monitor)
+            if gate is not None:
+                extra = gate.throttle_extra_delay(delay)
+                if extra > 0:
+                    logger.debug(
+                        "Round delay %.1fs + %.1fs throttle (resource pressure: %s)",
+                        delay,
+                        extra,
+                        ", ".join(gate.resources(ResourceAction.THROTTLE)),
+                    )
+                    delay += extra
 
         return delay
 

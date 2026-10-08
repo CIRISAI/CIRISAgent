@@ -6,36 +6,61 @@ Provides schemas for monitoring resource usage, costs, and environmental impact.
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
 class ResourceAction(str, Enum):
-    """Actions to take when a resource limit is exceeded"""
+    """Runtime self-protection actions a resource's pressure can trigger.
 
-    LOG = "log"
-    WARN = "warn"
-    THROTTLE = "throttle"
-    DEFER = "defer"
-    REJECT = "reject"
-    SHUTDOWN = "shutdown"
+    These are the runtime protecting itself, not agent decisions: none of them
+    is an H3ERE action and none is ever presented to the model as one. Ordered
+    from mildest to strongest; `ResourceLimit.action` caps how far a resource
+    may escalate along the ladder (see `PressureLevel`).
+    """
+
+    LOG = "log"  # non-acting: record the level change
+    WARN = "warn"  # non-acting: record it at WARNING
+    RECLAIM = "reclaim"  # release memory and caches back to the OS
+    THROTTLE = "throttle"  # slow the work loop by a bounded delay
+    SHED = "shed"  # admission control: no new tasks activated, new inbound work refused (503)
+    DRAIN = "drain"  # graceful runtime shutdown; only ever by explicit configuration
+
+
+class PressureLevel(str, Enum):
+    """How far past its thresholds a resource is.
+
+    ELEVATED >= `warning`, HIGH >= `critical`, CRITICAL >= `limit`. A level
+    lifts only once the value is clearly back below that threshold (hysteresis).
+    Default ladder: ELEVATED -> RECLAIM, HIGH -> +THROTTLE, CRITICAL -> +SHED
+    (+DRAIN only when the resource's cap is DRAIN); actions are cumulative and
+    each is capped by `ResourceLimit.action`.
+    """
+
+    NORMAL = "normal"
+    ELEVATED = "elevated"
+    HIGH = "high"
+    CRITICAL = "critical"
 
 
 class ResourceLimit(BaseModel):
     """Configuration for a single resource"""
 
-    limit: int = Field(description="Hard limit value")
-    warning: int = Field(description="Warning threshold")
-    critical: int = Field(description="Critical threshold")
-    action: ResourceAction = Field(default=ResourceAction.DEFER, description="Action when limit exceeded")
-    cooldown_seconds: int = Field(default=60, ge=0, description="Cooldown period in seconds")
+    limit: int = Field(description="Hard limit value; at or above it the resource is CRITICAL")
+    warning: int = Field(description="Warning threshold; at or above it the resource is ELEVATED")
+    critical: int = Field(description="Critical threshold; at or above it the resource is HIGH")
+    action: ResourceAction = Field(
+        default=ResourceAction.SHED,
+        description="Strongest action this resource may escalate to (cap on the pressure ladder)",
+    )
+    cooldown_seconds: int = Field(default=60, ge=0, description="Cooldown between repeat RECLAIMs and log lines")
 
     model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 def _memory_mb_limit() -> ResourceLimit:
-    return ResourceLimit(limit=1024, warning=768, critical=960)
+    return ResourceLimit(limit=1024, warning=768, critical=960, action=ResourceAction.SHED)
 
 
 def _cpu_percent_limit() -> ResourceLimit:
@@ -43,19 +68,26 @@ def _cpu_percent_limit() -> ResourceLimit:
 
 
 def _tokens_hour_limit() -> ResourceLimit:
-    return ResourceLimit(limit=10000, warning=8000, critical=9500)
+    return ResourceLimit(limit=10000, warning=8000, critical=9500, action=ResourceAction.THROTTLE)
 
 
 def _tokens_day_limit() -> ResourceLimit:
-    return ResourceLimit(limit=100000, warning=80000, critical=95000, action=ResourceAction.REJECT)
+    return ResourceLimit(limit=100000, warning=80000, critical=95000, action=ResourceAction.SHED)
 
 
 def _disk_mb_limit() -> ResourceLimit:
+    # NOT CHECKED by the monitor, on purpose. The unit is ambiguous: the field
+    # says MB, the numbers (100/80/95) read as a percentage, and the snapshot's
+    # disk_used_mb is the whole filesystem's usage. Under either MB reading
+    # (filesystem used, or database size) a production install sits above
+    # "critical" at boot, which would mark the monitor unhealthy and put a
+    # critical resource alert into every prompt. Give it a defined meaning
+    # (e.g. data-dir filesystem percent used) before wiring a check.
     return ResourceLimit(limit=100, warning=80, critical=95, action=ResourceAction.WARN)
 
 
 def _thoughts_active_limit() -> ResourceLimit:
-    return ResourceLimit(limit=50, warning=40, critical=48)
+    return ResourceLimit(limit=50, warning=40, critical=48, action=ResourceAction.SHED)
 
 
 class ResourceBudget(BaseModel):
@@ -65,7 +97,10 @@ class ResourceBudget(BaseModel):
     cpu_percent: ResourceLimit = Field(default_factory=_cpu_percent_limit, description="CPU usage limits in percent")
     tokens_hour: ResourceLimit = Field(default_factory=_tokens_hour_limit, description="Token usage per hour")
     tokens_day: ResourceLimit = Field(default_factory=_tokens_day_limit, description="Token usage per day")
-    disk_mb: ResourceLimit = Field(default_factory=_disk_mb_limit, description="Disk usage limits in MB")
+    disk_mb: ResourceLimit = Field(
+        default_factory=_disk_mb_limit,
+        description="Disk limit -- reserved, not checked: its unit is undefined (see _disk_mb_limit)",
+    )
     thoughts_active: ResourceLimit = Field(default_factory=_thoughts_active_limit, description="Active thoughts limit")
 
     model_config = ConfigDict(extra="forbid", defer_build=True)
@@ -80,7 +115,7 @@ class MemoryReleaseResult(BaseModel):
     another thread may allocate between the two reads.
     """
 
-    trigger: str = Field(description="Who asked: resource_monitor:<signal>, host:<level>, or manual")
+    trigger: str = Field(description="Who asked: resource_monitor:reclaim, host:<level>, or manual")
     platform_call: str = Field(
         description="Allocator call made: malloc_trim, mallopt(M_PURGE), malloc_zone_pressure_relief, none, or unavailable:<why>"
     )
@@ -90,6 +125,30 @@ class MemoryReleaseResult(BaseModel):
     gc_collected: int = Field(ge=0, description="Unreachable objects gc.collect() found")
     duration_ms: int = Field(ge=0, description="Wall time of the whole release")
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class ResourcePressureState(BaseModel):
+    """Which self-protection actions are in force right now, and how often they applied.
+
+    Held by `ResourcePressureGate`. Each list names the resources currently
+    holding that action; an empty list means it is lifted. DRAIN is not
+    reversible, so it is a one-shot reason rather than a list. RECLAIM is not
+    latched: each emit performs one release.
+    """
+
+    levels: Dict[str, PressureLevel] = Field(
+        default_factory=dict, description="Resources above NORMAL and their pressure level"
+    )
+    throttle: List[str] = Field(default_factory=list, description="Resources slowing the work loop")
+    shed: List[str] = Field(default_factory=list, description="Resources holding admission closed")
+    drain_requested: Optional[str] = Field(default=None, description="Reason a graceful drain was requested")
+    throttled_rounds_total: int = Field(
+        default=0, ge=0, description="Work-loop rounds that ran with the throttle delay"
+    )
+    shed_rounds_total: int = Field(default=0, ge=0, description="Work rounds that activated no new tasks under SHED")
+    shed_refusals_total: int = Field(default=0, ge=0, description="Inbound messages refused at intake under SHED")
 
     model_config = ConfigDict(extra="forbid")
 
@@ -197,9 +256,11 @@ class ResourceAlert(BaseModel):
 
 __all__ = [
     "ResourceAction",
+    "PressureLevel",
     "ResourceLimit",
     "ResourceBudget",
     "ResourceSnapshot",
+    "ResourcePressureState",
     "ResourceCost",
     "ResourceAlert",
 ]

@@ -697,14 +697,38 @@ def _get_shutdown_context(runtime: Optional[Any]) -> Optional[Any]:
     return None
 
 
-def _format_critical_alert(alert: str) -> str:
-    """Format a critical resource alert."""
-    return f"🚨 CRITICAL! RESOURCE LIMIT BREACHED! {alert} - REJECT OR DEFER ALL TASKS!"
+_RESOURCE_PRESSURE_PREFIX = "RESOURCE PRESSURE (runtime self-protection, informational):"
+
+
+def _format_critical_alert(alert: str, shedding: bool = False) -> str:
+    """Format a critical resource alert for the prompt.
+
+    Informational only. The runtime handles resource pressure itself (reclaim,
+    throttle, shed); the alert must never steer the model toward any H3ERE
+    action -- runtime self-protection and agent decisions stay separate.
+    """
+    state = (
+        "the runtime is shedding new work (not admitting new tasks) until it recovers"
+        if shedding
+        else "the runtime is managing it itself"
+    )
+    return f"{_RESOURCE_PRESSURE_PREFIX} {alert} is past its critical threshold; {state}. No action is requested."
 
 
 def _get_system_unhealthy_alert() -> str:
-    """Get system unhealthy alert message."""
-    return "🚨 CRITICAL! SYSTEM UNHEALTHY! RESOURCE LIMITS EXCEEDED - IMMEDIATE ACTION REQUIRED!"
+    """Get system unhealthy alert message (informational, see _format_critical_alert)."""
+    return (
+        f"{_RESOURCE_PRESSURE_PREFIX} one or more resources are past their critical threshold; "
+        "the runtime is managing them itself. No action is requested."
+    )
+
+
+def _is_shedding(resource_monitor: Any) -> bool:
+    from ciris_engine.logic.services.infrastructure.resource_monitor.pressure import pressure_gate_of
+    from ciris_engine.schemas.services.resources_core import ResourceAction
+
+    gate = pressure_gate_of(resource_monitor)
+    return gate is not None and gate.is_active(ResourceAction.SHED)
 
 
 def _get_resource_check_failed_alert(error: str) -> str:
@@ -712,11 +736,11 @@ def _get_resource_check_failed_alert(error: str) -> str:
     return f"🚨 CRITICAL! FAILED TO CHECK RESOURCES: {error}"
 
 
-def _process_critical_alerts(snapshot: Any, resource_alerts: List[str]) -> None:
+def _process_critical_alerts(snapshot: Any, resource_alerts: List[str], shedding: bool = False) -> None:
     """Process critical resource alerts from snapshot."""
     if snapshot.critical:
         for alert in snapshot.critical:
-            resource_alerts.append(_format_critical_alert(alert))
+            resource_alerts.append(_format_critical_alert(alert, shedding))
 
 
 def _check_system_health(snapshot: Any, resource_alerts: List[str]) -> None:
@@ -731,7 +755,7 @@ def _collect_resource_alerts(resource_monitor: Any) -> List[str]:
     try:
         if resource_monitor is not None:
             snapshot = resource_monitor.snapshot
-            _process_critical_alerts(snapshot, resource_alerts)
+            _process_critical_alerts(snapshot, resource_alerts, _is_shedding(resource_monitor))
             _check_system_health(snapshot, resource_alerts)
         else:
             logger.warning("Resource monitor not available - cannot check resource constraints")
@@ -2165,14 +2189,14 @@ async def _collect_cross_channel_messages(user_id: str, channel_id: str) -> List
                 )
 
                 created_at = row.get("created_at", "")
-                ts_str = (
-                    created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at)
+                ts_str = created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at)
+                recent_messages.append(
+                    {
+                        "channel": msg_channel,
+                        "content": msg_content,
+                        "timestamp": ts_str,
+                    }
                 )
-                recent_messages.append({
-                    "channel": msg_channel,
-                    "content": msg_content,
-                    "timestamp": ts_str,
-                })
                 collected += 1
                 if collected >= max_messages:
                     break

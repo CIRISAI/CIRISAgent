@@ -17,6 +17,7 @@ from ciris_engine.logic import persistence
 from ciris_engine.logic.processors.core.base_processor import BaseProcessor
 from ciris_engine.logic.processors.support.task_manager import TaskManager
 from ciris_engine.logic.processors.support.thought_manager import ThoughtManager
+from ciris_engine.logic.services.infrastructure.resource_monitor.pressure import pressure_gate_of
 
 # ServiceProtocol import removed - processors aren't services
 from ciris_engine.logic.utils.context_utils import build_dispatch_context
@@ -25,6 +26,7 @@ from ciris_engine.schemas.processors.states import AgentState
 from ciris_engine.schemas.runtime.enums import TaskStatus, ThoughtStatus
 from ciris_engine.schemas.runtime.models import Task
 from ciris_engine.schemas.services.budget_envelope import PROPOSAL_TICKET_STATUS
+from ciris_engine.schemas.services.resources_core import ResourceAction
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +81,23 @@ class WorkProcessor(BaseProcessor):
         self.last_activity_time = self.time_service.now()
         self.idle_rounds = 0
 
+    def _activate_pending_tasks_unless_shedding(self) -> int:
+        """Activate pending tasks, unless a resource is holding SHED.
+
+        SHED is admission control: queued tasks stay PENDING and wait, while
+        tasks already active keep generating and processing their thoughts, so
+        in-flight work finishes and the pressure can drain. The gate lifts SHED
+        once the resource falls clearly back below its CRITICAL threshold.
+        """
+        gate = pressure_gate_of(self.resource_monitor)
+        if gate is not None:
+            holders = gate.resources(ResourceAction.SHED)
+            if holders:
+                gate.note_shed_round()
+                logger.debug("Phase 1 skipped: admission closed by resource pressure (shed: %s)", ", ".join(holders))
+                return 0
+        return self.task_manager.activate_pending_tasks()
+
     def get_supported_states(self) -> List[AgentState]:
         """Work processor handles WORK and PLAY states."""
         return [AgentState.WORK, AgentState.PLAY]
@@ -109,7 +128,7 @@ class WorkProcessor(BaseProcessor):
 
             # Phase 1: Task activation
             logger.debug("Phase 1: Activating pending tasks...")
-            activated = self.task_manager.activate_pending_tasks()
+            activated = self._activate_pending_tasks_unless_shedding()
             logger.debug(f"Activated {activated} tasks")
             round_metrics["tasks_activated"] = activated
 

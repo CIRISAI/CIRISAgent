@@ -571,8 +571,9 @@ class TestSystemContext:
         result = _collect_resource_alerts(resource_monitor)
 
         assert len(result) == 2
-        assert "🚨 CRITICAL! RESOURCE LIMIT BREACHED! Memory usage > 90%" in result[0]
-        assert "🚨 CRITICAL! RESOURCE LIMIT BREACHED! CPU usage > 95%" in result[1]
+        assert "RESOURCE PRESSURE (runtime self-protection, informational): Memory usage > 90%" in result[0]
+        assert "RESOURCE PRESSURE (runtime self-protection, informational): CPU usage > 95%" in result[1]
+        assert all("DEFER" not in r and "REJECT" not in r for r in result)
 
     def test_collect_resource_alerts_with_unhealthy_system(self):
         """Test collecting resource alerts with unhealthy system."""
@@ -584,7 +585,7 @@ class TestSystemContext:
         result = _collect_resource_alerts(resource_monitor)
 
         assert len(result) == 1
-        assert "🚨 CRITICAL! SYSTEM UNHEALTHY!" in result[0]
+        assert "RESOURCE PRESSURE" in result[0] and "No action is requested" in result[0]
 
     def test_collect_resource_alerts_with_exception(self, caplog):
         """Test collecting resource alerts with exception."""

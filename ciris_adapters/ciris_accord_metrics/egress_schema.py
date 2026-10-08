@@ -94,6 +94,7 @@ MAP_MAX_ITEMS = 64
 JSON_MAX_DEPTH = 8
 JSON_MAX_ITEMS = 256
 JSON_MAX_STRING_CHARS = 8192
+JSON_MAX_KEY_CHARS = IDENTIFIER_MAX_CHARS  # object keys in opaque JSON
 
 
 class FieldKind(str, Enum):
@@ -693,7 +694,19 @@ class _Enforcer:
             if len(entries) > JSON_MAX_ITEMS:
                 self._flag(path, ViolationKind.OVER_CAP, entries, f"cut to {JSON_MAX_ITEMS} entries")
                 entries = entries[:JSON_MAX_ITEMS]
-            return {str(k): self.json_(v, f"{path}.{k}", depth + 1) for k, v in entries}
+            out: JSONDict = {}
+            for k, v in entries:
+                key = str(k)
+                if len(key) > JSON_MAX_KEY_CHARS:
+                    # Keys are producer-controlled content too: cap them, count
+                    # it, and never echo the key into the path (the log names
+                    # the path, so a long key would leak through it).
+                    self._flag(f"{path}.<key>", ViolationKind.OVER_CAP, key, f"key truncated to {JSON_MAX_KEY_CHARS}")
+                    key = key[:JSON_MAX_KEY_CHARS]
+                    out[key] = self.json_(v, f"{path}.<key>", depth + 1)
+                else:
+                    out[key] = self.json_(v, f"{path}.{key}", depth + 1)
+            return out
         self._flag(path, ViolationKind.WRONG_TYPE, value, "not JSON-serializable")
         return None
 

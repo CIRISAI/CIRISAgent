@@ -39,7 +39,7 @@ import os
 import sys
 import threading
 from enum import Enum
-from typing import Optional, Set
+from typing import Iterable, Optional, Set
 from urllib.parse import urlsplit
 
 from ciris_engine.logic.utils.env_flags import TRUTHY
@@ -61,6 +61,28 @@ def mark_mock_llm_active(source: str) -> None:
         if _latched_source is None:
             _latched_source = source
             logger.info("[MOCK-GUARD] mock LLM active (source=%s) — remote trace export disabled", source)
+
+
+#: Module names that are the mock LLM (``main.py`` uses ``mock_llm``; the
+#: manifest's own name is ``mockllm``; modular entries carry a ``modular:`` prefix).
+_MOCK_LLM_MODULE_NAMES = frozenset({"mock_llm", "mockllm"})
+
+
+def latch_if_mock_llm_module(modules: Iterable[object], source: str) -> bool:
+    """Latch when a configured module list names the mock LLM. Returns whether it did.
+
+    Called with the runtime's bootstrap modules BEFORE the edge initializes, so a
+    mock supplied only through ``RuntimeBootstrapConfig.modules`` (embedded and
+    mobile hosts) is known before any federation path starts.
+    """
+    for module in modules:
+        name = str(module).strip().lower()
+        if name.startswith("modular:"):
+            name = name[len("modular:") :]
+        if name.rsplit(".", 1)[-1] in _MOCK_LLM_MODULE_NAMES:
+            mark_mock_llm_active(f"{source}:{module}")
+            return True
+    return False
 
 
 def mock_llm_source() -> Optional[str]:
@@ -168,6 +190,53 @@ RUN_KIND_ENV_VAR = "CIRIS_TRACE_RUN_KIND"
 _run_kind_warned = False
 
 
+#: Android system property the mobile harness sets with ``adb shell setprop``.
+#: An Android app process does not inherit the runner's environment, and an
+#: ``am start`` extra reaches the Kotlin activity, not the embedded Python, so
+#: this is the one channel the QA harness can write and the runtime can read.
+#: ``debug.*`` properties are writable by the adb shell user only.
+ANDROID_RUN_KIND_PROP = "debug.ciris.trace_run_kind"
+_android_prop_cache: Optional[str] = None
+
+
+def _android_run_kind_prop() -> str:
+    """Read ANDROID_RUN_KIND_PROP once per process; empty off Android or on any error."""
+    global _android_prop_cache
+    if _android_prop_cache is not None:
+        return _android_prop_cache
+    value = ""
+    if os.environ.get("ANDROID_ROOT") or os.environ.get("ANDROID_DATA"):
+        try:
+            import subprocess
+
+            out = subprocess.run(["getprop", ANDROID_RUN_KIND_PROP], capture_output=True, text=True, timeout=5)
+            value = (out.stdout or "").strip()
+        except Exception:  # noqa: BLE001 - absence of the prop is the normal case
+            value = ""
+    _android_prop_cache = value
+    return value
+
+
+def _declared_run_kind() -> str:
+    """The harness's declaration: process env, then the ``.env`` file, then the Android prop.
+
+    iOS harnesses forward it as ``SIMCTL_CHILD_CIRIS_TRACE_RUN_KIND`` (simctl
+    strips the prefix into the app process, which the embedded Python inherits).
+    """
+    raw = os.environ.get(RUN_KIND_ENV_VAR, "")
+    if raw.strip():
+        return raw
+    try:
+        from ciris_engine.logic.config.env_utils import get_env_var
+
+        raw = str(get_env_var(RUN_KIND_ENV_VAR, "") or "")
+        if raw.strip():
+            return raw
+    except Exception:  # noqa: BLE001 - config layer may not be importable this early
+        pass
+    return _android_run_kind_prop()
+
+
 def trace_run_kind() -> TraceRunKind:
     """Resolve the run kind. The mock LLM always wins and cannot be overridden.
 
@@ -178,7 +247,7 @@ def trace_run_kind() -> TraceRunKind:
     global _run_kind_warned
     if is_mock_llm_active():
         return TraceRunKind.MOCK
-    raw = os.environ.get(RUN_KIND_ENV_VAR, "").strip().lower()
+    raw = _declared_run_kind().strip().lower()
     if not raw or raw == TraceRunKind.PRODUCTION.value:
         return TraceRunKind.PRODUCTION
     if raw in (TraceRunKind.QA.value, TraceRunKind.BATTERY.value):
@@ -196,8 +265,9 @@ def trace_run_kind() -> TraceRunKind:
 
 def _reset_for_tests() -> None:
     """Clear the latch and the log-once set. Tests only; production never calls it."""
-    global _latched_source, _run_kind_warned
+    global _latched_source, _run_kind_warned, _android_prop_cache
     with _lock:
         _latched_source = None
         _refusals_logged.clear()
     _run_kind_warned = False
+    _android_prop_cache = None

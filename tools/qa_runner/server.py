@@ -891,6 +891,17 @@ class APIServerManager:
 
     def start(self) -> bool:
         """Start the API server."""
+        # CIRISAgent#1244: refuse a remote trace sink under the mock LLM FIRST,
+        # before any side effect (trace-file clearing, .env rewrite, Postgres,
+        # data wipe). __main__ refuses this too; this catches programmatic
+        # QAConfig callers that bypass the CLI.
+        if self.config.mock_llm and (self.config.live_lens or self.config.federation_delivery):
+            self.console.print(
+                "[red][FAIL] --live-lens / --federation-delivery cannot run with the mock LLM: "
+                "mock-LLM traces must never reach the production lens or canonical (CIRISAgent#1244)[/red]"
+            )
+            return False
+
         # Check if server is already running
         if self._is_server_running():
             self.console.print("[yellow][WARN] Server already running[/yellow]")
@@ -919,14 +930,6 @@ class APIServerManager:
                     self.console.print("[yellow][WARN] PostgreSQL wipe failed, continuing anyway[/yellow]")
 
         # Start mock logshipper to receive accord traces (unless using live lens)
-        if self.config.mock_llm and (self.config.live_lens or self.config.federation_delivery):
-            # CIRISAgent#1244. __main__ refuses this combination too; this
-            # catches programmatic QAConfig callers that bypass the CLI.
-            self.console.print(
-                "[red][FAIL] --live-lens / --federation-delivery cannot run with the mock LLM: "
-                "mock-LLM traces must never reach the production lens or canonical (CIRISAgent#1244)[/red]"
-            )
-            return False
         if self.config.live_lens:
             self.console.print(
                 "[cyan]📡 Using LIVE Lens server: https://lens.ciris-services-1.ai/lens-api/api/v1[/cyan]"

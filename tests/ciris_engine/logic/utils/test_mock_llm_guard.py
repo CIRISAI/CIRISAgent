@@ -159,3 +159,51 @@ class TestRunKind:
         with caplog.at_level(logging.WARNING, logger=mock_llm_guard.__name__):
             assert trace_run_kind() == TraceRunKind.QA
         assert any("is not one of qa|battery|production" in r.getMessage() for r in caplog.records)
+
+
+class TestBootstrapModulesLatchBeforeEdge:
+    """Codex P1: a mock named only in RuntimeBootstrapConfig.modules must latch before edge init."""
+
+    @pytest.mark.parametrize("modules", [["mock_llm"], ["modular:mockllm"], ["ciris_adapters.mock_llm"]])
+    def test_constructor_check_latches_from_modules(self, real_llm_mode: None, modules: list) -> None:
+        from types import SimpleNamespace
+
+        from ciris_engine.logic.runtime.bootstrap_helpers import check_mock_llm
+
+        check_mock_llm(SimpleNamespace(modules_to_load=list(modules)))
+        assert is_mock_llm_active()
+
+    def test_non_mock_modules_do_not_latch(self, real_llm_mode: None) -> None:
+        assert not mock_llm_guard.latch_if_mock_llm_module(["modular:ciris_accord_metrics", "mock_llm_extra"], "t")
+        assert not is_mock_llm_active()
+
+    @pytest.mark.asyncio
+    async def test_edge_init_step_sees_the_latch(self, real_llm_mode: None, monkeypatch: pytest.MonkeyPatch) -> None:
+        from types import SimpleNamespace
+
+        from ciris_engine.logic.runtime import edge_runtime, initialization_steps
+
+        seen: list = []
+        monkeypatch.setattr(edge_runtime, "initialize_edge_runtime", lambda _dir: seen.append(is_mock_llm_active()))
+        runtime = SimpleNamespace(modules_to_load=["mock_llm"], essential_config=_essential_config())
+        await initialization_steps.init_edge_runtime(runtime)
+        assert seen == [True], "the edge initialized before the bootstrap mock module was latched"
+
+    @pytest.mark.asyncio
+    async def test_runtime_edge_init_sees_the_latch(self, real_llm_mode: None, monkeypatch: pytest.MonkeyPatch) -> None:
+        from types import SimpleNamespace
+
+        from ciris_engine.logic.runtime import edge_runtime
+        from ciris_engine.logic.runtime.ciris_runtime import CIRISRuntime
+
+        seen: list = []
+        monkeypatch.setattr(edge_runtime, "initialize_edge_runtime", lambda _dir: seen.append(is_mock_llm_active()))
+        fake = SimpleNamespace(modules_to_load=["mock_llm"], _ensure_config=_essential_config)
+        await CIRISRuntime._init_edge_runtime(fake)  # type: ignore[arg-type]
+        assert seen == [True]
+
+
+def _essential_config():  # type: ignore[no-untyped-def]
+    from ciris_engine.schemas.config.essential import EssentialConfig
+
+    return EssentialConfig()

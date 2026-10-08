@@ -1,11 +1,11 @@
-"""Under the mock LLM the edge carries no transport and starts no delivery (CIRISAgent#1244).
+"""Under the mock LLM the edge keeps its transport but starts no delivery (CIRISAgent#1244).
 
-The transport auto-seeds the PRODUCTION canonical dial from persist's baked
-hint, and the delivery controller is what ships sealed traces to it. A mock-LLM
-boot with ``CIRIS_FEDERATION_DELIVERY=true`` (the default) and consent on must
-therefore come up with ``enable_transport=False`` and never call
-``start_federation_delivery``. Otherwise a replication grant left by an earlier
-real-LLM run on the same DB would ship this run's mock traces.
+The transport stays ON: identity and session verification ride the edge, and
+without it ``/v1/agent/status`` answers 503 "Identity verification unavailable"
+(that took Staged QA down on the first cut of this fix). What must not run is
+the delivery controller that replicates sealed traces, nor the node-fold
+reprime. The traces themselves never reach the federation store under the mock
+(see tests/ciris_adapters/ciris_accord_metrics/test_mock_traces_never_stored.py).
 
 Drives ``initialize_edge_runtime`` against a real persist Engine. Only the Edge
 transport and the delivery controller are stubbed, so nothing touches a network.
@@ -80,7 +80,7 @@ def edge_boot(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Dict[str, List
     return seen
 
 
-def test_mock_llm_boot_has_no_transport_and_no_delivery(
+def test_mock_llm_boot_keeps_transport_but_starts_no_delivery(
     mock_llm_mode: None, engine: Any, edge_boot: Dict[str, List[Any]], tmp_path: Path
 ) -> None:
     from ciris_engine.logic.runtime.edge_runtime import initialize_edge_runtime
@@ -88,8 +88,13 @@ def test_mock_llm_boot_has_no_transport_and_no_delivery(
     initialize_edge_runtime(tmp_path / "identity")
 
     assert edge_boot["init_kwargs"], "edge init never ran: test premise broken"
-    assert edge_boot["init_kwargs"][0]["enable_transport"] is False
+    assert edge_boot["init_kwargs"][0]["enable_transport"] is True, "identity verification needs the transport"
     assert edge_boot["delivery_starts"] == []
+    # The identity surface the API's 503 checks (auth._identity_unavailable_detail).
+    from ciris_engine.logic.runtime import edge_runtime
+
+    assert edge_runtime.is_available()
+    assert edge_runtime.get_init_error() is None
 
 
 def test_real_llm_boot_keeps_transport_and_delivery(

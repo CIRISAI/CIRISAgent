@@ -268,6 +268,43 @@ class SimpleCapabilities:
     supported_domains: List[str] = field(default_factory=list)  # DomainCategory values
 
 
+class MockLocalOnlyEngine:
+    """The persist Engine as the LensClient sees it under the mock LLM (CIRISAgent#1244).
+
+    Mock-LLM traces must NEVER become eligible for off-node delivery, not even
+    later. Disabling the transport while the mock runs is not enough: a trace
+    sealed into the local store sits in the backlog that the substrate's
+    ``promote_consented_backlog`` lifts as soon as a ``trace:`` replication
+    grant covers it, for example after a restart on a real LLM. Promotion is
+    substrate-owned (Rust), with no agent-side filter, so the only agent-side
+    guarantee is that mock traces never enter that store at all.
+
+    lens-core's cohabitation path drives sign and persist through the host
+    engine's Python methods. This wrapper delegates everything (key ids,
+    hybrid signing) to the real engine EXCEPT ``receive_and_persist``, which
+    becomes a no-op. Traces are still assembled, sealed, signed and written to
+    the local tee (``local_copy_dir``), which is the allowed sink, while zero
+    trace rows land in the federation store. The ask for persist to also refuse
+    to promote or admit ``deployment_type="mock"`` rows is CIRISPersist#1040.
+    """
+
+    def __init__(self, inner: Any) -> None:
+        self._inner = inner
+        self._logged = False
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._inner, name)
+
+    def receive_and_persist(self, batch_bytes: bytes, pre_verified: bool = False) -> Dict[str, int]:
+        if not self._logged:
+            self._logged = True
+            logger.info(
+                "[MOCK-GUARD] mock LLM active: sealed traces go to the local tee only and are NOT "
+                "persisted to the federation store, so they can never be promoted off-node (CIRISAgent#1244)"
+            )
+        return {"envelopes_processed": 0, "trace_events_inserted": 0, "signatures_verified": 0}
+
+
 class AccordMetricsService:
     """Accord trace capture, orchestrated by the LensCore substrate.
 
@@ -544,6 +581,9 @@ class AccordMetricsService:
 
         # The substrate client (constructed in start(); REQUIRED)
         self._lens: Optional[Any] = None
+        # Whether _build_lens_client built _lens over MockLocalOnlyEngine (mock
+        # LLM, #1244). None until the builder runs.
+        self._lens_local_only: Optional[bool] = None
 
         # Per-level egress schema (egress_schema.py): every built component is
         # filtered against its level's contract before it reaches the signer,
@@ -890,11 +930,18 @@ class AccordMetricsService:
         # Run-kind marker (CIRISAgent#1244/#1245): mock/qa/battery when set,
         # else the operator's value (None = undeclared, unchanged from before).
         correlation_deployment_type: Optional[str] = self._run_kind_marker() or self._deployment_type or None
+        # Mock LLM: seal + sign + tee, but never persist into the replicable
+        # federation store (see MockLocalOnlyEngine). Recorded so a mock that
+        # latches after this build forces a rebuild (_ensure_mock_local_only).
+        from ciris_engine.logic.utils.mock_llm_guard import is_mock_llm_active
+
+        self._lens_local_only = is_mock_llm_active()
+        lens_engine: Any = MockLocalOnlyEngine(engine) if self._lens_local_only else engine
         try:
             return LensClient(
                 self._consent_timestamp if self._consent_given else None,
                 self._trace_level.value,
-                engine=engine,
+                engine=lens_engine,
                 deployment_profile=self._build_deployment_profile(),
                 consent_attesting_key_id=consent_key_id,
                 local_copy_dir=str(self._local_copy_dir) if self._local_copy_dir else None,
@@ -1266,6 +1313,8 @@ class AccordMetricsService:
         # seal here so this event captures into the rebuilt, consent-on client.
         self._maybe_self_heal_consent()
 
+        self._ensure_mock_local_only()
+
         if self._lens is None:
             # start() raises when the substrate is unavailable, so this only
             # happens if events arrive before start() — drop with a debug.
@@ -1534,6 +1583,20 @@ class AccordMetricsService:
                 f"⚠️ [{self._adapter_instance_id}] CEG seal tee FAILED trace_id={trace_id}: "
                 f"{type(exc).__name__}: {exc}"
             )
+
+    def _ensure_mock_local_only(self) -> None:
+        """Rebuild the LensClient over MockLocalOnlyEngine if the mock latched late.
+
+        One-way, like the latch: once the mock LLM is active in this process, no
+        later seal may reach the federation store (CIRISAgent#1244).
+        """
+        if self._lens is None or self._lens_local_only is not False:
+            return
+        from ciris_engine.logic.utils.mock_llm_guard import is_mock_llm_active
+
+        if is_mock_llm_active():
+            logger.info("[MOCK-GUARD] mock LLM latched after LensClient build; rebuilding as local-only")
+            self._lens = self._build_lens_client()
 
     def _enforce_egress_schema(self, event_type: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """Filter a built component to its level's egress schema, before signing.
@@ -2204,6 +2267,7 @@ class AccordMetricsService:
         timestamp = datetime.now(timezone.utc).isoformat()
         deferral_id = f"wbd-{request.thought_id}-{timestamp}"
 
+        self._ensure_mock_local_only()
         if self._lens is None:
             logger.debug("LensClient not ready; WBD deferral %s not captured", deferral_id)
             return deferral_id

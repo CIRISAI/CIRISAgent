@@ -254,3 +254,21 @@ async def test_the_service_filters_before_the_substrate_sees_it(caplog: pytest.L
     assert "María" not in repr(lens.components)
     assert any("verb_specific_data.defer_reason" in r.getMessage() for r in caplog.records)
     assert service.get_metrics()["schema_violations_unexpected_field"] >= 1
+
+
+def test_full_json_object_keys_are_capped_and_counted(caplog: pytest.LogCaptureFixture) -> None:
+    """Codex P2: a producer-controlled key cannot bypass the bounded-egress contract."""
+    long_key = "k" * 10_000
+    result = enforce_egress_schema(
+        "ASPDMA_RESULT", TraceLevel.FULL_TRACES, {"action_parameters": {long_key: "v", "ok": 1}}
+    )
+    params = result.data["action_parameters"]
+    assert isinstance(params, dict)
+    assert all(len(k) <= egress_schema.JSON_MAX_KEY_CHARS for k in params)
+    assert params["ok"] == 1
+    capped = [v for v in result.violations if v.kind == ViolationKind.OVER_CAP]
+    assert len(capped) == 1 and capped[0].path == "action_parameters.<key>"
+    reporter = ViolationReporter()
+    with caplog.at_level(logging.WARNING, logger=egress_schema.__name__):
+        reporter.report(result.violations)
+    assert long_key[:200] not in caplog.text

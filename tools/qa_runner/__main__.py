@@ -423,17 +423,12 @@ def main():
     """Main entry point."""
     args = parse_args()
 
-    # CIRISAgent#1244: refuse a remote trace sink under the mock LLM BEFORE
-    # anything is wiped or started. Mock is the default unless --live or
-    # --no-mock-llm, so `--live-lens` alone is a mock-LLM run too.
+    # CIRISAgent#1244: an explicit --mock-llm can never be combined with a
+    # real-LLM flag. The remote-sink check runs after module metadata has
+    # resolved live mode (a REQUIRES_LIVE_LLM module may auto-enable --live),
+    # and still before anything is wiped or started.
     if args.mock_llm and (args.live or args.no_mock_llm):
         print("[FAIL] --mock-llm conflicts with --live / --no-mock-llm")
-        sys.exit(2)
-    _sink_error = trace_sink_flag_error(
-        not args.no_mock_llm and not args.live, args.live_lens, args.federation_delivery
-    )
-    if _sink_error:
-        print(f"[FAIL] {_sink_error}")
         sys.exit(2)
 
     # Handle status dashboard commands (exit early)
@@ -462,21 +457,6 @@ def main():
             print("All modules have been run!")
         sys.exit(0)
 
-    # Handle --wipe-data: Clear data directory to reset state
-    if args.wipe_data:
-        import shutil
-
-        data_dir = Path("data")
-        if data_dir.exists():
-            print(f" Wiping data directory: {data_dir}")
-            try:
-                shutil.rmtree(data_dir)
-                print(" [OK] Data directory cleared")
-            except Exception as e:
-                print(f" [WARN] Failed to wipe data directory: {e}")
-        else:
-            print(f" [INFO] Data directory does not exist: {data_dir}")
-
     # Parse modules (default to "all" if none specified)
     module_names = args.modules if args.modules else ["all"]
     modules: List[QAModule] = []
@@ -504,6 +484,9 @@ def main():
         _md = get_metadata(_mod)
         if not _md.requires_live_llm:
             continue
+        if not args.live and args.mock_llm:
+            print(f"[FAIL] {_mod.value} module requires a live LLM; it cannot run with --mock-llm")
+            sys.exit(2)
         if not args.live:
             # Try auto-enable from module defaults.
             _defaults = _md.live_llm_defaults
@@ -531,6 +514,31 @@ def main():
                     f"--live-base-url ... --live-model ... explicitly."
                 )
                 sys.exit(1)
+
+    # CIRISAgent#1244: refuse a remote trace sink under the mock LLM. Mock is
+    # the default unless --live or --no-mock-llm, so `--live-lens` alone is a
+    # mock-LLM run too. Live mode is final here; nothing destructive has run.
+    _sink_error = trace_sink_flag_error(
+        not args.no_mock_llm and not args.live, args.live_lens, args.federation_delivery
+    )
+    if _sink_error:
+        print(f"[FAIL] {_sink_error}")
+        sys.exit(2)
+
+    # Handle --wipe-data: Clear data directory to reset state
+    if args.wipe_data:
+        import shutil
+
+        data_dir = Path("data")
+        if data_dir.exists():
+            print(f" Wiping data directory: {data_dir}")
+            try:
+                shutil.rmtree(data_dir)
+                print(" [OK] Data directory cleared")
+            except Exception as e:
+                print(f" [WARN] Failed to wipe data directory: {e}")
+        else:
+            print(f" [INFO] Data directory does not exist: {data_dir}")
 
     # HE-300 benchmark module-specific defaults
     is_he300 = QAModule.HE300_BENCHMARK in modules

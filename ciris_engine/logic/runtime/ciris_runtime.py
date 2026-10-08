@@ -766,6 +766,12 @@ class CIRISRuntime(ServicePropertyMixin):
         config = self._ensure_config()
         get_agent_mode_broker().set_mode_sync(config.agent_mode)
 
+        # CIRISAgent#1244: a mock LLM named only in the module list must be
+        # known before any federation path starts (modules may be mutated
+        # after construction, so re-check immediately before edge init).
+        from ciris_engine.logic.utils.mock_llm_guard import latch_if_mock_llm_module
+
+        latch_if_mock_llm_module(getattr(self, "modules_to_load", None) or [], "pre-edge")
         identity_dir = get_data_dir() / "edge"
         edge_runtime.initialize_edge_runtime(identity_dir)
 

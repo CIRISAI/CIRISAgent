@@ -212,10 +212,13 @@ substrate's scrubber and by the run-kind marker below, not by this filter.
 ### Mock LLM and Synthetic Runs
 
 - **Mock LLM** (`CIRIS_MOCK_LLM`, `--mock-llm`, or the mock_llm module or
-  service loaded): traces never leave the node. There is no ship grant, no
-  federation transport and no delivery controller. Only the local tee
-  (`CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR`) and loopback endpoints may receive
-  them. Consent and config can't lift this (CIRISAgent#1244).
+  service loaded): traces never leave the node. They are sealed, signed and
+  written to the local tee (`CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR`) but never
+  persisted into the federation store, so no later replication grant can
+  promote them. No ship grant is authored and the delivery controller is not
+  started. The edge transport stays up, because identity and session
+  verification need it. Only the local tee and loopback endpoints may receive
+  mock traces. Consent and config can't lift this (CIRISAgent#1244).
 - **Run kind**: `deployment_type` carries `mock` (always, under the mock LLM),
   or `qa` / `battery` when the harness sets `CIRIS_TRACE_RUN_KIND`, even
   with a real model (CIRISAgent#1245). Production runs keep the operator's

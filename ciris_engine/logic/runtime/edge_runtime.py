@@ -231,17 +231,20 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
         "no",
         "off",
     )
-    # MOCK LLM (CIRISAgent#1244): no transport, no delivery controller. The
-    # transport auto-seeds the PRODUCTION canonical dial from persist's baked
-    # hint whatever CIRIS_EDGE_BOOTSTRAP_PEERS says, so a loopback-only peer
-    # list cannot keep mock traces local. Turning the transport off also closes
-    # the case where a replication grant from an earlier real-LLM run on the
-    # same DB would otherwise ship this run's mock traces. Not overridable.
+    # MOCK LLM (CIRISAgent#1244): the TRANSPORT stays on. Identity, keys and
+    # session verification ride the edge (resolve_bearer answers 503 "Identity
+    # verification unavailable" without it, which took Staged QA down), and
+    # dialing the canonical carries no trace content by itself. What keeps mock
+    # traces on-node is upstream of the wire: they are never sealed into the
+    # federation store (MockLocalOnlyEngine in the accord_metrics service), no
+    # ship grant is authored (trace_sharing), and the delivery controller that
+    # replicates sealed traces is not started below. None of it is overridable.
+    _delivery_controller_on = _delivery_on
     if _delivery_on:
         from ciris_engine.logic.utils.mock_llm_guard import remote_trace_export_permitted
 
-        if not remote_trace_export_permitted("federation delivery (edge transport)"):
-            _delivery_on = False
+        if not remote_trace_export_permitted("federation delivery controller"):
+            _delivery_controller_on = False
 
     # Rust-side tracing (CIRISAgent#919/#920, ciris-server >=0.5.114): without
     # this a Python-embedded agent has ZERO rust logs — every delivery/rooting
@@ -587,7 +590,7 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
     # the agent's sealed CEG traces to the rooted canonical peer. Without it the
     # trace chain seals locally but nothing reaches the mesh. Default ON (consent
     # still gates what ships at the seal); opt out with CIRIS_FEDERATION_DELIVERY=false.
-    if _delivery_on:
+    if _delivery_controller_on:
         try:
             import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
 

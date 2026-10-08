@@ -10,10 +10,12 @@ from pathlib import Path
 from typing import Awaitable, Callable, Deque, Dict, List, Optional, Tuple
 
 import psutil
+from pydantic import ValidationError
 
 from ciris_engine.constants import SERVER_MINIMUM_DISK_BYTES
 from ciris_engine.logic.services.base_scheduled_service import BaseScheduledService
 from ciris_engine.logic.utils.memory_release import release_memory as _release_process_memory
+from ciris_engine.protocols.services.graph.config import GraphConfigServiceProtocol
 from ciris_engine.protocols.services.infrastructure.credit_gate import CreditGateProtocol
 from ciris_engine.protocols.services.infrastructure.resource_monitor import ResourceMonitorServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
@@ -26,13 +28,16 @@ from ciris_engine.schemas.services.credit_gate import (
     CreditSpendRequest,
     CreditSpendResult,
 )
+from ciris_engine.schemas.services.nodes import ConfigValue
 from ciris_engine.schemas.services.resources_core import (
+    TOKEN_BUDGET_CONFIG_KEYS,
     MemoryReleaseResult,
     PressureLevel,
     ResourceAction,
     ResourceBudget,
     ResourceLimit,
     ResourceSnapshot,
+    TokenBudgetConfig,
 )
 
 from .pressure import LATCHED_ACTIONS, LEVEL_ORDER, ResourcePressureGate, actions_for_level, level_rank, lifted_signal
@@ -228,8 +233,12 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
         # fills, CPU is reported but cannot change level.
         if self.cpu_window_full:
             await self._check_resource("cpu_percent", self.snapshot.cpu_average_1m)
-        await self._check_resource("tokens_hour", self.snapshot.tokens_used_hour)
-        await self._check_resource("tokens_day", self.snapshot.tokens_used_day)
+        # Token windows have no budget unless one is configured (config graph,
+        # TOKEN_BUDGET_CONFIG_KEYS); an unbudgeted window is not evaluated at all.
+        if self.budget.tokens_hour is not None:
+            await self._check_resource("tokens_hour", self.snapshot.tokens_used_hour)
+        if self.budget.tokens_day is not None:
+            await self._check_resource("tokens_day", self.snapshot.tokens_used_day)
         await self._check_resource("thoughts_active", self.snapshot.thoughts_active)
         if self.snapshot.critical:
             self.snapshot.healthy = False
@@ -240,7 +249,9 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
         return len(self._cpu_history) >= (self._cpu_history.maxlen or 0)
 
     async def _check_resource(self, name: str, current_value: int) -> None:
-        limit_config: ResourceLimit = getattr(self.budget, name)
+        limit_config: Optional[ResourceLimit] = getattr(self.budget, name)
+        if limit_config is None:  # unbudgeted
+            return
         # A resource capped at a non-acting level (LOG/WARN) is advisory: past
         # its critical threshold it is reported as a warning, never as
         # critical, so it cannot mark the monitor unhealthy or put a critical
@@ -348,6 +359,86 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
         )
         if ResourceAction.RECLAIM in actions:
             await self.signal_bus.emit(ResourceAction.RECLAIM.value, name)
+
+    # ------------------------------------------------------------------ #
+    # Token budgets from the config graph
+    # ------------------------------------------------------------------ #
+
+    async def attach_config_service(self, config_service: GraphConfigServiceProtocol) -> None:
+        """Read the token budgets from the config graph and follow changes live.
+
+        There is no token budget by default (user ruling). An operator sets one
+        with `TOKEN_BUDGET_CONFIG_KEYS` (e.g. ``PUT /v1/config/resources.token_budget.day``);
+        GraphConfigService notifies its listeners on every set_config/delete,
+        so a change applies immediately, the same pattern AdapterManager uses
+        for ``adapter.*``. Never raises: a bad read leaves the window unbudgeted.
+        """
+        for key in TOKEN_BUDGET_CONFIG_KEYS:
+            try:
+                node = await config_service.get_config(key)
+            except Exception as exc:
+                logger.warning("Token budget %s: could not read the config graph (%s); unbudgeted", key, exc)
+                continue
+            if node is not None:
+                await self._apply_token_budget(key, node.value.value)
+        config_service.register_config_listener("resources.token_budget.*", self._on_token_budget_config)
+
+    async def _on_token_budget_config(
+        self, key: str, old_value: Optional[ConfigValue], new_value: Optional[ConfigValue]
+    ) -> None:
+        if key not in TOKEN_BUDGET_CONFIG_KEYS:
+            logger.warning(
+                "Ignoring unknown token budget config key %s (known: %s)", key, ", ".join(TOKEN_BUDGET_CONFIG_KEYS)
+            )
+            return
+        await self._apply_token_budget(key, new_value.value if new_value is not None else None)
+
+    async def _apply_token_budget(self, key: str, raw: object) -> None:
+        """Validate one config value and put it in force. None/empty removes the budget.
+
+        An invalid value is logged and ignored: whatever was in force (by
+        default, no budget) stays in force, and the monitor never crashes on it.
+        """
+        resource = TOKEN_BUDGET_CONFIG_KEYS[key]
+        if raw is None or raw == {}:
+            await self.set_token_budget(resource, None)
+            return
+        try:
+            config = TokenBudgetConfig.model_validate(raw)
+        except ValidationError as exc:
+            logger.warning(
+                "Invalid token budget at config key %s ignored (%s keeps its current budget: %s): %s",
+                key,
+                resource,
+                "unbudgeted" if getattr(self.budget, resource) is None else "configured",
+                "; ".join(err["msg"] for err in exc.errors()),
+            )
+            return
+        await self.set_token_budget(resource, config.to_limit())
+
+    async def set_token_budget(self, resource: str, limit: Optional[ResourceLimit]) -> None:
+        """Put a token budget in force for ``resource`` (None = unbudgeted).
+
+        Any level the old budget held is released first, so actions it put in
+        force lift; the next tick evaluates the window against the new budget.
+        """
+        previous = self._levels.get(resource, PressureLevel.NORMAL)
+        old: Optional[ResourceLimit] = getattr(self.budget, resource)
+        if old is not None and previous != PressureLevel.NORMAL:
+            value = self.snapshot.tokens_used_hour if resource == "tokens_hour" else self.snapshot.tokens_used_day
+            await self._change_level(resource, old, previous, PressureLevel.NORMAL, value)
+        setattr(self.budget, resource, limit)
+        if limit is None:
+            logger.info("Token budget for %s: none (unbudgeted; usage is still recorded)", resource)
+        else:
+            logger.info(
+                "Token budget for %s: elevated %s / high %s / critical %s, cap %s",
+                resource,
+                limit.warning,
+                limit.critical,
+                limit.limit,
+                limit.action.value,
+            )
 
     def get_pressure_levels(self) -> Dict[str, PressureLevel]:
         """Resources currently above NORMAL and their level."""
@@ -486,6 +577,8 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
         if resource == "memory_mb":
             return self.snapshot.memory_mb + amount < self.budget.memory_mb.warning
         if resource == "tokens_hour":
+            if self.budget.tokens_hour is None:  # unbudgeted
+                return True
             return self.snapshot.tokens_used_hour + amount < self.budget.tokens_hour.warning
         if resource == "thoughts_active":
             return self.snapshot.thoughts_active + amount < self.budget.thoughts_active.warning
@@ -572,6 +665,8 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
             metrics[f"resource_signal_{signal}_total"] = float(count)
         metrics.update(self.pressure.collect_metrics())
         for resource in ("memory_mb", "cpu_percent", "tokens_hour", "tokens_day", "thoughts_active"):
+            if getattr(self.budget, resource) is None:  # unbudgeted: no level exists
+                continue
             level = self._levels.get(resource, PressureLevel.NORMAL)
             metrics[f"resource_pressure_level_{resource}"] = float(level_rank(level))
 

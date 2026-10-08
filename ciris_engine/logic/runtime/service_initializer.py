@@ -402,6 +402,11 @@ This directory contains critical cryptographic keys for the CIRIS system.
         self._services_started_count += 1
         _log_service_started(7, "ConfigService")
 
+        # Token budgets live in the config graph (none by default); the monitor
+        # reads them now and follows resources.token_budget.* changes live.
+        if self.resource_monitor_service is not None:
+            await self.resource_monitor_service.attach_config_service(self.config_service)
+
         # Register config service immediately so it's available for persistence operations
         registry = get_global_registry()
         # Store essential config on the service so db_paths can find it

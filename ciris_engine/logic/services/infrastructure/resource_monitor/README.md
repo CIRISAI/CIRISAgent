@@ -48,8 +48,8 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
 |---------------|----------------|-----------------|------------------|
 | **Memory (MB)** | laptop/server 4096 limit / 3072 warn / 3840 critical; phone 1024 / 768 / 960 | Real-time | Core 4GB constraint (1 GB on phones) |
 | **CPU (%)** | 80 limit / 60 warn / 75 critical | 1-minute average | Performance optimization |
-| **Tokens/Hour** | 10k limit / 8k warn / 9.5k critical | Rolling hour | Rate limiting |
-| **Tokens/Day** | 100k limit / 80k warn / 95k critical | Rolling day | Cost control |
+| **Tokens/Hour** | none by default; config key `resources.token_budget.hour` | Rolling hour | Optional operator budget |
+| **Tokens/Day** | none by default; config key `resources.token_budget.day` | Rolling day | Optional operator budget |
 | **Active Thoughts** | 50 limit / 40 warn / 48 critical | Real-time | Processing queue |
 | **Disk Space** | 100 / 80 / 95 (unit undefined) | **Not checked** | Reserved until its unit is defined |
 
@@ -177,8 +177,8 @@ class ResourceSignalBus:
 memory_mb = ResourceLimit(limit=4096, warning=3072, critical=3840, action=SHED, elevated_action=RECLAIM)  # laptop/server
 memory_mb = ResourceLimit(limit=1024, warning=768, critical=960, action=SHED, elevated_action=RECLAIM)    # phone
 cpu_percent = ResourceLimit(limit=80, warning=60, critical=75, action=THROTTLE)
-tokens_hour = ResourceLimit(limit=10000, warning=8000, critical=9500, action=WARN)  # non-acting until real budgets are decided
-tokens_day = ResourceLimit(limit=100000, warning=80000, critical=95000, action=WARN)  # non-acting until real budgets are decided
+tokens_hour = None  # no token budget by default; set config key resources.token_budget.hour
+tokens_day = None   # no token budget by default; set config key resources.token_budget.day
 thoughts_active = ResourceLimit(limit=50, warning=40, critical=48, action=SHED)
 disk_mb = ResourceLimit(limit=100, warning=80, critical=95, action=WARN)  # not checked
 ```

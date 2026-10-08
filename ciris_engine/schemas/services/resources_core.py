@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class ResourceAction(str, Enum):
@@ -100,18 +100,52 @@ def _cpu_percent_limit() -> ResourceLimit:
     return ResourceLimit(limit=80, warning=60, critical=75, action=ResourceAction.THROTTLE)
 
 
-# Token budgets: NON-ACTING by default (cap WARN). Real budgets are a product /
-# billing decision that has not been made; these legacy numbers are far below
-# real usage (one H3ERE thought is ~9 LLM calls of ~20k tokens each), and they
-# only ever "worked" because nothing recorded tokens. Tokens are recorded now,
-# so the levels are computed and logged; an operator who configures a cap of
-# THROTTLE or SHED gets the acting ladder.
-def _tokens_hour_limit() -> ResourceLimit:
-    return ResourceLimit(limit=10000, warning=8000, critical=9500, action=ResourceAction.WARN)
+#: Config-graph keys an operator sets to give a token window a budget.
+TOKEN_BUDGET_CONFIG_KEYS = {
+    "resources.token_budget.hour": "tokens_hour",
+    "resources.token_budget.day": "tokens_day",
+}
 
 
-def _tokens_day_limit() -> ResourceLimit:
-    return ResourceLimit(limit=100000, warning=80000, critical=95000, action=ResourceAction.WARN)
+class TokenBudgetConfig(BaseModel):
+    """An operator-configured token budget for one window (config graph value).
+
+    There is NO token budget by default (user ruling): tokens are recorded and
+    reported, but no threshold exists until one of `TOKEN_BUDGET_CONFIG_KEYS`
+    is set to a value of this shape.
+    """
+
+    warning: int = Field(gt=0, description="ELEVATED at or above this many tokens in the window")
+    critical: int = Field(gt=0, description="HIGH at or above this many tokens in the window")
+    limit: int = Field(gt=0, description="CRITICAL at or above this many tokens in the window")
+    action: ResourceAction = Field(
+        default=ResourceAction.THROTTLE, description="Strongest action: warn (log only), throttle or shed"
+    )
+    cooldown_seconds: int = Field(default=60, ge=0, description="Cooldown between repeat log lines")
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("action")
+    @classmethod
+    def _token_budget_action(cls, value: ResourceAction) -> ResourceAction:
+        if value not in (ResourceAction.WARN, ResourceAction.THROTTLE, ResourceAction.SHED):
+            raise ValueError("a token budget's action must be warn, throttle or shed")
+        return value
+
+    @model_validator(mode="after")
+    def _ordered(self) -> "TokenBudgetConfig":
+        if not self.warning <= self.critical <= self.limit:
+            raise ValueError("a token budget needs warning <= critical <= limit")
+        return self
+
+    def to_limit(self) -> ResourceLimit:
+        return ResourceLimit(
+            limit=self.limit,
+            warning=self.warning,
+            critical=self.critical,
+            action=self.action,
+            cooldown_seconds=self.cooldown_seconds,
+        )
 
 
 def _disk_mb_limit() -> ResourceLimit:
@@ -134,8 +168,16 @@ class ResourceBudget(BaseModel):
 
     memory_mb: ResourceLimit = Field(default_factory=_memory_mb_limit, description="Memory usage limits in MB")
     cpu_percent: ResourceLimit = Field(default_factory=_cpu_percent_limit, description="CPU usage limits in percent")
-    tokens_hour: ResourceLimit = Field(default_factory=_tokens_hour_limit, description="Token usage per hour")
-    tokens_day: ResourceLimit = Field(default_factory=_tokens_day_limit, description="Token usage per day")
+    tokens_hour: Optional[ResourceLimit] = Field(
+        default=None,
+        description="Token budget per rolling hour; null = unbudgeted (the default). "
+        "Set via config key resources.token_budget.hour",
+    )
+    tokens_day: Optional[ResourceLimit] = Field(
+        default=None,
+        description="Token budget per rolling day; null = unbudgeted (the default). "
+        "Set via config key resources.token_budget.day",
+    )
     disk_mb: ResourceLimit = Field(
         default_factory=_disk_mb_limit,
         description="Disk limit -- reserved, not checked: its unit is undefined (see _disk_mb_limit)",
@@ -306,6 +348,8 @@ __all__ = [
     "ResourceAction",
     "PressureLevel",
     "DeviceClass",
+    "TokenBudgetConfig",
+    "TOKEN_BUDGET_CONFIG_KEYS",
     "ResourceLimit",
     "ResourceBudget",
     "ResourceSnapshot",

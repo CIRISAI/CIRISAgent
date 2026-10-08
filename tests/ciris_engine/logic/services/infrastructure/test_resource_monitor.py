@@ -181,6 +181,9 @@ async def test_resource_monitor_check_available(resource_monitor):
 
     # Check with amounts that would exceed warning threshold
     assert await resource_monitor.check_available("memory_mb", 200) is True  # 40 + 200 = 240 < 3072 warning
+    # No token budget by default: an unbudgeted window always has room
+    assert await resource_monitor.check_available("tokens_hour", 10**9) is True
+    resource_monitor.budget.tokens_hour = ResourceLimit(limit=10000, warning=8000, critical=9500)
     assert await resource_monitor.check_available("tokens_hour", 8000) is False  # 1000 + 8000 = 9000 > 8000 warning
     assert await resource_monitor.check_available("thoughts_active", 35) is False  # 10 + 35 = 45 > 40 warning
 
@@ -199,7 +202,9 @@ async def test_resource_monitor_signal_bus(resource_monitor, signal_bus, monkeyp
 
     resource_monitor.budget.cpu_percent.action = ResourceAction.THROTTLE
     resource_monitor.budget.thoughts_active.action = ResourceAction.SHED
-    resource_monitor.budget.tokens_hour.action = ResourceAction.WARN
+    resource_monitor.budget.tokens_hour = ResourceLimit(
+        limit=10000, warning=8000, critical=9500, action=ResourceAction.WARN
+    )  # an operator budget capped at WARN
 
     resource_monitor.snapshot.cpu_average_1m = 81  # CRITICAL, but capped at THROTTLE
     resource_monitor.snapshot.thoughts_active = 50  # CRITICAL, cap SHED
@@ -1633,8 +1638,10 @@ async def test_warn_cap_logs_but_does_not_reclaim(resource_monitor, monkeypatch)
     calls: list = []
     monkeypatch.setattr(_rm_service, "_release_process_memory", _fake_release(calls))
 
-    resource_monitor.budget.tokens_hour.action = ResourceAction.WARN
-    resource_monitor.snapshot.tokens_used_hour = resource_monitor.budget.tokens_hour.limit + 1
+    resource_monitor.budget.tokens_hour = ResourceLimit(
+        limit=10000, warning=8000, critical=9500, action=ResourceAction.WARN
+    )  # an operator budget capped at WARN
+    resource_monitor.snapshot.tokens_used_hour = 10001
     await resource_monitor._check_limits()
 
     assert calls == []

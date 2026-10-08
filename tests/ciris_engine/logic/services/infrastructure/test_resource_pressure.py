@@ -135,9 +135,9 @@ def test_no_default_uses_drain_and_caps_match_the_ruling():
     caps = {name: limit.action for name, limit in _limits(budget).items()}
     assert ResourceAction.DRAIN not in caps.values()
     assert caps["cpu_percent"] == ResourceAction.THROTTLE
-    # Token budgets are non-acting until real budgets are decided (see resources_core)
-    assert caps["tokens_hour"] == ResourceAction.WARN
-    assert caps["tokens_day"] == ResourceAction.WARN
+    # No token budget by default (user ruling): the windows are not budgeted at all
+    assert budget.tokens_hour is None and budget.tokens_day is None
+    assert "tokens_hour" not in caps and "tokens_day" not in caps
     assert caps["memory_mb"] == ResourceAction.SHED
     assert caps["thoughts_active"] == ResourceAction.SHED
     assert caps["disk_mb"] == ResourceAction.WARN
@@ -670,35 +670,41 @@ async def test_round_delay_uses_the_state_after_this_rounds_transitions(monitor)
 
 
 @pytest.mark.asyncio
-async def test_default_token_budgets_do_not_act(monitor):
-    """One H3ERE thought is ~9 LLM calls of ~20k tokens: real usage blows
-    straight through the legacy 10k/100k numbers. By default that must only
-    be reported, never throttle, shed, mark the monitor unhealthy or put a
-    critical alert in the prompt."""
+async def test_default_token_windows_are_unbudgeted(monitor, caplog, api_app):
+    """No token budget by default: usage is recorded and reported, nothing is
+    evaluated -- no level, no log line, no warning, no alert, no limit published."""
+    from ciris_engine.logic.adapters.api.routes.system import services as system_services
     from ciris_engine.logic.context.system_snapshot_helpers import _collect_resource_alerts
 
     monitor.snapshot.tokens_used_hour = 30_527
-    monitor.snapshot.tokens_used_day = 183_150  # the values from the failed run
-    await monitor._check_limits()
+    monitor.snapshot.tokens_used_day = 183_150  # the values from staged QA run 37723851128
+    with caplog.at_level("DEBUG", logger="ciris_engine.logic.services.infrastructure.resource_monitor"):
+        await monitor._check_limits()
 
-    assert monitor.get_pressure_levels() == {
-        "tokens_hour": PressureLevel.CRITICAL,
-        "tokens_day": PressureLevel.CRITICAL,
-    }
-    gate = _gate(monitor)
-    assert not gate.is_active(ResourceAction.THROTTLE)
-    assert not gate.is_active(ResourceAction.SHED)
-    assert monitor.snapshot.critical == []
+    assert monitor.get_pressure_levels() == {}
+    assert not _gate(monitor).is_active(ResourceAction.THROTTLE)
+    assert not _gate(monitor).is_active(ResourceAction.SHED)
+    assert monitor.snapshot.warnings == [] and monitor.snapshot.critical == []
     assert monitor.snapshot.healthy is True
-    assert any(w.startswith("tokens_day") for w in monitor.snapshot.warnings)
     assert _collect_resource_alerts(monitor) == []
+    assert not [r for r in caplog.records if "tokens_" in r.getMessage()]
+    metrics = monitor._collect_custom_metrics()
+    assert "resource_pressure_level_tokens_hour" not in metrics
+    assert metrics["tokens_used_hour"] == 30_527.0  # usage still reported
+
+    api_app.include_router(system_services.router)
+    api_app.state.resource_monitor = monitor
+    limits = TestClient(api_app).get("/resources").json()["data"]["limits"]
+    assert limits["tokens_hour"] is None and limits["tokens_day"] is None
 
 
 @pytest.mark.asyncio
 async def test_an_operator_token_budget_acts(monitor):
-    """The ladder is kept: configuring a cap makes the token budget act."""
-    monitor.budget.tokens_day.action = ResourceAction.SHED
-    monitor.snapshot.tokens_used_day = monitor.budget.tokens_day.limit
+    """The ladder is kept: a configured budget acts."""
+    await monitor.set_token_budget(
+        "tokens_day", ResourceLimit(limit=100, warning=80, critical=95, action=ResourceAction.SHED)
+    )
+    monitor.snapshot.tokens_used_day = 100
     await monitor._check_limits()
     assert _gate(monitor).resources(ResourceAction.SHED) == ["tokens_day"]
     assert monitor.snapshot.healthy is False
@@ -741,3 +747,131 @@ async def test_cpu_cannot_engage_before_a_full_minute(monkeypatch):
         assert _gate(m).is_active(ResourceAction.THROTTLE)
     finally:
         os.unlink(db_path)
+
+
+# --------------------------------------------------------------------------- #
+# Token budgets from the config graph (user ruling: none by default)
+# --------------------------------------------------------------------------- #
+
+import pytest_asyncio  # noqa: E402
+
+from ciris_engine.logic.persistence.db import initialize_database  # noqa: E402
+from ciris_engine.logic.services.graph.config_service import GraphConfigService  # noqa: E402
+from ciris_engine.logic.services.graph.memory_service import LocalGraphMemoryService  # noqa: E402
+
+DAY_KEY = "resources.token_budget.day"
+HOUR_KEY = "resources.token_budget.hour"
+
+
+@pytest_asyncio.fixture
+async def config_service():
+    """A real GraphConfigService on a temp graph (the agent's config bus)."""
+    from ciris_engine.logic.persistence.models import graph as _graph_mod
+    from ciris_engine.logic.secrets.service import SecretsService
+
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+        db_path = f.name
+    prior_engine, prior_dsn = _graph_mod._engine, _graph_mod._engine_dsn
+    initialize_database(db_path)
+    time_service = TimeService()
+    secrets = SecretsService(db_path=db_path.replace(".db", "_secrets.db"), time_service=time_service)
+    await secrets.start()
+    memory = LocalGraphMemoryService(db_path=db_path, secrets_service=secrets, time_service=time_service)
+    await memory.start()
+    service = GraphConfigService(graph_memory_service=memory, time_service=time_service)
+    await service.start()
+    yield service
+    _graph_mod._engine, _graph_mod._engine_dsn = prior_engine, prior_dsn
+    os.unlink(db_path)
+
+
+@pytest.mark.asyncio
+async def test_budget_is_read_from_the_config_graph_at_startup(monitor, config_service):
+    await config_service.set_config(
+        DAY_KEY, {"warning": 800, "critical": 900, "limit": 1000, "action": "shed"}, updated_by="admin"
+    )
+    await monitor.attach_config_service(config_service)
+
+    assert monitor.budget.tokens_day is not None
+    assert (monitor.budget.tokens_day.warning, monitor.budget.tokens_day.limit) == (800, 1000)
+    assert monitor.budget.tokens_hour is None  # only the configured window is budgeted
+
+    monitor.snapshot.tokens_used_day = 1000
+    await monitor._check_limits()
+    assert _gate(monitor).resources(ResourceAction.SHED) == ["tokens_day"]
+
+
+@pytest.mark.asyncio
+async def test_budget_changes_apply_live_and_removal_reverts(monitor, config_service):
+    await monitor.attach_config_service(config_service)
+    assert monitor.budget.tokens_hour is None
+
+    # set: THROTTLE engages at the configured values
+    await config_service.set_config(HOUR_KEY, {"warning": 50, "critical": 60, "limit": 70}, updated_by="admin")
+    monitor.snapshot.tokens_used_hour = 60
+    await monitor._check_limits()
+    assert monitor.get_pressure_levels()["tokens_hour"] == PressureLevel.HIGH
+    assert _gate(monitor).resources(ResourceAction.THROTTLE) == ["tokens_hour"]
+
+    # change: raise the thresholds -> the old level is released, the window is re-evaluated
+    await config_service.set_config(HOUR_KEY, {"warning": 500, "critical": 600, "limit": 700}, updated_by="admin")
+    assert not _gate(monitor).is_active(ResourceAction.THROTTLE)
+    await monitor._check_limits()
+    assert "tokens_hour" not in monitor.get_pressure_levels()
+
+    # change the cap to SHED and cross the limit
+    await config_service.set_config(
+        HOUR_KEY, {"warning": 500, "critical": 600, "limit": 700, "action": "shed"}, updated_by="admin"
+    )
+    monitor.snapshot.tokens_used_hour = 700
+    await monitor._check_limits()
+    assert _gate(monitor).resources(ResourceAction.SHED) == ["tokens_hour"]
+
+    # remove (what DELETE /v1/config/{key} does): back to unbudgeted, SHED lifts
+    await config_service.set_config(HOUR_KEY, None, updated_by="admin")
+    assert monitor.budget.tokens_hour is None
+    assert not _gate(monitor).is_active(ResourceAction.SHED)
+    await monitor._check_limits()
+    assert monitor.get_pressure_levels() == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"warning": 900, "critical": 800, "limit": 1000},  # out of order
+        {"warning": 1, "critical": 2, "limit": 3, "action": "drain"},  # not a token action
+        {"warning": 1, "critical": 2, "limit": 3, "surprise": True},  # unknown field
+        {"warning": -1, "critical": 2, "limit": 3},  # not positive
+        "lots",  # not an object
+    ],
+)
+async def test_invalid_budget_is_logged_and_ignored(monitor, config_service, caplog, bad):
+    await monitor.attach_config_service(config_service)
+    with caplog.at_level("WARNING"):
+        await config_service.set_config(DAY_KEY, bad, updated_by="admin")
+    assert monitor.budget.tokens_day is None  # stays unbudgeted
+    assert any("Invalid token budget" in r.getMessage() for r in caplog.records)
+    monitor.snapshot.tokens_used_day = 10**9
+    await monitor._check_limits()  # never crashes
+    assert monitor.get_pressure_levels() == {}
+
+
+@pytest.mark.asyncio
+async def test_invalid_change_keeps_the_budget_in_force(monitor, config_service, caplog):
+    await monitor.attach_config_service(config_service)
+    await config_service.set_config(DAY_KEY, {"warning": 1, "critical": 2, "limit": 3}, updated_by="admin")
+    with caplog.at_level("WARNING"):
+        await config_service.set_config(DAY_KEY, {"warning": 3, "critical": 2, "limit": 1}, updated_by="admin")
+    assert monitor.budget.tokens_day is not None and monitor.budget.tokens_day.limit == 3
+    assert any("Invalid token budget" in r.getMessage() for r in caplog.records)
+
+
+def test_budget_keys_follow_the_config_naming_and_are_not_sensitive():
+    from ciris_engine.schemas.api.config_security import ConfigSecurity
+    from ciris_engine.schemas.services.resources_core import TOKEN_BUDGET_CONFIG_KEYS
+
+    assert set(TOKEN_BUDGET_CONFIG_KEYS) == {HOUR_KEY, DAY_KEY}
+    for key in TOKEN_BUDGET_CONFIG_KEYS:
+        assert not ConfigSecurity.is_sensitive(key)  # settable by an ADMIN through PUT /v1/config/{key}
+        assert not key.startswith("system.")

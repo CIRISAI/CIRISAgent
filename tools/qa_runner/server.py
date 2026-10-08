@@ -45,6 +45,7 @@ import requests
 from rich.console import Console
 
 from .config import QAConfig
+from .mock_chain_rpc import MockChainRPCServer, apply_wallet_rpc_stub_env
 
 logger = logging.getLogger(__name__)
 
@@ -59,8 +60,9 @@ logger = logging.getLogger(__name__)
 NODE_HTTP_PORT = 4243
 
 
-
-def apply_module_server_env(env: Dict[str, str], module_env: Mapping[str, str], operator_env: Mapping[str, str]) -> None:
+def apply_module_server_env(
+    env: Dict[str, str], module_env: Mapping[str, str], operator_env: Mapping[str, str]
+) -> None:
     """Merge a module's SERVER_ENV into the agent process env.
 
     Precedence, highest first:
@@ -80,6 +82,7 @@ def apply_module_server_env(env: Dict[str, str], module_env: Mapping[str, str], 
         if key in operator_env:
             continue
         env[key] = value
+
 
 class _MockLogshipperHTTPServer(HTTPServer):
     """HTTPServer subclass that holds per-instance state.
@@ -601,6 +604,9 @@ class APIServerManager:
         self.process: Optional[subprocess.Popen] = None
         self.pid: Optional[int] = None
         self.mock_logshipper: Optional[MockLogshipperServer] = None
+        # Local stub Base RPC for the wallet adapter, so QA never depends on
+        # the uptime of the public mainnet.base.org endpoint.
+        self.mock_chain_rpc: Optional[MockChainRPCServer] = None
         self._extracted_password: Optional[str] = None  # Dynamically extracted from server output
 
         # Per-backend output namespace. In parallel-backend mode both SQLITE
@@ -941,6 +947,20 @@ class APIServerManager:
                 self.console.print("[yellow][WARN] Could not start mock logshipper[/yellow]")
                 self.mock_logshipper = None
 
+        # Start the stub chain RPC. The wallet adapter auto-loads for
+        # base-mainnet and its context-enrichment tool (wallet:get_statement)
+        # queries balances during context gathering; without this the agent
+        # calls https://mainnet.base.org and a third-party 503 surfaces as a
+        # ChainClient ERROR that fails the incidents gate (v2.14.0 all_2).
+        # Reused across a restart (start() without stop()) so the URL is stable.
+        if self.mock_chain_rpc is None:
+            self.mock_chain_rpc = MockChainRPCServer()
+            if self.mock_chain_rpc.start():
+                self.console.print(f"[cyan]⛓  Stub chain RPC started at {self.mock_chain_rpc.endpoint_url}[/cyan]")
+            else:
+                self.console.print("[yellow][WARN] Could not start stub chain RPC[/yellow]")
+                self.mock_chain_rpc = None
+
         self.console.print("[cyan] Starting API server...[/cyan]")
 
         # Build command. When --from-staged is set, the server under test is
@@ -1019,27 +1039,27 @@ class APIServerManager:
             # Auto-detect provider from base_url if not explicitly set
             provider = self.config.live_provider
             if not provider and self.config.live_base_url:
-                    # Match on the parsed HOSTNAME, not a substring of the whole
-                    # URL. `"groq.com" in url` also matches
-                    # `https://evil.example/groq.com/v1` and
-                    # `https://groq.com.attacker.net` — the live API key would go
-                    # to the wrong host while the log says "groq"
-                    # (CodeQL py/incomplete-url-substring-sanitization). Host
-                    # suffix matching, with the leading dot, cannot be spoofed by
-                    # a path segment or a longer registrable domain.
-                    host = (urlparse(self.config.live_base_url).hostname or "").lower()
+                # Match on the parsed HOSTNAME, not a substring of the whole
+                # URL. `"groq.com" in url` also matches
+                # `https://evil.example/groq.com/v1` and
+                # `https://groq.com.attacker.net` — the live API key would go
+                # to the wrong host while the log says "groq"
+                # (CodeQL py/incomplete-url-substring-sanitization). Host
+                # suffix matching, with the leading dot, cannot be spoofed by
+                # a path segment or a longer registrable domain.
+                host = (urlparse(self.config.live_base_url).hostname or "").lower()
 
-                    def _is_host(domain: str) -> bool:
-                        return host == domain or host.endswith("." + domain)
+                def _is_host(domain: str) -> bool:
+                    return host == domain or host.endswith("." + domain)
 
-                    if _is_host("openrouter.ai"):
-                        provider = "openrouter"
-                    elif _is_host("groq.com"):
-                        provider = "groq"
-                    elif _is_host("together.ai") or _is_host("together.xyz"):
-                        provider = "together"
-                    else:
-                        provider = "openai_compatible"
+                if _is_host("openrouter.ai"):
+                    provider = "openrouter"
+                elif _is_host("groq.com"):
+                    provider = "groq"
+                elif _is_host("together.ai") or _is_host("together.xyz"):
+                    provider = "together"
+                else:
+                    provider = "openai_compatible"
             provider = provider or "openai"
             env["CIRIS_LLM_PROVIDER"] = provider
 
@@ -1065,6 +1085,11 @@ class APIServerManager:
         # Configure accord_metrics adapter to use mock logshipper
         if self.mock_logshipper:
             env["CIRIS_ACCORD_METRICS_ENDPOINT"] = self.mock_logshipper.endpoint_url
+
+        # Point the wallet's ChainClient at the stub RPC (operator export of
+        # WALLET_X402_RPC_URL still wins).
+        if apply_wallet_rpc_stub_env(env, self.mock_chain_rpc, os.environ):
+            self.console.print(f"[dim]WALLET_X402_RPC_URL={env['WALLET_X402_RPC_URL']} (stub chain RPC)[/dim]")
 
         # When running in --live mode, opt the agent into location sharing in
         # accord traces so lens dashboards can correlate by region. Defaults
@@ -1294,7 +1319,6 @@ class APIServerManager:
             # separates "cannot connect" from "connected and KEX failed", which
             # are different bugs with different owners.
             self._probe_canonical_reachability(env)
-
 
         if accord_metrics_enabled:
             # Load base accord_metrics adapter alongside the main adapter
@@ -1551,6 +1575,15 @@ class APIServerManager:
                     self.console.print(f"   • {trace['task_name']}: {trace['filepath']}")
             self.mock_logshipper = None
 
+        # Stop the stub chain RPC and report what the wallet asked it
+        if self.mock_chain_rpc:
+            calls = self.mock_chain_rpc.get_calls()
+            self.mock_chain_rpc.stop()
+            if calls:
+                methods = sorted({c.method for c in calls})
+                self.console.print(f"[green] Stub chain RPC served {len(calls)} calls: {', '.join(methods)}[/green]")
+            self.mock_chain_rpc = None
+
         # Skip port cleanup - it's causing hangs
         # JOIN THE LOG READER. It is a daemon thread teeing the server's stdout;
         # once the process is gone its readline returns EOF and it exits -- but
@@ -1565,7 +1598,6 @@ class APIServerManager:
             t.join(timeout=5)
             if t.is_alive():
                 self.console.print("[yellow]  log reader thread did not finish within 5s[/yellow]")
-
 
     def _is_server_running(self) -> bool:
         """Check if server is running on the configured port."""

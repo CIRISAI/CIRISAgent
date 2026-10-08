@@ -647,11 +647,15 @@ def _handle_final_exit() -> None:
 
     _node_only = node_only.node_only_config()
     if _node_only is not None:
-        logger.info("[EXIT] Run without AI: replacing this process with the ciris-server node (see [RUN-WITHOUT-AI] lines)")
+        logger.info(
+            "[EXIT] Run without AI: replacing this process with the ciris-server node (see [RUN-WITHOUT-AI] lines)"
+        )
         for _h in logging.getLogger().handlers:
             _h.flush()
         if not node_only.exec_into_node(_node_only):
-            logger.error("[EXIT] Run without AI: exec failed; exiting normally -- start `ciris-agent` again to boot the node")
+            logger.error(
+                "[EXIT] Run without AI: exec failed; exiting normally -- start `ciris-agent` again to boot the node"
+            )
 
     if "--adapter" in sys.argv and "api" in sys.argv and "--timeout" in sys.argv:
         logger.debug("EXITING NOW VIA os._exit(0) AT API mode subprocess tests")
@@ -812,6 +816,12 @@ def main(
         # Check for CIRIS_MOCK_LLM environment variable
         if not mock_llm and _check_mock_llm_env():
             mock_llm = True
+        if mock_llm:
+            # CIRISAgent#1244: latch BEFORE the runtime (and the edge) initializes,
+            # so remote trace export is refused from the very first boot step.
+            from ciris_engine.logic.utils.mock_llm_guard import mark_mock_llm_active
+
+            mark_mock_llm_active("main:--mock-llm")
 
         # Check macOS Python installation
         _check_python_installation()

@@ -21,6 +21,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Run-kind marker (CIRISAgent#1245): every agent this workflow starts is a
+# synthetic QA run, live model or not, and its traces must say so. Agents under
+# the mock LLM mark themselves "mock" and never ship remotely (#1244).
+env:
+  CIRIS_TRACE_RUN_KIND: qa
+
 jobs:
   memory-benchmark:
     name: Memory Benchmark

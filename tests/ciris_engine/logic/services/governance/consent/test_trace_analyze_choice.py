@@ -18,11 +18,11 @@ from typing import List, Optional, Tuple
 import pytest
 
 from ciris_engine.logic.services.governance.consent import trace_sharing
-from ciris_engine.schemas.consent.trace_sharing import (
-    TraceConsentSource,
-    TraceSharingConsent,
-    TraceSharingGrantResult,
-)
+from ciris_engine.schemas.consent.trace_sharing import TraceConsentSource, TraceSharingConsent, TraceSharingGrantResult
+
+# These tests exercise the PRODUCTION ship path; the session runs with
+# CIRIS_MOCK_LLM=true, under which the ship grant is refused (CIRISAgent#1244).
+pytestmark = pytest.mark.usefixtures("real_llm_mode")
 
 
 @pytest.fixture
@@ -59,23 +59,15 @@ class TestAnalyzeReachesTheSubstrate:
         assert authored == [("canonical-1", None, analyze)]
         assert result.peers_authored == ["canonical-1"]
 
-    def test_declining_analyze_still_ships(
-        self, authored: List[Tuple[str, Optional[list], bool]]
-    ) -> None:
+    def test_declining_analyze_still_ships(self, authored: List[Tuple[str, Optional[list], bool]]) -> None:
         """Declining to be scored is not declining to share — the grant still lands."""
-        result = trace_sharing.grant_trace_sharing(
-            TraceConsentSource.SETUP_WIZARD, require_opt_in=False, analyze=False
-        )
+        result = trace_sharing.grant_trace_sharing(TraceConsentSource.SETUP_WIZARD, require_opt_in=False, analyze=False)
         assert result.capture_grant_id == "att-capture-1"
         assert result.complete is True
 
-    def test_prefixes_are_still_never_restated(
-        self, authored: List[Tuple[str, Optional[list], bool]]
-    ) -> None:
+    def test_prefixes_are_still_never_restated(self, authored: List[Tuple[str, Optional[list], bool]]) -> None:
         """Guard the neighbouring invariant: prefixes stay None (the build's default)."""
-        trace_sharing.grant_trace_sharing(
-            TraceConsentSource.SETUP_WIZARD, require_opt_in=False, analyze=True
-        )
+        trace_sharing.grant_trace_sharing(TraceConsentSource.SETUP_WIZARD, require_opt_in=False, analyze=True)
         assert authored[0][1] is None
 
 
@@ -85,18 +77,14 @@ class TestReplayHonoursTheRecordedChoice:
     def test_replay_reuses_a_recorded_decline(
         self, authored: List[Tuple[str, Optional[list], bool]], monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(
-            trace_sharing, "trace_sharing_status", lambda: TraceSharingConsent(analyze=False)
-        )
+        monkeypatch.setattr(trace_sharing, "trace_sharing_status", lambda: TraceSharingConsent(analyze=False))
         trace_sharing.grant_trace_sharing(TraceConsentSource.NODE_FOLD, require_opt_in=False)
         assert authored == [("canonical-1", None, False)]
 
     def test_replay_reuses_a_recorded_grant(
         self, authored: List[Tuple[str, Optional[list], bool]], monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(
-            trace_sharing, "trace_sharing_status", lambda: TraceSharingConsent(analyze=True)
-        )
+        monkeypatch.setattr(trace_sharing, "trace_sharing_status", lambda: TraceSharingConsent(analyze=True))
         trace_sharing.grant_trace_sharing(TraceConsentSource.NODE_FOLD, require_opt_in=False)
         assert authored == [("canonical-1", None, True)]
 
@@ -120,12 +108,8 @@ def test_an_explicit_argument_beats_the_recorded_stance(
     authored: List[Tuple[str, Optional[list], bool]], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The owner changing their mind in the UI must win over the stored row."""
-    monkeypatch.setattr(
-        trace_sharing, "trace_sharing_status", lambda: TraceSharingConsent(analyze=True)
-    )
-    trace_sharing.grant_trace_sharing(
-        TraceConsentSource.SETUP_WIZARD, require_opt_in=False, analyze=False
-    )
+    monkeypatch.setattr(trace_sharing, "trace_sharing_status", lambda: TraceSharingConsent(analyze=True))
+    trace_sharing.grant_trace_sharing(TraceConsentSource.SETUP_WIZARD, require_opt_in=False, analyze=False)
     assert authored == [("canonical-1", None, False)]
 
 
@@ -135,11 +119,7 @@ def test_no_opt_in_authors_nothing_regardless_of_analyze(
     """The opt-in gate still comes first — analyze cannot smuggle a grant through."""
     monkeypatch.delenv(trace_sharing.OPT_IN_ENV_VAR, raising=False)
     calls: List[bool] = []
-    monkeypatch.setattr(
-        trace_sharing, "_author_ship_grant", lambda r, analyze: calls.append(analyze)
-    )
-    result: TraceSharingGrantResult = trace_sharing.grant_trace_sharing(
-        TraceConsentSource.NODE_FOLD, analyze=True
-    )
+    monkeypatch.setattr(trace_sharing, "_author_ship_grant", lambda r, analyze: calls.append(analyze))
+    result: TraceSharingGrantResult = trace_sharing.grant_trace_sharing(TraceConsentSource.NODE_FOLD, analyze=True)
     assert result.opted_in is False
     assert calls == []

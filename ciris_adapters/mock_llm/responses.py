@@ -70,6 +70,10 @@ def set_mock_config(**kwargs: Any) -> None:
             setattr(_mock_config, key, value)
 
 
+#: Prefix of the internal context item that carries the serialized messages.
+MESSAGES_CONTEXT_PREFIX = "__messages__:"
+
+
 def extract_context_from_messages(messages: List[Dict[str, Any]]) -> List[str]:
     """Extract context information from messages using regex patterns."""
     context_items = []
@@ -98,7 +102,12 @@ def extract_context_from_messages(messages: List[Dict[str, Any]]) -> List[str]:
         return msg
 
     serialized_messages = [serialize_message(m) for m in messages]
-    context_items.append(f"__messages__:{json.dumps(serialized_messages)}")
+    # INTERNAL ROUTING ONLY (CIRISAgent#1244). action_selection reads this item
+    # back to recover the messages; no builder may return it, or any other
+    # context item, in a result field (flags / reasoning / rationale). It once
+    # did, and the whole message array, system prompt included, rode
+    # DMA_RESULTS.dsdma.flags into 766 production traces.
+    context_items.append(f"{MESSAGES_CONTEXT_PREFIX}{json.dumps(serialized_messages)}")
 
     # Debug logging - only log message count, not content
     logger.info(f"[MOCK_LLM] Extracting context from {len(messages)} messages")
@@ -591,7 +600,8 @@ def cs_dma(context: Optional[List[str]] = None) -> CSDMAResult:
     is_memory_operation = any("recall" in item.lower() or "memory" in item.lower() for item in context)
     if _mock_config.inject_error:
         score = 0.3
-        flags = ["plausibility_concern", "requires_clarification", "mock_flag"] + context
+        # Fixed strings only: context items carry prompt/user content (#1244).
+        flags = ["plausibility_concern", "requires_clarification", "mock_flag"]
         reasoning = "[MOCK LLM] Injected low plausibility for testing error handling paths."
     else:
         score = 0.9  # Always passing value
@@ -600,7 +610,9 @@ def cs_dma(context: Optional[List[str]] = None) -> CSDMAResult:
             reasoning = "[MOCK LLM] Wakeup ritual thoughts are inherently plausible and necessary for agent initialization. High reliability in procedural integrity."
         elif is_user_interaction:
             flags = ["human_interaction", "conversational"]
-            reasoning = f"[MOCK LLM] User interaction '{user_speech or thought_content[:50]}' is plausible conversational content. Natural dialogue pattern detected."
+            reasoning = (
+                "[MOCK LLM] User interaction is plausible conversational content. Natural dialogue pattern detected."
+            )
         elif is_memory_operation:
             flags = ["memory_operation", "cognitive_function"]
             reasoning = "[MOCK LLM] Memory operations are standard cognitive functions with high plausibility for autonomous agents."
@@ -615,13 +627,13 @@ def cs_dma(context: Optional[List[str]] = None) -> CSDMAResult:
 def ds_dma(context: Optional[List[str]] = None) -> DSDMAResult:
     context = context or []
     domain_val = next((item.split(":")[1] for item in context if item.startswith("echo_domain:")), "mock")
-    reasoning = (
-        f"[MOCK LLM] Mock domain-specific evaluation. Context: {', '.join(context)}"
-        if context
-        else "[MOCK LLM] Mock domain-specific evaluation."
-    )
+    # Fixed strings only (CIRISAgent#1244): the context items include the
+    # serialized message array and the user's text, so none may be echoed into
+    # flags or reasoning. echo_domain is a mock test marker, bounded to a token.
+    domain_val = re.sub(r"[^A-Za-z0-9_.-]", "", domain_val)[:32] or "mock"
+    reasoning = "[MOCK LLM] Mock domain-specific evaluation."
     score_val = 0.9
-    flags = ["mock_domain_flag"] + context if _mock_config.inject_error else context
+    flags = ["mock_domain_flag"] if _mock_config.inject_error else ["mock_domain"]
     result = DSDMAResult(domain=domain_val, domain_alignment=score_val, flags=flags, reasoning=reasoning)
     return result
 
@@ -731,7 +743,7 @@ def create_response(response_model: Any, messages: Optional[List[Dict[str, Any]]
     # Handle None response models - these should not happen in a properly structured system
     if response_model is None:
         logger.warning("Received None response_model - this indicates unstructured LLM call")
-        logger.warning(f"Context: {context}")
+        logger.warning(f"Context items: {len(context)}")
         return SimpleNamespace(
             finish_reason="stop",
             _raw_response={"mock": True},
@@ -743,8 +755,10 @@ def create_response(response_model: Any, messages: Optional[List[Dict[str, Any]]
             ],
             usage=SimpleNamespace(total_tokens=42),
         )
-    # Default response with context echoing
-    context_echo = f"Context: {', '.join(context)}" if context else "No context detected"
+    # Default response: a fixed string. It used to echo every context item,
+    # the serialized message array included (CIRISAgent#1244).
     return _attach_extras(
-        SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=f"[MOCK LLM] OK - {context_echo}"))])
+        SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content=f"[MOCK LLM] OK - {len(context)} context items"))]
+        )
     )

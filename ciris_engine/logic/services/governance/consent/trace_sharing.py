@@ -28,11 +28,7 @@ from __future__ import annotations
 import logging
 from typing import List, Optional
 
-from ciris_engine.schemas.consent.trace_sharing import (
-    TraceConsentSource,
-    TraceSharingConsent,
-    TraceSharingGrantResult,
-)
+from ciris_engine.schemas.consent.trace_sharing import TraceConsentSource, TraceSharingConsent, TraceSharingGrantResult
 
 logger = logging.getLogger(__name__)
 
@@ -70,9 +66,7 @@ def trace_sharing_status() -> TraceSharingConsent:
     actually reads, the scoped resolver for analyze). This exists so callers get
     a model with a ``ships`` property instead of a dict they each interpret.
     """
-    from ciris_engine.logic.services.governance.consent.attestation import (
-        federation_consent_status,
-    )
+    from ciris_engine.logic.services.governance.consent.attestation import federation_consent_status
 
     try:
         raw = federation_consent_status()
@@ -142,7 +136,16 @@ def _author_ship_grant(result: TraceSharingGrantResult, analyze: bool) -> None:
     ``required: false`` with named costs, and ``fold_consent_surface.rs`` is
     explicit that "marking it required misrepresents a legitimate choice as a
     misconfiguration" — so it is the owner's answer, passed in, never a literal.
+
+    MOCK LLM (CIRISAgent#1244): never authored. The ship grant is what lets
+    sealed traces replicate to a canonical peer, and a canonical peer is never
+    loopback, so under the mock LLM this refuses whatever the consent says.
     """
+    from ciris_engine.logic.utils.mock_llm_guard import remote_trace_export_permitted
+
+    if not remote_trace_export_permitted("federation replication grant"):
+        result.errors.append("ship grant refused: mock LLM active (CIRISAgent#1244)")
+        return
     try:
         import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
 
@@ -224,9 +227,7 @@ def grant_trace_sharing(
 
     # 1. CAPTURE — consent:community_trust:v1
     try:
-        from ciris_engine.logic.services.governance.consent.attestation import (
-            emit_community_consent_grant,
-        )
+        from ciris_engine.logic.services.governance.consent.attestation import emit_community_consent_grant
 
         attestation_id = emit_community_consent_grant(granted_at=granted_at)
         if attestation_id:

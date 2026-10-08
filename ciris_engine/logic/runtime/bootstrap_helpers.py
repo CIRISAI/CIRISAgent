@@ -117,10 +117,12 @@ def check_mock_llm(runtime: Any) -> None:
     """
     if os.environ.get("CIRIS_MOCK_LLM", "").lower() in ("true", "1", "yes", "on"):
         logger.warning("CIRIS_MOCK_LLM environment variable detected in CIRISRuntime")
+        from ciris_engine.logic.utils.mock_llm_guard import mark_mock_llm_active
+
+        mark_mock_llm_active("runtime:CIRIS_MOCK_LLM")
         if "mock_llm" not in runtime.modules_to_load:
             runtime.modules_to_load.append("mock_llm")
             logger.info("Added mock_llm to modules to load")
-
 
 
 def _record_adapter_failure(runtime: Any, adapter_type: str, adapter_id: str, exc: Exception) -> None:

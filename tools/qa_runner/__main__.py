@@ -18,11 +18,31 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from .config import QAConfig, QAModule
 from .runner import QARunner
 from .status_tracker import get_failing_modules, get_not_run_modules, print_status_dashboard
+
+
+def trace_sink_flag_error(use_mock_llm: bool, live_lens: bool, federation_delivery: bool) -> Optional[str]:
+    """Why this flag combination must not run, or None.
+
+    CIRISAgent#1244: mock-LLM runs shipped 1,499 traces to the PRODUCTION
+    canonical. Under the mock LLM the agent now refuses every remote trace sink
+    on its own; a harness that asks for one anyway is mis-configured, and must
+    fail loudly here rather than run and quietly test nothing.
+    """
+    if not use_mock_llm:
+        return None
+    wanted = [flag for flag, on in (("--live-lens", live_lens), ("--federation-delivery", federation_delivery)) if on]
+    if not wanted:
+        return None
+    return (
+        f"{' and '.join(wanted)} cannot be combined with the mock LLM: mock-LLM traces must never reach the "
+        "production lens or canonical (CIRISAgent#1244). Use --live (real LLM) for a live-lens run, or drop "
+        f"{' / '.join(wanted)} to keep traces on the local tee."
+    )
 
 
 def parse_args():
@@ -119,6 +139,11 @@ Available modules:
         ),
     )
     parser.add_argument("--no-mock-llm", action="store_true", help="Don't use mock LLM (requires real LLM)")
+    parser.add_argument(
+        "--mock-llm",
+        action="store_true",
+        help="Use the mock LLM (the default without --live). Mock traces never leave the node (CIRISAgent#1244).",
+    )
     parser.add_argument(
         "--adapter", default="api", choices=["api", "cli", "discord"], help="Adapter to use (default: api)"
     )
@@ -397,6 +422,19 @@ Available modules:
 def main():
     """Main entry point."""
     args = parse_args()
+
+    # CIRISAgent#1244: refuse a remote trace sink under the mock LLM BEFORE
+    # anything is wiped or started. Mock is the default unless --live or
+    # --no-mock-llm, so `--live-lens` alone is a mock-LLM run too.
+    if args.mock_llm and (args.live or args.no_mock_llm):
+        print("[FAIL] --mock-llm conflicts with --live / --no-mock-llm")
+        sys.exit(2)
+    _sink_error = trace_sink_flag_error(
+        not args.no_mock_llm and not args.live, args.live_lens, args.federation_delivery
+    )
+    if _sink_error:
+        print(f"[FAIL] {_sink_error}")
+        sys.exit(2)
 
     # Handle status dashboard commands (exit early)
     if args.status:

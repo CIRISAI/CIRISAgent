@@ -231,6 +231,17 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
         "no",
         "off",
     )
+    # MOCK LLM (CIRISAgent#1244): no transport, no delivery controller. The
+    # transport auto-seeds the PRODUCTION canonical dial from persist's baked
+    # hint whatever CIRIS_EDGE_BOOTSTRAP_PEERS says, so a loopback-only peer
+    # list cannot keep mock traces local. Turning the transport off also closes
+    # the case where a replication grant from an earlier real-LLM run on the
+    # same DB would otherwise ship this run's mock traces. Not overridable.
+    if _delivery_on:
+        from ciris_engine.logic.utils.mock_llm_guard import remote_trace_export_permitted
+
+        if not remote_trace_export_permitted("federation delivery (edge transport)"):
+            _delivery_on = False
 
     # Rust-side tracing (CIRISAgent#919/#920, ciris-server >=0.5.114): without
     # this a Python-embedded agent has ZERO rust logs — every delivery/rooting

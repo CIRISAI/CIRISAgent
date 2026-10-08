@@ -42,6 +42,7 @@ from ciris_engine.schemas.processors.states import AgentState
 from ciris_engine.schemas.runtime.adapter_management import AdapterConfig
 from ciris_engine.schemas.runtime.core import AgentIdentityRoot
 from ciris_engine.schemas.runtime.enums import ServiceType
+from ciris_engine.schemas.services.attestation import AttestationGateOutcome
 
 from .billing_helpers import (
     CIRIS_PROXY_DOMAINS,
@@ -61,10 +62,7 @@ from .bootstrap_helpers import (
     parse_bootstrap_config,
 )
 from .component_builder import ComponentBuilder
-from .config_migration import (
-    migrate_adapter_configs_to_graph,
-    migrate_tickets_config_to_graph,
-)
+from .config_migration import migrate_adapter_configs_to_graph, migrate_tickets_config_to_graph
 from .identity_manager import IdentityManager
 from .resume_helpers import (
     auto_enable_android_adapters_for_resume,
@@ -86,8 +84,6 @@ from .shutdown_continuity import (
     preserve_shutdown_continuity,
     update_identity_with_shutdown_reference,
 )
-
-from ciris_engine.schemas.services.attestation import AttestationGateOutcome
 
 logger = logging.getLogger(__name__)
 
@@ -726,8 +722,9 @@ class CIRISRuntime(ServicePropertyMixin):
         Engine is wired and a cheap probe succeeds, the schema is intact.
         """
         try:
-            from ciris_engine.logic.persistence.models.graph import get_persist_engine
             import json
+
+            from ciris_engine.logic.persistence.models.graph import get_persist_engine
 
             engine = get_persist_engine()
             if engine is None:
@@ -783,8 +780,7 @@ class CIRISRuntime(ServicePropertyMixin):
             logger.info("Edge runtime disabled via env — skipping verification")
         else:
             logger.warning(
-                "Edge runtime not available (degraded). "
-                "GET /v1/system/federation will report available=false."
+                "Edge runtime not available (degraded). GET /v1/system/federation will report available=false."
             )
         return True  # Non-critical: always pass.
 
@@ -1153,9 +1149,7 @@ class CIRISRuntime(ServicePropertyMixin):
         # auth_service is `Any` (see service_initializer.py), so the call
         # returns Any — annotate locally so the function honours its
         # declared `Optional[str]` return type.
-        auth_token: Optional[str] = await auth_service._create_channel_token_for_adapter(
-            adapter_type, adapter_info
-        )
+        auth_token: Optional[str] = await auth_service._create_channel_token_for_adapter(adapter_type, adapter_info)
 
         if hasattr(adapter, "set_auth_token") and auth_token:
             adapter.set_auth_token(auth_token)
@@ -1703,18 +1697,12 @@ class CIRISRuntime(ServicePropertyMixin):
             "attestation_task_done": _safe(
                 lambda: bool(getattr(auth_service, "_attestation_task", None) and auth_service._attestation_task.done())
             ),
-            "attestation_cache_populated": _safe(
-                lambda: getattr(auth_service, "_attestation_cache", None) is not None
-            ),
+            "attestation_cache_populated": _safe(lambda: getattr(auth_service, "_attestation_cache", None) is not None),
             "baseline_attestation_populated": _safe(
                 lambda: getattr(auth_service, "_baseline_attestation", None) is not None
             ),
-            "attestation_in_progress": _safe(
-                lambda: bool(getattr(auth_service, "_attestation_in_progress", False))
-            ),
-            "stage_timings_seconds": _safe(
-                lambda: getattr(auth_service, "_attestation_stage_timings", None)
-            ),
+            "attestation_in_progress": _safe(lambda: bool(getattr(auth_service, "_attestation_in_progress", False))),
+            "stage_timings_seconds": _safe(lambda: getattr(auth_service, "_attestation_stage_timings", None)),
             "platform": f"{platform.system()} {platform.release()}",
             "python": sys.version.split()[0],
             "running_tasks_count": _safe(lambda: len(asyncio.all_tasks())),
@@ -1758,6 +1746,7 @@ class CIRISRuntime(ServicePropertyMixin):
             time_service=self.time_service,
             telemetry_service=self.telemetry_service,
             audit_service=self.audit_service,
+            resource_monitor=self.resource_monitor,
         )
 
         return build_action_dispatcher(
@@ -1903,7 +1892,9 @@ class CIRISRuntime(ServicePropertyMixin):
                 result = await asyncio.wait_for(asyncio.to_thread(fn), timeout=budget)
                 logger.info("Substrate release: %s -> %s", label, result)
             except asyncio.TimeoutError:
-                logger.warning("Substrate release: %s did not finish within %.0fs; ports may stay bound (#1102)", label, budget)
+                logger.warning(
+                    "Substrate release: %s did not finish within %.0fs; ports may stay bound (#1102)", label, budget
+                )
             except Exception as exc:  # noqa: BLE001 -- shutdown must finish
                 logger.warning("Substrate release: %s raised (continuing): %s", label, exc)
 

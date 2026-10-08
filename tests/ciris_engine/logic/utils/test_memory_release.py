@@ -271,7 +271,7 @@ def test_windows_own_threshold_does_not_empty_the_working_set(monkeypatch):
 
     kernel32 = types.SimpleNamespace(SetProcessWorkingSetSize=_WinFn(), GetCurrentProcess=lambda: 42)
     monkeypatch.setattr(memory_release.ctypes, "windll", types.SimpleNamespace(kernel32=kernel32), raising=False)
-    assert memory_release._platform_release("resource_monitor:defer") == "_heapmin"
+    assert memory_release._platform_release("resource_monitor:reclaim") == "_heapmin"
     assert libc.calls[0][0] == "_heapmin"
     assert calls == []
 

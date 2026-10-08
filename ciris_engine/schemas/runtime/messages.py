@@ -42,6 +42,7 @@ class MessageHandlingStatus(str, Enum):
     RATE_LIMITED = "RATE_LIMITED"  # Rate limit exceeded
     CHANNEL_RESTRICTED = "CHANNEL_RESTRICTED"  # Channel access denied
     UPDATED_EXISTING_TASK = "UPDATED_EXISTING_TASK"  # Flagged existing task with new info
+    RESOURCE_SHED = "RESOURCE_SHED"  # Runtime self-protection: admission closed under resource pressure
 
 
 class PassiveObservationResult(BaseModel):
@@ -68,6 +69,9 @@ class MessageHandlingResult(BaseModel):
     credit_denial_reason: Optional[str] = Field(None, description="Credit denial reason")
     task_priority: int = Field(default=0, description="Priority of created task (0=passive, 5=high, 10=critical)")
     existing_task_updated: bool = Field(default=False, description="Whether an existing task was updated")
+    shed_resources: List[str] = Field(
+        default_factory=list, description="Resources holding admission closed (status RESOURCE_SHED)"
+    )
 
     model_config = ConfigDict(defer_build=True)
 

@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 
 from ciris_engine.logic.adapters.api.dependencies.auth import require_admin, require_observer
 from ciris_engine.logic.adapters.api.routes.telemetry import router
+from ciris_engine.schemas.services.resources_core import ResourceBudget
 
 
 def override_auth():
@@ -163,7 +164,7 @@ class TestBasicFunctionality:
         # Verify our bug fixes worked
         assert data["current"]["cpu_percent"] == 45.5
         assert data["current"]["memory_mb"] == 512.0
-        assert data["limits"]["max_memory_mb"] == 2048.0
+        assert data["limits"]["max_memory_mb"] == float(ResourceBudget().memory_mb.limit)
         assert data["health"]["status"] in ["healthy", "warning", "critical"]
 
     def test_metrics_success(self, fully_initialized_app):
@@ -272,7 +273,7 @@ class TestBugFixes:
 
         data = response.json()["data"]
         # Should correctly access max_memory_mb
-        assert data["limits"]["max_memory_mb"] == 2048.0
+        assert data["limits"]["max_memory_mb"] == float(ResourceBudget().memory_mb.limit)
 
     def test_resource_health_warnings_bug_fixed(self, client):
         """Test that ResourceHealthStatus warnings bug is fixed."""

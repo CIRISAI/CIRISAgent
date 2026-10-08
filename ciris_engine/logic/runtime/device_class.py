@@ -28,6 +28,7 @@ from enum import Enum
 from typing import Optional
 
 from ciris_engine.logic.utils.path_resolution import is_android, is_ios
+from ciris_engine.schemas.services.resources_core import DeviceClass
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,22 @@ class HostDeviceClass(str, Enum):
 
     LAPTOP = "laptop"
     SERVER = "server"
+
+
+def resolve_device_class() -> DeviceClass:
+    """The device class this runtime is on, resolved the way the node resolves it.
+
+    Android/iOS builds are ``phone``; otherwise a valid ``CIRIS_DEVICE_CLASS``
+    (which ``declare_device_class`` sets before the runtime starts); otherwise
+    ``server``. Used to pick the device-sized resource budget.
+    """
+    if is_android() or is_ios():
+        return DeviceClass.PHONE
+    declared = (os.environ.get(DEVICE_CLASS_ENV) or "").strip().lower()
+    try:
+        return DeviceClass(declared)
+    except ValueError:
+        return DeviceClass.SERVER
 
 
 def declare_device_class(default: HostDeviceClass) -> Optional[str]:

@@ -6,56 +6,161 @@ Provides schemas for monitoring resource usage, costs, and environmental impact.
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import List, Optional
+from typing import Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class ResourceAction(str, Enum):
-    """Actions to take when a resource limit is exceeded"""
+    """Runtime self-protection actions a resource's pressure can trigger.
 
-    LOG = "log"
-    WARN = "warn"
-    THROTTLE = "throttle"
-    DEFER = "defer"
-    REJECT = "reject"
-    SHUTDOWN = "shutdown"
+    These are the runtime protecting itself, not agent decisions: none of them
+    is an H3ERE action and none is ever presented to the model as one. Ordered
+    from mildest to strongest; `ResourceLimit.action` caps how far a resource
+    may escalate along the ladder (see `PressureLevel`).
+    """
+
+    LOG = "log"  # non-acting: record the level change
+    WARN = "warn"  # non-acting: record it at WARNING
+    RECLAIM = "reclaim"  # release memory and caches back to the OS
+    THROTTLE = "throttle"  # slow the work loop by a bounded delay
+    SHED = "shed"  # admission control: no new tasks activated, new inbound work refused (503)
+    DRAIN = "drain"  # graceful runtime shutdown; only ever by explicit configuration
+
+
+class PressureLevel(str, Enum):
+    """How far past its thresholds a resource is.
+
+    ELEVATED >= `warning`, HIGH >= `critical`, CRITICAL >= `limit`. A level
+    lifts only once the value is clearly back below that threshold (hysteresis).
+    Ladder: ELEVATED -> `ResourceLimit.elevated_action` (RECLAIM for memory,
+    non-acting WARN elsewhere), HIGH -> +THROTTLE, CRITICAL -> +SHED (+DRAIN
+    only when the resource's cap is DRAIN); actions are cumulative and each is
+    capped by `ResourceLimit.action`.
+    """
+
+    NORMAL = "normal"
+    ELEVATED = "elevated"
+    HIGH = "high"
+    CRITICAL = "critical"
 
 
 class ResourceLimit(BaseModel):
     """Configuration for a single resource"""
 
-    limit: int = Field(description="Hard limit value")
-    warning: int = Field(description="Warning threshold")
-    critical: int = Field(description="Critical threshold")
-    action: ResourceAction = Field(default=ResourceAction.DEFER, description="Action when limit exceeded")
-    cooldown_seconds: int = Field(default=60, ge=0, description="Cooldown period in seconds")
+    limit: int = Field(description="Hard limit value; at or above it the resource is CRITICAL")
+    warning: int = Field(description="Warning threshold; at or above it the resource is ELEVATED")
+    critical: int = Field(description="Critical threshold; at or above it the resource is HIGH")
+    action: ResourceAction = Field(
+        default=ResourceAction.SHED,
+        description="Strongest action this resource may escalate to (cap on the pressure ladder)",
+    )
+    elevated_action: ResourceAction = Field(
+        default=ResourceAction.WARN,
+        description=(
+            "What the ELEVATED rung does: RECLAIM (memory only -- releasing heap does nothing for other "
+            "resources and costs CPU), or the non-acting LOG/WARN"
+        ),
+    )
+    cooldown_seconds: int = Field(default=60, ge=0, description="Cooldown between repeat RECLAIMs and log lines")
 
     model_config = ConfigDict(extra="forbid", defer_build=True)
 
+    @field_validator("elevated_action")
+    @classmethod
+    def _elevated_rung_is_reclaim_or_non_acting(cls, value: ResourceAction) -> ResourceAction:
+        if value not in (ResourceAction.LOG, ResourceAction.WARN, ResourceAction.RECLAIM):
+            raise ValueError("elevated_action must be LOG, WARN or RECLAIM; THROTTLE/SHED/DRAIN start higher")
+        return value
+
+
+class DeviceClass(str, Enum):
+    """Kind of host the runtime is on; selects the device-sized default budget."""
+
+    PHONE = "phone"
+    LAPTOP = "laptop"
+    SERVER = "server"
+
 
 def _memory_mb_limit() -> ResourceLimit:
-    return ResourceLimit(limit=1024, warning=768, critical=960)
+    """Laptop and server: the 4 GB target (CLAUDE.md, resource monitor README)."""
+    return ResourceLimit(
+        limit=4096, warning=3072, critical=3840, action=ResourceAction.SHED, elevated_action=ResourceAction.RECLAIM
+    )
+
+
+def _phone_memory_mb_limit() -> ResourceLimit:
+    """Phones: a 1 GB budget; ~650 MB resting RSS was measured on the Android leg."""
+    return ResourceLimit(
+        limit=1024, warning=768, critical=960, action=ResourceAction.SHED, elevated_action=ResourceAction.RECLAIM
+    )
 
 
 def _cpu_percent_limit() -> ResourceLimit:
     return ResourceLimit(limit=80, warning=60, critical=75, action=ResourceAction.THROTTLE)
 
 
-def _tokens_hour_limit() -> ResourceLimit:
-    return ResourceLimit(limit=10000, warning=8000, critical=9500)
+#: Config-graph keys an operator sets to give a token window a budget.
+TOKEN_BUDGET_CONFIG_KEYS = {
+    "resources.token_budget.hour": "tokens_hour",
+    "resources.token_budget.day": "tokens_day",
+}
 
 
-def _tokens_day_limit() -> ResourceLimit:
-    return ResourceLimit(limit=100000, warning=80000, critical=95000, action=ResourceAction.REJECT)
+class TokenBudgetConfig(BaseModel):
+    """An operator-configured token budget for one window (config graph value).
+
+    There is NO token budget by default (user ruling): tokens are recorded and
+    reported, but no threshold exists until one of `TOKEN_BUDGET_CONFIG_KEYS`
+    is set to a value of this shape.
+    """
+
+    warning: int = Field(gt=0, description="ELEVATED at or above this many tokens in the window")
+    critical: int = Field(gt=0, description="HIGH at or above this many tokens in the window")
+    limit: int = Field(gt=0, description="CRITICAL at or above this many tokens in the window")
+    action: ResourceAction = Field(
+        default=ResourceAction.THROTTLE, description="Strongest action: warn (log only), throttle or shed"
+    )
+    cooldown_seconds: int = Field(default=60, ge=0, description="Cooldown between repeat log lines")
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("action")
+    @classmethod
+    def _token_budget_action(cls, value: ResourceAction) -> ResourceAction:
+        if value not in (ResourceAction.WARN, ResourceAction.THROTTLE, ResourceAction.SHED):
+            raise ValueError("a token budget's action must be warn, throttle or shed")
+        return value
+
+    @model_validator(mode="after")
+    def _ordered(self) -> "TokenBudgetConfig":
+        if not self.warning <= self.critical <= self.limit:
+            raise ValueError("a token budget needs warning <= critical <= limit")
+        return self
+
+    def to_limit(self) -> ResourceLimit:
+        return ResourceLimit(
+            limit=self.limit,
+            warning=self.warning,
+            critical=self.critical,
+            action=self.action,
+            cooldown_seconds=self.cooldown_seconds,
+        )
 
 
 def _disk_mb_limit() -> ResourceLimit:
+    # NOT CHECKED by the monitor, on purpose. The unit is ambiguous: the field
+    # says MB, the numbers (100/80/95) read as a percentage, and the snapshot's
+    # disk_used_mb is the whole filesystem's usage. Under either MB reading
+    # (filesystem used, or database size) a production install sits above
+    # "critical" at boot, which would mark the monitor unhealthy and put a
+    # critical resource alert into every prompt. Give it a defined meaning
+    # (e.g. data-dir filesystem percent used) before wiring a check.
     return ResourceLimit(limit=100, warning=80, critical=95, action=ResourceAction.WARN)
 
 
 def _thoughts_active_limit() -> ResourceLimit:
-    return ResourceLimit(limit=50, warning=40, critical=48)
+    return ResourceLimit(limit=50, warning=40, critical=48, action=ResourceAction.SHED)
 
 
 class ResourceBudget(BaseModel):
@@ -63,12 +168,32 @@ class ResourceBudget(BaseModel):
 
     memory_mb: ResourceLimit = Field(default_factory=_memory_mb_limit, description="Memory usage limits in MB")
     cpu_percent: ResourceLimit = Field(default_factory=_cpu_percent_limit, description="CPU usage limits in percent")
-    tokens_hour: ResourceLimit = Field(default_factory=_tokens_hour_limit, description="Token usage per hour")
-    tokens_day: ResourceLimit = Field(default_factory=_tokens_day_limit, description="Token usage per day")
-    disk_mb: ResourceLimit = Field(default_factory=_disk_mb_limit, description="Disk usage limits in MB")
+    tokens_hour: Optional[ResourceLimit] = Field(
+        default=None,
+        description="Token budget per rolling hour; null = unbudgeted (the default). "
+        "Set via config key resources.token_budget.hour",
+    )
+    tokens_day: Optional[ResourceLimit] = Field(
+        default=None,
+        description="Token budget per rolling day; null = unbudgeted (the default). "
+        "Set via config key resources.token_budget.day",
+    )
+    disk_mb: ResourceLimit = Field(
+        default_factory=_disk_mb_limit,
+        description="Disk limit -- reserved, not checked: its unit is undefined (see _disk_mb_limit)",
+    )
     thoughts_active: ResourceLimit = Field(default_factory=_thoughts_active_limit, description="Active thoughts limit")
+    device_class: DeviceClass = Field(
+        default=DeviceClass.SERVER, description="Device class whose defaults this budget was built from"
+    )
 
     model_config = ConfigDict(extra="forbid", defer_build=True)
+
+    @classmethod
+    def for_device_class(cls, device_class: DeviceClass) -> "ResourceBudget":
+        """The default budget for a device class. Only memory differs: phones get 1 GB."""
+        memory = _phone_memory_mb_limit() if device_class == DeviceClass.PHONE else _memory_mb_limit()
+        return cls(memory_mb=memory, device_class=device_class)
 
 
 class MemoryReleaseResult(BaseModel):
@@ -80,7 +205,7 @@ class MemoryReleaseResult(BaseModel):
     another thread may allocate between the two reads.
     """
 
-    trigger: str = Field(description="Who asked: resource_monitor:<signal>, host:<level>, or manual")
+    trigger: str = Field(description="Who asked: resource_monitor:reclaim, host:<level>, or manual")
     platform_call: str = Field(
         description="Allocator call made: malloc_trim, mallopt(M_PURGE), malloc_zone_pressure_relief, none, or unavailable:<why>"
     )
@@ -90,6 +215,30 @@ class MemoryReleaseResult(BaseModel):
     gc_collected: int = Field(ge=0, description="Unreachable objects gc.collect() found")
     duration_ms: int = Field(ge=0, description="Wall time of the whole release")
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class ResourcePressureState(BaseModel):
+    """Which self-protection actions are in force right now, and how often they applied.
+
+    Held by `ResourcePressureGate`. Each list names the resources currently
+    holding that action; an empty list means it is lifted. DRAIN is not
+    reversible, so it is a one-shot reason rather than a list. RECLAIM is not
+    latched: each emit performs one release.
+    """
+
+    levels: Dict[str, PressureLevel] = Field(
+        default_factory=dict, description="Resources above NORMAL and their pressure level"
+    )
+    throttle: List[str] = Field(default_factory=list, description="Resources slowing the work loop")
+    shed: List[str] = Field(default_factory=list, description="Resources holding admission closed")
+    drain_requested: Optional[str] = Field(default=None, description="Reason a graceful drain was requested")
+    throttled_rounds_total: int = Field(
+        default=0, ge=0, description="Work-loop rounds that ran with the throttle delay"
+    )
+    shed_rounds_total: int = Field(default=0, ge=0, description="Work rounds that activated no new tasks under SHED")
+    shed_refusals_total: int = Field(default=0, ge=0, description="Inbound messages refused at intake under SHED")
 
     model_config = ConfigDict(extra="forbid")
 
@@ -197,9 +346,14 @@ class ResourceAlert(BaseModel):
 
 __all__ = [
     "ResourceAction",
+    "PressureLevel",
+    "DeviceClass",
+    "TokenBudgetConfig",
+    "TOKEN_BUDGET_CONFIG_KEYS",
     "ResourceLimit",
     "ResourceBudget",
     "ResourceSnapshot",
+    "ResourcePressureState",
     "ResourceCost",
     "ResourceAlert",
 ]

@@ -122,9 +122,6 @@ async def test_get_telemetry_summary_queries_correct_metrics(telemetry_setup):
     # Check that the correct metrics were queried
     expected_metrics = [
         "llm.tokens.total",
-        "llm_tokens_used",  # Legacy metric
-        "llm.tokens.input",
-        "llm.tokens.output",
         "llm.cost.cents",
         "llm.environmental.carbon_grams",
         "llm.environmental.energy_kwh",
@@ -138,6 +135,11 @@ async def test_get_telemetry_summary_queries_correct_metrics(telemetry_setup):
 
     for metric in expected_metrics:
         assert metric in queried_metrics, f"Expected {metric} to be queried"
+
+    # The same LLM call's tokens are also written under these names; summing
+    # them on top of llm.tokens.total double/triple counts tokens_24h/1h.
+    for duplicate in ("llm_tokens_used", "llm.tokens.input", "llm.tokens.output"):
+        assert duplicate not in queried_metrics, f"{duplicate} must not feed the token aggregate"
 
 
 @pytest.mark.asyncio

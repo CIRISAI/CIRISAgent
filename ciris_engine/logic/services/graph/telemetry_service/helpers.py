@@ -35,12 +35,25 @@ if TYPE_CHECKING:
     from ciris_engine.logic.services.graph.telemetry_service.service import GraphTelemetryService
     from ciris_engine.schemas.services.graph.telemetry import CircuitBreakerState
 
-# Metric types to query - moved from inline definition
+# Metric types to query - moved from inline definition.
+#
+# Each fact is summed from exactly ONE canonical metric name. For tokens that
+# is the bus-level ``llm.tokens.total``: LLMBus._record_resource_telemetry
+# writes it once per LLM call for every provider (real, mock, local).
+# Do NOT add the other token series here, because each one is the same call
+# counted again:
+#   - ``llm_tokens_used`` is a legacy alias that OpenAICompatibleClient writes
+#     for the same call (it is still written, and still served per-series by
+#     /v1/telemetry/metrics);
+#   - ``llm.tokens.input`` + ``llm.tokens.output`` together equal
+#     ``llm.tokens.total``.
+# Summing all four put 3x the real usage into tokens_24h/tokens_1h on the real
+# provider path (2x on mock). The test in tests/test_telemetry_token_single_count.py
+# locks this.
+CANONICAL_TOKENS_METRIC = "llm.tokens.total"
+
 METRIC_TYPES = [
-    ("llm.tokens.total", "tokens"),
-    ("llm_tokens_used", "tokens"),  # Legacy metric name
-    ("llm.tokens.input", "tokens"),
-    ("llm.tokens.output", "tokens"),
+    (CANONICAL_TOKENS_METRIC, "tokens"),
     ("llm.cost.cents", "cost"),
     ("llm.environmental.carbon_grams", "carbon"),
     ("llm.environmental.energy_kwh", "energy"),
@@ -262,8 +275,9 @@ async def get_average_thought_depth(
         # is DESC by created_at and supports an updated_at filter implicitly;
         # we walk pages until we cross `window_start`. The window is 24h so
         # the pagination is bounded.
-        from ciris_engine.logic.persistence.models.graph import get_persist_engine
         import json
+
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
 
         engine = get_persist_engine()
         if engine is None:

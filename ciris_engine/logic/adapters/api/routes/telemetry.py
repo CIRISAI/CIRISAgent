@@ -810,8 +810,9 @@ async def get_resource_telemetry(request: Request, auth: AuthObserverDep) -> Suc
                 timestamp=datetime.now(timezone.utc).isoformat(),
             ),
             limits=ResourceLimits(
-                max_memory_mb=getattr(limits, "max_memory_mb", 2048.0),
-                max_cpu_percent=getattr(limits, "max_cpu_percent", 100.0),
+                # The monitor's active (device-sized) budget -- the numbers that act.
+                max_memory_mb=float(limits.memory_mb.limit),
+                max_cpu_percent=float(limits.cpu_percent.limit),
                 max_disk_bytes=getattr(limits, "max_disk_bytes", 0),
             ),
             history=history_points[-60:],  # Last hour of data

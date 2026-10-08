@@ -117,10 +117,15 @@ def mock_runtime_with_tools():
 
 
 @pytest.mark.asyncio
-async def test_build_system_snapshot_minimal(mock_resource_monitor, mock_time_service, mock_runtime, mock_service_registry):
+async def test_build_system_snapshot_minimal(
+    mock_resource_monitor, mock_time_service, mock_runtime, mock_service_registry
+):
     """Test minimal snapshot with only required parameters."""
     snapshot = await build_system_snapshot(
-        task=None, thought=None, resource_monitor=mock_resource_monitor, time_service=mock_time_service,
+        task=None,
+        thought=None,
+        resource_monitor=mock_resource_monitor,
+        time_service=mock_time_service,
         runtime=mock_runtime,
         service_registry=mock_service_registry,
     )
@@ -131,7 +136,9 @@ async def test_build_system_snapshot_minimal(mock_resource_monitor, mock_time_se
 
 
 @pytest.mark.asyncio
-async def test_build_system_snapshot_with_task(mock_resource_monitor, mock_task_with_channel, mock_time_service, mock_runtime, mock_service_registry):
+async def test_build_system_snapshot_with_task(
+    mock_resource_monitor, mock_task_with_channel, mock_time_service, mock_runtime, mock_service_registry
+):
     """Test snapshot with task that has channel context."""
     snapshot = await build_system_snapshot(
         task=mock_task_with_channel,
@@ -149,10 +156,15 @@ async def test_build_system_snapshot_with_task(mock_resource_monitor, mock_task_
 
 
 @pytest.mark.asyncio
-async def test_build_system_snapshot_with_thought(mock_resource_monitor, mock_thought, mock_time_service, mock_runtime, mock_service_registry):
+async def test_build_system_snapshot_with_thought(
+    mock_resource_monitor, mock_thought, mock_time_service, mock_runtime, mock_service_registry
+):
     """Test snapshot with thought."""
     snapshot = await build_system_snapshot(
-        task=None, thought=mock_thought, resource_monitor=mock_resource_monitor, time_service=mock_time_service,
+        task=None,
+        thought=mock_thought,
+        resource_monitor=mock_resource_monitor,
+        time_service=mock_time_service,
         runtime=mock_runtime,
         service_registry=mock_service_registry,
     )
@@ -164,14 +176,17 @@ async def test_build_system_snapshot_with_thought(mock_resource_monitor, mock_th
 
 
 @pytest.mark.asyncio
-async def test_build_system_snapshot_with_tools(mock_resource_monitor, mock_runtime_with_tools, mock_time_service, mock_runtime, mock_service_registry):
+async def test_build_system_snapshot_with_tools(
+    mock_resource_monitor, mock_runtime_with_tools, mock_time_service, mock_runtime, mock_service_registry
+):
     """Test snapshot with runtime that provides tools."""
     snapshot = await build_system_snapshot(
         task=None,
         thought=None,
         resource_monitor=mock_resource_monitor,
         runtime=mock_runtime_with_tools,
-        time_service=mock_time_service, service_registry=mock_service_registry,
+        time_service=mock_time_service,
+        service_registry=mock_service_registry,
     )
 
     assert isinstance(snapshot, SystemSnapshot)
@@ -187,22 +202,29 @@ async def test_build_system_snapshot_with_tools(mock_resource_monitor, mock_runt
 
 
 @pytest.mark.asyncio
-async def test_build_system_snapshot_with_unhealthy_resources(mock_resource_monitor, mock_time_service, mock_runtime, mock_service_registry):
+async def test_build_system_snapshot_with_unhealthy_resources(
+    mock_resource_monitor, mock_time_service, mock_runtime, mock_service_registry
+):
     """Test snapshot with critical resource alerts."""
     # Make resources unhealthy
     mock_resource_monitor.snapshot.critical = ["Memory usage above 90%"]
     mock_resource_monitor.snapshot.healthy = False
 
     snapshot = await build_system_snapshot(
-        task=None, thought=None, resource_monitor=mock_resource_monitor, time_service=mock_time_service,
+        task=None,
+        thought=None,
+        resource_monitor=mock_resource_monitor,
+        time_service=mock_time_service,
         runtime=mock_runtime,
         service_registry=mock_service_registry,
     )
 
     assert isinstance(snapshot, SystemSnapshot)
     assert len(snapshot.resource_alerts) == 2  # One for critical, one for unhealthy
-    assert "CRITICAL" in snapshot.resource_alerts[0]
-    assert "UNHEALTHY" in snapshot.resource_alerts[1]
+    assert "critical threshold" in snapshot.resource_alerts[0]
+    assert "one or more resources" in snapshot.resource_alerts[1]
+    # Informational only: never an instruction to choose an agent action
+    assert not any("DEFER" in a or "REJECT" in a for a in snapshot.resource_alerts)
 
 
 @pytest.mark.asyncio
@@ -417,7 +439,10 @@ async def test_build_system_snapshot_with_version_info(mock_time_service, mock_r
     resource_monitor.snapshot = Mock(critical=[], healthy=True)
 
     snapshot = await build_system_snapshot(
-        task=None, thought=None, resource_monitor=resource_monitor, time_service=mock_time_service,
+        task=None,
+        thought=None,
+        resource_monitor=resource_monitor,
+        time_service=mock_time_service,
         runtime=mock_runtime,
         service_registry=mock_service_registry,
     )

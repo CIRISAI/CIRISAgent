@@ -360,16 +360,21 @@ async def prefetch_batch_context(
     if resource_monitor:
         logger.debug("[DEBUG DB TIMING] Batch: checking resource monitor")
         try:
+            # Informational only: runtime self-protection, never an instruction
+            # to choose an H3ERE action (same text as the snapshot builder).
+            from ciris_engine.logic.context.system_snapshot_helpers import (
+                _format_critical_alert,
+                _get_system_unhealthy_alert,
+                _is_shedding,
+            )
+
             snapshot = resource_monitor.snapshot
+            shedding = _is_shedding(resource_monitor)
             if snapshot.critical:
                 for alert in snapshot.critical:
-                    batch_data.resource_alerts.append(
-                        f"🚨 CRITICAL! RESOURCE LIMIT BREACHED! {alert} - REJECT OR DEFER ALL TASKS!"
-                    )
+                    batch_data.resource_alerts.append(_format_critical_alert(alert, shedding))
             if not snapshot.healthy:
-                batch_data.resource_alerts.append(
-                    "🚨 CRITICAL! SYSTEM UNHEALTHY! RESOURCE LIMITS EXCEEDED - IMMEDIATE ACTION REQUIRED!"
-                )
+                batch_data.resource_alerts.append(_get_system_unhealthy_alert())
         except Exception as e:
             logger.error(f"Failed to get resource alerts: {e}")
             batch_data.resource_alerts.append(f"🚨 CRITICAL! FAILED TO CHECK RESOURCES: {str(e)}")

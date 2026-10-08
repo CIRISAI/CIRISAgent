@@ -30,7 +30,8 @@ class ResourceMonitorServiceProtocol(ServiceProtocol, Protocol):
     """Protocol for resource monitoring service.
 
     Tracks CPU, memory, disk, token usage and active thoughts.
-    Enforces limits through throttle, defer, reject, and shutdown signals.
+    Escalates per-resource pressure (NORMAL -> ELEVATED -> HIGH -> CRITICAL) into
+    reclaim, throttle, shed and drain signals (runtime self-protection, not agent actions).
     Critical for preventing resource exhaustion over centuries of operation.
     """
 

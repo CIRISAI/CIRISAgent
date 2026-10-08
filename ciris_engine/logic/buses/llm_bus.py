@@ -18,6 +18,7 @@ from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     from ciris_engine.logic.registries.base import ServiceRegistry
+    from ciris_engine.protocols.services.infrastructure.resource_monitor import ResourceMonitorServiceProtocol
     from ciris_engine.schemas.services.llm import LLMMessage
 
 from collections import defaultdict
@@ -136,9 +137,7 @@ def _serialize_response(result: Optional[BaseModel]) -> Tuple[Optional[str], Opt
     return response_text, len(response_text.encode("utf-8"))
 
 
-def _resolve_status_and_error_class(
-    success: bool, error: Optional[BaseException]
-) -> Tuple[str, Optional[str]]:
+def _resolve_status_and_error_class(success: bool, error: Optional[BaseException]) -> Tuple[str, Optional[str]]:
     """Map (success, error) to (status_enum, error_class_name)."""
     if success:
         return "ok", None
@@ -158,13 +157,10 @@ async def _broadcast_llm_call_event(ctx: LLMCallEventContext) -> None:
     issues.
     """
     try:
-        from ciris_engine.logic.buses.llm_call_context import (
-            UNKNOWN_PARENT_EVENT_TYPE,
-            get_parent_event_context,
-        )
+        from ciris_engine.logic.buses.llm_call_context import UNKNOWN_PARENT_EVENT_TYPE, get_parent_event_context
         from ciris_engine.logic.infrastructure.step_streaming import reasoning_event_stream
-        from ciris_engine.schemas.streaming.reasoning_stream import create_reasoning_event
         from ciris_engine.schemas.services.runtime_control import ReasoningEvent
+        from ciris_engine.schemas.streaming.reasoning_stream import create_reasoning_event
 
         model = _extract_call_model(ctx.selected_service)
         prompt_tokens, completion_tokens, cost_usd = _extract_usage_metrics(ctx.usage)
@@ -291,8 +287,11 @@ class LLMBus(BaseBus[LLMService]):
         telemetry_service: Optional[TelemetryServiceProtocol] = None,
         distribution_strategy: DistributionStrategy = DistributionStrategy.LATENCY_BASED,
         circuit_breaker_config: Optional[JSONDict] = None,
+        resource_monitor: Optional["ResourceMonitorServiceProtocol"] = None,
     ):
         super().__init__(service_type=ServiceType.LLM, service_registry=service_registry)
+        # Receives each completed call's tokens (tokens_hour / tokens_day budgets).
+        self.resource_monitor = resource_monitor
 
         self._time_service = time_service
         self._start_time = time_service.now() if time_service else None
@@ -502,11 +501,7 @@ class LLMBus(BaseBus[LLMService]):
                 "temperature": temperature,
                 "max_tokens": max_tokens,
                 "messages": messages,
-                "result": (
-                    result.model_dump()
-                    if hasattr(result, "model_dump")
-                    else str(result)
-                ),
+                "result": (result.model_dump() if hasattr(result, "model_dump") else str(result)),
             }
 
             # O_NOFOLLOW: refuse to follow a symlink at out_path. If a
@@ -1341,7 +1336,18 @@ class LLMBus(BaseBus[LLMService]):
         thought_id: Optional[str] = None,
         api_base: Optional[str] = None,
     ) -> None:
-        """Record detailed telemetry for resource usage"""
+        """Record detailed telemetry for resource usage.
+
+        The single point where a completed call's tokens are recorded: the
+        canonical ``llm.tokens.total`` metric below, and the resource monitor's
+        token budget (tokens_hour / tokens_day) -- the same number, once.
+        """
+        if self.resource_monitor is not None and usage.tokens_used > 0:
+            try:
+                await self.resource_monitor.record_tokens(usage.tokens_used)
+            except Exception as e:  # never fail an LLM call over budget bookkeeping
+                logger.warning(f"Failed to record tokens with the resource monitor: {e}")
+
         if not self.telemetry_service:
             return
 

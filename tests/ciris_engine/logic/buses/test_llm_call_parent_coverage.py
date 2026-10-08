@@ -36,6 +36,7 @@ in ``tools/qa_runner/modules/streaming_verification.py`` and is exercised
 by the ``streaming`` QA module — that catches the runtime-coverage case
 the static tests can't.
 """
+
 from __future__ import annotations
 
 import ast
@@ -51,11 +52,8 @@ from ciris_engine.logic.buses.llm_call_context import (
     get_parent_event_context,
     set_parent_event_context,
 )
-from ciris_engine.logic.processors.core.step_decorators import (
-    _resolve_parent_event_for_step,
-)
+from ciris_engine.logic.processors.core.step_decorators import _resolve_parent_event_for_step
 from ciris_engine.schemas.services.runtime_control import StepPoint
-
 
 # ---------------------------------------------------------------------------
 # StepPoint coverage
@@ -125,9 +123,9 @@ def test_llm_issuing_step_maps_to_real_parent(step: StepPoint):
         f"StepPoint.{step.name} maps to the UNKNOWN_PARENT sentinel — that's exactly "
         f"the value the sentinel exists to flag as missing."
     )
-    assert parent_attempt_index >= 0, (
-        f"StepPoint.{step.name} maps to a negative parent_attempt_index — persistence rejects."
-    )
+    assert (
+        parent_attempt_index >= 0
+    ), f"StepPoint.{step.name} maps to a negative parent_attempt_index — persistence rejects."
 
 
 @pytest.mark.parametrize("step", sorted(NON_LLM_STEP_POINTS, key=lambda s: s.value))
@@ -184,8 +182,8 @@ def _find_broadcast_llm_call_emission_sites() -> Set[str]:
 # the new site is reached only from a `@streaming_step`-decorated handler
 # OR explicitly inside a `set_parent_event_context()` `with` block.
 EXPECTED_BROADCAST_SITES: Set[str] = {
-    "ciris_engine/logic/buses/llm_bus.py:833",  # _execute_llm_call success path
-    "ciris_engine/logic/buses/llm_bus.py:953",  # _execute_llm_call error path
+    "ciris_engine/logic/buses/llm_bus.py:828",  # _execute_llm_call success path
+    "ciris_engine/logic/buses/llm_bus.py:948",  # _execute_llm_call error path
 }
 
 

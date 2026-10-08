@@ -4,7 +4,7 @@ Enhanced with proper context building and service passing.
 """
 
 import logging
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from ciris_engine.logic.utils.jsondict_helpers import get_int
 from ciris_engine.schemas.types import JSONDict
@@ -17,6 +17,7 @@ from ciris_engine.logic import persistence
 from ciris_engine.logic.processors.core.base_processor import BaseProcessor
 from ciris_engine.logic.processors.support.task_manager import TaskManager
 from ciris_engine.logic.processors.support.thought_manager import ThoughtManager
+from ciris_engine.logic.services.infrastructure.resource_monitor.pressure import pressure_gate_of
 
 # ServiceProtocol import removed - processors aren't services
 from ciris_engine.logic.utils.context_utils import build_dispatch_context
@@ -25,6 +26,7 @@ from ciris_engine.schemas.processors.states import AgentState
 from ciris_engine.schemas.runtime.enums import TaskStatus, ThoughtStatus
 from ciris_engine.schemas.runtime.models import Task
 from ciris_engine.schemas.services.budget_envelope import PROPOSAL_TICKET_STATUS
+from ciris_engine.schemas.services.resources_core import ResourceAction
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +81,36 @@ class WorkProcessor(BaseProcessor):
         self.last_activity_time = self.time_service.now()
         self.idle_rounds = 0
 
+    async def _admit_new_work(self) -> Tuple[int, int]:
+        """Phases 0 and 1 -- take on new work -- unless a resource is holding SHED.
+
+        SHED is admission control. Nothing new is taken on: no shared ticket is
+        claimed (a pressured occurrence must not take work a healthy peer
+        could do), no continuation task is created, and queued tasks stay
+        PENDING. Tasks already active keep generating and processing their
+        thoughts, so in-flight work finishes and the pressure can drain. The
+        gate lifts SHED once the resource falls clearly back below CRITICAL.
+
+        Returns (tickets_discovered, tasks_activated).
+        """
+        gate = pressure_gate_of(self.resource_monitor)
+        if gate is not None:
+            holders = gate.resources(ResourceAction.SHED)
+            if holders:
+                gate.note_shed_round()
+                logger.debug("Phases 0-1 skipped: admission closed by resource pressure (shed: %s)", ", ".join(holders))
+                return 0, 0
+
+        # Phase 0: Ticket discovery (claims shared tickets, creates tasks for incomplete tickets)
+        logger.debug("Phase 0: Discovering incomplete tickets...")
+        tickets_discovered = await self._discover_incomplete_tickets()
+        logger.debug(f"Discovered {tickets_discovered} incomplete tickets")
+
+        # Phase 1: Task activation
+        logger.debug("Phase 1: Activating pending tasks...")
+        activated = self.task_manager.activate_pending_tasks()
+        return tickets_discovered, activated
+
     def get_supported_states(self) -> List[AgentState]:
         """Work processor handles WORK and PLAY states."""
         return [AgentState.WORK, AgentState.PLAY]
@@ -102,14 +134,8 @@ class WorkProcessor(BaseProcessor):
         }
 
         try:
-            # Phase 0: Ticket discovery (create tasks for incomplete tickets)
-            logger.debug("Phase 0: Discovering incomplete tickets...")
-            tickets_discovered = await self._discover_incomplete_tickets()
-            logger.debug(f"Discovered {tickets_discovered} incomplete tickets")
-
-            # Phase 1: Task activation
-            logger.debug("Phase 1: Activating pending tasks...")
-            activated = self.task_manager.activate_pending_tasks()
+            # Phases 0-1: take on new work (ticket discovery, task activation) -- gated by SHED
+            _tickets_discovered, activated = await self._admit_new_work()
             logger.debug(f"Activated {activated} tasks")
             round_metrics["tasks_activated"] = activated
 

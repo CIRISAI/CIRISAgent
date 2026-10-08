@@ -56,6 +56,7 @@ class MessageRejectionReason(str, Enum):
     PROCESSOR_PAUSED = "PROCESSOR_PAUSED"  # Agent processor paused
     RATE_LIMITED = "RATE_LIMITED"  # Rate limit exceeded
     CHANNEL_RESTRICTED = "CHANNEL_RESTRICTED"  # Channel access denied
+    RESOURCE_SHED = "RESOURCE_SHED"  # Runtime self-protection: admission closed under resource pressure
 
 
 class ImagePayload(BaseModel):
@@ -270,7 +271,9 @@ async def store_message_response(message_id: str, response: str, task_id: Option
         # and cleaned up. So this stays WARNING, not ERROR — the unambiguous
         # failure signal is the interact() timeout itself ([INTERACT_TIMEOUT],
         # logged at ERROR), not this line.
-        logger.warning(f"[STORE_RESPONSE] No event found for {message_id} (async submission or already-timed-out interact)")
+        logger.warning(
+            f"[STORE_RESPONSE] No event found for {message_id} (async submission or already-timed-out interact)"
+        )
 
 
 # Endpoints
@@ -814,6 +817,32 @@ def _get_current_cognitive_state(request: Request) -> str:
     return _get_cognitive_state(runtime)
 
 
+def _raise_if_shed(result: Any, message_id: str, request: Request) -> None:
+    """503 + Retry-After when the observer refused the message under SHED.
+
+    SHED is runtime self-protection (a resource is under CRITICAL pressure),
+    not an agent decision, so it is answered as a retryable service condition
+    rather than as a rejected or deferred message.
+    """
+    from ciris_engine.logic.services.infrastructure.resource_monitor.pressure import SHED_RETRY_AFTER_SECONDS
+    from ciris_engine.schemas.runtime.messages import MessageHandlingStatus
+
+    if getattr(result, "status", None) != MessageHandlingStatus.RESOURCE_SHED:
+        return
+    _cleanup_interaction_tracking(message_id, request)
+    raise HTTPException(
+        status_code=503,
+        headers={"Retry-After": str(SHED_RETRY_AFTER_SECONDS)},
+        detail={
+            "error": "resource_shed",
+            "reason": MessageRejectionReason.RESOURCE_SHED.value,
+            "message": "The agent is not admitting new work while a resource is under pressure. Retry later.",
+            "resources": list(getattr(result, "shed_resources", []) or []),
+            "retry_after_seconds": SHED_RETRY_AFTER_SECONDS,
+        },
+    )
+
+
 def _cleanup_interaction_tracking(message_id: str, request: Optional[Request] = None) -> None:
     """Clean up interaction tracking for given message ID.
 
@@ -936,6 +965,8 @@ async def submit_message(
         )
         return SuccessResponse(data=response)
 
+    _raise_if_shed(result, message_id, request)
+
     # Map MessageHandlingResult to MessageSubmissionResponse
     accepted = result.status in [MessageHandlingStatus.TASK_CREATED, MessageHandlingStatus.UPDATED_EXISTING_TASK]
     rejection_reason = None
@@ -1005,7 +1036,7 @@ async def interact(request: Request, body: InteractRequest, auth: AuthObserverDe
 
     try:
         if hasattr(request.app.state, "on_message"):
-            await request.app.state.on_message(msg)
+            interact_result = await request.app.state.on_message(msg)
         else:
             raise HTTPException(status_code=503, detail=ERROR_MESSAGE_HANDLER_NOT_CONFIGURED)
     except CreditDenied as exc:
@@ -1036,6 +1067,8 @@ async def interact(request: Request, body: InteractRequest, auth: AuthObserverDe
                 "reason": exc.message,
             },
         ) from exc
+
+    _raise_if_shed(interact_result, message_id, request)
 
     # Get timeout and wait for response
     timeout = _get_interaction_timeout(request)
@@ -1099,13 +1132,10 @@ async def interact(request: Request, body: InteractRequest, auth: AuthObserverDe
         # systemic interact() stall instead of it masking as a benign 200.
         mock_llm = bool(os.environ.get("CIRIS_MOCK_LLM"))
         logger.error(
-            "[INTERACT_TIMEOUT] message_id=%s timed out after %.0fs without an "
-            "agent response%s",
+            "[INTERACT_TIMEOUT] message_id=%s timed out after %.0fs without an agent response%s",
             message_id,
             timeout,
-            " (mock LLM active — this indicates a processing stall, not slow inference)"
-            if mock_llm
-            else "",
+            " (mock LLM active — this indicates a processing stall, not slow inference)" if mock_llm else "",
         )
 
         # Return a timeout response rather than error

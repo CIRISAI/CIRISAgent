@@ -910,9 +910,9 @@ class ApiPlatform(Service):
         logger.info("Started API tool service")
 
         # Create message observer for handling incoming messages
-        resource_monitor_from_runtime = getattr(self.runtime, "resource_monitor_service", None)
+        resource_monitor_from_runtime = getattr(self.runtime, "resource_monitor", None)
         logger.info(
-            f"[OBSERVER_INIT] resource_monitor_service from runtime: {resource_monitor_from_runtime is not None}, type={type(resource_monitor_from_runtime).__name__ if resource_monitor_from_runtime else 'None'}"
+            f"[OBSERVER_INIT] resource_monitor from runtime: {resource_monitor_from_runtime is not None}, type={type(resource_monitor_from_runtime).__name__ if resource_monitor_from_runtime else 'None'}"
         )
 
         self.message_observer = APIObserver(
@@ -1083,8 +1083,7 @@ class ApiPlatform(Service):
             await asyncio.wait_for(asyncio.shield(task), timeout=grace_seconds)
         except asyncio.TimeoutError:
             logger.warning(
-                "API server did not stop within %.0fs of should_exit; cancelling its task "
-                "so the process can exit",
+                "API server did not stop within %.0fs of should_exit; cancelling its task so the process can exit",
                 grace_seconds,
             )
             task.cancel()

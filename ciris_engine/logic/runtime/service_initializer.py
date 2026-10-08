@@ -180,11 +180,22 @@ class ServiceInitializer:
         _log_service_started(3, "InitializationService")
 
         # Initialize ResourceMonitorService
+        # Device-sized default budget (phones: 1 GB memory; laptop/server: 4 GB).
+        # The monitor's budget is the one source: /v1/system/resources and the
+        # telemetry resource view both report it, so published and acting
+        # numbers cannot drift.
+        from ciris_engine.logic.runtime.device_class import resolve_device_class
         from ciris_engine.logic.services.infrastructure.resource_monitor import ResourceMonitorService
         from ciris_engine.schemas.services.resources_core import ResourceBudget
 
-        # Create default resource budget
-        budget = ResourceBudget()  # Uses defaults from schema
+        budget = ResourceBudget.for_device_class(resolve_device_class())
+        logger.info(
+            "Resource budget: device class %s, memory %s/%s/%s MB (elevated/high/critical)",
+            budget.device_class.value,
+            budget.memory_mb.warning,
+            budget.memory_mb.critical,
+            budget.memory_mb.limit,
+        )
 
         # Credit provider: Controls billing for CIRIS LLM proxy usage
         # - Server: CIRIS_BILLING_API_KEY set → API key auth
@@ -268,6 +279,7 @@ class ServiceInitializer:
             db_path=get_sqlite_db_full_path(self.essential_config),
             time_service=self.time_service,
             credit_provider=credit_provider,
+            agent_occurrence_id=getattr(self.essential_config, "agent_occurrence_id", "default"),
         )
         await self.resource_monitor_service.start()
         self._services_started_count += 1
@@ -389,6 +401,11 @@ This directory contains critical cryptographic keys for the CIRIS system.
         await self.config_service.start()
         self._services_started_count += 1
         _log_service_started(7, "ConfigService")
+
+        # Token budgets live in the config graph (none by default); the monitor
+        # reads them now and follows resources.token_budget.* changes live.
+        if self.resource_monitor_service is not None:
+            await self.resource_monitor_service.attach_config_service(self.config_service)
 
         # Register config service immediately so it's available for persistence operations
         registry = get_global_registry()
@@ -800,6 +817,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
             self.time_service,
             None,  # telemetry_service will be set later
             None,  # audit_service will be set later
+            resource_monitor=self.resource_monitor_service,
         )
         self._dependencies_resolved += 1  # BusManager dependency
 

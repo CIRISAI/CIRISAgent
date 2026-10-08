@@ -1132,7 +1132,7 @@ async def interact(request: Request, body: InteractRequest, auth: AuthObserverDe
         # systemic interact() stall instead of it masking as a benign 200.
         mock_llm = bool(os.environ.get("CIRIS_MOCK_LLM"))
         logger.error(
-            "[INTERACT_TIMEOUT] message_id=%s timed out after %.0fs without an " "agent response%s",
+            "[INTERACT_TIMEOUT] message_id=%s timed out after %.0fs without an agent response%s",
             message_id,
             timeout,
             " (mock LLM active — this indicates a processing stall, not slow inference)" if mock_llm else "",

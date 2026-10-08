@@ -15,6 +15,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from ciris_engine.logic.adapters.api.dependencies.auth import require_observer
 from ciris_engine.logic.adapters.api.routes import agent as agent_routes
@@ -40,6 +41,7 @@ from ciris_engine.schemas.services.resources_core import (
     PressureLevel,
     ResourceAction,
     ResourceBudget,
+    ResourceLimit,
 )
 
 
@@ -81,21 +83,41 @@ def _gate(monitor):
 # --------------------------------------------------------------------------- #
 
 
+def _limit(cap: ResourceAction, elevated: ResourceAction = ResourceAction.WARN) -> ResourceLimit:
+    return ResourceLimit(limit=100, warning=60, critical=80, action=cap, elevated_action=elevated)
+
+
 def test_default_ladder_and_caps():
-    shed = ResourceAction.SHED
-    assert actions_for_level(PressureLevel.NORMAL, shed) == []
-    assert actions_for_level(PressureLevel.ELEVATED, shed) == [ResourceAction.RECLAIM]
-    assert actions_for_level(PressureLevel.HIGH, shed) == [ResourceAction.RECLAIM, ResourceAction.THROTTLE]
-    assert actions_for_level(PressureLevel.CRITICAL, shed) == [
+    memory = _limit(ResourceAction.SHED, ResourceAction.RECLAIM)
+    assert actions_for_level(PressureLevel.NORMAL, memory) == []
+    assert actions_for_level(PressureLevel.ELEVATED, memory) == [ResourceAction.RECLAIM]
+    assert actions_for_level(PressureLevel.HIGH, memory) == [ResourceAction.RECLAIM, ResourceAction.THROTTLE]
+    assert actions_for_level(PressureLevel.CRITICAL, memory) == [
         ResourceAction.RECLAIM,
         ResourceAction.THROTTLE,
         ResourceAction.SHED,
     ]
+    # Non-memory resources: ELEVATED is non-acting, the ladder starts at THROTTLE
+    thoughts = _limit(ResourceAction.SHED)
+    assert actions_for_level(PressureLevel.ELEVATED, thoughts) == []
+    assert actions_for_level(PressureLevel.CRITICAL, thoughts) == [ResourceAction.THROTTLE, ResourceAction.SHED]
     # cpu is capped at THROTTLE; WARN only logs; DRAIN joins only when it is the cap
-    assert ResourceAction.SHED not in actions_for_level(PressureLevel.CRITICAL, ResourceAction.THROTTLE)
-    assert actions_for_level(PressureLevel.CRITICAL, ResourceAction.WARN) == []
-    assert ResourceAction.DRAIN in actions_for_level(PressureLevel.CRITICAL, ResourceAction.DRAIN)
-    assert ResourceAction.DRAIN not in actions_for_level(PressureLevel.HIGH, ResourceAction.DRAIN)
+    assert actions_for_level(PressureLevel.CRITICAL, _limit(ResourceAction.THROTTLE)) == [ResourceAction.THROTTLE]
+    assert actions_for_level(PressureLevel.CRITICAL, _limit(ResourceAction.WARN, ResourceAction.RECLAIM)) == []
+    assert ResourceAction.DRAIN in actions_for_level(PressureLevel.CRITICAL, _limit(ResourceAction.DRAIN))
+    assert ResourceAction.DRAIN not in actions_for_level(PressureLevel.HIGH, _limit(ResourceAction.DRAIN))
+
+
+def test_elevated_rung_cannot_be_an_admission_or_shutdown_action():
+    for action in (ResourceAction.THROTTLE, ResourceAction.SHED, ResourceAction.DRAIN):
+        with pytest.raises(ValidationError):
+            _limit(ResourceAction.SHED, action)
+
+
+def test_only_memory_reclaims_by_default():
+    budget = ResourceBudget()
+    reclaiming = [n for n in type(budget).model_fields if getattr(budget, n).elevated_action == ResourceAction.RECLAIM]
+    assert reclaiming == ["memory_mb"]
 
 
 def test_no_default_uses_drain_and_caps_match_the_ruling():
@@ -134,21 +156,52 @@ async def test_disk_is_not_checked(monitor):
 # --------------------------------------------------------------------------- #
 
 
+async def _set_memory(monitor: ResourceMonitorService, value: int) -> None:
+    monitor.snapshot.memory_mb = value
+    await monitor._check_limits()
+
+
 @pytest.mark.asyncio
-async def test_reclaim_engages_at_elevated_and_lifts(monitor, monkeypatch):
+async def test_reclaim_engages_at_elevated_memory_and_lifts(monitor, monkeypatch):
     calls = []
     monkeypatch.setattr(rm_service, "_release_process_memory", lambda t: calls.append(t) or _fake_release(t))
-    monitor.budget.thoughts_active.cooldown_seconds = 0
+    monitor.budget.memory_mb.cooldown_seconds = 0
 
-    await _set_thoughts(monitor, 40)  # ELEVATED
+    await _set_memory(monitor, 768)  # ELEVATED
     assert calls == ["resource_monitor:reclaim"]
-    await _set_thoughts(monitor, 40)  # stays ELEVATED: reclaims again once the cooldown allows
+    await _set_memory(monitor, 768)  # stays ELEVATED: reclaims again once the cooldown allows
     assert len(calls) == 2
 
-    await _set_thoughts(monitor, 0)  # back to NORMAL
-    await _set_thoughts(monitor, 0)
+    await _set_memory(monitor, 100)  # back to NORMAL
+    await _set_memory(monitor, 100)
     assert len(calls) == 2
     assert monitor._collect_custom_metrics()["resource_signal_reclaim_total"] == 2.0
+
+
+@pytest.mark.asyncio
+async def test_cpu_and_thoughts_never_release_memory(monitor, monkeypatch):
+    """Releasing heap does nothing for CPU or thought counts and costs CPU:
+    neither reclaims at ELEVATED, nor at any higher level."""
+    calls = []
+    monkeypatch.setattr(rm_service, "_release_process_memory", lambda t: calls.append(t) or _fake_release(t))
+    monitor.budget.cpu_percent.cooldown_seconds = 0
+    monitor.budget.thoughts_active.cooldown_seconds = 0
+
+    monitor.snapshot.cpu_average_1m = 60  # ELEVATED
+    await _set_thoughts(monitor, 40)  # ELEVATED
+    assert monitor.get_pressure_levels() == {
+        "cpu_percent": PressureLevel.ELEVATED,
+        "thoughts_active": PressureLevel.ELEVATED,
+    }
+    await _set_thoughts(monitor, 40)  # repeat tick within the level
+    assert not _gate(monitor).is_active(ResourceAction.THROTTLE)
+
+    monitor.snapshot.cpu_average_1m = 100  # CRITICAL (capped at THROTTLE)
+    await _set_thoughts(monitor, 50)  # CRITICAL
+    assert _gate(monitor).is_active(ResourceAction.THROTTLE)
+
+    assert calls == []
+    assert "resource_signal_reclaim_total" not in monitor._collect_custom_metrics()
 
 
 # --------------------------------------------------------------------------- #

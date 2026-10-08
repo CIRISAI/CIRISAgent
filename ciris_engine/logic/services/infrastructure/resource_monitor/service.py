@@ -278,8 +278,8 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
     async def _change_level(
         self, name: str, config: ResourceLimit, previous: PressureLevel, level: PressureLevel, value: int
     ) -> None:
-        before = actions_for_level(previous, config.action)
-        after = actions_for_level(level, config.action)
+        before = actions_for_level(previous, config)
+        after = actions_for_level(level, config)
         if level == PressureLevel.NORMAL:
             self._levels.pop(name, None)
         else:
@@ -319,7 +319,7 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
         if last and now - last < timedelta(seconds=config.cooldown_seconds):
             return
         self._last_repeat[name] = now
-        actions = actions_for_level(level, config.action)
+        actions = actions_for_level(level, config)
         logger.warning(
             "Resource %s still at %s pressure (value %s); in force: %s",
             name,

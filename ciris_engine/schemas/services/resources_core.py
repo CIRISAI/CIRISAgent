@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ResourceAction(str, Enum):
@@ -33,9 +33,10 @@ class PressureLevel(str, Enum):
 
     ELEVATED >= `warning`, HIGH >= `critical`, CRITICAL >= `limit`. A level
     lifts only once the value is clearly back below that threshold (hysteresis).
-    Default ladder: ELEVATED -> RECLAIM, HIGH -> +THROTTLE, CRITICAL -> +SHED
-    (+DRAIN only when the resource's cap is DRAIN); actions are cumulative and
-    each is capped by `ResourceLimit.action`.
+    Ladder: ELEVATED -> `ResourceLimit.elevated_action` (RECLAIM for memory,
+    non-acting WARN elsewhere), HIGH -> +THROTTLE, CRITICAL -> +SHED (+DRAIN
+    only when the resource's cap is DRAIN); actions are cumulative and each is
+    capped by `ResourceLimit.action`.
     """
 
     NORMAL = "normal"
@@ -54,13 +55,29 @@ class ResourceLimit(BaseModel):
         default=ResourceAction.SHED,
         description="Strongest action this resource may escalate to (cap on the pressure ladder)",
     )
+    elevated_action: ResourceAction = Field(
+        default=ResourceAction.WARN,
+        description=(
+            "What the ELEVATED rung does: RECLAIM (memory only -- releasing heap does nothing for other "
+            "resources and costs CPU), or the non-acting LOG/WARN"
+        ),
+    )
     cooldown_seconds: int = Field(default=60, ge=0, description="Cooldown between repeat RECLAIMs and log lines")
 
     model_config = ConfigDict(extra="forbid", defer_build=True)
 
+    @field_validator("elevated_action")
+    @classmethod
+    def _elevated_rung_is_reclaim_or_non_acting(cls, value: ResourceAction) -> ResourceAction:
+        if value not in (ResourceAction.LOG, ResourceAction.WARN, ResourceAction.RECLAIM):
+            raise ValueError("elevated_action must be LOG, WARN or RECLAIM; THROTTLE/SHED/DRAIN start higher")
+        return value
+
 
 def _memory_mb_limit() -> ResourceLimit:
-    return ResourceLimit(limit=1024, warning=768, critical=960, action=ResourceAction.SHED)
+    return ResourceLimit(
+        limit=1024, warning=768, critical=960, action=ResourceAction.SHED, elevated_action=ResourceAction.RECLAIM
+    )
 
 
 def _cpu_percent_limit() -> ResourceLimit:

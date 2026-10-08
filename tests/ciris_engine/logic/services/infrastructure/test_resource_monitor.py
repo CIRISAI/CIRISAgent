@@ -203,10 +203,9 @@ async def test_resource_monitor_signal_bus(resource_monitor, signal_bus, monkeyp
 
     await resource_monitor._check_limits()
 
-    assert ("reclaim", "cpu_percent") in emitted_signals
-    assert ("throttle", "cpu_percent") in emitted_signals
-    assert ("shed", "cpu_percent") not in emitted_signals
-    assert [s for s, r in emitted_signals if r == "thoughts_active"] == ["reclaim", "throttle", "shed"]
+    # Only memory reclaims; elsewhere the ladder starts acting at THROTTLE
+    assert [s for s, r in emitted_signals if r == "cpu_percent"] == ["throttle"]
+    assert [s for s, r in emitted_signals if r == "thoughts_active"] == ["throttle", "shed"]
     assert not [s for s, r in emitted_signals if r == "tokens_hour"]
 
 
@@ -250,19 +249,23 @@ async def test_resource_monitor_cooldown(resource_monitor, signal_bus, monkeypat
 
     signal_bus.register("reclaim", signal_handler)
     signal_bus.register("throttle", signal_handler)
-    resource_monitor.budget.thoughts_active.cooldown_seconds = 1
-    high = resource_monitor.budget.thoughts_active.critical
+    resource_monitor.budget.memory_mb.cooldown_seconds = 1
+    high = resource_monitor.budget.memory_mb.critical
 
-    resource_monitor.snapshot.thoughts_active = high
+    # The release writes the post-release RSS into the snapshot; re-assert the
+    # HIGH reading before every check (this test is about pacing, not release).
+    resource_monitor.snapshot.memory_mb = high
     await resource_monitor._check_limits()
-    assert emitted_signals == [("reclaim", "thoughts_active"), ("throttle", "thoughts_active")]
+    assert emitted_signals == [("reclaim", "memory_mb"), ("throttle", "memory_mb")]
 
+    resource_monitor.snapshot.memory_mb = high
     await resource_monitor._check_limits()
     assert len(emitted_signals) == 2  # within cooldown: nothing repeats
 
     await asyncio.sleep(1.1)
+    resource_monitor.snapshot.memory_mb = high
     await resource_monitor._check_limits()
-    assert emitted_signals[2:] == [("reclaim", "thoughts_active")]  # RECLAIM repeats, THROTTLE does not
+    assert emitted_signals[2:] == [("reclaim", "memory_mb")]  # RECLAIM repeats, THROTTLE does not
 
 
 def test_resource_monitor_get_capabilities(resource_monitor):

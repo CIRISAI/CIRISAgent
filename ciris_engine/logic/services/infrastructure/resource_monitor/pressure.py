@@ -9,7 +9,8 @@ H3ERE action and none is ever offered to the model as a choice.
     PressureLevel  NORMAL -> ELEVATED -> HIGH -> CRITICAL   (per resource, hysteresis)
     ResourceAction RECLAIM, THROTTLE, SHED, DRAIN           (LOG / WARN are non-acting)
 
-    ELEVATED -> RECLAIM    the monitor releases memory (existing release_memory path)
+    ELEVATED -> RECLAIM    memory only (elevated_action): the monitor releases memory via
+                           release_memory. Other resources: non-acting WARN at ELEVATED.
     HIGH     -> THROTTLE   AgentProcessor adds a bounded delay between rounds
     CRITICAL -> SHED       WorkProcessor activates no new tasks; BaseObserver refuses new
                            inbound work with a typed status (API: 503 + Retry-After).
@@ -34,7 +35,12 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Set, Tuple
 
-from ciris_engine.schemas.services.resources_core import PressureLevel, ResourceAction, ResourcePressureState
+from ciris_engine.schemas.services.resources_core import (
+    PressureLevel,
+    ResourceAction,
+    ResourceLimit,
+    ResourcePressureState,
+)
 
 if TYPE_CHECKING:
     from .service import ResourceSignalBus
@@ -58,11 +64,12 @@ LEVEL_ORDER: Tuple[PressureLevel, ...] = (
     PressureLevel.CRITICAL,
 )
 
-#: The default escalation: the action each level adds.
-ESCALATION_LADDER: Tuple[Tuple[PressureLevel, ResourceAction], ...] = (
-    (PressureLevel.ELEVATED, ResourceAction.RECLAIM),
-    (PressureLevel.HIGH, ResourceAction.THROTTLE),
-    (PressureLevel.CRITICAL, ResourceAction.SHED),
+#: Actions that do something (LOG and WARN only log).
+_ACTING: Tuple[ResourceAction, ...] = (
+    ResourceAction.RECLAIM,
+    ResourceAction.THROTTLE,
+    ResourceAction.SHED,
+    ResourceAction.DRAIN,
 )
 
 #: Actions that stay in force until lifted. RECLAIM is per-emit; DRAIN is one-shot.
@@ -93,16 +100,32 @@ def level_rank(level: PressureLevel) -> int:
     return LEVEL_ORDER.index(level)
 
 
-def actions_for_level(level: PressureLevel, cap: ResourceAction) -> List[ResourceAction]:
-    """Acting actions in force at ``level`` for a resource capped at ``cap``.
+def escalation_ladder(config: ResourceLimit) -> Tuple[Tuple[PressureLevel, ResourceAction], ...]:
+    """The action each level adds for one resource.
 
-    Cumulative and mildest first. DRAIN joins at CRITICAL only when the cap is
-    DRAIN itself; with a LOG or WARN cap the list is empty (logging only).
+    ELEVATED is the resource's own `elevated_action`: RECLAIM for memory, a
+    non-acting LOG/WARN everywhere else (releasing heap does nothing for CPU or
+    thought counts and costs CPU). Acting otherwise starts at THROTTLE.
     """
+    return (
+        (PressureLevel.ELEVATED, config.elevated_action),
+        (PressureLevel.HIGH, ResourceAction.THROTTLE),
+        (PressureLevel.CRITICAL, ResourceAction.SHED),
+    )
+
+
+def actions_for_level(level: PressureLevel, config: ResourceLimit) -> List[ResourceAction]:
+    """Acting actions in force at ``level`` for one resource.
+
+    Cumulative and mildest first, each capped by ``config.action``. DRAIN joins
+    at CRITICAL only when the cap is DRAIN itself; with a LOG or WARN cap the
+    list is empty (logging only).
+    """
+    cap = config.action
     actions = [
         action
-        for rung_level, action in ESCALATION_LADDER
-        if level_rank(level) >= level_rank(rung_level) and _rank(action) <= _rank(cap)
+        for rung_level, action in escalation_ladder(config)
+        if action in _ACTING and level_rank(level) >= level_rank(rung_level) and _rank(action) <= _rank(cap)
     ]
     if level == PressureLevel.CRITICAL and cap == ResourceAction.DRAIN:
         actions.append(ResourceAction.DRAIN)

@@ -60,7 +60,7 @@ Runtime self-protection, not agent decisions: none of these is an H3ERE action.
 ```
 Pressure level   threshold      action it adds (cumulative, capped per resource)
 NORMAL           -              -
-ELEVATED         >= warning     RECLAIM   release memory and caches to the OS
+ELEVATED         >= warning     RECLAIM   memory only (elevated_action); WARN (non-acting) elsewhere
 HIGH             >= critical    THROTTLE  bounded extra delay between processing rounds
 CRITICAL         >= limit       SHED      no new tasks activated; new inbound work refused (503)
                                 DRAIN     graceful runtime shutdown -- only if the cap is DRAIN
@@ -115,7 +115,8 @@ class ResourceSignalBus:
 
 ### Graduated Response Model
 
-1. **RECLAIM** (ELEVATED) -- the monitor releases memory (`release_memory`), and
+1. **RECLAIM** (ELEVATED, memory_mb only via `elevated_action`) -- the monitor
+   releases memory (`release_memory`), and
    again once per cooldown while the resource stays up.
 2. **THROTTLE** (HIGH) -- `AgentProcessor` doubles the round delay (at least
    +1 s, at most +10 s). Never applied in SHUTDOWN.
@@ -171,8 +172,8 @@ class ResourceSignalBus:
 
 ### Default Resource Budget (4GB Target)
 ```python
-# action = the cap on the ladder
-memory_mb = ResourceLimit(limit=1024, warning=768, critical=960, action=SHED)
+# action = the cap on the ladder; elevated_action defaults to WARN (non-acting)
+memory_mb = ResourceLimit(limit=1024, warning=768, critical=960, action=SHED, elevated_action=RECLAIM)
 cpu_percent = ResourceLimit(limit=80, warning=60, critical=75, action=THROTTLE)
 tokens_hour = ResourceLimit(limit=10000, warning=8000, critical=9500, action=THROTTLE)
 tokens_day = ResourceLimit(limit=100000, warning=80000, critical=95000, action=SHED)

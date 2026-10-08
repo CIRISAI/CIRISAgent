@@ -956,7 +956,7 @@ class APIServerManager:
         if self.mock_chain_rpc is None:
             self.mock_chain_rpc = MockChainRPCServer()
             if self.mock_chain_rpc.start():
-                self.console.print(f"[cyan]⛓  Stub chain RPC started at {self.mock_chain_rpc.endpoint_url}[/cyan]")
+                self.console.print(f"[cyan][STUB] Stub chain RPC started at {self.mock_chain_rpc.endpoint_url}[/cyan]")
             else:
                 self.console.print("[yellow][WARN] Could not start stub chain RPC[/yellow]")
                 self.mock_chain_rpc = None

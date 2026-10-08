@@ -1223,7 +1223,10 @@ class AgentProcessor:
         if should_break:
             return round_count, consecutive_errors, True
 
-        # Handle delay between rounds
+        # Handle delay between rounds. Re-read the state: this round may have
+        # transitioned (a DRAIN or any shutdown request moves to SHUTDOWN), and
+        # the throttle must never slow a shutdown on the strength of a stale WORK.
+        current_state = self.state_manager.get_state()
         if not await self._handle_round_delay(current_state):
             return round_count, consecutive_errors, True
 

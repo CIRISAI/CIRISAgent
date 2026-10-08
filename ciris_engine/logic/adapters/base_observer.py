@@ -1063,9 +1063,23 @@ class BaseObserver(Generic[MessageT], ABC):
             existing_task_updated=obs_result.existing_task_updated if obs_result else False,
         )
 
+    def _admission_monitor(self, msg: MessageT) -> Optional[ResourceMonitorServiceProtocol]:
+        """The resource monitor that decides admission for this observer.
+
+        Late-bound from the runtime's BusManager when the observer was not
+        given one: CLI, Discord and Reddit are constructed without a monitor,
+        and SHED must reach every observer, not just the ones that were
+        handed it. Kept separate from `_get_resource_monitor` so admission
+        control does not change which observers enforce credit policy.
+        """
+        monitor = self._get_resource_monitor(msg)
+        if monitor is None:
+            monitor = getattr(self.bus_manager, "resource_monitor", None)
+        return monitor
+
     def _refuse_if_shedding(self, msg: MessageT, msg_id: str, channel_id: str) -> Optional[MessageHandlingResult]:
         """A RESOURCE_SHED result when admission is closed, else None."""
-        gate = pressure_gate_of(self._get_resource_monitor(msg))
+        gate = pressure_gate_of(self._admission_monitor(msg))
         if gate is None:
             return None
         holders = gate.resources(ResourceAction.SHED)

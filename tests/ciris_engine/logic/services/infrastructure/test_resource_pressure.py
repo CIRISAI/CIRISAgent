@@ -83,6 +83,10 @@ def _gate(monitor):
 # --------------------------------------------------------------------------- #
 
 
+def _limits(budget: ResourceBudget) -> dict:
+    return {n: getattr(budget, n) for n in type(budget).model_fields if isinstance(getattr(budget, n), ResourceLimit)}
+
+
 def _limit(cap: ResourceAction, elevated: ResourceAction = ResourceAction.WARN) -> ResourceLimit:
     return ResourceLimit(limit=100, warning=60, critical=80, action=cap, elevated_action=elevated)
 
@@ -116,13 +120,13 @@ def test_elevated_rung_cannot_be_an_admission_or_shutdown_action():
 
 def test_only_memory_reclaims_by_default():
     budget = ResourceBudget()
-    reclaiming = [n for n in type(budget).model_fields if getattr(budget, n).elevated_action == ResourceAction.RECLAIM]
+    reclaiming = [n for n, limit in _limits(budget).items() if limit.elevated_action == ResourceAction.RECLAIM]
     assert reclaiming == ["memory_mb"]
 
 
 def test_no_default_uses_drain_and_caps_match_the_ruling():
     budget = ResourceBudget()
-    caps = {name: getattr(budget, name).action for name in type(budget).model_fields}
+    caps = {name: limit.action for name, limit in _limits(budget).items()}
     assert ResourceAction.DRAIN not in caps.values()
     assert caps["cpu_percent"] == ResourceAction.THROTTLE
     assert caps["tokens_day"] == ResourceAction.SHED
@@ -167,9 +171,10 @@ async def test_reclaim_engages_at_elevated_memory_and_lifts(monitor, monkeypatch
     monkeypatch.setattr(rm_service, "_release_process_memory", lambda t: calls.append(t) or _fake_release(t))
     monitor.budget.memory_mb.cooldown_seconds = 0
 
-    await _set_memory(monitor, 768)  # ELEVATED
+    elevated = monitor.budget.memory_mb.warning
+    await _set_memory(monitor, elevated)  # ELEVATED
     assert calls == ["resource_monitor:reclaim"]
-    await _set_memory(monitor, 768)  # stays ELEVATED: reclaims again once the cooldown allows
+    await _set_memory(monitor, elevated)  # stays ELEVATED: reclaims again once the cooldown allows
     assert len(calls) == 2
 
     await _set_memory(monitor, 100)  # back to NORMAL
@@ -248,24 +253,27 @@ async def test_cpu_never_sheds(monitor):
 # --------------------------------------------------------------------------- #
 
 
-def _activate(monitor, task_manager) -> int:
-    fake = SimpleNamespace(resource_monitor=monitor, task_manager=task_manager)
-    return WorkProcessor._activate_pending_tasks_unless_shedding(fake)
+async def _activate(monitor, task_manager) -> int:
+    fake = SimpleNamespace(
+        resource_monitor=monitor, task_manager=task_manager, _discover_incomplete_tickets=AsyncMock(return_value=0)
+    )
+    _tickets, activated = await WorkProcessor._admit_new_work(fake)
+    return activated
 
 
 @pytest.mark.asyncio
 async def test_shed_stops_task_activation_and_lifts(monitor):
     task_manager = Mock()
     task_manager.activate_pending_tasks = Mock(return_value=2)
-    assert _activate(monitor, task_manager) == 2
+    assert await _activate(monitor, task_manager) == 2
 
     await _set_thoughts(monitor, 50)  # CRITICAL -> SHED
     task_manager.activate_pending_tasks.reset_mock()
-    assert _activate(monitor, task_manager) == 0
+    assert await _activate(monitor, task_manager) == 0
     task_manager.activate_pending_tasks.assert_not_called()
 
     await _set_thoughts(monitor, 0)
-    assert _activate(monitor, task_manager) == 2
+    assert await _activate(monitor, task_manager) == 2
     metrics = monitor._collect_custom_metrics()
     assert metrics["resource_pressure_shed_rounds_total"] == 1.0
     assert metrics["resource_signal_shed_lifted_total"] == 1.0
@@ -412,3 +420,237 @@ async def test_drain_requests_graceful_shutdown_only(monitor, monkeypatch, fresh
 def test_pressure_gate_of_ignores_mocks():
     assert pressure_gate_of(Mock()) is None
     assert pressure_gate_of(None) is None
+
+
+# --------------------------------------------------------------------------- #
+# Codex review of #1242
+# --------------------------------------------------------------------------- #
+
+from ciris_adapters.reddit.observer import RedditObserver  # noqa: E402
+from ciris_adapters.reddit.schemas import RedditCredentials  # noqa: E402
+from ciris_engine.logic.adapters.api.api_observer import APIObserver  # noqa: E402
+from ciris_engine.logic.adapters.cli.cli_observer import CLIObserver  # noqa: E402
+from ciris_engine.logic.adapters.discord.discord_observer import DiscordObserver  # noqa: E402
+from ciris_engine.logic.buses.bus_manager import BusManager  # noqa: E402
+from ciris_engine.logic.buses.llm_bus import LLMBus  # noqa: E402
+from ciris_engine.logic.runtime.device_class import DEVICE_CLASS_ENV, resolve_device_class  # noqa: E402
+from ciris_engine.schemas.runtime.messages import DiscordMessage  # noqa: E402
+from ciris_engine.schemas.runtime.resources import ResourceUsage  # noqa: E402
+from ciris_engine.schemas.services.resources_core import DeviceClass  # noqa: E402
+
+
+def _late_bound(monitor):
+    """What the runtime gives every adapter: a BusManager carrying the monitor."""
+    return lambda: SimpleNamespace(resource_monitor=monitor)
+
+
+def _stub_intake(obs):
+    obs._check_for_accord = AsyncMock()  # type: ignore[method-assign]
+    obs._enforce_credit_policy = AsyncMock()  # type: ignore[method-assign]
+    return obs
+
+
+def _cli(monitor):
+    return CLIObserver(on_observe=AsyncMock(), bus_manager_provider=_late_bound(monitor), agent_id="agent")
+
+
+def _discord(monitor):
+    return DiscordObserver(agent_id="agent", bus_manager_provider=_late_bound(monitor))
+
+
+def _api(monitor):
+    return APIObserver(
+        on_observe=AsyncMock(), bus_manager_provider=_late_bound(monitor), agent_id="agent", origin_service="api"
+    )
+
+
+def _reddit(monitor):
+    creds = RedditCredentials(
+        client_id="i", client_secret="s", username="u", password="p", user_agent="ua", subreddit="ciris"
+    )
+    obs = RedditObserver(credentials=creds, agent_id="agent")
+    obs.bus_manager = SimpleNamespace(resource_monitor=monitor)  # Reddit passes bus_manager directly
+    return obs
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("make", [_cli, _discord, _api, _reddit], ids=["cli", "discord", "api", "reddit"])
+async def test_shed_reaches_observers_built_without_a_monitor(monitor, make):
+    """CLI, Discord and Reddit are constructed without a resource monitor;
+    admission control late-binds it from the runtime's BusManager."""
+    obs = _stub_intake(make(monitor))
+    assert obs.resource_monitor is None
+    msg_cls = DiscordMessage if isinstance(obs, DiscordObserver) else IncomingMessage
+    msg = msg_cls(message_id="m1", author_id="u1", author_name="user", content="hi", channel_id="c1")
+
+    await _set_thoughts(monitor, 50)
+    result = await obs.handle_incoming_message(msg)
+    assert result.status == MessageHandlingStatus.RESOURCE_SHED
+    obs._enforce_credit_policy.assert_not_awaited()
+
+    await _set_thoughts(monitor, 0)
+    assert obs._refuse_if_shedding(msg, "m1", "c1") is None
+
+
+def test_api_adapter_reads_the_runtime_monitor_attribute():
+    """The runtime exposes `resource_monitor`; `resource_monitor_service` does not exist on it."""
+    import inspect
+
+    from ciris_engine.logic.adapters.api import adapter as api_adapter
+    from ciris_engine.logic.runtime.service_property_mixin import ServicePropertyMixin
+
+    assert isinstance(inspect.getattr_static(ServicePropertyMixin, "resource_monitor"), property)
+    source = inspect.getsource(api_adapter)
+    assert 'getattr(self.runtime, "resource_monitor", None)' in source
+    assert 'getattr(self.runtime, "resource_monitor_service"' not in source
+
+
+@pytest.mark.asyncio
+async def test_one_llm_call_moves_tokens_used_hour_by_its_tokens(monitor):
+    telemetry = SimpleNamespace(record_metric=AsyncMock())
+    bus = BusManager(Mock(), TimeService(), telemetry_service=telemetry, resource_monitor=monitor).llm
+    assert bus.resource_monitor is monitor
+
+    await monitor._update_snapshot()
+    before = monitor.snapshot.tokens_used_hour
+    usage = ResourceUsage(tokens_used=1234, tokens_input=1000, tokens_output=234, model_used="m")
+    await bus._record_resource_telemetry("svc", "handler", usage, 10.0)
+    await monitor._update_snapshot()
+
+    assert monitor.snapshot.tokens_used_hour - before == 1234
+    assert monitor.snapshot.tokens_used_day - before == 1234
+    canonical = [c for c in telemetry.record_metric.await_args_list if c.kwargs["metric_name"] == "llm.tokens.total"]
+    assert [c.kwargs["value"] for c in canonical] == [1234.0]  # same fact, written once
+
+
+@pytest.mark.asyncio
+async def test_tokens_recorded_even_without_telemetry(monitor):
+    bus = LLMBus(Mock(), TimeService(), resource_monitor=monitor)
+    await bus._record_resource_telemetry("svc", "h", ResourceUsage(tokens_used=7, model_used="m"), 1.0)
+    await monitor._update_snapshot()
+    assert monitor.snapshot.tokens_used_hour == 7
+
+
+def test_thought_count_is_scoped_to_the_occurrence(monitor, monkeypatch):
+    from ciris_engine.logic.persistence.models import thoughts as thoughts_model
+
+    seen = []
+
+    def fake(status, occurrence_id="default", limit=None):
+        seen.append(occurrence_id)
+        return [object()] * (3 if occurrence_id == "occurrence-7" else 99)
+
+    monkeypatch.setattr(thoughts_model, "get_thoughts_by_status", fake)
+    scoped = ResourceMonitorService(
+        budget=ResourceBudget(), db_path=monitor.db_path, time_service=TimeService(), agent_occurrence_id="occurrence-7"
+    )
+    assert scoped._count_active_thoughts() == 6  # PENDING + PROCESSING for occurrence-7 only
+    assert seen == ["occurrence-7", "occurrence-7"]
+
+
+@pytest.mark.parametrize(
+    "device_class, expected",
+    [
+        (DeviceClass.PHONE, (768, 960, 1024)),
+        (DeviceClass.LAPTOP, (3072, 3840, 4096)),
+        (DeviceClass.SERVER, (3072, 3840, 4096)),
+    ],
+)
+def test_memory_budget_is_device_sized(device_class, expected):
+    budget = ResourceBudget.for_device_class(device_class)
+    memory = budget.memory_mb
+    assert (memory.warning, memory.critical, memory.limit) == expected
+    assert budget.device_class == device_class
+    assert budget.thoughts_active == ResourceBudget().thoughts_active  # only memory differs
+
+
+def test_resolve_device_class(monkeypatch):
+    from ciris_engine.logic.runtime import device_class as dc
+
+    monkeypatch.setattr(dc, "is_android", lambda: False)
+    monkeypatch.setattr(dc, "is_ios", lambda: False)
+    monkeypatch.delenv(DEVICE_CLASS_ENV, raising=False)
+    assert resolve_device_class() == DeviceClass.SERVER
+    monkeypatch.setenv(DEVICE_CLASS_ENV, "laptop")
+    assert resolve_device_class() == DeviceClass.LAPTOP
+    monkeypatch.setenv(DEVICE_CLASS_ENV, "bogus")
+    assert resolve_device_class() == DeviceClass.SERVER
+    monkeypatch.setattr(dc, "is_android", lambda: True)
+    assert resolve_device_class() == DeviceClass.PHONE
+
+
+@pytest.mark.asyncio
+async def test_published_limits_are_the_acting_budget(monitor, api_app):
+    """/v1/system/resources and the telemetry resource view report the monitor's own budget."""
+    from ciris_engine.logic.adapters.api.routes import telemetry as telemetry_routes
+    from ciris_engine.logic.adapters.api.routes.system import services as system_services
+
+    monitor.budget = ResourceBudget.for_device_class(DeviceClass.PHONE)
+    api_app.include_router(system_services.router)
+    api_app.include_router(telemetry_routes.router)
+    api_app.state.resource_monitor = monitor
+    api_app.state.telemetry_service = SimpleNamespace(query_metrics=AsyncMock(return_value=[]))
+    client = TestClient(api_app)
+
+    limits = client.get("/resources").json()["data"]["limits"]
+    assert limits["memory_mb"]["limit"] == 1024
+    assert limits["device_class"] == "phone"
+    tele = client.get("/telemetry/resources").json()["data"]["limits"]
+    assert tele["max_memory_mb"] == 1024.0
+    assert tele["max_cpu_percent"] == float(monitor.budget.cpu_percent.limit)
+
+
+@pytest.mark.asyncio
+async def test_shed_claims_no_shared_ticket(monitor, monkeypatch):
+    """A pressured occurrence must not take shared work a healthy peer could do."""
+    from ciris_engine.logic.persistence.models import tickets as tickets_model
+
+    claims = []
+    shared = {"ticket_id": "T-1", "agent_occurrence_id": "__shared__", "status": "pending"}
+    monkeypatch.setattr(
+        tickets_model, "list_tickets", lambda status=None, **kw: [shared] if status == "pending" else []
+    )
+    monkeypatch.setattr(tickets_model, "update_ticket_status", lambda *a, **kw: claims.append(a) or True)
+
+    wp = WorkProcessor.__new__(WorkProcessor)
+    wp.resource_monitor = monitor
+    wp.agent_occurrence_id = "occurrence-1"
+    wp.task_manager = Mock(activate_pending_tasks=Mock(return_value=0))
+    wp._create_seed_task_for_ticket = Mock(return_value=True)  # type: ignore[method-assign]
+
+    await _set_thoughts(monitor, 50)  # SHED
+    assert await wp._admit_new_work() == (0, 0)
+    assert claims == []
+
+    await _set_thoughts(monitor, 0)  # lifted
+    tickets, _ = await wp._admit_new_work()
+    assert tickets == 1
+    assert claims and claims[0][:2] == ("T-1", "assigned")
+
+
+@pytest.mark.asyncio
+async def test_round_delay_uses_the_state_after_this_rounds_transitions(monitor):
+    """A round that moved to SHUTDOWN (e.g. a DRAIN) is not slowed by THROTTLE."""
+    await _set_thoughts(monitor, 48)  # HIGH -> THROTTLE
+    states = iter([AgentState.WORK, AgentState.SHUTDOWN])
+    delays = []
+
+    ap = AgentProcessor.__new__(AgentProcessor)
+    ap.app_config = SimpleNamespace(mock_llm=False)
+    ap.services = SimpleNamespace(resource_monitor=monitor)
+    ap.current_round_number = 0
+    ap.state_manager = Mock(get_state=Mock(side_effect=lambda: next(states)))
+    ap._should_stop_after_target_rounds = Mock(return_value=False)  # type: ignore[method-assign]
+    ap._check_pause_state = AsyncMock(return_value=True)  # type: ignore[method-assign]
+    ap._handle_shutdown_transitions = AsyncMock(return_value=True)  # type: ignore[method-assign]
+    ap._process_current_state = AsyncMock(return_value=(1, 0, False))  # type: ignore[method-assign]
+
+    async def capture(delay):
+        delays.append(delay)
+        return True
+
+    ap._handle_delay_with_stop_check = capture  # type: ignore[method-assign]
+    await AgentProcessor._process_single_round(ap, 0, 0, 5, None)
+
+    assert delays == [1.0]  # SHUTDOWN base delay, no throttle extra
+    assert ap._process_current_state.await_args.args[3] == AgentState.WORK

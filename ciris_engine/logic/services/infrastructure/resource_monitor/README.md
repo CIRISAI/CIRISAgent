@@ -46,7 +46,7 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
 
 | Resource Type | Default Limits | Tracking Window | Primary Use Case |
 |---------------|----------------|-----------------|------------------|
-| **Memory (MB)** | 4096 limit / 3072 warn / 3840 critical | Real-time | Core 4GB constraint |
+| **Memory (MB)** | laptop/server 4096 limit / 3072 warn / 3840 critical; phone 1024 / 768 / 960 | Real-time | Core 4GB constraint (1 GB on phones) |
 | **CPU (%)** | 80 limit / 60 warn / 75 critical | 1-minute average | Performance optimization |
 | **Tokens/Hour** | 10k limit / 8k warn / 9.5k critical | Rolling hour | Rate limiting |
 | **Tokens/Day** | 100k limit / 80k warn / 95k critical | Rolling day | Cost control |
@@ -173,7 +173,9 @@ class ResourceSignalBus:
 ### Default Resource Budget (4GB Target)
 ```python
 # action = the cap on the ladder; elevated_action defaults to WARN (non-acting)
-memory_mb = ResourceLimit(limit=1024, warning=768, critical=960, action=SHED, elevated_action=RECLAIM)
+# memory is device-sized: ResourceBudget.for_device_class(resolve_device_class())
+memory_mb = ResourceLimit(limit=4096, warning=3072, critical=3840, action=SHED, elevated_action=RECLAIM)  # laptop/server
+memory_mb = ResourceLimit(limit=1024, warning=768, critical=960, action=SHED, elevated_action=RECLAIM)    # phone
 cpu_percent = ResourceLimit(limit=80, warning=60, critical=75, action=THROTTLE)
 tokens_hour = ResourceLimit(limit=10000, warning=8000, critical=9500, action=THROTTLE)
 tokens_day = ResourceLimit(limit=100000, warning=80000, critical=95000, action=SHED)

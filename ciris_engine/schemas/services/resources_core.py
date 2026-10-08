@@ -74,7 +74,23 @@ class ResourceLimit(BaseModel):
         return value
 
 
+class DeviceClass(str, Enum):
+    """Kind of host the runtime is on; selects the device-sized default budget."""
+
+    PHONE = "phone"
+    LAPTOP = "laptop"
+    SERVER = "server"
+
+
 def _memory_mb_limit() -> ResourceLimit:
+    """Laptop and server: the 4 GB target (CLAUDE.md, resource monitor README)."""
+    return ResourceLimit(
+        limit=4096, warning=3072, critical=3840, action=ResourceAction.SHED, elevated_action=ResourceAction.RECLAIM
+    )
+
+
+def _phone_memory_mb_limit() -> ResourceLimit:
+    """Phones: a 1 GB budget; ~650 MB resting RSS was measured on the Android leg."""
     return ResourceLimit(
         limit=1024, warning=768, critical=960, action=ResourceAction.SHED, elevated_action=ResourceAction.RECLAIM
     )
@@ -119,8 +135,17 @@ class ResourceBudget(BaseModel):
         description="Disk limit -- reserved, not checked: its unit is undefined (see _disk_mb_limit)",
     )
     thoughts_active: ResourceLimit = Field(default_factory=_thoughts_active_limit, description="Active thoughts limit")
+    device_class: DeviceClass = Field(
+        default=DeviceClass.SERVER, description="Device class whose defaults this budget was built from"
+    )
 
     model_config = ConfigDict(extra="forbid", defer_build=True)
+
+    @classmethod
+    def for_device_class(cls, device_class: DeviceClass) -> "ResourceBudget":
+        """The default budget for a device class. Only memory differs: phones get 1 GB."""
+        memory = _phone_memory_mb_limit() if device_class == DeviceClass.PHONE else _memory_mb_limit()
+        return cls(memory_mb=memory, device_class=device_class)
 
 
 class MemoryReleaseResult(BaseModel):
@@ -274,6 +299,7 @@ class ResourceAlert(BaseModel):
 __all__ = [
     "ResourceAction",
     "PressureLevel",
+    "DeviceClass",
     "ResourceLimit",
     "ResourceBudget",
     "ResourceSnapshot",

@@ -81,6 +81,7 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
         time_service: TimeServiceProtocol,
         signal_bus: Optional[ResourceSignalBus] = None,
         credit_provider: CreditGateProtocol | None = None,
+        agent_occurrence_id: str = "default",
     ) -> None:
         super().__init__(run_interval_seconds=1.0, time_service=time_service)
         self.budget = budget
@@ -88,6 +89,8 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
         self.snapshot = ResourceSnapshot()
         self.signal_bus = signal_bus or ResourceSignalBus()
         self.credit_provider = credit_provider
+        # Thought counts (thoughts_active) are this occurrence's own work.
+        self.agent_occurrence_id = agent_occurrence_id
         # Make time_service a direct attribute to match protocol
         self.time_service: Optional[TimeServiceProtocol] = time_service
 
@@ -511,13 +514,13 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
             raise
 
     def _count_active_thoughts(self) -> int:
-        """Count thoughts in pending/processing status via persist substrate."""
+        """Count this occurrence's thoughts in pending/processing status via persist substrate."""
         try:
             from ciris_engine.logic.persistence.models.thoughts import get_thoughts_by_status
             from ciris_engine.schemas.runtime.enums import ThoughtStatus
 
-            pending = len(get_thoughts_by_status(ThoughtStatus.PENDING))
-            processing = len(get_thoughts_by_status(ThoughtStatus.PROCESSING))
+            pending = len(get_thoughts_by_status(ThoughtStatus.PENDING, self.agent_occurrence_id))
+            processing = len(get_thoughts_by_status(ThoughtStatus.PROCESSING, self.agent_occurrence_id))
             return pending + processing
         except Exception:  # pragma: no cover - persist errors unlikely in tests
             return 0

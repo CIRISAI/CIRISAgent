@@ -177,8 +177,8 @@ class ResourceSignalBus:
 memory_mb = ResourceLimit(limit=4096, warning=3072, critical=3840, action=SHED, elevated_action=RECLAIM)  # laptop/server
 memory_mb = ResourceLimit(limit=1024, warning=768, critical=960, action=SHED, elevated_action=RECLAIM)    # phone
 cpu_percent = ResourceLimit(limit=80, warning=60, critical=75, action=THROTTLE)
-tokens_hour = ResourceLimit(limit=10000, warning=8000, critical=9500, action=THROTTLE)
-tokens_day = ResourceLimit(limit=100000, warning=80000, critical=95000, action=SHED)
+tokens_hour = ResourceLimit(limit=10000, warning=8000, critical=9500, action=WARN)  # non-acting until real budgets are decided
+tokens_day = ResourceLimit(limit=100000, warning=80000, critical=95000, action=WARN)  # non-acting until real budgets are decided
 thoughts_active = ResourceLimit(limit=50, warning=40, critical=48, action=SHED)
 disk_mb = ResourceLimit(limit=100, warning=80, critical=95, action=WARN)  # not checked
 ```

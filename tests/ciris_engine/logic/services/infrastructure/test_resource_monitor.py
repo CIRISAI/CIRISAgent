@@ -45,12 +45,16 @@ def signal_bus():
 @pytest.fixture
 def resource_monitor(resource_budget, temp_db, time_service, signal_bus):
     """Create a resource monitor service for testing."""
-    return ResourceMonitorService(
+    monitor = ResourceMonitorService(
         budget=resource_budget,
         db_path=temp_db,
         time_service=time_service,
         signal_bus=signal_bus,
     )
+    # A full minute of (idle) CPU samples, so tests that set cpu_average_1m
+    # exercise the CPU ladder rather than the boot-window guard.
+    monitor._cpu_history.extend([0.0] * (monitor._cpu_history.maxlen or 0))
+    return monitor
 
 
 @pytest.mark.asyncio
@@ -91,7 +95,7 @@ def test_resource_monitor_get_snapshot(resource_monitor):
 async def test_resource_monitor_check_limits(resource_monitor):
     """Test resource limit checking."""
     # Modify budget to have low limits for testing
-    resource_monitor.budget.memory_mb = ResourceLimit(limit=100, warning=50, critical=80, action=ResourceAction.WARN)
+    resource_monitor.budget.memory_mb = ResourceLimit(limit=100, warning=50, critical=80, action=ResourceAction.SHED)
     resource_monitor.budget.cpu_percent = ResourceLimit(
         limit=80, warning=60, critical=75, action=ResourceAction.THROTTLE
     )

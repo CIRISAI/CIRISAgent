@@ -100,12 +100,18 @@ def _cpu_percent_limit() -> ResourceLimit:
     return ResourceLimit(limit=80, warning=60, critical=75, action=ResourceAction.THROTTLE)
 
 
+# Token budgets: NON-ACTING by default (cap WARN). Real budgets are a product /
+# billing decision that has not been made; these legacy numbers are far below
+# real usage (one H3ERE thought is ~9 LLM calls of ~20k tokens each), and they
+# only ever "worked" because nothing recorded tokens. Tokens are recorded now,
+# so the levels are computed and logged; an operator who configures a cap of
+# THROTTLE or SHED gets the acting ladder.
 def _tokens_hour_limit() -> ResourceLimit:
-    return ResourceLimit(limit=10000, warning=8000, critical=9500, action=ResourceAction.THROTTLE)
+    return ResourceLimit(limit=10000, warning=8000, critical=9500, action=ResourceAction.WARN)
 
 
 def _tokens_day_limit() -> ResourceLimit:
-    return ResourceLimit(limit=100000, warning=80000, critical=95000, action=ResourceAction.SHED)
+    return ResourceLimit(limit=100000, warning=80000, critical=95000, action=ResourceAction.WARN)
 
 
 def _disk_mb_limit() -> ResourceLimit:

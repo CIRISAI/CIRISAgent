@@ -45,6 +45,11 @@ from ciris_engine.schemas.services.resources_core import (
 )
 
 
+def _fill_cpu_window(m) -> None:
+    """A full minute of idle CPU samples, as after the first 60 s of uptime."""
+    m._cpu_history.extend([0.0] * (m._cpu_history.maxlen or 0))
+
+
 def _fake_release(trigger: str) -> MemoryReleaseResult:
     return MemoryReleaseResult(
         trigger=trigger,
@@ -63,6 +68,7 @@ def monitor(monkeypatch):
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
         db_path = f.name
     m = ResourceMonitorService(budget=ResourceBudget(), db_path=db_path, time_service=TimeService())
+    _fill_cpu_window(m)
     yield m
     os.unlink(db_path)
 
@@ -129,7 +135,9 @@ def test_no_default_uses_drain_and_caps_match_the_ruling():
     caps = {name: limit.action for name, limit in _limits(budget).items()}
     assert ResourceAction.DRAIN not in caps.values()
     assert caps["cpu_percent"] == ResourceAction.THROTTLE
-    assert caps["tokens_day"] == ResourceAction.SHED
+    # Token budgets are non-acting until real budgets are decided (see resources_core)
+    assert caps["tokens_hour"] == ResourceAction.WARN
+    assert caps["tokens_day"] == ResourceAction.WARN
     assert caps["memory_mb"] == ResourceAction.SHED
     assert caps["thoughts_active"] == ResourceAction.SHED
     assert caps["disk_mb"] == ResourceAction.WARN
@@ -654,3 +662,82 @@ async def test_round_delay_uses_the_state_after_this_rounds_transitions(monitor)
 
     assert delays == [1.0]  # SHUTDOWN base delay, no throttle extra
     assert ap._process_current_state.await_args.args[3] == AgentState.WORK
+
+
+# --------------------------------------------------------------------------- #
+# Staged QA run 37723851128: SHED engaged at boot
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.asyncio
+async def test_default_token_budgets_do_not_act(monitor):
+    """One H3ERE thought is ~9 LLM calls of ~20k tokens: real usage blows
+    straight through the legacy 10k/100k numbers. By default that must only
+    be reported, never throttle, shed, mark the monitor unhealthy or put a
+    critical alert in the prompt."""
+    from ciris_engine.logic.context.system_snapshot_helpers import _collect_resource_alerts
+
+    monitor.snapshot.tokens_used_hour = 30_527
+    monitor.snapshot.tokens_used_day = 183_150  # the values from the failed run
+    await monitor._check_limits()
+
+    assert monitor.get_pressure_levels() == {
+        "tokens_hour": PressureLevel.CRITICAL,
+        "tokens_day": PressureLevel.CRITICAL,
+    }
+    gate = _gate(monitor)
+    assert not gate.is_active(ResourceAction.THROTTLE)
+    assert not gate.is_active(ResourceAction.SHED)
+    assert monitor.snapshot.critical == []
+    assert monitor.snapshot.healthy is True
+    assert any(w.startswith("tokens_day") for w in monitor.snapshot.warnings)
+    assert _collect_resource_alerts(monitor) == []
+
+
+@pytest.mark.asyncio
+async def test_an_operator_token_budget_acts(monitor):
+    """The ladder is kept: configuring a cap makes the token budget act."""
+    monitor.budget.tokens_day.action = ResourceAction.SHED
+    monitor.snapshot.tokens_used_day = monitor.budget.tokens_day.limit
+    await monitor._check_limits()
+    assert _gate(monitor).resources(ResourceAction.SHED) == ["tokens_day"]
+    assert monitor.snapshot.healthy is False
+
+
+@pytest.mark.asyncio
+async def test_tokens_accumulate_once_per_call_in_both_windows(monitor):
+    """Each call adds exactly its tokens_used once; hour and day read the same history."""
+    bus = LLMBus(Mock(), TimeService(), resource_monitor=monitor)
+    for tokens in (15_000, 20_350, 22_000):
+        await bus._record_resource_telemetry("svc", "h", ResourceUsage(tokens_used=tokens, model_used="m"), 1.0)
+    await monitor._update_snapshot()
+    assert monitor.snapshot.tokens_used_hour == 57_350
+    assert monitor.snapshot.tokens_used_day == 57_350
+
+
+@pytest.mark.asyncio
+async def test_cpu_cannot_engage_before_a_full_minute(monkeypatch):
+    """At boot cpu_average_1m averages a few startup samples; it must not throttle on them."""
+    monkeypatch.setattr(rm_service, "_release_process_memory", _fake_release)
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+        db_path = f.name
+    try:
+        m = ResourceMonitorService(budget=ResourceBudget(), db_path=db_path, time_service=TimeService())
+        monkeypatch.setattr(m._process, "cpu_percent", lambda interval=0: 94.0)  # the boot reading from the run
+
+        for _ in range(3):  # three seconds after start
+            await m._update_snapshot()
+            await m._check_limits()
+        assert m.snapshot.cpu_average_1m == 94
+        assert not m.cpu_window_full
+        assert "cpu_percent" not in m.get_pressure_levels()
+        assert not _gate(m).is_active(ResourceAction.THROTTLE)
+
+        for _ in range(57):  # the window fills at 60 samples
+            await m._update_snapshot()
+        await m._check_limits()
+        assert m.cpu_window_full
+        assert m.get_pressure_levels()["cpu_percent"] == PressureLevel.CRITICAL
+        assert _gate(m).is_active(ResourceAction.THROTTLE)
+    finally:
+        os.unlink(db_path)

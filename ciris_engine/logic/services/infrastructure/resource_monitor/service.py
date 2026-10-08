@@ -222,16 +222,32 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
         self.snapshot.critical.clear()
         self.snapshot.healthy = True
         await self._check_resource("memory_mb", self.snapshot.memory_mb)
-        await self._check_resource("cpu_percent", self.snapshot.cpu_average_1m)
+        # cpu_average_1m is only a 1-minute average once the window is full; at
+        # boot it averages a handful of startup samples (startup is CPU-heavy by
+        # nature), and throttling then only slows the start. Until the window
+        # fills, CPU is reported but cannot change level.
+        if self.cpu_window_full:
+            await self._check_resource("cpu_percent", self.snapshot.cpu_average_1m)
         await self._check_resource("tokens_hour", self.snapshot.tokens_used_hour)
         await self._check_resource("tokens_day", self.snapshot.tokens_used_day)
         await self._check_resource("thoughts_active", self.snapshot.thoughts_active)
         if self.snapshot.critical:
             self.snapshot.healthy = False
 
+    @property
+    def cpu_window_full(self) -> bool:
+        """True once the CPU history holds a full minute of samples."""
+        return len(self._cpu_history) >= (self._cpu_history.maxlen or 0)
+
     async def _check_resource(self, name: str, current_value: int) -> None:
         limit_config: ResourceLimit = getattr(self.budget, name)
-        if current_value >= limit_config.critical:
+        # A resource capped at a non-acting level (LOG/WARN) is advisory: past
+        # its critical threshold it is reported as a warning, never as
+        # critical, so it cannot mark the monitor unhealthy or put a critical
+        # resource alert into the prompt. Token budgets ship this way until
+        # real budgets are decided.
+        advisory = limit_config.action in (ResourceAction.LOG, ResourceAction.WARN)
+        if current_value >= limit_config.critical and not advisory:
             self.snapshot.critical.append(f"{name}: {current_value}/{limit_config.limit}")
         elif current_value >= limit_config.warning:
             self.snapshot.warnings.append(f"{name}: {current_value}/{limit_config.limit}")

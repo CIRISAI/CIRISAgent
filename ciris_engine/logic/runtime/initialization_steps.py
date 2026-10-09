@@ -135,6 +135,12 @@ async def init_edge_runtime(runtime: Any) -> None:
 
     config = _ensure_config(runtime)
     get_agent_mode_broker().set_mode_sync(config.agent_mode)
+    # CIRISAgent#1244: a mock LLM named only in the module list must be
+    # known before any federation path starts (modules may be mutated
+    # after construction, so re-check immediately before edge init).
+    from ciris_engine.logic.utils.mock_llm_guard import latch_if_mock_llm_module
+
+    latch_if_mock_llm_module(getattr(runtime, "modules_to_load", None) or [], "pre-edge")
     # Reticulum identity lives in the agent's data dir, NOT per-occurrence —
     # multi-occurrence agents share the same federation identity.
     identity_dir = get_data_dir() / "edge"

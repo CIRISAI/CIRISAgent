@@ -231,6 +231,18 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
         "no",
         "off",
     )
+    # MOCK LLM (CIRISAgent#1244): transport AND delivery controller both run.
+    # Substrate session verification depends on them: resolve_bearer raises
+    # "federation delivery not started" until start_federation_delivery has
+    # run, and every authenticated request then answers 503 (that took Staged
+    # QA down twice). The no-egress guarantee for mock traces does not live on
+    # the wire. It lives upstream, and nothing here can lift it:
+    #   1. mock traces are never sealed into the federation store
+    #      (MockLocalOnlyEngine in the accord_metrics service), so the
+    #      controller has nothing of theirs to replicate, now or after a
+    #      restart on a real LLM;
+    #   2. no replication (ship) grant is authored under the mock
+    #      (trace_sharing._author_ship_grant).
 
     # Rust-side tracing (CIRISAgent#919/#920, ciris-server >=0.5.114): without
     # this a Python-embedded agent has ZERO rust logs — every delivery/rooting

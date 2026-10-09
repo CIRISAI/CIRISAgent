@@ -895,6 +895,17 @@ class APIServerManager:
 
     def start(self) -> bool:
         """Start the API server."""
+        # CIRISAgent#1244: refuse a remote trace sink under the mock LLM FIRST,
+        # before any side effect (trace-file clearing, .env rewrite, Postgres,
+        # data wipe). __main__ refuses this too; this catches programmatic
+        # QAConfig callers that bypass the CLI.
+        if self.config.mock_llm and (self.config.live_lens or self.config.federation_delivery):
+            self.console.print(
+                "[red][FAIL] --live-lens / --federation-delivery cannot run with the mock LLM: "
+                "mock-LLM traces must never reach the production lens or canonical (CIRISAgent#1244)[/red]"
+            )
+            return False
+
         # Check if server is already running
         if self._is_server_running():
             self.console.print("[yellow][WARN] Server already running[/yellow]")
@@ -1019,6 +1030,17 @@ class APIServerManager:
         # Ensure CIRIS_MOCK_LLM matches our config (unset if not using mock)
         if not self.config.mock_llm:
             env.pop("CIRIS_MOCK_LLM", None)  # Remove if present
+
+        # Run-kind marker (CIRISAgent#1245): every agent this runner starts is
+        # synthetic, including live-model runs. The battery/model-eval modules
+        # mark "battery", everything else "qa"; the mock LLM overrides both
+        # with "mock" agent-side. Set explicitly so the canonical never has to
+        # infer it from channel names. An operator's explicit value wins.
+        from .config import QAModule as _RunKindModule  # local import: module-scope would be circular
+
+        battery_modules = {_RunKindModule.SAFETY_BATTERY, _RunKindModule.MODEL_EVAL}
+        run_kind = "battery" if any(m in battery_modules for m in self.modules or []) else "qa"
+        env.setdefault("CIRIS_TRACE_RUN_KIND", run_kind)
 
         # Set CIRIS_HOME for verifier_singleton (required for audit hash chain)
         if "CIRIS_HOME" not in env:

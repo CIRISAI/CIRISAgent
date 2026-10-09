@@ -912,8 +912,12 @@ class TestAccordMetricsServiceLifecycle:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.usefixtures("real_llm_mode")
 class TestBuildDeploymentProfile:
-    """FSD §3.2 — operator config wins, migration defaults otherwise."""
+    """FSD §3.2 — operator config wins, migration defaults otherwise.
+
+    Real-LLM mode: under the mock LLM deployment_type is always "mock" (#1244).
+    """
 
     def test_defaults_without_any_config(self):
         service = AccordMetricsService()

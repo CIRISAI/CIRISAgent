@@ -188,22 +188,48 @@ Each trace captures the 6-component reasoning pipeline. Fields vary by trace lev
 - **k_eff >= 2**: HEALTHY - multiple truly independent perspectives
 - **Nascent agents**: Expected to have low k_eff initially (~1.0)
 
-### What is NOT Collected
+### Egress Schema (enforced before signing)
 
-- User messages or conversation content
-- Personal identifiable information (PII)
-- Chat history
-- Tool call details or parameters
-- External API responses
-- File contents
+Every component is checked against its trace level's schema in
+`egress_schema.py` before it reaches the signer. A field the level doesn't
+allow is dropped. So is a value of the wrong type, such as free text where a
+number, enum token, bool or hash belongs. Over-long text and lists are capped.
+Every violation is logged once as a WARNING (`[TRACE-SCHEMA]`, naming the event,
+field path, level and kind, never the value) and counted in
+`schema_violations_*` metrics. A violation is a bug in the code that produced the
+field: fix it there, and don't rely on the filter.
+
+| Level | Allowed |
+|---|---|
+| `generic` | Numbers, booleans and short enum-like tokens (no whitespace, at most 64 chars). One named exception: `attestation_context`, agent-authored and required at every level by FSD-001, capped at 1024 chars. No LLM text, no user text, no URLs, no channel ids. Inside `verb_specific_data`, only enum, boolean and tool-name members. |
+| `detailed` | Everything in `generic`, plus key identifiers (channel id, thought/audit ids, key ids, model ids, provider base URL without userinfo or query) and actionable lists (at most 32 items, each one line of at most 128 chars). Also allows short reason summaries (defer reason, conscience reasons, execution error), capped at 500 chars. The reasoning chain itself (pass rationales, DMA reasoning) and tool parameters are not allowed. |
+| `full_traces` | Everything, still bounded: free text at most 65,536 chars, opaque JSON at most 8 levels deep, 256 items, 8,192 chars per string. |
+
+What this does **not** do: it can't recognise a person's name inside an
+allowed reason summary at `detailed`. That residue is handled by the
+substrate's scrubber and by the run-kind marker below, not by this filter.
+
+### Mock LLM and Synthetic Runs
+
+- **Mock LLM** (`CIRIS_MOCK_LLM`, `--mock-llm`, or the mock_llm module or
+  service loaded): traces never leave the node. They are sealed, signed and
+  written to the local tee (`CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR`) but never
+  persisted into the federation store, so no later replication grant can
+  promote them, and no ship grant is authored. The edge transport and the
+  delivery controller still run, because session verification
+  (`resolve_bearer`) needs them, but they have no mock trace to carry. Only the local tee and loopback endpoints may receive
+  mock traces. Consent and config can't lift this (CIRISAgent#1244).
+- **Run kind**: `deployment_type` carries `mock` (always, under the mock LLM),
+  or `qa` / `battery` when the harness sets `CIRIS_TRACE_RUN_KIND`, even
+  with a real model (CIRISAgent#1245). Production runs keep the operator's
+  value, or the default `production`.
 
 ### Privacy Controls
 
 1. **Anonymization**: Agent IDs are SHA-256 hashed
-2. **Truncation**: All text fields are truncated to prevent sensitive data leakage
-3. **No PII**: Only structural metadata is collected
-4. **Consent Required**: Nothing is sent without explicit consent
-5. **Revocable**: Disable the adapter to stop collection immediately
+2. **Level-gated egress**: the schema above, enforced before signing; at `generic`, free text never ships
+3. **Consent Required**: Nothing leaves the node without explicit consent (and never under the mock LLM)
+4. **Revocable**: Disable the adapter to stop collection immediately
 
 ## Usage
 

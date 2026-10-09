@@ -129,6 +129,11 @@ class MockLLMService(BaseService, MockLLMServiceProtocol):
     def __init__(self, *_: Any, **kwargs: Any) -> None:
         # Initialize BaseService with service name
         super().__init__(service_name="MockLLMService", **kwargs)
+        # CIRISAgent#1244: any process that constructs the mock LLM must never
+        # ship a trace off-node. One-way latch, read by the trace-export guard.
+        from ciris_engine.logic.utils.mock_llm_guard import mark_mock_llm_active
+
+        mark_mock_llm_active("MockLLMService")
         self._client: Optional[MockLLMClient] = None
         self.model_name = "mock-model"
 

@@ -1,11 +1,17 @@
-"""Under the mock LLM the edge keeps its transport but starts no delivery (CIRISAgent#1244).
+"""Under the mock LLM the federation runtime runs normally; mock traces just never reach it (CIRISAgent#1244).
 
-The transport stays ON: identity and session verification ride the edge, and
-without it ``/v1/agent/status`` answers 503 "Identity verification unavailable"
-(that took Staged QA down on the first cut of this fix). What must not run is
-the delivery controller that replicates sealed traces, nor the node-fold
-reprime. The traces themselves never reach the federation store under the mock
-(see tests/ciris_adapters/ciris_accord_metrics/test_mock_traces_never_stored.py).
+Two cuts of this fix broke every Staged QA leg by withholding the wrong layer:
+
+* transport off: ``/v1/agent/status`` 503 "Identity verification unavailable";
+* delivery controller off: ``resolve_bearer`` raises "federation delivery not
+  started", so every authenticated request answers 503.
+
+Session verification depends on both. So under the mock the edge transport,
+``start_federation_delivery`` and the node-fold reprime all run, and the
+no-egress guarantee lives upstream: mock traces are never sealed into the
+federation store (``MockLocalOnlyEngine``, see
+tests/ciris_adapters/ciris_accord_metrics/test_mock_traces_never_stored.py) and no
+replication grant is authored (test_trace_sharing_mock_guard.py).
 
 Drives ``initialize_edge_runtime`` against a real persist Engine. Only the Edge
 transport and the delivery controller are stubbed, so nothing touches a network.
@@ -80,21 +86,52 @@ def edge_boot(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Dict[str, List
     return seen
 
 
-def test_mock_llm_boot_keeps_transport_but_starts_no_delivery(
-    mock_llm_mode: None, engine: Any, edge_boot: Dict[str, List[Any]], tmp_path: Path
-) -> None:
-    from ciris_engine.logic.runtime.edge_runtime import initialize_edge_runtime
+class _SubstrateAuthModel:
+    """resolve_bearer's precondition, as the substrate states it at runtime.
 
+    ``ciris_server.resolve_bearer`` raises ``RuntimeError("resolve_bearer:
+    federation delivery not started — cannot verify")`` until
+    ``start_federation_delivery`` has run (Staged QA, 0267c85b8). The real call
+    needs a live embedded edge that dials the canonical, which a unit test must
+    not do, so this models exactly that precondition and is wired to the same
+    two names the runtime and the auth dependency call.
+    """
+
+    def __init__(self) -> None:
+        self.started = False
+
+    def start_federation_delivery(self, **_: Any) -> int:
+        self.started = True
+        return 1
+
+    def resolve_bearer(self, token: str) -> Dict[str, Any]:
+        if not self.started:
+            raise RuntimeError("resolve_bearer: federation delivery not started — cannot verify")
+        return {"wa_id": "wa-qa", "name": "qa", "role": "ROOT", "scopes": [], "actor": None}
+
+
+def test_mock_llm_boot_starts_delivery_so_sessions_verify(
+    mock_llm_mode: None, engine: Any, edge_boot: Dict[str, List[Any]], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
+
+    from ciris_engine.logic.adapters.api.dependencies.auth import resolve_substrate_session
+    from ciris_engine.logic.runtime import edge_runtime
+    from ciris_engine.logic.runtime.edge_runtime import initialize_edge_runtime
+    from ciris_engine.logic.utils.mock_llm_guard import is_mock_llm_active
+
+    model = _SubstrateAuthModel()
+    monkeypatch.setattr(ciris_server, "start_federation_delivery", model.start_federation_delivery, raising=False)
+    monkeypatch.setattr(ciris_server, "resolve_bearer", model.resolve_bearer, raising=False)
+
+    assert is_mock_llm_active(), "test premise: the guard is active"
     initialize_edge_runtime(tmp_path / "identity")
 
-    assert edge_boot["init_kwargs"], "edge init never ran: test premise broken"
-    assert edge_boot["init_kwargs"][0]["enable_transport"] is True, "identity verification needs the transport"
-    assert edge_boot["delivery_starts"] == []
-    # The identity surface the API's 503 checks (auth._identity_unavailable_detail).
-    from ciris_engine.logic.runtime import edge_runtime
-
-    assert edge_runtime.is_available()
-    assert edge_runtime.get_init_error() is None
+    assert edge_boot["init_kwargs"][0]["enable_transport"] is True
+    assert edge_runtime.is_available() and edge_runtime.get_init_error() is None
+    assert model.started, "the delivery controller must start under the mock: resolve_bearer depends on it"
+    # The real auth dependency must not answer 503 for a well-formed session.
+    assert resolve_substrate_session("sess:wa-qa:abc")["wa_id"] == "wa-qa"
 
 
 def test_real_llm_boot_keeps_transport_and_delivery(
@@ -109,11 +146,11 @@ def test_real_llm_boot_keeps_transport_and_delivery(
     assert len(edge_boot["delivery_starts"]) == 1
 
 
-@pytest.mark.parametrize("mode,expected", [("mock_llm_mode", 0), ("real_llm_mode", 1)])
-def test_node_fold_reprime_is_refused_under_the_mock_llm(
-    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch, mode: str, expected: int
+@pytest.mark.parametrize("mode", ["mock_llm_mode", "real_llm_mode"])
+def test_node_fold_reprime_runs_in_both_modes(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch, mode: str
 ) -> None:
-    """The node fold re-drives the canonical prime on reuse/post-bind; never under the mock."""
+    """The reprime keeps delivery 'started' across an in-process re-serve (mobile fold)."""
     import sys
     import types
 
@@ -126,4 +163,4 @@ def test_node_fold_reprime_is_refused_under_the_mock_llm(
     monkeypatch.setitem(sys.modules, "ciris_server", fake)
 
     node_fold._reprime_federation_delivery("reuse")
-    assert len(calls) == expected
+    assert len(calls) == 1

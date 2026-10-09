@@ -278,10 +278,6 @@ def _reprime_federation_delivery(path: str) -> None:
     and a fresh post-bind). getattr-guarded: wheels <0.5.124 degrade to the
     prior (never-re-primed) behavior rather than crashing.
     """
-    from ciris_engine.logic.utils.mock_llm_guard import remote_trace_export_permitted
-
-    if not remote_trace_export_permitted("federation delivery reprime"):
-        return  # CIRISAgent#1244: never re-drive the canonical prime under the mock LLM
     try:
         import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
 

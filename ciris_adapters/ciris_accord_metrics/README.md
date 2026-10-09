@@ -215,9 +215,9 @@ substrate's scrubber and by the run-kind marker below, not by this filter.
   service loaded): traces never leave the node. They are sealed, signed and
   written to the local tee (`CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR`) but never
   persisted into the federation store, so no later replication grant can
-  promote them. No ship grant is authored and the delivery controller is not
-  started. The edge transport stays up, because identity and session
-  verification need it. Only the local tee and loopback endpoints may receive
+  promote them, and no ship grant is authored. The edge transport and the
+  delivery controller still run, because session verification
+  (`resolve_bearer`) needs them, but they have no mock trace to carry. Only the local tee and loopback endpoints may receive
   mock traces. Consent and config can't lift this (CIRISAgent#1244).
 - **Run kind**: `deployment_type` carries `mock` (always, under the mock LLM),
   or `qa` / `battery` when the harness sets `CIRIS_TRACE_RUN_KIND`, even

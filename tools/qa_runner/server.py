@@ -45,6 +45,7 @@ import requests
 from rich.console import Console
 
 from .config import QAConfig
+from .mock_chain_rpc import MockChainRPCServer, apply_wallet_rpc_stub_env
 
 logger = logging.getLogger(__name__)
 
@@ -603,6 +604,9 @@ class APIServerManager:
         self.process: Optional[subprocess.Popen] = None
         self.pid: Optional[int] = None
         self.mock_logshipper: Optional[MockLogshipperServer] = None
+        # Local stub Base RPC for the wallet adapter, so QA never depends on
+        # the uptime of the public mainnet.base.org endpoint.
+        self.mock_chain_rpc: Optional[MockChainRPCServer] = None
         self._extracted_password: Optional[str] = None  # Dynamically extracted from server output
 
         # Per-backend output namespace. In parallel-backend mode both SQLITE
@@ -954,6 +958,20 @@ class APIServerManager:
                 self.console.print("[yellow][WARN] Could not start mock logshipper[/yellow]")
                 self.mock_logshipper = None
 
+        # Start the stub chain RPC. The wallet adapter auto-loads for
+        # base-mainnet and its context-enrichment tool (wallet:get_statement)
+        # queries balances during context gathering; without this the agent
+        # calls https://mainnet.base.org and a third-party 503 surfaces as a
+        # ChainClient ERROR that fails the incidents gate (v2.14.0 all_2).
+        # Reused across a restart (start() without stop()) so the URL is stable.
+        if self.mock_chain_rpc is None:
+            self.mock_chain_rpc = MockChainRPCServer()
+            if self.mock_chain_rpc.start():
+                self.console.print(f"[cyan][STUB] Stub chain RPC started at {self.mock_chain_rpc.endpoint_url}[/cyan]")
+            else:
+                self.console.print("[yellow][WARN] Could not start stub chain RPC[/yellow]")
+                self.mock_chain_rpc = None
+
         self.console.print("[cyan] Starting API server...[/cyan]")
 
         # Build command. When --from-staged is set, the server under test is
@@ -1089,6 +1107,11 @@ class APIServerManager:
         # Configure accord_metrics adapter to use mock logshipper
         if self.mock_logshipper:
             env["CIRIS_ACCORD_METRICS_ENDPOINT"] = self.mock_logshipper.endpoint_url
+
+        # Point the wallet's ChainClient at the stub RPC (operator export of
+        # WALLET_X402_RPC_URL still wins).
+        if apply_wallet_rpc_stub_env(env, self.mock_chain_rpc, os.environ):
+            self.console.print(f"[dim]WALLET_X402_RPC_URL={env['WALLET_X402_RPC_URL']} (stub chain RPC)[/dim]")
 
         # When running in --live mode, opt the agent into location sharing in
         # accord traces so lens dashboards can correlate by region. Defaults
@@ -1573,6 +1596,15 @@ class APIServerManager:
                 for trace in received:
                     self.console.print(f"   • {trace['task_name']}: {trace['filepath']}")
             self.mock_logshipper = None
+
+        # Stop the stub chain RPC and report what the wallet asked it
+        if self.mock_chain_rpc:
+            calls = self.mock_chain_rpc.get_calls()
+            self.mock_chain_rpc.stop()
+            if calls:
+                methods = sorted({c.method for c in calls})
+                self.console.print(f"[green] Stub chain RPC served {len(calls)} calls: {', '.join(methods)}[/green]")
+            self.mock_chain_rpc = None
 
         # Skip port cleanup - it's causing hangs
         # JOIN THE LOG READER. It is a daemon thread teeing the server's stdout;

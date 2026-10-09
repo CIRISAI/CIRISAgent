@@ -59,8 +59,9 @@ logger = logging.getLogger(__name__)
 NODE_HTTP_PORT = 4243
 
 
-
-def apply_module_server_env(env: Dict[str, str], module_env: Mapping[str, str], operator_env: Mapping[str, str]) -> None:
+def apply_module_server_env(
+    env: Dict[str, str], module_env: Mapping[str, str], operator_env: Mapping[str, str]
+) -> None:
     """Merge a module's SERVER_ENV into the agent process env.
 
     Precedence, highest first:
@@ -80,6 +81,7 @@ def apply_module_server_env(env: Dict[str, str], module_env: Mapping[str, str], 
         if key in operator_env:
             continue
         env[key] = value
+
 
 class _MockLogshipperHTTPServer(HTTPServer):
     """HTTPServer subclass that holds per-instance state.
@@ -889,6 +891,17 @@ class APIServerManager:
 
     def start(self) -> bool:
         """Start the API server."""
+        # CIRISAgent#1244: refuse a remote trace sink under the mock LLM FIRST,
+        # before any side effect (trace-file clearing, .env rewrite, Postgres,
+        # data wipe). __main__ refuses this too; this catches programmatic
+        # QAConfig callers that bypass the CLI.
+        if self.config.mock_llm and (self.config.live_lens or self.config.federation_delivery):
+            self.console.print(
+                "[red][FAIL] --live-lens / --federation-delivery cannot run with the mock LLM: "
+                "mock-LLM traces must never reach the production lens or canonical (CIRISAgent#1244)[/red]"
+            )
+            return False
+
         # Check if server is already running
         if self._is_server_running():
             self.console.print("[yellow][WARN] Server already running[/yellow]")
@@ -1000,6 +1013,17 @@ class APIServerManager:
         if not self.config.mock_llm:
             env.pop("CIRIS_MOCK_LLM", None)  # Remove if present
 
+        # Run-kind marker (CIRISAgent#1245): every agent this runner starts is
+        # synthetic, including live-model runs. The battery/model-eval modules
+        # mark "battery", everything else "qa"; the mock LLM overrides both
+        # with "mock" agent-side. Set explicitly so the canonical never has to
+        # infer it from channel names. An operator's explicit value wins.
+        from .config import QAModule as _RunKindModule  # local import: module-scope would be circular
+
+        battery_modules = {_RunKindModule.SAFETY_BATTERY, _RunKindModule.MODEL_EVAL}
+        run_kind = "battery" if any(m in battery_modules for m in self.modules or []) else "qa"
+        env.setdefault("CIRIS_TRACE_RUN_KIND", run_kind)
+
         # Set CIRIS_HOME for verifier_singleton (required for audit hash chain)
         if "CIRIS_HOME" not in env:
             project_root = Path(__file__).parent.parent.parent
@@ -1019,27 +1043,27 @@ class APIServerManager:
             # Auto-detect provider from base_url if not explicitly set
             provider = self.config.live_provider
             if not provider and self.config.live_base_url:
-                    # Match on the parsed HOSTNAME, not a substring of the whole
-                    # URL. `"groq.com" in url` also matches
-                    # `https://evil.example/groq.com/v1` and
-                    # `https://groq.com.attacker.net` — the live API key would go
-                    # to the wrong host while the log says "groq"
-                    # (CodeQL py/incomplete-url-substring-sanitization). Host
-                    # suffix matching, with the leading dot, cannot be spoofed by
-                    # a path segment or a longer registrable domain.
-                    host = (urlparse(self.config.live_base_url).hostname or "").lower()
+                # Match on the parsed HOSTNAME, not a substring of the whole
+                # URL. `"groq.com" in url` also matches
+                # `https://evil.example/groq.com/v1` and
+                # `https://groq.com.attacker.net` — the live API key would go
+                # to the wrong host while the log says "groq"
+                # (CodeQL py/incomplete-url-substring-sanitization). Host
+                # suffix matching, with the leading dot, cannot be spoofed by
+                # a path segment or a longer registrable domain.
+                host = (urlparse(self.config.live_base_url).hostname or "").lower()
 
-                    def _is_host(domain: str) -> bool:
-                        return host == domain or host.endswith("." + domain)
+                def _is_host(domain: str) -> bool:
+                    return host == domain or host.endswith("." + domain)
 
-                    if _is_host("openrouter.ai"):
-                        provider = "openrouter"
-                    elif _is_host("groq.com"):
-                        provider = "groq"
-                    elif _is_host("together.ai") or _is_host("together.xyz"):
-                        provider = "together"
-                    else:
-                        provider = "openai_compatible"
+                if _is_host("openrouter.ai"):
+                    provider = "openrouter"
+                elif _is_host("groq.com"):
+                    provider = "groq"
+                elif _is_host("together.ai") or _is_host("together.xyz"):
+                    provider = "together"
+                else:
+                    provider = "openai_compatible"
             provider = provider or "openai"
             env["CIRIS_LLM_PROVIDER"] = provider
 
@@ -1294,7 +1318,6 @@ class APIServerManager:
             # separates "cannot connect" from "connected and KEX failed", which
             # are different bugs with different owners.
             self._probe_canonical_reachability(env)
-
 
         if accord_metrics_enabled:
             # Load base accord_metrics adapter alongside the main adapter
@@ -1565,7 +1588,6 @@ class APIServerManager:
             t.join(timeout=5)
             if t.is_alive():
                 self.console.print("[yellow]  log reader thread did not finish within 5s[/yellow]")
-
 
     def _is_server_running(self) -> bool:
         """Check if server is running on the configured port."""

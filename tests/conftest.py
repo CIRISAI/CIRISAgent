@@ -313,11 +313,8 @@ import gc  # noqa: E402
 
 # Import database fixtures and API fixtures - must be imported after os.environ setup
 from tests.fixtures.api import random_api_port  # noqa: E402
-from tests.fixtures.database import (  # noqa: E402
-    _release_persist_engine,
-    clean_db,
-    test_db,
-)
+from tests.fixtures.database import _release_persist_engine, clean_db, test_db  # noqa: E402
+from tests.fixtures.llm_mode import mock_llm_mode, real_llm_mode  # noqa: E402, F401
 from tests.fixtures.mocks import MockRuntime  # noqa: E402
 from tests.fixtures.persist_engine import persist_engine  # noqa: E402, F401
 from tests.fixtures.runtime_control import (  # noqa: E402
@@ -717,9 +714,7 @@ def _stub_authentication_service_attestation(request, monkeypatch):
     import asyncio
     from datetime import datetime, timezone
 
-    from ciris_engine.logic.services.infrastructure.authentication.service import (
-        AuthenticationService,
-    )
+    from ciris_engine.logic.services.infrastructure.authentication.service import AuthenticationService
     from ciris_engine.schemas.services.attestation import AttestationResult
 
     def _synthetic_result() -> AttestationResult:
@@ -758,12 +753,8 @@ def _stub_authentication_service_attestation(request, monkeypatch):
         except asyncio.CancelledError:
             raise
 
-    monkeypatch.setattr(
-        AuthenticationService, "run_startup_attestation", _stub_run_startup_attestation
-    )
-    monkeypatch.setattr(
-        AuthenticationService, "_attestation_refresh_loop", _stub_attestation_refresh_loop
-    )
+    monkeypatch.setattr(AuthenticationService, "run_startup_attestation", _stub_run_startup_attestation)
+    monkeypatch.setattr(AuthenticationService, "_attestation_refresh_loop", _stub_attestation_refresh_loop)
 
 
 @pytest.fixture(autouse=True)
@@ -909,7 +900,6 @@ def pytest_sessionfinish(session, exitstatus):  # noqa: D401
     # trylast=True so xdist's own sessionfinish — which ships this worker's
     # results back to the controller — has already run. Forcing the exit after
     # that discards no test outcome.
-
     # DEADLINE FIRST — armed unconditionally, before the non-daemon check below.
     #
     # That check is necessary but NOT sufficient, and shard 3 proved it on
@@ -936,9 +926,7 @@ def pytest_sessionfinish(session, exitstatus):  # noqa: D401
     _arm_exit_deadline(exitstatus)
 
     lingering = [
-        t
-        for t in threading.enumerate()
-        if t is not threading.current_thread() and t.is_alive() and not t.daemon
+        t for t in threading.enumerate() if t is not threading.current_thread() and t.is_alive() and not t.daemon
     ]
     if not lingering:
         return  # nothing obviously leaked; the deadline above covers the rest

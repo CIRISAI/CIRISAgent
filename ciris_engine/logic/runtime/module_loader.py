@@ -62,6 +62,12 @@ class ModuleLoader:
     def _handle_mock_module(self, module_name: str, manifest: ServiceManifest, disable_core: bool) -> None:
         """Handle loading of MOCK modules with safety warnings."""
         self.mock_modules.add(module_name)
+        # CIRISAgent#1244: a mock LLM module means mock-authored traces; latch
+        # it for the trace-export guard (one-way, never cleared).
+        if any(service.type == ServiceType.LLM for service in manifest.services):
+            from ciris_engine.logic.utils.mock_llm_guard import mark_mock_llm_active
+
+            mark_mock_llm_active(f"module_loader:{module_name}")
 
         # Emit LOUD warnings
         logger.warning("=" * 80)

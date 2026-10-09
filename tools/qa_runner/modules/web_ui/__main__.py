@@ -1022,6 +1022,7 @@ class DesktopAppTestRunner:
                     await asyncio.sleep(1.0)
                     env = dict(os.environ)
                     env["SIMCTL_CHILD_CIRIS_TEST_MODE"] = "true"
+                    _forward_run_kind_ios(env)
                     subprocess.run(
                         ["xcrun", "simctl", "launch", udid, bundle_id],
                         capture_output=True,
@@ -2960,6 +2961,7 @@ async def run_android_up(args: argparse.Namespace) -> int:
     # Debug builds flip TEST_MODE_ENABLED=true automatically; set the prop
     # too in case anyone is testing a release build via adb.
     _adb(["shell", "setprop", "debug.CIRIS_TEST_MODE", "true"], serial=serial, timeout=10)
+    _forward_run_kind_android(serial)
 
     launch = _adb(
         ["shell", "am", "start", "-n", f"{ANDROID_PACKAGE}/{ANDROID_ACTIVITY}", "--es", "CIRIS_TEST_MODE", "true"],
@@ -3760,6 +3762,37 @@ def _host_listener(port: int) -> Optional[str]:
     return f"pid {', '.join(str(p) for p in pids)}"
 
 
+def _run_kind_to_forward() -> Optional[str]:
+    """The harness's run-kind marker (CIRISAgent#1245), if this job declared one.
+
+    Mobile app processes inherit nothing from the runner, so a marker set only
+    in the workflow env never reached the Android or iOS backend, and live-model
+    traces from those legs stayed `production`.
+    """
+    value = os.environ.get("CIRIS_TRACE_RUN_KIND", "").strip()
+    return value or None
+
+
+def _forward_run_kind_ios(env: Dict[str, str]) -> None:
+    """simctl only forwards SIMCTL_CHILD_-prefixed vars into the launched app."""
+    kind = _run_kind_to_forward()
+    if kind:
+        env["SIMCTL_CHILD_CIRIS_TRACE_RUN_KIND"] = kind
+
+
+def _forward_run_kind_android(serial: Optional[str]) -> None:
+    """Set the debug property the Android backend reads (mock_llm_guard.ANDROID_RUN_KIND_PROP).
+
+    Always written, so a stale value from an earlier job on the same emulator
+    cannot outlive the job that set it (an empty value reads as production).
+    """
+    _adb(
+        ["shell", "setprop", "debug.ciris.trace_run_kind", _run_kind_to_forward() or "''"],
+        serial=serial,
+        timeout=10,
+    )
+
+
 def _simctl(args: List[str], timeout: int = 120) -> subprocess.CompletedProcess:
     """Run `xcrun simctl ...`. Mirrors `_adb` so both bring-ups read alike."""
     cmd = ["xcrun", "simctl", *args]
@@ -3981,6 +4014,7 @@ async def run_ios_simulator_up(args: argparse.Namespace) -> int:
     _simctl(["terminate", udid, bundle_id], timeout=60)  # idempotent; ignore rc
     env = dict(os.environ)
     env["SIMCTL_CHILD_CIRIS_TEST_MODE"] = "true"
+    _forward_run_kind_ios(env)
     env["SIMCTL_CHILD_CIRIS_TESTING_MODE"] = "true"
     launch = subprocess.run(
         ["xcrun", "simctl", "launch", udid, bundle_id],

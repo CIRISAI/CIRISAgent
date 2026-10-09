@@ -51,9 +51,9 @@ GRATITUDE_SIGNALED / CREDIT_GENERATED).
 import asyncio
 import base64
 import hashlib
+import json
 import logging
 import os
-import json
 import re
 import time
 from dataclasses import dataclass, field
@@ -85,6 +85,8 @@ def _conscience_guidance_mode_for_batch() -> str:
         import os as _os
 
         return f"INVALID:{_os.environ.get('CIRIS_CONSCIENCE_GUIDANCE_MODE', '')}"
+
+
 # 2.9.6 crosses the JCS gate: the trace wire era the agent declares is
 # "3.0.0" — persist's signed-epoch verifier gate (`canon_version_for_trace_
 # schema`, src/verify/ed25519.rs) dispatches major >= 3 ⇒ JCS (RFC 8785),
@@ -226,6 +228,8 @@ class FailureStreak:
     last_error_message: str = ""
 
 
+from ciris_adapters.ciris_accord_metrics.egress_schema import TraceLevel as EgressTraceLevel
+from ciris_adapters.ciris_accord_metrics.egress_schema import ViolationReporter, enforce_egress_schema
 from ciris_engine.logic.utils.substrate_caps import substrate_can_scrub
 
 
@@ -262,6 +266,43 @@ class SimpleCapabilities:
     actions: List[str]
     scopes: List[str]
     supported_domains: List[str] = field(default_factory=list)  # DomainCategory values
+
+
+class MockLocalOnlyEngine:
+    """The persist Engine as the LensClient sees it under the mock LLM (CIRISAgent#1244).
+
+    Mock-LLM traces must NEVER become eligible for off-node delivery, not even
+    later. Disabling the transport while the mock runs is not enough: a trace
+    sealed into the local store sits in the backlog that the substrate's
+    ``promote_consented_backlog`` lifts as soon as a ``trace:`` replication
+    grant covers it, for example after a restart on a real LLM. Promotion is
+    substrate-owned (Rust), with no agent-side filter, so the only agent-side
+    guarantee is that mock traces never enter that store at all.
+
+    lens-core's cohabitation path drives sign and persist through the host
+    engine's Python methods. This wrapper delegates everything (key ids,
+    hybrid signing) to the real engine EXCEPT ``receive_and_persist``, which
+    becomes a no-op. Traces are still assembled, sealed, signed and written to
+    the local tee (``local_copy_dir``), which is the allowed sink, while zero
+    trace rows land in the federation store. The ask for persist to also refuse
+    to promote or admit ``deployment_type="mock"`` rows is CIRISPersist#1040.
+    """
+
+    def __init__(self, inner: Any) -> None:
+        self._inner = inner
+        self._logged = False
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._inner, name)
+
+    def receive_and_persist(self, batch_bytes: bytes, pre_verified: bool = False) -> Dict[str, int]:
+        if not self._logged:
+            self._logged = True
+            logger.info(
+                "[MOCK-GUARD] mock LLM active: sealed traces go to the local tee only and are NOT "
+                "persisted to the federation store, so they can never be promoted off-node (CIRISAgent#1244)"
+            )
+        return {"envelopes_processed": 0, "trace_events_inserted": 0, "signatures_verified": 0}
 
 
 class AccordMetricsService:
@@ -540,6 +581,14 @@ class AccordMetricsService:
 
         # The substrate client (constructed in start(); REQUIRED)
         self._lens: Optional[Any] = None
+        # Whether _build_lens_client built _lens over MockLocalOnlyEngine (mock
+        # LLM, #1244). None until the builder runs.
+        self._lens_local_only: Optional[bool] = None
+
+        # Per-level egress schema (egress_schema.py): every built component is
+        # filtered against its level's contract before it reaches the signer,
+        # and every violation is counted and logged once as a producer bug.
+        self._schema_reporter = ViolationReporter()
 
         # Metrics (session counters)
         self._events_received = 0
@@ -632,10 +681,37 @@ class AccordMetricsService:
             "agent_role": agent_role,
             "agent_template": agent_template,
             "deployment_domain": self._deployment_domain or "general",
-            "deployment_type": self._deployment_type or "production",
+            "deployment_type": self._effective_deployment_type(),
             "deployment_region": deployment_region,
             "deployment_trust_mode": self._deployment_trust_mode or "sovereign",
         }
+
+    def _run_kind_marker(self) -> Optional[str]:
+        """The run-kind marker, or None for a production run.
+
+        ``mock`` under the mock LLM (CIRISAgent#1244), always, whatever the
+        operator configured; ``qa`` / ``battery`` when the harness declared it
+        via CIRIS_TRACE_RUN_KIND (CIRISAgent#1245, set even with a REAL model).
+        Re-evaluated at every LensClient (re)build because the mock may latch
+        after this service was constructed.
+        """
+        from ciris_engine.logic.utils.mock_llm_guard import TraceRunKind, trace_run_kind
+
+        kind = trace_run_kind()
+        return None if kind == TraceRunKind.PRODUCTION else kind.value
+
+    def _effective_deployment_type(self) -> str:
+        """The ``deployment_type`` stamped on sealed traces (deployment_profile).
+
+        The run-kind marker rides this existing field: a free-form string
+        inside the signed deployment_profile / correlation_metadata blocks, so
+        it is a value, not a wire-shape change, and the canonical sees it at
+        every trace level and can refuse ``mock`` at admission
+        (CIRISPersist#1040). A non-production run kind overrides the
+        operator's declared value; otherwise the operator's value or the FSD
+        §3.2 migration default "production".
+        """
+        return self._run_kind_marker() or self._deployment_type or "production"
 
     def _compute_instance_hash(self, fallback_id: Optional[str] = None) -> str:
         """Compute unique instance hash from the persist Engine's local signer.
@@ -851,16 +927,26 @@ class AccordMetricsService:
             self._trace_level.value,
         )
 
+        # Run-kind marker (CIRISAgent#1244/#1245): mock/qa/battery when set,
+        # else the operator's value (None = undeclared, unchanged from before).
+        correlation_deployment_type: Optional[str] = self._run_kind_marker() or self._deployment_type or None
+        # Mock LLM: seal + sign + tee, but never persist into the replicable
+        # federation store (see MockLocalOnlyEngine). Recorded so a mock that
+        # latches after this build forces a rebuild (_ensure_mock_local_only).
+        from ciris_engine.logic.utils.mock_llm_guard import is_mock_llm_active
+
+        self._lens_local_only = is_mock_llm_active()
+        lens_engine: Any = MockLocalOnlyEngine(engine) if self._lens_local_only else engine
         try:
             return LensClient(
                 self._consent_timestamp if self._consent_given else None,
                 self._trace_level.value,
-                engine=engine,
+                engine=lens_engine,
                 deployment_profile=self._build_deployment_profile(),
                 consent_attesting_key_id=consent_key_id,
                 local_copy_dir=str(self._local_copy_dir) if self._local_copy_dir else None,
                 deployment_region=self._deployment_region or None,
-                deployment_type=self._deployment_type or None,
+                deployment_type=correlation_deployment_type,
                 agent_role=self._agent_role or None,
                 agent_template=self._agent_template or None,
                 share_location=self._share_location_in_traces,
@@ -1227,6 +1313,8 @@ class AccordMetricsService:
         # seal here so this event captures into the rebuilt, consent-on client.
         self._maybe_self_heal_consent()
 
+        self._ensure_mock_local_only()
+
         if self._lens is None:
             # start() raises when the substrate is unavailable, so this only
             # happens if events arrive before start() — drop with a debug.
@@ -1248,7 +1336,7 @@ class AccordMetricsService:
             # event in every batch and every CEG seal therefore carries which
             # side of the CC 3.4.5 line the process ran on.
             "conscience_guidance_mode": _conscience_guidance_mode_for_batch(),
-            "data": self._extract_component_data(event_type, event),
+            "data": self._enforce_egress_schema(event_type, self._extract_component_data(event_type, event)),
         }
 
         # to_thread keeps the seal's Ed25519+DB work off the event loop;
@@ -1299,8 +1387,6 @@ class AccordMetricsService:
             self._events_rejected += 1
             logger.warning(f" Substrate rejected unknown event_type {outcome.get('raw')!r} (thought {thought_id})")
         # "appended" needs no bookkeeping
-
-
 
     def _declared_condition(self) -> Optional[str]:
         """The research condition the operator DECLARED, if any.
@@ -1434,8 +1520,7 @@ class AccordMetricsService:
             conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=5.0)
             try:
                 cur = conn.execute(
-                    "SELECT * FROM federation_attestations "
-                    "WHERE CAST(attestation_envelope AS TEXT) LIKE ?",
+                    "SELECT * FROM federation_attestations " "WHERE CAST(attestation_envelope AS TEXT) LIKE ?",
                     (like,),
                 )
                 cols = [d[0] for d in cur.description]
@@ -1468,11 +1553,7 @@ class AccordMetricsService:
                         pass
                 ceg_rows.append(d)
 
-            signed = sum(
-                1
-                for d in ceg_rows
-                if d.get("scrub_signature_classical") or d.get("scrub_signature_pqc")
-            )
+            signed = sum(1 for d in ceg_rows if d.get("scrub_signature_classical") or d.get("scrub_signature_pqc"))
             payload = {
                 "thought_id": thought_id,
                 "trace_id": trace_id,
@@ -1502,6 +1583,32 @@ class AccordMetricsService:
                 f"⚠️ [{self._adapter_instance_id}] CEG seal tee FAILED trace_id={trace_id}: "
                 f"{type(exc).__name__}: {exc}"
             )
+
+    def _ensure_mock_local_only(self) -> None:
+        """Rebuild the LensClient over MockLocalOnlyEngine if the mock latched late.
+
+        One-way, like the latch: once the mock LLM is active in this process, no
+        later seal may reach the federation store (CIRISAgent#1244).
+        """
+        if self._lens is None or self._lens_local_only is not False:
+            return
+        from ciris_engine.logic.utils.mock_llm_guard import is_mock_llm_active
+
+        if is_mock_llm_active():
+            logger.info("[MOCK-GUARD] mock LLM latched after LensClient build; rebuilding as local-only")
+            self._lens = self._build_lens_client()
+
+    def _enforce_egress_schema(self, event_type: str, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Filter a built component to its level's egress schema, before signing.
+
+        Drops unexpected fields and wrong-typed values, caps strings and lists,
+        and reports each violation (WARNING once per event/field/kind/level,
+        counted always, never the value). See egress_schema.py.
+        """
+        result = enforce_egress_schema(event_type, EgressTraceLevel(self._trace_level.value), data)
+        if result.violations:
+            self._schema_reporter.report(result.violations, self._adapter_instance_id)
+        return dict(result.data)
 
     def _extract_component_data(self, event_type: str, event: Dict[str, Any]) -> Dict[str, Any]:
         """Extract reasoning data from event based on configured trace detail level.
@@ -2160,6 +2267,7 @@ class AccordMetricsService:
         timestamp = datetime.now(timezone.utc).isoformat()
         deferral_id = f"wbd-{request.thought_id}-{timestamp}"
 
+        self._ensure_mock_local_only()
         if self._lens is None:
             logger.debug("LensClient not ready; WBD deferral %s not captured", deferral_id)
             return deferral_id
@@ -2194,7 +2302,7 @@ class AccordMetricsService:
             "agent_id_hash": self._agent_id_hash or self._compute_instance_hash(),
             "task_id": request.task_id,
             "trace_level": self._trace_level.value,
-            "data": data,
+            "data": self._enforce_egress_schema("DEFERRAL_ROUTED", data),
         }
         try:
             async with self._capture_lock:
@@ -2297,9 +2405,7 @@ class AccordMetricsService:
         # never silently author owner-tier grants from a session-less path.
         if self._consent_given:
             try:
-                from ciris_engine.logic.services.governance.consent.attestation import (
-                    log_federation_consent_drift,
-                )
+                from ciris_engine.logic.services.governance.consent.attestation import log_federation_consent_drift
 
                 log_federation_consent_drift(source or "boot")
             except Exception:  # noqa: BLE001 — advisory only
@@ -2323,8 +2429,7 @@ class AccordMetricsService:
             pre_wizard = not bool(self._config.get("setup_complete", False))
             logger.log(
                 logging.INFO if pre_wizard else logging.WARNING,
-                "[CONSENT] trace consent %s — traces will not seal yet "
-                "(checked: ceg=none config=%s env=%s). %s",
+                "[CONSENT] trace consent %s — traces will not seal yet " "(checked: ceg=none config=%s env=%s). %s",
                 "not yet granted (pre-wizard, expected)" if pre_wizard else "ABSENT",
                 config_consent,
                 env_consent,
@@ -2351,10 +2456,7 @@ class AccordMetricsService:
         # First re-check (sentinel 0.0) is always allowed — don't let a small
         # monotonic epoch right after boot throttle the very first opportunity
         # to arm. Subsequent re-checks are interval-throttled.
-        if (
-            self._last_consent_recheck is not None
-            and now - self._last_consent_recheck < self._consent_recheck_interval
-        ):
+        if self._last_consent_recheck is not None and now - self._last_consent_recheck < self._consent_recheck_interval:
             return
         self._last_consent_recheck = now
         grant_id = self._derive_consent_from_ceg()
@@ -2468,6 +2570,11 @@ class AccordMetricsService:
             "has_signing_key": signer_key_id is not None,
             "agent_id_hash": self._agent_id_hash,
             "substrate": "ciris-lens-core",
+            # CIRISAgent#1244: under the mock LLM traces stay on-node (local
+            # persist + local tee) and carry deployment_type="mock".
+            "deployment_type": self._effective_deployment_type(),
+            # Egress-schema findings (producer bugs filtered before signing).
+            **self._schema_reporter.snapshot(),
             # 933 failure-hygiene surface: the degraded condition is adapter
             # STATE, not a log stream — a steady-state failure is a gauge.
             "capture_state": self._capture_streak.state.value,

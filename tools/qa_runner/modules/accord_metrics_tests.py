@@ -34,6 +34,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 import aiohttp
 
+
 def _accord_tee_dir() -> str:
     """Where runtime-registered accord adapters tee sealed batches.
 
@@ -44,6 +45,7 @@ def _accord_tee_dir() -> str:
     while reporting 100% pass.
     """
     import os
+
     return os.environ.get("CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR", "") or ""
 
 
@@ -201,9 +203,9 @@ class AccordMetricsTests:
             "evaluation_time_ms",  # added in v1.9.1
         ],
         # TSASPDMA_RESULT detailed fields (optional, v1.9.3)
+        # original_parameters / final_parameters are tool CONTENT, not
+        # identifiers: FULL-only per the egress schema (egress_schema.py).
         "TSASPDMA_RESULT": [
-            "original_parameters",
-            "final_parameters",
             "gotchas_acknowledged",
             "tool_description",
         ],
@@ -258,6 +260,8 @@ class AccordMetricsTests:
         ],
         # TSASPDMA_RESULT full fields (optional, v1.9.3)
         "TSASPDMA_RESULT": [
+            "original_parameters",
+            "final_parameters",
             "aspdma_rationale",
             "tsaspdma_rationale",
             "tsaspdma_prompt",
@@ -388,7 +392,7 @@ class AccordMetricsTests:
                 # red. Such a check says so by returning SKIP_PREFIX, and lands
                 # as its own status.
                 if not success and message.startswith(SKIP_PREFIX):
-                    reason = message[len(SKIP_PREFIX):].strip()
+                    reason = message[len(SKIP_PREFIX) :].strip()
                     # ASCII ONLY. A Windows cp1252 console raises
                     # UnicodeEncodeError on an emoji and kills the process —
                     # the repo has a guard test for exactly this, and my skip

@@ -642,4 +642,6 @@ decimal_id	claim_id	repo	path#symbol	status
 4.2.1.1	CLM-halt-one-row	CIRISAgent	ciris_engine/schemas/runtime/accord_halt.py#AgentSendSurface	impl
 4.2.1.1	CLM-halt-one-row	CIRISAgent	tests/ciris_engine/logic/utils/test_accord_halt_totality.py#test_every_outbound_path_is_gated_backstopped_or_exempt_with_a_reason	impl
 4.2.1.1	CLM-halt-one-row	CIRISAgent	ciris_engine/logic/accord/ingress.py#forward_accord_row	impl
+# A2: capture is a data door — no module on the reasoning-stream → trace path reads the latch, so a refused act's ACTION_RESULT always reaches the trace.
+4.2.1.1	CLM-halt-one-row	CIRISAgent	tests/ciris_engine/logic/utils/test_accord_halt_capture_never_reads_the_latch.py#test_no_capture_module_reads_the_latch	impl
 4.2.1.1	CLM-halt-one-row	CIRISAgent	tests/ciris_engine/logic/accord/test_accord_halt_ingress.py#test_nothing_on_the_accord_path_can_end_the_process	impl

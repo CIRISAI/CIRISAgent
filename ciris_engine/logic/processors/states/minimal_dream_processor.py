@@ -134,6 +134,12 @@ class MinimalDreamProcessor(BaseProcessor):
         self._stop_event: Optional[Any] = None
         self.dream_metrics: dict[str, Any] = {}
 
+        # Two callers drive process(): the dream loop's own task, and the main
+        # round (state_processors maps DREAM here). Unserialized, both picked
+        # up the same seed thought and dispatched it twice; one ended the
+        # session and the other then dereferenced current_session=None.
+        self._process_lock = asyncio.Lock()
+
     def get_supported_states(self) -> List[AgentState]:
         """Dream processor handles DREAM state."""
         return [AgentState.DREAM]
@@ -148,7 +154,11 @@ class MinimalDreamProcessor(BaseProcessor):
         return super().initialize()
 
     async def process(self, round_number: int) -> DreamResult:
-        """Process one round of dream consolidation."""
+        """Process one round of dream consolidation, one caller at a time."""
+        async with self._process_lock:
+            return await self._process_round(round_number)
+
+    async def _process_round(self, round_number: int) -> DreamResult:
         start = self.time_service.now()
 
         # Initialize session on first round
@@ -173,7 +183,9 @@ class MinimalDreamProcessor(BaseProcessor):
                 try:
                     await self._process_dream_thought(thought)
                     thoughts_processed += 1
-                    self.current_session.thoughts_processed += 1
+                    # stop_dreaming() can end the session while a thought is in flight.
+                    if self.current_session is not None:
+                        self.current_session.thoughts_processed += 1
                 except Exception as e:
                     logger.error(f"[DREAM] Error processing thought {thought.thought_id}: {e}")
                     errors += 1

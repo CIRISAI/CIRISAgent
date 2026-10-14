@@ -1042,6 +1042,18 @@ class APIServerManager:
         run_kind = "battery" if any(m in battery_modules for m in self.modules or []) else "qa"
         env.setdefault("CIRIS_TRACE_RUN_KIND", run_kind)
 
+        # accord_halt writes the node's halt latch, so the agent gets a home of
+        # its own that nothing else uses (CIRISAgent#1231). The module reads the
+        # latch path back from the node and refuses to write outside this dir.
+        if _RunKindModule.ACCORD_HALT in (self.modules or []):
+            import tempfile
+
+            throwaway = os.environ.get("CIRIS_QA_THROWAWAY_HOME") or tempfile.mkdtemp(prefix="ciris-qa-accord-halt-")
+            os.environ["CIRIS_QA_THROWAWAY_HOME"] = throwaway
+            env["CIRIS_QA_THROWAWAY_HOME"] = throwaway
+            env["CIRIS_HOME"] = throwaway
+            self.console.print(f"[dim]accord_halt: throwaway CIRIS_HOME={throwaway}[/dim]")
+
         # Set CIRIS_HOME for verifier_singleton (required for audit hash chain)
         if "CIRIS_HOME" not in env:
             project_root = Path(__file__).parent.parent.parent

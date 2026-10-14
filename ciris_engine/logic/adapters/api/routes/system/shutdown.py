@@ -15,7 +15,7 @@ from starlette.responses import JSONResponse
 from ciris_engine.schemas.api.auth import AuthContext
 from ciris_engine.schemas.api.responses import SuccessResponse
 
-from ...dependencies.auth import require_admin
+from ...dependencies.auth import get_auth_service, require_admin, verify_forced_shutdown_standing
 
 # Annotated type alias for FastAPI dependency injection (S8410)
 AuthAdminDep = Annotated[AuthContext, Depends(require_admin)]
@@ -50,15 +50,27 @@ async def shutdown_system(
     Initiates graceful system shutdown. Requires confirmation
     flag to prevent accidental shutdowns.
 
-    Requires ADMIN role.
+    Requires ADMIN role. ``force=True`` skips the agent's shutdown negotiation
+    and so additionally requires Wise Authority standing -- an active WA
+    certificate at ROOT or AUTHORITY (403 ``ForcedShutdownRefusal`` otherwise).
+    A forced stop ends the agent runtime and :8080, never the host process
+    (CIRISAgent#1240).
     """
     try:
         # Validate and get required services
         validate_shutdown_request(body)
+
+        # Forced shutdown: WA standing gate, before anything else is touched.
+        wa_id: Optional[str] = None
+        wa_role: Optional[str] = None
+        if body.force:
+            cert = await verify_forced_shutdown_standing(auth, get_auth_service(request))
+            wa_id, wa_role = cert.wa_id, cert.role.value
+
         shutdown_service, runtime = get_shutdown_service(request)
 
-        # Check if already shutting down
-        check_shutdown_already_requested(shutdown_service)
+        # Check if already shutting down (a forced request may escalate a graceful one)
+        check_shutdown_already_requested(shutdown_service, force=body.force)
 
         # Build and sanitize shutdown reason
         safe_reason = build_shutdown_reason(body.reason, body.force, auth.user_id)
@@ -68,7 +80,9 @@ async def shutdown_system(
 
         # Audit shutdown request
         severity = "high" if body.force else "warning"
-        await audit_shutdown_request(request, body.force, auth.user_id, auth.role.value, severity, safe_reason)
+        await audit_shutdown_request(
+            request, body.force, auth.user_id, auth.role.value, severity, safe_reason, wa_id=wa_id, wa_role=wa_role
+        )
 
         # Execute shutdown
         await execute_shutdown(shutdown_service, runtime, body.force, safe_reason)

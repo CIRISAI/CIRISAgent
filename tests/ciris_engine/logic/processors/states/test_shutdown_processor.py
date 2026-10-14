@@ -39,9 +39,8 @@ def _wire_persist_engine():
     import os
     import tempfile
 
-    from ciris_engine.logic.persistence._substrate import Engine, reset_engine  # type: ignore[import-untyped]
-
     import ciris_engine.logic.persistence.models.graph as _graph_mod
+    from ciris_engine.logic.persistence._substrate import Engine, reset_engine  # type: ignore[import-untyped]
     from ciris_engine.logic.persistence.models.graph import set_persist_engine
 
     with tempfile.NamedTemporaryFile(suffix="-persist.db", delete=False) as pf:
@@ -316,7 +315,6 @@ class TestTaskCreation:
         shutdown_manager = Mock()
         shutdown_manager.get_shutdown_reason.return_value = "Emergency shutdown"
         shutdown_manager.is_force_shutdown.return_value = True
-        shutdown_manager.get_requester_wa_id.return_value = "wa_root_123"
         mock_get_shutdown_manager.return_value = shutdown_manager
 
         # Mock WA with ROOT role
@@ -366,7 +364,6 @@ class TestTaskCreation:
         shutdown_manager = Mock()
         shutdown_manager.get_shutdown_reason.return_value = "Emergency shutdown"
         shutdown_manager.is_force_shutdown.return_value = True
-        shutdown_manager.get_requester_wa_id.return_value = "wa_authority_123"
         mock_get_shutdown_manager.return_value = shutdown_manager
 
         # Mock WA with AUTHORITY role
@@ -384,51 +381,36 @@ class TestTaskCreation:
 
     @pytest.mark.asyncio
     @patch("ciris_engine.logic.processors.states.shutdown_processor.get_shutdown_manager")
-    async def test_create_shutdown_task_emergency_insufficient_role(
+    @patch("ciris_engine.logic.persistence.models.tasks.is_shared_task_completed")
+    @patch("ciris_engine.logic.persistence.models.tasks.try_claim_shared_task")
+    @patch("ciris_engine.logic.processors.states.shutdown_processor.persistence")
+    async def test_forced_shutdown_skips_negotiation(
         self,
+        mock_persistence,
+        mock_try_claim,
+        mock_is_completed,
         mock_get_shutdown_manager,
         shutdown_processor,
     ):
-        """Test that emergency shutdown fails with insufficient role"""
-        # Setup
+        """A forced/emergency shutdown never opens the negotiation (CIRISAgent#1240).
+
+        Its authority (WA standing / WA signature) is checked at the entry point
+        before the flag is set, so no shutdown task or thought is created and the
+        processor reports ready at once. The non-forced path still negotiates:
+        see test_process_activates_pending_task.
+        """
         shutdown_manager = Mock()
-        shutdown_manager.get_shutdown_reason.return_value = "Emergency shutdown"
+        shutdown_manager.get_shutdown_reason.return_value = "EMERGENCY: operator stop (API shutdown by wa-x) [FORCED]"
         shutdown_manager.is_force_shutdown.return_value = True
-        shutdown_manager.get_requester_wa_id.return_value = "wa_observer_123"
         mock_get_shutdown_manager.return_value = shutdown_manager
 
-        # Mock WA with OBSERVER role (insufficient)
-        from ciris_engine.schemas.services.authority_core import WARole
+        result = await shutdown_processor.process(round_number=1)
 
-        mock_wa = Mock()
-        mock_wa.role = WARole.OBSERVER
-        shutdown_processor.auth_service.get_wa = AsyncMock(return_value=mock_wa)
-
-        # Execute and verify exception
-        with pytest.raises(ValueError, match="Emergency shutdown requires ROOT or AUTHORITY"):
-            await shutdown_processor._create_shutdown_task()
-
-    @pytest.mark.asyncio
-    @patch("ciris_engine.logic.processors.states.shutdown_processor.get_shutdown_manager")
-    async def test_create_shutdown_task_emergency_wa_not_found(
-        self,
-        mock_get_shutdown_manager,
-        shutdown_processor,
-    ):
-        """Test that emergency shutdown fails when WA not found"""
-        # Setup
-        shutdown_manager = Mock()
-        shutdown_manager.get_shutdown_reason.return_value = "Emergency shutdown"
-        shutdown_manager.is_force_shutdown.return_value = True
-        shutdown_manager.get_requester_wa_id.return_value = "wa_missing_123"
-        mock_get_shutdown_manager.return_value = shutdown_manager
-
-        # Mock WA not found
-        shutdown_processor.auth_service.get_wa = AsyncMock(return_value=None)
-
-        # Execute and verify exception
-        with pytest.raises(ValueError, match="Emergency shutdown requester not found"):
-            await shutdown_processor._create_shutdown_task()
+        assert result.shutdown_ready is True
+        assert shutdown_processor.shutdown_result.action == "forced_shutdown"
+        assert shutdown_processor.shutdown_task is None
+        mock_try_claim.assert_not_called()
+        mock_persistence.add_thought.assert_not_called()
 
     @pytest.mark.asyncio
     @patch("ciris_engine.logic.processors.states.shutdown_processor.get_shutdown_manager")
@@ -1058,9 +1040,7 @@ class TestValidationErrors:
         """#863-B: a shutdown task stuck non-terminal (e.g. DEFERRED) past the
         negotiation timeout forces a graceful shutdown instead of polling
         'Waiting for agent response' forever."""
-        from ciris_engine.logic.processors.states.shutdown_processor import (
-            SHUTDOWN_NEGOTIATION_TIMEOUT_SECONDS,
-        )
+        from ciris_engine.logic.processors.states.shutdown_processor import SHUTDOWN_NEGOTIATION_TIMEOUT_SECONDS
 
         mock_is_completed.return_value = False
         deferred_task = Task(
@@ -1085,9 +1065,7 @@ class TestValidationErrors:
         # Pretend negotiation began well beyond the timeout.
         start = datetime(2025, 10, 7, 12, 0, 0, tzinfo=timezone.utc)
         shutdown_processor._negotiation_started_at = start
-        mock_time_service.now.return_value = start + timedelta(
-            seconds=SHUTDOWN_NEGOTIATION_TIMEOUT_SECONDS + 5
-        )
+        mock_time_service.now.return_value = start + timedelta(seconds=SHUTDOWN_NEGOTIATION_TIMEOUT_SECONDS + 5)
 
         result = await shutdown_processor.process(round_number=999_999)
 
@@ -1522,7 +1500,6 @@ class TestEmergencyShutdownWarnings:
         shutdown_manager = Mock()
         shutdown_manager.get_shutdown_reason.return_value = "Emergency"
         shutdown_manager.is_force_shutdown.return_value = True
-        shutdown_manager.get_requester_wa_id.return_value = None  # No requester ID
         mock_get_shutdown_manager.return_value = shutdown_manager
 
         emergency_task = Task(

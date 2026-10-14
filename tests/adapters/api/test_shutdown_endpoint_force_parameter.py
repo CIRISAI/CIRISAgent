@@ -59,8 +59,11 @@ class TestShutdownEndpointForceParameter:
         )
 
         # Should fail validation (Pydantic will reject non-boolean for force field)
-        # May be 422 for validation error, 400 for bad request, or 503 if runtime unavailable
+        # May be 422 for validation error, 400 for bad request, or 503 if runtime unavailable.
+        # Pydantic's lax mode coerces "yes" -> True, so the request is a FORCED one and
+        # the WA-standing gate (CIRISAgent#1240) answers 403 for the fixture admin.
         assert response.status_code in [
+            status.HTTP_403_FORBIDDEN,
             status.HTTP_422_UNPROCESSABLE_ENTITY,
             status.HTTP_400_BAD_REQUEST,
             status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -89,9 +92,12 @@ class TestShutdownEndpointForceParameter:
             json={"reason": "Forced shutdown test", "force": True, "confirm": True},
         )
 
-        # Should be accepted (200) or runtime not available (503) or already shutting down (409)
-        # Note: In real execution, forced shutdown would call sys.exit(1) and terminate immediately
+        # Forced shutdown needs WA standing (CIRISAgent#1240): the fixture admin has
+        # no active ROOT/AUTHORITY certificate in a store, so 403 is the expected
+        # answer here; 200/503/409 remain valid where a WA store resolves one.
+        # It never ends the process -- see test_forced_shutdown_wa_gate.py.
         assert response.status_code in [
+            status.HTTP_403_FORBIDDEN,
             status.HTTP_200_OK,
             status.HTTP_503_SERVICE_UNAVAILABLE,
             status.HTTP_409_CONFLICT,

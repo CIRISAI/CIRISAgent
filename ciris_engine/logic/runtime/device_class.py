@@ -72,3 +72,30 @@ def declare_device_class(default: HostDeviceClass) -> Optional[str]:
     os.environ[DEVICE_CLASS_ENV] = default.value
     logger.info("Node device class: %s=%s (declared by the agent)", DEVICE_CLASS_ENV, default.value)
     return default.value
+
+
+def agent_owns_process() -> bool:
+    """True only when this process is the agent's own to end (CIRISAgent#1240).
+
+    The agent may end its process only as a headless server under a supervisor
+    (``ciris-server`` / ``main.py`` in a container or under systemd), where
+    exiting is how the supervisor learns the agent stopped. Everywhere else the
+    process belongs to someone else and must outlive a shutdown:
+
+    * Android (Chaquopy) and iOS (BeeWare): the agent is a thread of the host app;
+      ending the process is the user's app vanishing, and the host cannot restart
+      the interpreter;
+    * the desktop install (``laptop`` class: ``ciris-agent`` or the client's own
+      spawn, CIRISClient#153), whose process also carries the folded node (4243)
+      the client talks to.
+
+    **Fails closed**: ``platform_detection.is_desktop()`` is a positive allow-list
+    (an unrecognised platform is not desktop) and only an explicit or defaulted
+    ``server`` device class counts, so anything uncertain gets the embedded answer
+    -- stop the runtime and :8080, and return.
+    """
+    from ciris_engine.logic.utils.platform_detection import is_desktop
+
+    if not is_desktop():
+        return False
+    return resolve_device_class() == DeviceClass.SERVER

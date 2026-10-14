@@ -92,3 +92,29 @@ class KillSwitchConfig(BaseModel):
     require_reason: bool = Field(True, description="Whether reason is mandatory")
     log_to_audit: bool = Field(True, description="Whether to audit log all commands")
     allow_override: bool = Field(False, description="Whether local admin can override")
+
+
+class ForcedShutdownRefusalReason(str, Enum):
+    """Why a forced/emergency shutdown request was refused (CIRISAgent#1240).
+
+    A forced shutdown skips the agent's own shutdown negotiation, so it takes
+    Wise Authority standing, not just the ADMIN API role: an active WA
+    certificate at ROOT or AUTHORITY, read from the authentication store.
+    """
+
+    NOT_AUTHENTICATED = "not_authenticated"
+    WA_STORE_UNAVAILABLE = "wa_store_unavailable"
+    NO_WA_CERTIFICATE = "no_wa_certificate"
+    WA_ROLE_INSUFFICIENT = "wa_role_insufficient"
+
+
+class ForcedShutdownRefusal(BaseModel):
+    """Typed 403 body for a refused forced/emergency shutdown."""
+
+    reason: ForcedShutdownRefusalReason = Field(..., description="Machine-readable refusal reason")
+    message: str = Field(..., description="Human-readable explanation")
+    user_id: Optional[str] = Field(None, description="The requester the gate evaluated")
+    wa_id: Optional[str] = Field(None, description="The WA certificate the requester resolved to, if any")
+    wa_role: Optional[str] = Field(None, description="That certificate's role, if any")
+
+    model_config = ConfigDict(extra="forbid")

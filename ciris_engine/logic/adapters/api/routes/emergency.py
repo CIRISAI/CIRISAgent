@@ -201,6 +201,37 @@ def is_authorized_key(public_key: str) -> bool:
     return False
 
 
+async def _audit_emergency_shutdown(request: Request, command: WASignedCommand) -> None:
+    """Record a verified WA-signed emergency stop in the audit trail (who, why)."""
+    audit_service = getattr(request.app.state, "audit_service", None)
+    if not audit_service:
+        logger.warning("[EMERGENCY] no audit service -- emergency stop by %s not persisted", command.wa_id)
+        return
+    from ciris_engine.schemas.services.graph.audit import AuditEventData
+
+    try:
+        await audit_service.log_event(
+            "emergency_shutdown",
+            AuditEventData(
+                entity_id="system",
+                actor=command.wa_id,
+                outcome="initiated",
+                severity="critical",
+                action="emergency_shutdown",
+                resource="system",
+                reason=command.reason,
+                metadata={
+                    "command_id": command.command_id,
+                    "command_type": str(command.command_type),
+                    "authority": "wa_signed_command",
+                    "ip_address": request.client.host if request.client else "unknown",
+                },
+            ),
+        )
+    except Exception as e:  # the stop still proceeds; the failure is logged loudly
+        logger.error(f"[EMERGENCY] failed to persist emergency-shutdown audit record: {e}")
+
+
 @router.post(
     "/emergency/shutdown",
     responses={
@@ -266,6 +297,9 @@ async def emergency_shutdown(command: WASignedCommand, request: Request) -> Succ
     status.command_verified = True
     logger.info("Emergency shutdown command verified successfully")
 
+    # Persist "stopped by emergency command (who, why)" BEFORE the runtime stops.
+    await _audit_emergency_shutdown(request, command)
+
     # Get runtime control service if available
     runtime_service = None
     service_registry = getattr(request.app.state, "service_registry", None)
@@ -306,8 +340,13 @@ async def emergency_shutdown(command: WASignedCommand, request: Request) -> Succ
         status.shutdown_initiated = datetime.now(timezone.utc)
 
         # Request immediate emergency shutdown (forced termination)
+        # Stops the agent runtime and :8080 via the global (loop-watched)
+        # shutdown; never ends the host process on an embedded/desktop host
+        # (CIRISAgent#1240).
         reason = f"EMERGENCY: {command.reason} (WA: {command.wa_id})"
         await shutdown_service.emergency_shutdown(reason)
+        if hasattr(runtime, "request_shutdown"):
+            runtime.request_shutdown(reason)
 
         # Update status
         status.services_stopped = ["shutdown_requested"]

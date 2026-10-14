@@ -864,6 +864,31 @@ class APIAuthService:
         # This handles cases where frontend passes just "googleUserId" without "google:" prefix
         return self._lookup_by_external_id(user_id)
 
+    async def resolve_wa_certificate(self, user_id: str) -> Optional[WACertificate]:
+        """The ACTIVE WA certificate behind an authenticated API user, from the store.
+
+        An API user IS a WA certificate (``User.wa_id`` is the cert's primary key;
+        password users are minted as one in ``create_user``, OAuth users in
+        ``mint_wise_authority``). ``AuthContext.user_id`` may be that wa_id or an
+        OAuth alias (``google:...``), so it is resolved through ``get_user`` to the
+        canonical ``wa_id`` first, then the certificate is read fresh from the
+        authentication store (``get_wa`` -> ``authentication_store.get_wa_by_id``,
+        which returns active certificates only). The cached ``User.wa_role`` is
+        deliberately NOT trusted: a revoked or downgraded certificate must lose
+        standing immediately.
+
+        Returns None when there is no WA store, no such user, or no active cert.
+        """
+        if not self._auth_service:
+            return None
+        user = self.get_user(user_id)
+        wa_id = user.wa_id if user else user_id
+        try:
+            return await self._auth_service.get_wa(wa_id)
+        except Exception as e:  # store errors must refuse, never grant
+            logger.warning("WA certificate lookup failed for %s: %s", wa_id, e)
+            return None
+
     async def update_user(
         self, user_id: str, api_role: Optional[APIRole] = None, is_active: Optional[bool] = None
     ) -> Optional[User]:
@@ -1401,9 +1426,7 @@ class APIAuthService:
         if not self._auth_service:
             return
 
-        from ciris_engine.logic.services.infrastructure.authentication.service import (
-            AuthenticationService,
-        )
+        from ciris_engine.logic.services.infrastructure.authentication.service import AuthenticationService
 
         permissions: Optional[List[str]] = None
         if wa_role in (WARole.AUTHORITY, WARole.ROOT):

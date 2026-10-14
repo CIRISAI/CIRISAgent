@@ -270,8 +270,9 @@ class ShutdownProcessor(BaseProcessor):
         - conditional: Check conditions, skip task if no consent needed
         - instant: Skip consent entirely, return immediately ready
 
-        Emergency shutdowns (force=True) always require consent from
-        ROOT or AUTHORITY roles, regardless of cognitive_behaviors config.
+        Forced/emergency shutdowns skip negotiation entirely: their authority
+        (WA standing, a WA signature, or a verified accord) is checked at the
+        entry point before the flag is set (CIRISAgent#1240).
         """
         logger.info(f"Shutdown processor: round {round_number}")
 
@@ -288,32 +289,34 @@ class ShutdownProcessor(BaseProcessor):
                     f"Shutdown consent evaluation: required={self._consent_required}, reason={self._consent_reason}"
                 )
 
-            # Check for emergency shutdown (always requires consent)
+            # Forced/emergency shutdown skips the negotiation window entirely
+            # (CIRISAgent#1240). Its authority was established BEFORE the flag was
+            # set: WA standing (ROOT/AUTHORITY cert) on POST /system/shutdown
+            # force=True, the Ed25519 signature on a WASignedCommand, or a
+            # verified accord invocation. Nothing here re-asks the agent.
             shutdown_manager = get_shutdown_manager()
             is_emergency = (
                 shutdown_manager.is_force_shutdown() if hasattr(shutdown_manager, "is_force_shutdown") else False
             )
-
-            # Check for accord invocation shutdown (always instant, no consent)
-            if is_emergency and shutdown_manager:
+            if is_emergency:
                 shutdown_reason = shutdown_manager.get_shutdown_reason() or ""
-                if "Accord invocation" in shutdown_reason:
-                    logger.warning(
-                        f"ACCORD INVOCATION SHUTDOWN: {shutdown_reason}. "
-                        "Bypassing consent — this is a signed directive from a Wise Authority."
-                    )
-                    self.shutdown_complete = True
-                    self.shutdown_result = ShutdownResult(
-                        status="completed",
-                        action="accord_invocation_shutdown",
-                        message=f"Accord invocation: {shutdown_reason}",
-                        shutdown_ready=True,
-                        duration_seconds=0.0,
-                    )
-                    return self.shutdown_result
+                is_accord = "Accord invocation" in shutdown_reason
+                logger.warning(
+                    f"{'ACCORD INVOCATION' if is_accord else 'FORCED'} SHUTDOWN: {shutdown_reason}. "
+                    "Skipping shutdown negotiation -- authority was verified at the entry point."
+                )
+                self.shutdown_complete = True
+                self.shutdown_result = ShutdownResult(
+                    status="completed",
+                    action="accord_invocation_shutdown" if is_accord else "forced_shutdown",
+                    message=f"{'Accord invocation' if is_accord else 'Forced shutdown'}: {shutdown_reason}",
+                    shutdown_ready=True,
+                    duration_seconds=0.0,
+                )
+                return self.shutdown_result
 
-            # If no consent required AND not emergency, skip task and return ready
-            if not self._consent_required and not is_emergency:
+            # If no consent required, skip task and return ready
+            if not self._consent_required:
                 logger.info(
                     f"Shutdown consent not required (mode={self.cognitive_behaviors.shutdown.mode}). "
                     f"Proceeding with instant shutdown. Reason: {self._consent_reason}"
@@ -357,9 +360,7 @@ class ShutdownProcessor(BaseProcessor):
             # narrowing assert this replaces sat inside a try that catches Exception,
             # so a failure would have been swallowed as an ordinary error (Sonar
             # python:S5779) -- and asserts vanish entirely under `python -O`.
-            current_task = persistence.get_task_by_id(
-                current_task.task_id, current_task.agent_occurrence_id
-            )
+            current_task = persistence.get_task_by_id(current_task.task_id, current_task.agent_occurrence_id)
             if not current_task:
                 logger.error("Current task is None after fetching")
                 return ShutdownResult(status="error", message="Task not found", errors=1, duration_seconds=0.0)
@@ -448,31 +449,6 @@ class ShutdownProcessor(BaseProcessor):
 
         # Check if this is an emergency shutdown (force=True)
         is_emergency = shutdown_manager.is_force_shutdown() if hasattr(shutdown_manager, "is_force_shutdown") else False
-
-        # For emergency shutdown, verify the requester has root or authority role
-        if is_emergency and self.auth_service:
-            requester_wa_id = (
-                shutdown_manager.get_requester_wa_id() if hasattr(shutdown_manager, "get_requester_wa_id") else None
-            )
-            if requester_wa_id:
-                requester_wa = await self.auth_service.get_wa(requester_wa_id)
-                if requester_wa:
-                    from ciris_engine.schemas.services.authority_core import WARole
-
-                    if requester_wa.role not in [WARole.ROOT, WARole.AUTHORITY]:
-                        logger.error(
-                            f"Emergency shutdown requested by {requester_wa.role.value} {requester_wa_id} - DENIED"
-                        )
-                        # Reject the emergency shutdown
-                        raise ValueError(
-                            f"Emergency shutdown requires ROOT or AUTHORITY role, not {requester_wa.role.value}"
-                        )
-                    logger.info(f"Emergency shutdown authorized by {requester_wa.role.value} {requester_wa_id}")
-                else:
-                    logger.error(f"Emergency shutdown requester {requester_wa_id} not found")
-                    raise ValueError("Emergency shutdown requester not found")
-            else:
-                logger.warning("Emergency shutdown requested without requester ID")
 
         # Check if shutdown already decided by another occurrence
         if is_shared_task_completed("shutdown", within_hours=1):

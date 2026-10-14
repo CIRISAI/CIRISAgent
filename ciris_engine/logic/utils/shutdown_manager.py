@@ -75,6 +75,22 @@ def _get_shutdown_service() -> ShutdownService:
     return _global_shutdown_service
 
 
+def get_global_shutdown_service() -> ShutdownService:
+    """The ONE ShutdownService the runtime loop watches.
+
+    ``ServiceInitializer`` adopts this instance as ``runtime.shutdown_service``
+    and the registry's SHUTDOWN service, so a request made through any of them
+    reaches the loop (CIRISAgent#1240: a second, unwatched instance used to
+    swallow forced shutdowns).
+    """
+    return _get_shutdown_service()
+
+
+def mark_global_shutdown_emergency() -> None:
+    """Mark the global shutdown as emergency/forced: the shutdown processor skips negotiation."""
+    _get_shutdown_service().mark_emergency()
+
+
 def is_global_shutdown_requested() -> bool:
     """Check if shutdown has been requested."""
     service = _get_shutdown_service()
@@ -146,6 +162,8 @@ def get_shutdown_manager() -> ShutdownManagerWrapper:
 # Export for compatibility
 __all__ = [
     "get_shutdown_manager",
+    "get_global_shutdown_service",
+    "mark_global_shutdown_emergency",
     "is_global_shutdown_requested",
     "get_global_shutdown_reason",
     "request_global_shutdown",

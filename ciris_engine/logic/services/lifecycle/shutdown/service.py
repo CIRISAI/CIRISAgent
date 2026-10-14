@@ -7,8 +7,9 @@ This replaces the shutdown_manager.py utility with a proper service.
 
 import asyncio
 import logging
+import threading
 from threading import Lock
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from typing import Awaitable, Callable, Dict, List, Optional
 
 from ciris_engine.logic.services.base_infrastructure_service import BaseInfrastructureService
 from ciris_engine.protocols.services import ShutdownServiceProtocol
@@ -17,6 +18,11 @@ from ciris_engine.schemas.services.core import ServiceCapabilities
 from ciris_engine.schemas.services.metadata import ServiceMetadata
 
 logger = logging.getLogger(__name__)
+
+#: How long an OWNED headless process waits for the runtime to finish stopping
+#: after an emergency shutdown before it is interrupted (and, after the same again,
+#: terminated). Never used on an embedded or desktop host (CIRISAgent#1240).
+OWNED_PROCESS_EXIT_GRACE_SECONDS = 30.0
 
 
 class ShutdownService(BaseInfrastructureService, ShutdownServiceProtocol):
@@ -42,7 +48,8 @@ class ShutdownService(BaseInfrastructureService, ShutdownServiceProtocol):
         #: it was made for, carrying the requested-state over.
         self._event_loop: Optional[asyncio.AbstractEventLoop] = None
         self._emergency_mode = False
-        self._force_kill_task: Optional[asyncio.Task[Any]] = None
+        #: Owned-process exit watchdog cancel switch (headless server only, #1240).
+        self._owned_exit_cancel: Optional[threading.Event] = None
 
         # v1.4.3 metric tracking
         self._shutdown_requests_total = 0
@@ -284,44 +291,130 @@ class ShutdownService(BaseInfrastructureService, ShutdownServiceProtocol):
 
     async def emergency_shutdown(self, reason: str, timeout_seconds: int = 5) -> None:
         """
-        Execute emergency shutdown without negotiation.
+        Stop the agent runtime immediately, without the shutdown negotiation.
 
-        This method is used by the emergency shutdown endpoint to force
-        immediate system termination with minimal cleanup.
+        Used by every forced/emergency entry point (``POST /system/shutdown``
+        with ``force=True`` behind the WA-standing gate, and the WA-signed
+        ``/emergency/shutdown`` command). It stops the AGENT, never the host
+        (CIRISAgent#1240):
+
+        1. sets the emergency flags here AND on the global shutdown service --
+           the one the runtime loop watches (``request_global_shutdown``) -- so
+           the shutdown processor skips negotiation and the runtime stops its
+           processors, adapters and :8080;
+        2. runs the registered shutdown handlers, bounded by ``timeout_seconds``;
+        3. returns. It never calls ``sys.exit``, ``os._exit``, ``os.kill`` or
+           ``execv``: on Android, iOS and the desktop install the process
+           belongs to the host app.
+
+        Only when the agent owns its process (headless server under a
+        supervisor, ``device_class.agent_owns_process``) is a bounded exit
+        watchdog armed, so a runtime that hangs while stopping still ends and
+        the supervisor sees it.
 
         Args:
             reason: Why emergency shutdown was triggered
-            timeout_seconds: Grace period before force kill (default 5s)
+            timeout_seconds: Bound on the shutdown handlers (default 5s)
         """
+        if not self._set_emergency_flags(reason):
+            logger.warning(f"Emergency shutdown already in progress; ignoring duplicate: {reason}")
+            return
+
         logger.critical(f"EMERGENCY SHUTDOWN: {reason}")
 
-        # Set emergency flags
-        self._set_emergency_flags(reason)
-
-        # Set shutdown event immediately
+        # Wake any waiter on THIS instance.
         if self._shutdown_event:
             self._shutdown_event.set()
 
-        # Notify all handlers with timeout
+        # Route to the global shutdown service -- the one the runtime loop and
+        # the shutdown processor read. When this instance IS the global one
+        # (the runtime adopts it, see ServiceInitializer) the request below is a
+        # de-duplicated no-op; when it is not, this is what actually stops the
+        # loop (the defect CIRISAgent#1240 names).
+        from ciris_engine.logic.utils.shutdown_manager import mark_global_shutdown_emergency, request_global_shutdown
+
+        mark_global_shutdown_emergency()
+        request_global_shutdown(f"EMERGENCY: {reason}")
+
+        # Notify handlers, bounded.
         await self._execute_handlers_with_timeout(timeout_seconds)
 
-        # Start force kill timer
-        self._force_kill_task = asyncio.create_task(self._force_kill_after_timeout(timeout_seconds))
+        from ciris_engine.logic.runtime.device_class import agent_owns_process
 
-        # Try graceful exit first
-        logger.info("Attempting graceful exit...")
-        import sys
+        if agent_owns_process():
+            self._arm_owned_process_exit(OWNED_PROCESS_EXIT_GRACE_SECONDS)
+        else:
+            logger.critical(
+                "Emergency shutdown: embedded/desktop host -- stopping the agent runtime and :8080 only; "
+                "the host process is not ours to end"
+            )
 
-        sys.exit(1)
+    def _arm_owned_process_exit(self, grace_seconds: float) -> None:
+        """Bounded exit for a process the agent OWNS (headless server only).
 
-    def _set_emergency_flags(self, reason: str) -> None:
-        """Set emergency shutdown flags and update metrics."""
+        The runtime normally finishes stopping well inside ``grace_seconds`` and
+        ``main.py`` exits on its own. If it is still alive after the grace, the
+        main thread is interrupted (``KeyboardInterrupt`` -> main.py's normal
+        exit path); if it is STILL alive after a second grace, the supervisor-
+        owned process is terminated so it cannot hang forever. Callers must have
+        checked ``agent_owns_process()`` -- this is never armed on an embedded or
+        desktop host.
+        """
+        import threading
+
+        if self._owned_exit_cancel is not None:
+            return
+        cancel = threading.Event()
+        self._owned_exit_cancel = cancel
+
+        def _watchdog() -> None:
+            if cancel.wait(grace_seconds):
+                return
+            import _thread
+
+            logger.critical(
+                "Emergency shutdown: runtime still alive after %.0fs on an owned headless process -- "
+                "interrupting the main thread for a normal exit",
+                grace_seconds,
+            )
+            _thread.interrupt_main()
+            if cancel.wait(grace_seconds):
+                return
+            from ciris_engine.logic.utils.hard_kill import terminate_immediately
+
+            terminate_immediately(
+                f"emergency shutdown did not complete within {2 * grace_seconds:.0f}s (owned process)"
+            )
+
+        threading.Thread(target=_watchdog, name="OwnedProcessExitWatchdog", daemon=True).start()
+        logger.warning("Emergency shutdown: owned headless process -- exit watchdog armed (%.0fs grace)", grace_seconds)
+
+    def cancel_owned_process_exit(self) -> None:
+        """Disarm the owned-process exit watchdog (tests; a completed in-process stop)."""
+        if self._owned_exit_cancel is not None:
+            self._owned_exit_cancel.set()
+            self._owned_exit_cancel = None
+
+    def mark_emergency(self) -> None:
+        """Mark a (possibly already requested) shutdown as emergency: no negotiation."""
         with self._lock:
+            self._emergency_mode = True
+
+    def _set_emergency_flags(self, reason: str) -> bool:
+        """Set emergency shutdown flags and update metrics.
+
+        Returns False when an emergency shutdown is already in progress (the
+        request is a duplicate). A pending GRACEFUL shutdown is escalated.
+        """
+        with self._lock:
+            if self._emergency_mode and self._shutdown_requested:
+                return False
             self._shutdown_requested = True
             self._shutdown_reason = f"EMERGENCY: {reason}"
             self._emergency_mode = True
             self._shutdown_requests_total += 1
             self._shutdown_emergency_total += 1
+        return True
 
     async def _execute_handlers_with_timeout(self, timeout_seconds: int) -> None:
         """Execute shutdown handlers with timeout protection."""
@@ -337,62 +430,3 @@ class ShutdownService(BaseInfrastructureService, ShutdownServiceProtocol):
             logger.warning("Emergency shutdown handlers timed out")
         except Exception as e:
             logger.error(f"Error during emergency shutdown: {e}")
-
-    async def _force_kill_after_timeout(self, timeout_seconds: int) -> None:
-        """Force process termination after timeout period."""
-        await asyncio.sleep(timeout_seconds)
-        logger.critical("Emergency shutdown timeout reached - forcing termination")
-
-        import os
-        import signal
-
-        # Safety check: only kill our own process
-        pid = os.getpid()
-        logger.critical(f"Sending SIGKILL to process {pid}")
-
-        self._send_kill_signal(pid, signal)
-
-    def _send_kill_signal(self, pid: int, signal: Any) -> None:
-        """Send kill signal to process with platform-specific handling."""
-        try:
-            self._try_primary_signal(pid, signal)
-        except (OSError, AttributeError) as e:
-            logger.error(f"Failed to force kill process: {e}")
-            self._try_fallback_signal(pid, signal)
-
-    def _try_primary_signal(self, pid: int, signal: Any) -> None:
-        """Try to send primary kill signal (SIGKILL or SIGTERM)."""
-        import os
-
-        # Use platform-specific signals
-        # SIGKILL doesn't exist on Windows - use SIGTERM or sys.exit
-        if hasattr(signal, "SIGKILL"):
-            # NOSONAR: Safe - only sending signal to our own process (os.getpid())
-            os.kill(pid, signal.SIGKILL)  # NOSONAR python:S4828
-        elif hasattr(signal, "SIGTERM"):
-            # NOSONAR: Safe - only sending signal to our own process (os.getpid())
-            os.kill(pid, signal.SIGTERM)  # NOSONAR python:S4828
-        else:
-            # Windows fallback - just exit
-            import sys
-
-            sys.exit(1)
-
-    def _try_fallback_signal(self, pid: int, signal: Any) -> None:
-        """Try fallback kill signal if primary fails."""
-        import os
-
-        try:
-            if hasattr(signal, "SIGTERM"):
-                # NOSONAR: Safe - only sending signal to our own process (os.getpid())
-                os.kill(pid, signal.SIGTERM)  # NOSONAR python:S4828
-            else:
-                # Windows fallback
-                import sys
-
-                sys.exit(1)
-        except (OSError, AttributeError):
-            # Last resort
-            import sys
-
-            sys.exit(1)

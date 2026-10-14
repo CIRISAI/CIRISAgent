@@ -1,0 +1,220 @@
+# The localization pipeline, once. The three lane workflows call this.
+#
+# DERIVED from CIRISClient .github/workflows/i18n-lane.yml (provenance in
+# localization/upstream/vendored.json; account in localization/VENDORED.md). The
+# pipeline code it runs -- localization/localize.py and friends -- is vendored
+# byte-identical; this workflow is ours, adapted to agent paths:
+#
+#   - no CIRISServer `.emitters` checkout and no client bundle mirrors: the
+#     agent has neither. The client gate (check_localization_sync.py
+#     --server-src) is replaced by the agent's own gates below.
+#   - a TARGET input: `accord` runs the Accord segment adapter
+#     (localization/accord_localize.py); `ui` runs localize.py against the
+#     agent's own string bundle, ciris_engine/data/localized/{lang}.json.
+#   - the vendoring digest is CHECKED, never re-recorded: a lane writes
+#     translations, not vendored code, so a lane that changes a vendored file
+#     is a defect.
+#
+# Secrets: OPENROUTER_API_KEY drives the model ladder (every rung, including a
+# family the Anthropic SDK cannot reach). ANTHROPIC_API_KEY is honoured when
+# present. LOCALIZE_PROVIDER picks when both are set; on the Anthropic path the
+# judge is the drafter's family, so localize.py refuses unless
+# LOCALIZE_REVIEW_MODEL is set deliberately.
+#
+# Inputs reach the shell through env, never by ${{ }} interpolation into the
+# script body; localization/run_lane.sh builds the command from them.
+
+name: i18n lane
+
+on:
+  workflow_call:
+    inputs:
+      target:
+        description: "accord | ui"
+        required: false
+        default: "accord"
+        type: string
+      lane:
+        description: "translate | evaluate | repair"
+        required: true
+        type: string
+      accord_version:
+        description: "accord version to translate (target=accord); its English source must exist"
+        required: false
+        default: "1.3"
+        type: string
+      tm_version:
+        description: "previous accord used as translation memory (target=accord)"
+        required: false
+        default: "1.2b"
+        type: string
+      accord_units:
+        description: "accord units, space-separated (section0 v1 .. v9 annexes). Empty = every unit, one at a time"
+        required: false
+        default: ""
+        type: string
+      keys:
+        description: "fnmatch patterns over flat dotted keys, space-separated. Empty = whatever is missing"
+        required: false
+        default: ""
+        type: string
+      langs:
+        description: "language codes, space-separated. Empty = all 28"
+        required: false
+        default: ""
+        type: string
+      max_keys:
+        description: "refuse runs larger than this many key-values (accord: per unit)"
+        required: false
+        default: "400"
+        type: string
+      mode:
+        description: "fast | batch (batch is 50% cheaper, for backfills)"
+        required: false
+        default: "fast"
+        type: string
+      commit:
+        description: "push the result to the branch (false = report only)"
+        required: false
+        default: true
+        type: boolean
+      ref:
+        description: "ref to check out and push to"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  lane:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    env:
+      TARGET: ${{ inputs.target }}
+      LANE: ${{ inputs.lane }}
+      ACCORD_VERSION: ${{ inputs.accord_version }}
+      TM_VERSION: ${{ inputs.tm_version }}
+      UNITS: ${{ inputs.accord_units }}
+      KEYS: ${{ inputs.keys }}
+      LANGS: ${{ inputs.langs }}
+      MAX_KEYS: ${{ inputs.max_keys }}
+      MODE: ${{ inputs.mode }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Vendored pipeline matches its record
+        run: python3 tools/dev/check_localize_vendoring.py
+
+      - name: Plan (no API call)
+        env:
+          LOCALIZE_PROVIDER: ${{ vars.LOCALIZE_PROVIDER || 'openrouter' }}
+        run: |
+          set -euo pipefail
+          localization/run_lane.sh --dry-run | tee plan.log
+          {
+            echo "### Plan -- $TARGET / $LANE lane"
+            echo '```'
+            cat plan.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run the lane
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          LOCALIZE_PROVIDER: ${{ vars.LOCALIZE_PROVIDER || 'openrouter' }}
+          LOCALIZE_LADDER: ${{ vars.LOCALIZE_LADDER }}
+          LOCALIZE_REVIEW_MODEL: ${{ vars.LOCALIZE_REVIEW_MODEL }}
+        run: |
+          set -euo pipefail
+          pip install --quiet anthropic
+          localization/run_lane.sh --mode "$MODE" --report i18n-report.json | tee lane.log
+          {
+            echo "### $TARGET / $LANE lane"
+            echo '```'
+            tail -400 lane.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: MQM findings
+        if: always() && hashFiles('i18n-report.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: i18n-report-${{ inputs.target }}-${{ inputs.lane }}
+          path: i18n-report.json
+
+      - name: Gate -- the pipeline proposes, this decides
+        # always(), so a lane that exited 1 still gets what it DID write checked,
+        # and the operator sees both facts.
+        if: always()
+        run: |
+          set -euo pipefail
+          python3 tools/dev/check_localize_vendoring.py
+          if [ "$TARGET" = "accord" ]; then
+            # Round trip of the English source, every staged passage against the
+            # accord's structural rules, every reassembled file byte-equal to its
+            # bundle, and no per-locale accord mirror anywhere.
+            python3 localization/accord_localize.py --version "$ACCORD_VERSION" --verify
+          else
+            python3 tools/dev/check_localization_sync.py
+          fi
+
+      - name: Commit
+        env:
+          BRANCH: ${{ github.ref_name }}
+        # ALWAYS, even when the lane exited 1. The lane writes only ACCEPTED
+        # values, so committing on failure banks the good work and leaves the
+        # rejected keys missing for the next run (CIRISClient: skipping this on
+        # failure discarded 587 good translations per run, seven runs running).
+        if: always() && inputs.commit
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ "$TARGET" = "accord" ]; then
+            # The segment bundles are the lane's state (en.json and manifest.json
+            # there are generated and git-ignored); the .txt files are what the
+            # loader reads, written only for COMPLETE locales.
+            git add --all -- "localization/accord/$ACCORD_VERSION" ciris_engine/data/localized
+          else
+            git add --all -- ciris_engine/data/localized
+          fi
+          if git diff --cached --quiet; then
+            echo "nothing to commit"
+            exit 0
+          fi
+          git commit -F - <<MSG
+          i18n($TARGET): $LANE lane (translate -> evaluate -> repair)
+
+          Machine translation through the vendored CIRISClient pipeline,
+          independently reviewed against MQM by a different model family, and
+          repaired where the review found a critical, major or terminology error.
+          Every value is status=draft / review_status=machine_reviewed: this
+          guarantees terminology, structure and meaning, not native fluency.
+
+          Gated in this run by tools/dev/check_localize_vendoring.py and, for the
+          Accord, accord_localize.py --verify. The MQM findings are attached to
+          the run as i18n-report.json.
+
+          Accord files are hash-pinned (ACCORD_EXPECTED_HASHES) and covered by
+          the root-signed accord manifest: re-pin and re-sign before merge.
+          MSG
+          # REBASE BEFORE PUSHING: a lane takes minutes, and a human can land a
+          # commit on the same branch meanwhile.
+          for attempt in 1 2 3; do
+            if git push; then
+              exit 0
+            fi
+            echo "push rejected (attempt $attempt) -- rebasing onto the branch and retrying"
+            git pull --rebase origin "$BRANCH" || true
+          done
+          echo "::error::could not push the translations after 3 attempts -- the branch moved under the lane each time"
+          exit 1

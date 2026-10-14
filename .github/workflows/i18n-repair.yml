@@ -1,0 +1,77 @@
+# Correct translations the reviewer rejects.
+#
+# Enters at evaluate, fixes what is flagged and nothing that is not, then
+# re-reviews only what it changed -- a repair is a new string, and an
+# unreviewed new string is the thing this pipeline refuses to write.
+#
+# DERIVED from CIRISClient .github/workflows/i18n-repair.yml (see
+# localization/VENDORED.md). The work itself is in i18n-lane.yml, once.
+# Dispatch only: nothing here runs on push, and nothing spends tokens unless a
+# human starts it.
+
+name: i18n repair
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "accord = the Accord segments (localization/accord_localize.py); ui = ciris_engine/data/localized/{lang}.json"
+        required: false
+        default: "accord"
+        type: choice
+        options: [accord, ui]
+      accord_version:
+        description: "Accord version (target=accord). Its English source accord_<v>_en.txt must exist."
+        required: false
+        default: "1.3"
+      tm_version:
+        description: "Previous Accord used as translation memory (target=accord)."
+        required: false
+        default: "1.2b"
+      accord_units:
+        description: "Accord units to run (target=accord), space-separated: section0 v1 v2 v3 v4 v5 v6 v7 v8 v9 annexes. Defaults to ONE unit so a dispatch spends on a section, not the whole Accord; clear it for every unit (run one at a time)."
+        required: false
+        default: "section0"
+      keys:
+        description: "Key patterns (fnmatch over flat dotted keys, e.g. accord.v9.*), space-separated. Required for this lane: the pipeline refuses an empty selection here."
+        required: false
+        default: ""
+      langs:
+        description: "Language codes, space-separated. Empty = all 28."
+        required: false
+        default: ""
+      max_keys:
+        description: "Refuse runs larger than this many key-values (accord: per unit; the largest 1.2b-sized unit, v6, is 91 x 28 = 2548)."
+        required: false
+        default: "400"
+      mode:
+        description: "fast, or batch for 50% off when nobody is waiting."
+        required: false
+        default: "fast"
+        type: choice
+        options: [fast, batch]
+
+concurrency:
+  # One writer at a time. Parallel agents racing on one bundle is the failure
+  # CIRISAgent's retrospectives name explicitly; a queue is the fix.
+  group: i18n-write-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    uses: ./.github/workflows/i18n-lane.yml
+    secrets: inherit
+    with:
+      target: ${{ inputs.target }}
+      lane: repair
+      accord_version: ${{ inputs.accord_version }}
+      tm_version: ${{ inputs.tm_version }}
+      accord_units: ${{ inputs.accord_units }}
+      keys: ${{ inputs.keys }}
+      langs: ${{ inputs.langs }}
+      max_keys: ${{ inputs.max_keys }}
+      mode: ${{ inputs.mode }}
+      commit: true

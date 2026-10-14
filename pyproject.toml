@@ -34,3 +34,8 @@ ignore_names = [
 "tests/**" = ["S101"]
 "**/tests/*" = ["S101"]
 "ciris_adapters/*/tests/**" = ["S101"]
+
+[tool.black]
+# Vendored byte-identical from CIRISClient (localization/upstream/vendored.json). Grace
+# runs `black .`; reformatting these would fork them silently.
+extend-exclude = '^/localization/((localize|glossary|review_only)\.py|upstream/.*)$'

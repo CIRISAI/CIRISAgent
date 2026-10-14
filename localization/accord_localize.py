@@ -68,7 +68,9 @@ import importlib
 import json
 import os
 import re
+import shutil
 import sys
+import tempfile
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
@@ -94,6 +96,9 @@ ACCORD_MAX_ANCHOR_BLOCK_CHARS = 24000
 #: English: keys are positional within a section, so a rewritten section can
 #: put a different line under an old key.
 SAME_KEY_MIN_SIMILARITY = 0.3
+
+#: localize.py flags under which a run must not write anything.
+READ_ONLY_FLAGS = ("--check", "--dry-run", "--glossary-report")
 
 #: Glossary rows dropped for accord runs (see the module docstring, point 5).
 ACCORD_GLOSSARY_DROP = ("ACCORD",)
@@ -686,7 +691,26 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--no-reassemble", action="store_true", help="do not write accord files after the run")
     args, rest = ap.parse_known_args(argv)
 
-    stage = Stage(args.version, stage_dir=args.stage_dir, localized=args.localized_dir)
+    # READ-ONLY unless this is a lane run that may write. --check, --dry-run,
+    # --glossary-report, --segments and --verify never touch the live bundles
+    # (ciris_engine/data/localized) or the committed stage: a read-only pass
+    # stages into a throwaway copy of the committed stage.
+    read_only = args.segments or args.verify or any(f in rest for f in READ_ONLY_FLAGS)
+    scratch: Optional[tempfile.TemporaryDirectory[str]] = None
+    stage_dir = args.stage_dir or (STAGE_ROOT / check_version(args.version))
+    if read_only and not args.verify:
+        scratch = tempfile.TemporaryDirectory(prefix="accord-stage-")
+        if stage_dir.is_dir():
+            shutil.copytree(stage_dir, scratch.name, dirs_exist_ok=True)
+        stage_dir = Path(scratch.name)
+    try:
+        return _main(args, rest, Stage(args.version, stage_dir=stage_dir, localized=args.localized_dir))
+    finally:
+        if scratch is not None:
+            scratch.cleanup()
+
+
+def _main(args: argparse.Namespace, rest: List[str], stage: Stage) -> int:
     if args.segments:
         segments_report(stage)
         return 0

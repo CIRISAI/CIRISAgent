@@ -35,7 +35,7 @@ repos:
         # Never fail, just fix
         always_run: true
         fail_fast: false
-        # Vendored byte-identical from CIRISClient (localization/vendored.json):
+        # Vendored byte-identical from CIRISClient (localization/upstream/vendored.json):
         # reformatting them is a silent fork the vendoring check then rejects.
         exclude: '^localization/((localize|glossary|review_only)\.py|drive\.sh|TRANSLATION_GUIDE\.md|glossaries/.*|upstream/.*)$'
 
@@ -47,7 +47,7 @@ repos:
         # Never fail, just fix
         always_run: true
         fail_fast: false
-        # Vendored byte-identical from CIRISClient (localization/vendored.json):
+        # Vendored byte-identical from CIRISClient (localization/upstream/vendored.json):
         # reformatting them is a silent fork the vendoring check then rejects.
         exclude: '^localization/((localize|glossary|review_only)\.py|drive\.sh|TRANSLATION_GUIDE\.md|glossaries/.*|upstream/.*)$'
 
@@ -56,16 +56,16 @@ repos:
     rev: v4.6.0
     hooks:
       - id: trailing-whitespace
-        # Vendored byte-identical from CIRISClient (localization/vendored.json):
+        # Vendored byte-identical from CIRISClient (localization/upstream/vendored.json):
         # reformatting them is a silent fork the vendoring check then rejects.
         exclude: '^localization/((localize|glossary|review_only)\.py|drive\.sh|TRANSLATION_GUIDE\.md|glossaries/.*|upstream/.*)$'
       - id: end-of-file-fixer
-        # Vendored byte-identical from CIRISClient (localization/vendored.json):
+        # Vendored byte-identical from CIRISClient (localization/upstream/vendored.json):
         # reformatting them is a silent fork the vendoring check then rejects.
         exclude: '^localization/((localize|glossary|review_only)\.py|drive\.sh|TRANSLATION_GUIDE\.md|glossaries/.*|upstream/.*)$'
       - id: mixed-line-ending
         args: ['--fix=lf']
-        # Vendored byte-identical from CIRISClient (localization/vendored.json):
+        # Vendored byte-identical from CIRISClient (localization/upstream/vendored.json):
         # reformatting them is a silent fork the vendoring check then rejects.
         exclude: '^localization/((localize|glossary|review_only)\.py|drive\.sh|TRANSLATION_GUIDE\.md|glossaries/.*|upstream/.*)$'
       # Critical checks that should block
@@ -187,7 +187,7 @@ repos:
         verbose: true
 
       # Vendored CIRISClient localization pipeline - BLOCKING. A vendored file
-      # that differs from the digest localization/vendored.json records is a
+      # that differs from the digest localization/upstream/vendored.json records is a
       # fork nobody declared; re-vendor it or record the edit as a patch.
       - id: localize-vendoring
         name: Vendored localize pipeline matches its record

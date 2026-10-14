@@ -1,7 +1,7 @@
 # The localization pipeline, once. The three lane workflows call this.
 #
 # DERIVED from CIRISClient .github/workflows/i18n-lane.yml (provenance in
-# localization/vendored.json; account in localization/VENDORED.md). The
+# localization/upstream/vendored.json; account in localization/VENDORED.md). The
 # pipeline code it runs -- localization/localize.py and friends -- is vendored
 # byte-identical; this workflow is ours, adapted to agent paths:
 #

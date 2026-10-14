@@ -6,9 +6,22 @@ structural validation could not see (JSON parsed, keys present, placeholders
 matched). The pipeline answers that with an evaluate lane: MQM error spans from a
 judge of a *different model family*, then repair, then re-review.
 
-The machine-readable record is [`vendored.json`](vendored.json). The gate is
+The machine-readable record is [`upstream/vendored.json`](upstream/vendored.json). The gate is
 `python3 tools/dev/check_localize_vendoring.py` (pre-commit hook
 `localize-vendoring`, plus the first and last steps of every i18n lane run).
+
+**Keep JSON out of `localization/` itself.** The agent's string loader
+(`_get_localization_dir`) uses `<CIRIS_HOME>/localization/` as THE bundle
+directory as soon as that folder holds any `*.json`. In a dev checkout,
+CIRIS_HOME is the repo root. That is why the record lives in `upstream/`. The
+first cut of #1253 put it at the top level, and every `get_string` /
+`language_guidance` read then came back empty. The vendoring check and
+`tests/localization` now fail on any top-level JSON here.
+
+Every adapter mode is read-only except a real lane run. `--check`,
+`--dry-run`, `--glossary-report`, `--segments` and `--verify` stage into a
+throwaway directory and never write `ciris_engine/data/localized` or the
+committed stage. A test asserts this byte for byte.
 
 ## Upstream
 

@@ -390,3 +390,51 @@ def test_no_per_locale_mirror_exists_in_the_real_tree() -> None:
     for lang in LOCALES:
         mirror = LOCALIZED / lang
         assert not (mirror.is_dir() and any(mirror.glob("accord*"))), mirror
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Read-only by default: the live bundles are never touched outside a lane run
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _snapshot(*roots: Path) -> Dict[str, str]:
+    import hashlib
+
+    out: Dict[str, str] = {}
+    for root in roots:
+        for p in sorted(root.rglob("*")):
+            if p.is_file() and "__pycache__" not in p.parts:
+                out[p.relative_to(REPO).as_posix()] = hashlib.sha256(p.read_bytes()).hexdigest()
+    return out
+
+
+def test_the_agent_string_loader_still_reads_its_own_bundle(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The regression #1253 shipped: a *.json at localization/ top level makes
+    _get_localization_dir() adopt localization/ (CIRIS_HOME is the repo root in
+    a dev checkout), and every get_string / language_guidance read goes empty."""
+    from ciris_engine.logic.utils import localization as loc
+
+    monkeypatch.delenv("CIRIS_LOCALIZATION_DIR", raising=False)
+    assert not list(LOCALIZATION.glob("*.json")), "no JSON at localization/ top level"
+    assert loc._get_localization_dir().resolve() == LOCALIZED.resolve()
+
+
+def test_read_only_modes_never_mutate_anything(monkeypatch: pytest.MonkeyPatch, capsys: Any) -> None:
+    before = _snapshot(LOCALIZED, LOCALIZATION)
+    common = ["--version", "1.2b"]
+    assert AL.main([*common, "--segments"]) == 0
+    AL.main([*common, "--check"])
+    AL.main([*common, "--lane", "translate", "--lang", "yo", "--dry-run", "--max-keys", "5000"])
+    AL.main([*common, "--glossary-report"])
+    AL.main([*common, "--verify"])
+    for name in ("localize", "check_localization_sync", "glossary"):
+        sys.modules.pop(name, None)
+    monkeypatch.setenv("LOCALIZE_TARGET", "ui")
+    import importlib
+
+    ui = importlib.import_module("localize")
+    assert ui.CANONICAL.resolve() == LOCALIZED.resolve()
+    monkeypatch.setattr(sys, "argv", ["localize.py", "--check"])
+    ui.main()
+    capsys.readouterr()
+    assert _snapshot(LOCALIZED, LOCALIZATION) == before

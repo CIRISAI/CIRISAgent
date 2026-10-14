@@ -10,7 +10,7 @@
 
 Mirrors CIRISClient's ``packaging/check_vendoring.py``: per-file digests, not a
 set of names, so a DECLARED file that changes without the record changing is a
-failure rather than a silent middle. The record is ``localization/vendored.json``
+failure rather than a silent middle. The record is ``localization/upstream/vendored.json``
 (the human-readable account is ``localization/VENDORED.md``).
 
 Three kinds of entry:
@@ -43,7 +43,12 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 REPO = Path(__file__).resolve().parents[2]
-RECORD = Path("localization") / "vendored.json"
+#: Inside upstream/, NOT at localization/ top level: the agent's string loader
+#: (ciris_engine/logic/utils/localization.py::_get_localization_dir) adopts
+#: <CIRIS_HOME>/localization/ as THE bundle directory as soon as it holds any
+#: *.json -- and in a dev checkout CIRIS_HOME is the repo root. A record there
+#: once made every get_string()/language_guidance read an empty bundle.
+RECORD = Path("localization") / "upstream" / "vendored.json"
 
 
 def sha256(data: bytes) -> str:
@@ -62,7 +67,13 @@ def check(root: Path) -> List[str]:
     """Every problem with the vendored tree under ``root``. Empty = clean."""
     record = load_record(root)
     problems: List[str] = []
-    declared = set()
+    declared = {RECORD.as_posix()}
+    stray = sorted(p.name for p in (root / "localization").glob("*.json"))
+    if stray:
+        problems.append(
+            f"localization/ holds {stray}: the agent's string loader adopts a localization/ dir that contains "
+            f"*.json as its bundle, shadowing ciris_engine/data/localized. Keep JSON out of the top level."
+        )
     entries: List[Dict[str, Any]] = record.get("files", [])
     if not entries:
         problems.append("the record declares no files -- a check over nothing is not a check")

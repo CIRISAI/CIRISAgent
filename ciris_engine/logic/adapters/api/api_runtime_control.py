@@ -165,26 +165,30 @@ class APIRuntimeControlService(Service):
         return status
 
     async def handle_emergency_shutdown(self, command: Any) -> Any:
-        """Handle emergency shutdown command."""
-        logger.critical(f"Emergency shutdown requested via API: {command.reason}")
+        """Handle a WA-signed emergency shutdown command.
 
-        # Delegate to runtime's shutdown service
-        if hasattr(self.runtime, "shutdown_service"):
-            await self.runtime.shutdown_service.request_shutdown(f"EMERGENCY API: {command.reason}")
-        else:
-            # Fallback to runtime shutdown
-            if hasattr(self.runtime, "shutdown"):
-                await self.runtime.shutdown(f"EMERGENCY API: {command.reason}")
+        Delegates to the main RuntimeControlService, which VERIFIES the WA
+        signature (the signature is the authority) and then stops the agent
+        runtime through the global ShutdownService without ending the host
+        process (CIRISAgent#1240). This adapter-side service used to accept any
+        command unverified and call `request_shutdown` on a ShutdownService the
+        runtime loop does not watch. With no main control service to verify
+        the signature, the command is refused.
+        """
+        from ciris_engine.schemas.services.shutdown import EmergencyShutdownStatus
 
-        return {
-            "shutdown_initiated": datetime.now(timezone.utc),
-            "command_verified": True,
-            "services_stopped": ["all"],
-            "data_persisted": True,
-            "final_message_sent": True,
-            "shutdown_completed": datetime.now(timezone.utc),
-            "exit_code": 0,
-        }
+        logger.critical(f"Emergency shutdown requested via API: {getattr(command, 'reason', '')}")
+
+        main_control = getattr(self.runtime, "runtime_control_service", None)
+        if main_control is not None and main_control is not self and hasattr(main_control, "handle_emergency_shutdown"):
+            return await main_control.handle_emergency_shutdown(command)
+
+        logger.error("Emergency shutdown refused: no RuntimeControlService available to verify the WA signature")
+        return EmergencyShutdownStatus(
+            command_received=datetime.now(timezone.utc),
+            command_verified=False,
+            verification_error="WA signature cannot be verified: RuntimeControlService unavailable",
+        )
 
     # Service interface methods
 

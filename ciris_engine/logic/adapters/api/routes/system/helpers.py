@@ -806,11 +806,20 @@ def get_shutdown_service(request: Request) -> tuple[Any, Any]:
     return shutdown_service, runtime
 
 
-def check_shutdown_already_requested(shutdown_service: Any) -> None:
-    """Check if shutdown is already in progress."""
-    if shutdown_service.is_shutdown_requested():
-        existing_reason = shutdown_service.get_shutdown_reason()
-        raise HTTPException(status_code=409, detail=f"Shutdown already requested: {existing_reason}")
+def check_shutdown_already_requested(shutdown_service: Any, force: bool = False) -> None:
+    """Check if shutdown is already in progress.
+
+    A FORCED request may escalate a pending graceful shutdown (a negotiation
+    that is stuck is exactly when force is needed); it is a duplicate only when
+    a forced/emergency shutdown is already under way.
+    """
+    if not shutdown_service.is_shutdown_requested():
+        return
+    if force and not shutdown_service.is_force_shutdown():
+        logger.warning("Forced shutdown escalating a pending graceful shutdown")
+        return
+    existing_reason = shutdown_service.get_shutdown_reason()
+    raise HTTPException(status_code=409, detail=f"Shutdown already requested: {existing_reason}")
 
 
 def build_shutdown_reason(reason: str, force: bool, user_id: str) -> str:
@@ -826,10 +835,16 @@ def build_shutdown_reason(reason: str, force: bool, user_id: str) -> str:
     return safe_reason
 
 
-def create_audit_metadata(force: bool, role_value: str, request: Request) -> Dict[str, Any]:
+def create_audit_metadata(
+    force: bool,
+    role_value: str,
+    request: Request,
+    wa_id: Optional[str] = None,
+    wa_role: Optional[str] = None,
+) -> Dict[str, Any]:
     """Create metadata dict for shutdown audit event."""
     is_service_account = role_value == "SERVICE_ACCOUNT"
-    return {
+    metadata: Dict[str, Any] = {
         "force": force,
         "is_service_account": is_service_account,
         "auth_role": role_value,
@@ -837,12 +852,29 @@ def create_audit_metadata(force: bool, role_value: str, request: Request) -> Dic
         "user_agent": request.headers.get("user-agent", "unknown"),
         "request_path": str(request.url.path),
     }
+    if wa_id:
+        # Who authorised a FORCED stop: the WA certificate the gate verified.
+        metadata["authorized_wa_id"] = wa_id
+        metadata["authorized_wa_role"] = wa_role or "unknown"
+    return metadata
 
 
 async def audit_shutdown_request(
-    request: Request, force: bool, user_id: str, role_value: str, severity: str, safe_reason: str
+    request: Request,
+    force: bool,
+    user_id: str,
+    role_value: str,
+    severity: str,
+    safe_reason: str,
+    wa_id: Optional[str] = None,
+    wa_role: Optional[str] = None,
 ) -> None:  # NOSONAR - async required for create_task
-    """Audit the shutdown request for security tracking."""
+    """Audit the shutdown request for security tracking.
+
+    A FORCED shutdown is awaited, not fire-and-forget: it stops the runtime
+    without negotiation, so the "stopped by forced command (who, why)" record
+    must be in the audit trail before the loop winds down (CIRISAgent#1240).
+    """
     audit_service = getattr(request.app.state, "audit_service", None)
     if not audit_service:
         return
@@ -857,8 +889,15 @@ async def audit_shutdown_request(
         action="system_shutdown",
         resource="system",
         reason=safe_reason,
-        metadata=create_audit_metadata(force, role_value, request),
+        metadata=create_audit_metadata(force, role_value, request, wa_id=wa_id, wa_role=wa_role),
     )
+
+    if force:
+        try:
+            await audit_service.log_event("system_forced_shutdown", audit_event)
+        except Exception as e:  # the stop still proceeds; the failure is logged loudly
+            logger.error(f"Failed to persist forced-shutdown audit record: {e}")
+        return
 
     # Store task reference to prevent garbage collection
     # Using _ prefix to indicate we're intentionally not awaiting
@@ -868,8 +907,13 @@ async def audit_shutdown_request(
 async def execute_shutdown(shutdown_service: Any, runtime: Any, force: bool, reason: str) -> None:
     """Execute the shutdown with appropriate method based on force flag."""
     if force:
-        # Forced shutdown: bypass thought processing, immediate termination
+        # Forced shutdown: skip the agent's negotiation and stop the RUNTIME now.
+        # emergency_shutdown sets the global (loop-watched) emergency shutdown;
+        # runtime.request_shutdown also wakes the runtime's own event. Neither
+        # ends the process -- on Android/iOS/desktop it is the host's
+        # (CIRISAgent#1240); only an owned headless process arms a bounded exit.
         await shutdown_service.emergency_shutdown(reason, timeout_seconds=5)
+        runtime.request_shutdown(reason)
     else:
         # Normal shutdown: allow thoughtful consideration via runtime
         # The runtime's request_shutdown will call the shutdown service AND set global flags

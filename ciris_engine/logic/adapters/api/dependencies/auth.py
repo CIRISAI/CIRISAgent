@@ -11,7 +11,7 @@ Supports:
 import logging
 import re
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional, Set
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Set
 
 from fastapi import Depends, Header, HTTPException, Request, status
 
@@ -19,6 +19,9 @@ from ciris_engine.protocols.services.infrastructure.ingress_auth import IngressA
 from ciris_engine.schemas.api.auth import ROLE_PERMISSIONS, APIKeyInfo, AuthContext, UserInfo, UserRole
 
 from ..services.auth_service import APIAuthService
+
+if TYPE_CHECKING:
+    from ciris_engine.schemas.services.authority_core import WACertificate
 
 logger = logging.getLogger(__name__)
 
@@ -384,9 +387,7 @@ def resolve_substrate_session(token: str) -> Dict[str, Any]:
     return dict(resolved)
 
 
-def _handle_substrate_session_auth(
-    _request: Request, _auth_service: APIAuthService, token: str
-) -> AuthContext:
+def _handle_substrate_session_auth(_request: Request, _auth_service: APIAuthService, token: str) -> AuthContext:
     """Verify a node-minted `sess:` token by asking the SUBSTRATE, not ourselves.
 
     This is the binding that lets the brain stop having an opinion about identity.
@@ -415,9 +416,7 @@ def _handle_substrate_session_auth(
     # owner's authority while the ACT is attributable to the delegate. Logging the
     # wa_id alone would record the owner as having done what a delegate did.
     actor = resolved.get("actor")
-    logger.debug(
-        "auth: substrate resolved session wa_id=%s role=%s actor=%s", wa_id, role.value, actor
-    )
+    logger.debug("auth: substrate resolved session wa_id=%s role=%s actor=%s", wa_id, role.value, actor)
     return AuthContext(
         user_id=wa_id,
         role=role,
@@ -729,6 +728,52 @@ require_admin = require_role(UserRole.ADMIN)
 require_authority = require_role(UserRole.AUTHORITY)
 require_system_admin = require_role(UserRole.SYSTEM_ADMIN)
 require_service_account = require_role(UserRole.SERVICE_ACCOUNT)
+
+
+async def verify_forced_shutdown_standing(auth: AuthContext, auth_service: APIAuthService) -> "WACertificate":
+    """Gate for forced/emergency shutdown: the requester must hold WA standing (CIRISAgent#1240).
+
+    A forced shutdown skips the agent's own shutdown negotiation, so the ADMIN
+    API role is not enough. The requester must resolve to an ACTIVE Wise
+    Authority certificate at ROOT or AUTHORITY, read fresh from the
+    authentication store (``APIAuthService.resolve_wa_certificate``). A valid
+    admin already is one -- ``create_user`` mints ADMIN as WA AUTHORITY and
+    SYSTEM_ADMIN as ROOT -- so an ADMIN with no such certificate (a service
+    token, a revoked cert, an in-memory fallback user) is refused with 403 and a
+    typed ``ForcedShutdownRefusal`` body.
+
+    Returns the certificate so the caller can record who authorised the stop.
+    """
+    from ciris_engine.schemas.services.authority_core import WARole
+    from ciris_engine.schemas.services.shutdown import ForcedShutdownRefusal, ForcedShutdownRefusalReason
+
+    def _refuse(reason: ForcedShutdownRefusalReason, message: str, **extra: Optional[str]) -> HTTPException:
+        refusal = ForcedShutdownRefusal(reason=reason, message=message, user_id=auth.user_id, **extra)
+        logger.warning("[FORCED_SHUTDOWN] refused for %s: %s (%s)", auth.user_id, reason.value, message)
+        return HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=refusal.model_dump(mode="json"))
+
+    if not auth.user_id:
+        raise _refuse(ForcedShutdownRefusalReason.NOT_AUTHENTICATED, "Forced shutdown requires an authenticated WA")
+    if getattr(auth_service, "_auth_service", None) is None:
+        raise _refuse(
+            ForcedShutdownRefusalReason.WA_STORE_UNAVAILABLE,
+            "Wise Authority store unavailable; WA standing cannot be verified",
+        )
+    cert = await auth_service.resolve_wa_certificate(auth.user_id)
+    if cert is None:
+        raise _refuse(
+            ForcedShutdownRefusalReason.NO_WA_CERTIFICATE,
+            "Forced shutdown requires an active Wise Authority certificate (ROOT or AUTHORITY)",
+        )
+    if cert.role not in (WARole.ROOT, WARole.AUTHORITY):
+        raise _refuse(
+            ForcedShutdownRefusalReason.WA_ROLE_INSUFFICIENT,
+            f"Forced shutdown requires WA role ROOT or AUTHORITY, not {cert.role.value}",
+            wa_id=cert.wa_id,
+            wa_role=cert.role.value,
+        )
+    logger.warning("[FORCED_SHUTDOWN] authorised: %s -> WA %s (%s)", auth.user_id, cert.wa_id, cert.role.value)
+    return cert
 
 
 def check_permissions(permissions: list[str]) -> Callable[..., Any]:

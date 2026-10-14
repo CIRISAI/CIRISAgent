@@ -123,6 +123,11 @@ class TestServiceInitializer:
 
         # Should create other infrastructure services
         assert service_initializer.shutdown_service is not None
+        # ...and the ShutdownService IS the global one the runtime loop watches,
+        # not a second, unwatched instance (CIRISAgent#1240).
+        from ciris_engine.logic.utils.shutdown_manager import get_global_shutdown_service
+
+        assert service_initializer.shutdown_service is get_global_shutdown_service()
         assert service_initializer.initialization_service is not None
         assert service_initializer.resource_monitor_service is not None
 
@@ -218,9 +223,7 @@ class TestServiceInitializer:
                 mock_wa.start.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_security_init_recovers_stranded_wa_certificates(
-        self, service_initializer, mock_essential_config
-    ):
+    async def test_security_init_recovers_stranded_wa_certificates(self, service_initializer, mock_essential_config):
         """The long-jump `wa_cert` recovery must run during security init.
 
         A 2.7.x -> 2.9.x upgrade leaves the owner's certificate in the AUDIT

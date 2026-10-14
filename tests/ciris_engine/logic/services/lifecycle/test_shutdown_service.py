@@ -236,52 +236,45 @@ async def test_is_force_shutdown_false_after_normal_shutdown():
     assert service.is_force_shutdown() is False
 
 
+@pytest.fixture
+def embedded_emergency(monkeypatch):
+    """Emergency shutdown on an embedded host: a fresh global service, and every
+    process-ending primitive patched to FAIL the test (CIRISAgent#1240)."""
+    import os
+    import sys
+
+    from ciris_engine.logic.utils import shutdown_manager
+
+    def _forbidden(*_a, **_k):
+        raise AssertionError("emergency shutdown tried to end the host process")
+
+    shutdown_manager.reset_global_shutdown_service()
+    monkeypatch.setattr("ciris_engine.logic.runtime.device_class.agent_owns_process", lambda: False)
+    for target, name in ((sys, "exit"), (os, "_exit"), (os, "kill"), (os, "execv")):
+        monkeypatch.setattr(target, name, _forbidden)
+    yield
+    shutdown_manager.reset_global_shutdown_service()
+
+
 @pytest.mark.asyncio
-async def test_is_force_shutdown_true_after_emergency_shutdown():
-    """Test is_force_shutdown() returns True after emergency shutdown."""
+async def test_is_force_shutdown_true_after_emergency_shutdown(embedded_emergency):
+    """is_force_shutdown() is True after emergency shutdown, and it RETURNS (no exit)."""
     service = ShutdownService()
     await service.start()
 
-    # Track if sys.exit was called
-    exit_called = False
+    await service.emergency_shutdown("Emergency test", timeout_seconds=1)
 
-    def mock_exit(code):
-        nonlocal exit_called
-        exit_called = True
-        # Don't actually exit during test
-        raise SystemExit(code)
-
-    # Mock sys.exit to prevent actual termination
-    import sys
-
-    original_exit = sys.exit
-    sys.exit = mock_exit
-
-    try:
-        # Request emergency shutdown (will raise SystemExit)
-        with pytest.raises(SystemExit):
-            await service.emergency_shutdown("Emergency test", timeout_seconds=1)
-
-        # Should be marked as force shutdown
-        assert service.is_shutdown_requested() is True
-        assert service.is_force_shutdown() is True
-        assert exit_called is True
-
-        # Reason should have EMERGENCY prefix
-        assert "EMERGENCY:" in service.get_shutdown_reason()
-
-    finally:
-        # Restore original sys.exit
-        sys.exit = original_exit
+    assert service.is_shutdown_requested() is True
+    assert service.is_force_shutdown() is True
+    assert "EMERGENCY:" in service.get_shutdown_reason()
 
 
 @pytest.mark.asyncio
-async def test_emergency_shutdown_executes_handlers():
+async def test_emergency_shutdown_executes_handlers(embedded_emergency):
     """Test emergency_shutdown() executes both sync and async handlers."""
     service = ShutdownService()
     await service.start()
 
-    # Track handler calls
     sync_called = False
     async_called = False
 
@@ -297,91 +290,46 @@ async def test_emergency_shutdown_executes_handlers():
 
     async_handler.__name__ = "async_handler"
 
-    # Register handlers
     service.register_shutdown_handler(sync_handler)
     service._register_async_shutdown_handler(async_handler)
 
-    # Mock sys.exit to prevent actual termination
-    import sys
+    await service.emergency_shutdown("Handler test", timeout_seconds=1)
 
-    original_exit = sys.exit
-    sys.exit = lambda code: (_ for _ in ()).throw(SystemExit(code))
-
-    try:
-        # Request emergency shutdown (will raise SystemExit)
-        with pytest.raises(SystemExit):
-            await service.emergency_shutdown("Handler test", timeout_seconds=1)
-
-        # Both handlers should have been called
-        assert sync_called is True
-        assert async_called is True
-
-    finally:
-        # Restore original sys.exit
-        sys.exit = original_exit
+    assert sync_called is True
+    assert async_called is True
 
 
 @pytest.mark.asyncio
-async def test_emergency_shutdown_timeout_handling():
+async def test_emergency_shutdown_timeout_handling(embedded_emergency):
     """Test emergency_shutdown() handles handler timeout correctly."""
     service = ShutdownService()
     await service.start()
 
-    # Create a slow async handler that will timeout
     async def slow_handler():
         await asyncio.sleep(10)  # Sleep longer than timeout
 
     slow_handler.__name__ = "slow_handler"
-
     service._register_async_shutdown_handler(slow_handler)
 
-    # Mock sys.exit to prevent actual termination
-    import sys
+    await service.emergency_shutdown("Timeout test", timeout_seconds=1)
 
-    original_exit = sys.exit
-    sys.exit = lambda code: (_ for _ in ()).throw(SystemExit(code))
-
-    try:
-        # Request emergency shutdown with short timeout
-        with pytest.raises(SystemExit):
-            await service.emergency_shutdown("Timeout test", timeout_seconds=1)
-
-        # Should still complete despite handler timeout
-        assert service.is_force_shutdown() is True
-
-    finally:
-        # Restore original sys.exit
-        sys.exit = original_exit
+    assert service.is_force_shutdown() is True
 
 
 @pytest.mark.asyncio
-async def test_emergency_shutdown_metrics():
-    """Test emergency_shutdown() updates metrics correctly."""
+async def test_emergency_shutdown_metrics(embedded_emergency):
+    """Test emergency_shutdown() updates metrics correctly (and a duplicate does not)."""
     service = ShutdownService()
     await service.start()
 
-    # Get initial metrics
     initial_metrics = await service.get_metrics()
     assert initial_metrics["shutdown_requests_total"] == 0.0
     assert initial_metrics["shutdown_emergency_total"] == 0.0
 
-    # Mock sys.exit to prevent actual termination
-    import sys
+    await service.emergency_shutdown("Metrics test", timeout_seconds=1)
+    await service.emergency_shutdown("Duplicate", timeout_seconds=1)
 
-    original_exit = sys.exit
-    sys.exit = lambda code: (_ for _ in ()).throw(SystemExit(code))
-
-    try:
-        # Request emergency shutdown (will raise SystemExit)
-        with pytest.raises(SystemExit):
-            await service.emergency_shutdown("Metrics test", timeout_seconds=1)
-
-        # Check metrics updated
-        final_metrics = await service.get_metrics()
-        assert final_metrics["shutdown_requests_total"] == 1.0
-        assert final_metrics["shutdown_emergency_total"] == 1.0
-        assert final_metrics["shutdown_graceful_total"] == 0.0
-
-    finally:
-        # Restore original sys.exit
-        sys.exit = original_exit
+    final_metrics = await service.get_metrics()
+    assert final_metrics["shutdown_requests_total"] == 1.0
+    assert final_metrics["shutdown_emergency_total"] == 1.0
+    assert final_metrics["shutdown_graceful_total"] == 0.0

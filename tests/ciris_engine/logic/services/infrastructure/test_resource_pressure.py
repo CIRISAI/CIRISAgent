@@ -398,9 +398,7 @@ async def test_drain_requests_graceful_shutdown_only(monitor, monkeypatch, fresh
     monkeypatch.setattr(os, "execv", forbidden)
     monkeypatch.setattr(os, "execvp", forbidden)
     emergency = AsyncMock()
-    force_kill = AsyncMock()
     monkeypatch.setattr(ShutdownService, "emergency_shutdown", emergency)
-    monkeypatch.setattr(ShutdownService, "_force_kill_after_timeout", force_kill)
     runtime_handler = Mock(
         __name__="runtime_request_shutdown"
     )  # stands in for component_builder's runtime.request_shutdown hook
@@ -421,7 +419,6 @@ async def test_drain_requests_graceful_shutdown_only(monitor, monkeypatch, fresh
 
     forbidden.assert_not_called()
     emergency.assert_not_awaited()
-    force_kill.assert_not_awaited()
     assert _gate(monitor).get_state().drain_requested is not None
 
 

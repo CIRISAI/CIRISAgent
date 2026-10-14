@@ -642,28 +642,23 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                 result={"wa_id": command.wa_id, "command_id": command.command_id, "reason": command.reason},
             )
 
-            # Call the existing shutdown mechanism
-            # This will trigger all registered shutdown handlers
+            # The signature IS the authority (the WA-signed kill switch). Stop
+            # the agent runtime now: emergency_shutdown on the GLOBAL shutdown
+            # service -- the one the runtime loop watches -- skips negotiation and
+            # stops processors, adapters and :8080. It never ends the host
+            # process on an embedded/desktop host (CIRISAgent#1240). The old
+            # call here was an un-awaited `request_shutdown` coroutine on the
+            # registry's instance: it never ran.
             shutdown_reason = f"WA EMERGENCY SHUTDOWN: {command.reason} (WA: {command.wa_id})"
 
-            # Get shutdown service from registry if available
-            if self.runtime and hasattr(self.runtime, "service_registry"):
-                # Fix: Provide both handler and service_type parameters
-                shutdown_service = await self.runtime.service_registry.get_service(
-                    handler="default", service_type=ServiceType.SHUTDOWN
-                )
-                if shutdown_service:
-                    shutdown_service.request_shutdown(shutdown_reason)
-                    status.shutdown_completed = self._now()
-                    status.exit_code = 0
-                    logger.info("Emergency shutdown delegated to ShutdownService")
-                    return status
+            from ciris_engine.logic.utils.shutdown_manager import get_global_shutdown_service
 
-            # Fallback to direct shutdown
-            await self.shutdown_runtime(shutdown_reason)
+            await get_global_shutdown_service().emergency_shutdown(shutdown_reason)
+            if self.runtime and hasattr(self.runtime, "request_shutdown"):
+                self.runtime.request_shutdown(shutdown_reason)
             status.shutdown_completed = self._now()
             status.exit_code = 0
-
+            logger.info("Emergency shutdown delegated to the global ShutdownService")
             return status
 
         except Exception as e:

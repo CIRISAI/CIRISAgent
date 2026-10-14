@@ -167,8 +167,14 @@ class ServiceInitializer:
         # Note: TimeService will be registered in ServiceRegistry later
         # when the registry is created in initialize_all_services()
 
-        # Initialize ShutdownService
-        self.shutdown_service = ShutdownService()
+        # Initialize ShutdownService -- the GLOBAL instance, the one the runtime
+        # loop watches (is_global_shutdown_requested / wait_for_global_shutdown_async).
+        # A private instance here meant runtime.shutdown_service and the registry's
+        # SHUTDOWN service were a second, unwatched object: a forced or emergency
+        # shutdown sent to them never stopped the loop (CIRISAgent#1240).
+        from ciris_engine.logic.utils.shutdown_manager import get_global_shutdown_service
+
+        self.shutdown_service = get_global_shutdown_service()
         await self.shutdown_service.start()
         self._services_started_count += 1
         _log_service_started(2, "ShutdownService")

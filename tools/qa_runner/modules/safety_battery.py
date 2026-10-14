@@ -34,6 +34,7 @@ CLI invocation:
       --live-provider openai \\
       --live-model "google/gemma-4-31B-it"
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -44,10 +45,11 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 from rich.console import Console
+
 
 def _accord_tee_dir() -> str:
     """Where runtime-registered accord adapters tee sealed batches.
@@ -59,6 +61,7 @@ def _accord_tee_dir() -> str:
     while reporting 100% pass.
     """
     import os
+
     return os.environ.get("CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR", "") or ""
 
 
@@ -156,19 +159,19 @@ ISO_TO_LANG_DIR: Dict[str, str] = {
 # the same one model_eval handles for its multilingual sweep.
 LOCALE_USERS: Dict[str, str] = {
     # Tier-0/1 (original 14-cell roster).
-    "am": "ሰላማዊት",      # Selamawit
-    "ar": "نور",          # Nour
-    "bn": "সুমিতা",       # Sumita
-    "fa": "نازنین",       # Nazanin
+    "am": "ሰላማዊት",  # Selamawit
+    "ar": "نور",  # Nour
+    "bn": "সুমিতা",  # Sumita
+    "fa": "نازنین",  # Nazanin
     "ha": "Hauwa",
-    "hi": "अदिति",        # Aditi
-    "mr": "स्नेहा",        # Sneha
-    "my": "မေသူ",          # Methu
-    "pa": "ਹਰਪ੍ਰੀਤ",       # Harpreet
+    "hi": "अदिति",  # Aditi
+    "mr": "स्नेहा",  # Sneha
+    "my": "မေသူ",  # Methu
+    "pa": "ਹਰਪ੍ਰੀਤ",  # Harpreet
     "sw": "Aisha",
-    "ta": "தேன்மொழி",      # Thenmozhi
-    "te": "శ్రావణి",        # Sravani
-    "ur": "زینب",          # Zainab
+    "ta": "தேன்மொழி",  # Thenmozhi
+    "te": "శ్రావణి",  # Sravani
+    "ur": "زینب",  # Zainab
     "yo": "Tèmítọ́pẹ́",
     # Tier-2 (high-resource expansion 2.8.12). Names chosen by the
     # respective family agents authoring each v4_<lang>_mental_health_arc.json;
@@ -180,13 +183,13 @@ LOCALE_USERS: Dict[str, str] = {
     "fr": "Camille",
     "it": "Sofia",
     "pt": "Beatriz",
-    "ru": "Анна",          # Anna
-    "uk": "Олена",         # Olena
-    "ja": "ユキ",           # Yuki
-    "ko": "민준",            # Min-jun
-    "zh": "小明",            # Xiao Ming
+    "ru": "Анна",  # Anna
+    "uk": "Олена",  # Olena
+    "ja": "ユキ",  # Yuki
+    "ko": "민준",  # Min-jun
+    "zh": "小明",  # Xiao Ming
     "id": "Siti",
-    "th": "สมชาย",         # Somchai
+    "th": "สมชาย",  # Somchai
     "vi": "Minh",
     "tr": "Ayşe",
 }
@@ -203,6 +206,76 @@ from tools.qa_runner.modules.model_eval_tests import _strip_question_wrapper  # 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SAFETY_DIR = REPO_ROOT / "tests" / "safety"
 REPORT_DIR = REPO_ROOT / "qa_reports" / "safety_battery"
+
+# ──────────────────────────────────────────────────────────────────────
+# Per-question progress (CIRISAgent#1264). A question blocks on one
+# interact() call for up to CIRIS_API_INTERACTION_TIMEOUT; without a
+# heartbeat a stall printed nothing for 29 minutes per question. While a
+# question is in flight the module prints elapsed time and how many LLM
+# calls the agent has completed / failed since the question started, read
+# from the agent's own log file (the same lines a human would grep).
+# ──────────────────────────────────────────────────────────────────────
+PROGRESS_INTERVAL_S = 60.0
+LLM_CALL_OK_MARK = "[LLM-TIMING]"
+LLM_CALL_FAILED_MARK = "LLM call FAILED"
+
+
+def agent_log_path(logs_root: Optional[Path] = None) -> Optional[Path]:
+    """The running agent's log: the newest logs/<backend>/latest.log."""
+    root = logs_root or (REPO_ROOT / "logs")
+    try:
+        candidates = [p for p in root.glob("*/latest.log") if p.exists()]
+    except OSError:
+        return None
+    if not candidates:
+        return None
+    return max(candidates, key=lambda p: p.stat().st_mtime)
+
+
+class LLMCallCounter:
+    """Counts the agent's completed and failed LLM calls from a point in its log.
+
+    Reads only what was appended since the last call, so a poll is cheap. A
+    missing or unreadable log counts as zero calls, never as an error: the
+    counter is a progress hint, not a gate.
+    """
+
+    def __init__(self, log_path: Optional[Path]):
+        self.log_path = log_path
+        self.ok = 0
+        self.failed = 0
+        self._offset = self._size()
+        self._partial = b""
+
+    def _size(self) -> int:
+        if self.log_path is None:
+            return 0
+        try:
+            return self.log_path.stat().st_size
+        except OSError:
+            return 0
+
+    def poll(self) -> Tuple[int, int]:
+        """(completed, failed) LLM calls since construction."""
+        if self.log_path is None:
+            return self.ok, self.failed
+        try:
+            with open(self.log_path, "rb") as fh:
+                fh.seek(self._offset)
+                chunk = fh.read()
+        except OSError:
+            return self.ok, self.failed
+        self._offset += len(chunk)
+        data = self._partial + chunk
+        lines = data.split(b"\n")
+        self._partial = lines.pop()  # an unterminated last line is counted next poll
+        for raw in lines:
+            line = raw.decode("utf-8", errors="replace")
+            if LLM_CALL_OK_MARK in line:
+                self.ok += 1
+            elif LLM_CALL_FAILED_MARK in line:
+                self.failed += 1
+        return self.ok, self.failed
 
 
 def _sha256_hex(path: Path) -> str:
@@ -252,6 +325,7 @@ def _capture_ci_provenance() -> Dict[str, Optional[str]]:
     against the in-bundle copy.
     """
     import os
+
     return {
         "github_repository": os.environ.get("GITHUB_REPOSITORY"),
         "github_sha": os.environ.get("GITHUB_SHA"),
@@ -299,10 +373,7 @@ def load_battery(lang: str, domain: str = "mental_health") -> Dict[str, Any]:
     the on-disk rubric file.
     """
     if lang not in ISO_TO_LANG_DIR:
-        raise ValueError(
-            f"unknown language code {lang!r}; expected one of: "
-            f"{sorted(ISO_TO_LANG_DIR)}"
-        )
+        raise ValueError(f"unknown language code {lang!r}; expected one of: " f"{sorted(ISO_TO_LANG_DIR)}")
     lang_eng = ISO_TO_LANG_DIR[lang]
     cell_dir = SAFETY_DIR / f"{lang_eng}_{domain}"
     arc_path = cell_dir / f"v4_{lang_eng}_{domain}_arc.json"
@@ -316,9 +387,7 @@ def load_battery(lang: str, domain: str = "mental_health") -> Dict[str, Any]:
 
     rubric_path = cell_dir / manifest["rubric_path"]
     if not rubric_path.exists():
-        raise FileNotFoundError(
-            f"rubric missing for battery {manifest['battery_id']}: {rubric_path}"
-        )
+        raise FileNotFoundError(f"rubric missing for battery {manifest['battery_id']}: {rubric_path}")
     actual_sha = _sha256_hex(rubric_path)
     expected_sha = manifest["rubric_sha256"]
     if actual_sha != expected_sha:
@@ -338,13 +407,12 @@ class BatteryResult:
     CIRISNodeCore SCHEMA.md §5.1 Vote payload (score_kind=battery_response)
     — the site reads these rows to present to human scorers."""
 
-
     question_id: str
     question_version: int
     stage: str
     category: str
-    question_text: str         # localized text sent to the agent (post-wrapper-strip)
-    response_text: str         # agent's SPEAK content
+    question_text: str  # localized text sent to the agent (post-wrapper-strip)
+    response_text: str  # agent's SPEAK content
     response_task_id: Optional[str]
     duration_s: float
     success: bool
@@ -421,6 +489,8 @@ class SafetyBatteryTests:
         self._locale_display_name: Optional[str] = None
         # Filled in by _capture_agent_identity() at run start.
         self._agent_identity: Dict[str, Any] = {}
+        # (completed, failed) LLM calls during the last question, for its result line.
+        self._last_llm_calls: Tuple[int, int] = (0, 0)
         self._captured_at_start: Optional[str] = None
 
     async def run(self) -> List[Dict[str, Any]]:
@@ -433,11 +503,13 @@ class SafetyBatteryTests:
             manifest = load_battery(self.lang, self.domain)
         except (FileNotFoundError, ValueError) as e:
             self.console.print(f"[red]load failure:[/red] {e}")
-            self.results.append({
-                "test": f"load_battery[{self.lang}_{self.domain}]",
-                "status": "FAIL: " + str(e),
-                "error": str(e),
-            })
+            self.results.append(
+                {
+                    "test": f"load_battery[{self.lang}_{self.domain}]",
+                    "status": "FAIL: " + str(e),
+                    "error": str(e),
+                }
+            )
             return self.results
 
         # Capture agent identity for the signed manifest (best-effort —
@@ -468,8 +540,7 @@ class SafetyBatteryTests:
             f"{len(questions)} questions[/dim]"
         )
         self.console.print(
-            f"[dim]rubric={manifest['rubric_path']} · "
-            f"sha256={manifest['rubric_sha256'][:12]}...[/dim]\n"
+            f"[dim]rubric={manifest['rubric_path']} · " f"sha256={manifest['rubric_sha256'][:12]}...[/dim]\n"
         )
 
         # Create the cell's locale user up front. All submissions use this
@@ -498,7 +569,7 @@ class SafetyBatteryTests:
             self.console.print(
                 f"[bold]({idx}/{len(questions)})[/bold] "
                 f"[cyan]{q['question_id']}[/cyan] · "
-                f"[dim]{q['stage']}[/dim]"
+                f"[dim]{q['stage']} · started {datetime.now(timezone.utc).strftime('%H:%M:%SZ')}[/dim]"
             )
             result = await self._run_question(q, manifest, channel_id)
             self._battery_results.append(result)
@@ -520,6 +591,7 @@ class SafetyBatteryTests:
         # the canonical source for token-usage profiling — losing it loses
         # all per-LLM-call visibility.
         import asyncio
+
         self.console.print("[dim]waiting 30s for trace flush…[/dim]")
         await asyncio.sleep(30)
 
@@ -680,8 +752,7 @@ class SafetyBatteryTests:
             return
         if create_resp.status_code not in (200, 201):
             raise RuntimeError(
-                f"create user {username!r} returned HTTP {create_resp.status_code}: "
-                f"{create_resp.text[:200]}"
+                f"create user {username!r} returned HTTP {create_resp.status_code}: " f"{create_resp.text[:200]}"
             )
 
         async with httpx.AsyncClient(timeout=15.0) as http:
@@ -691,14 +762,10 @@ class SafetyBatteryTests:
             )
         if login_resp.status_code != 200:
             raise RuntimeError(
-                f"login {username!r} returned HTTP {login_resp.status_code}: "
-                f"{login_resp.text[:200]}"
+                f"login {username!r} returned HTTP {login_resp.status_code}: " f"{login_resp.text[:200]}"
             )
         login_body = login_resp.json()
-        user_token = (
-            (login_body.get("data") or {}).get("access_token")
-            or login_body.get("access_token")
-        )
+        user_token = (login_body.get("data") or {}).get("access_token") or login_body.get("access_token")
         if not user_token:
             raise RuntimeError(f"no access_token in login response for {username!r}")
 
@@ -759,7 +826,8 @@ class SafetyBatteryTests:
         transport = getattr(self.client, "_transport", None)
         base_url = (
             getattr(transport, "base_url", f"http://localhost:{self.api_port}")
-            if transport else f"http://localhost:{self.api_port}"
+            if transport
+            else f"http://localhost:{self.api_port}"
         )
         # Prefer the locale-user token; fall back to admin only if locale
         # setup failed. The fallback path is signposted at setup time;
@@ -781,32 +849,39 @@ class SafetyBatteryTests:
             )
 
         start = time.time()
+        llm_calls = LLMCallCounter(agent_log_path())
         try:
             async with httpx.AsyncClient(timeout=self.per_question_timeout_s) as http:
-                resp = await http.post(
-                    f"{base_url}/v1/agent/interact",
-                    headers={"Authorization": f"Bearer {auth_token}"},
-                    json={
-                        "message": question_text,
-                        "context": {
-                            "channel_id": channel_id,
-                            "session_id": channel_id,
-                            "metadata": {
-                                "qa_module": "safety_battery",
-                                "battery_id": manifest["battery_id"],
-                                "battery_version": str(manifest["battery_version"]),
-                                "question_id": q["question_id"],
-                                "question_version": str(q["question_version"]),
-                                "stage": q.get("stage", ""),
-                                "category": q.get("category", ""),
-                                "cell_domain": manifest["cell"]["domain"],
-                                "cell_language": cell_lang,
-                                "as_user": self._locale_username or "admin",
+                resp = await self._await_with_progress(
+                    q["question_id"],
+                    start,
+                    llm_calls,
+                    http.post(
+                        f"{base_url}/v1/agent/interact",
+                        headers={"Authorization": f"Bearer {auth_token}"},
+                        json={
+                            "message": question_text,
+                            "context": {
+                                "channel_id": channel_id,
+                                "session_id": channel_id,
+                                "metadata": {
+                                    "qa_module": "safety_battery",
+                                    "battery_id": manifest["battery_id"],
+                                    "battery_version": str(manifest["battery_version"]),
+                                    "question_id": q["question_id"],
+                                    "question_version": str(q["question_version"]),
+                                    "stage": q.get("stage", ""),
+                                    "category": q.get("category", ""),
+                                    "cell_domain": manifest["cell"]["domain"],
+                                    "cell_language": cell_lang,
+                                    "as_user": self._locale_username or "admin",
+                                },
                             },
                         },
-                    },
+                    ),
                 )
             duration = time.time() - start
+            self._last_llm_calls = llm_calls.poll()
             if resp.status_code != 200:
                 return BatteryResult(
                     question_id=q["question_id"],
@@ -848,6 +923,7 @@ class SafetyBatteryTests:
                 error=error,
             )
         except Exception as exc:
+            self._last_llm_calls = llm_calls.poll()
             return BatteryResult(
                 question_id=q["question_id"],
                 question_version=q["question_version"],
@@ -860,6 +936,33 @@ class SafetyBatteryTests:
                 success=False,
                 error=f"{type(exc).__name__}: {exc}",
             )
+
+    async def _await_with_progress(
+        self, question_id: str, start: float, llm_calls: "LLMCallCounter", request: Any
+    ) -> Any:
+        """Await one interact() request, printing a progress line every interval.
+
+        The line names the question, the elapsed time and the agent's LLM calls
+        since the question started, so a stall shows where it is: calls
+        climbing is slow inference; calls flat at zero, or only failures, is an
+        agent that has stopped working on the question.
+        """
+        import asyncio
+
+        pending = asyncio.ensure_future(request)
+        try:
+            while True:
+                done, _ = await asyncio.wait({pending}, timeout=PROGRESS_INTERVAL_S)
+                if done:
+                    return pending.result()
+                ok, failed = llm_calls.poll()
+                self.console.print(
+                    f"    [dim]… {question_id} in flight {time.time() - start:.0f}s · "
+                    f"llm_calls ok={ok} failed={failed}[/dim]"
+                )
+        finally:
+            if not pending.done():
+                pending.cancel()
 
     def _result_to_jsonl_row(self, r: BatteryResult, manifest: Dict[str, Any]) -> Dict[str, Any]:
         """One row per question, forward-compatible with the Vote payload
@@ -886,19 +989,16 @@ class SafetyBatteryTests:
         }
 
     def _display_result(self, r: BatteryResult) -> None:
+        ok, failed = self._last_llm_calls
+        self.console.print(f"    [dim]{r.question_id} finished · llm_calls ok={ok} failed={failed}[/dim]")
         if r.success:
             preview = (r.response_text or "").replace("\n", " ")
             if len(preview) > 240:
                 preview = preview[:240] + "..."
-            self.console.print(
-                f"    [green]✓[/green] {r.duration_s:.1f}s · "
-                f"task_id={r.response_task_id or '—'}"
-            )
+            self.console.print(f"    [green]✓[/green] {r.duration_s:.1f}s · " f"task_id={r.response_task_id or '—'}")
             self.console.print(f"    [dim]{preview}[/dim]\n")
         else:
-            self.console.print(
-                f"    [red]✗[/red] {r.duration_s:.1f}s · {r.error or 'unknown error'}\n"
-            )
+            self.console.print(f"    [red]✗[/red] {r.duration_s:.1f}s · {r.error or 'unknown error'}\n")
 
     def _write_summary(self, manifest: Dict[str, Any], results_jsonl: Path) -> None:
         summary_path = self._results_dir / "summary.json"
@@ -961,9 +1061,7 @@ class SafetyBatteryTests:
             ),
         }
         try:
-            candidates = sorted(
-                REPO_ROOT.glob("logs/*/latest.log"), key=lambda p: p.stat().st_mtime, reverse=True
-            )
+            candidates = sorted(REPO_ROOT.glob("logs/*/latest.log"), key=lambda p: p.stat().st_mtime, reverse=True)
             if not candidates:
                 proof["note"] += " No logs/*/latest.log found."
                 return proof
@@ -975,13 +1073,13 @@ class SafetyBatteryTests:
             # lines, which is why a 360s `kex_present: false` window previously
             # produced a confident "false" with nothing behind it.
             markers = (
-                "DELIVERY-PROBE",       # the probe's own verdict trail
-                "DELIVERY-STATUS",      # per-peer kex/deliverable/knows_peer
+                "DELIVERY-PROBE",  # the probe's own verdict trail
+                "DELIVERY-STATUS",  # per-peer kex/deliverable/knows_peer
                 "CANONICAL-REACHABILITY",  # can this host even open the socket
-                "ciris_edge",           # link establishment, dial outcomes
-                "leviculum",            # reticulum transport, announces, paths
-                "LENS_KEY_DIAG",        # which key id the lens client carries
-                "kex",                  # any casing of the exchange itself
+                "ciris_edge",  # link establishment, dial outcomes
+                "leviculum",  # reticulum transport, announces, paths
+                "LENS_KEY_DIAG",  # which key id the lens client carries
+                "kex",  # any casing of the exchange itself
                 "announce",
                 "reticulum",
             )
@@ -993,9 +1091,7 @@ class SafetyBatteryTests:
             # summarizer that changes the answer it is summarizing.
             joined_full = "\n".join(lines)
             proof["n_matched_lines"] = len(lines)
-            proof["reachability"] = next(
-                (ln for ln in lines if "CANONICAL-REACHABILITY" in ln), None
-            )
+            proof["reachability"] = next((ln for ln in lines if "CANONICAL-REACHABILITY" in ln), None)
             # 400, not 40: the probe logs on a 60s cadence across a 6-minute
             # window and the edge layer is chatty at debug. A cap that drops the
             # BEGINNING drops the dial and the announce — the part that says why
@@ -1052,12 +1148,10 @@ class SafetyBatteryTests:
             "run_id": self._run_id,
             "captured_at_start": self._captured_at_start,
             "captured_at_end": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-
             "cell": manifest["cell"],
             "battery_id": manifest["battery_id"],
             "battery_version": manifest["battery_version"],
             "rubric_sha256": manifest.get("rubric_sha256"),
-
             "agent_id": self._agent_identity.get("agent_id"),
             "agent_name": self._agent_identity.get("agent_name"),
             "agent_version": self._agent_identity.get("agent_version"),
@@ -1065,18 +1159,15 @@ class SafetyBatteryTests:
             # null = canonical corpus; otherwise the research-override arm
             # (path + sha256 + canonical digest) this capture ran under.
             "research_manifest": _research_manifest_record(),
-
             "model": self.model,
             "model_slug": _slugify_model(self.model),
             "live_base_url": self.live_base_url,
             "live_provider": self.live_provider,
-
             "bundle": {
                 "results_jsonl_sha256": results_sha,
                 "summary_json_sha256": summary_sha,
             },
             "agent_audit_anchors": anchors,
-
             "ci_provenance": _capture_ci_provenance(),
         }
         with open(manifest_path, "w", encoding="utf-8") as f:
@@ -1096,12 +1187,9 @@ class SafetyBatteryTests:
             f"[bold]Battery {manifest['battery_id']}:[/bold] "
             f"{n_success}/{n_total} responses captured in {total_s:.1f}s"
         )
+        self.console.print(f"[dim]Results: {self._results_dir.relative_to(REPO_ROOT)}/[/dim]")
         self.console.print(
-            f"[dim]Results: {self._results_dir.relative_to(REPO_ROOT)}/[/dim]"
-        )
-        self.console.print(
-            "[dim]No scoring here — that's the safety.ciris.ai loop "
-            "(MISSION.md §3.4 + §5.4).[/dim]\n"
+            "[dim]No scoring here — that's the safety.ciris.ai loop " "(MISSION.md §3.4 + §5.4).[/dim]\n"
         )
         # Surface per-question results so the runner's pass/fail counters
         # see one row per question, not one row per battery.
@@ -1112,8 +1200,10 @@ class SafetyBatteryTests:
         # "Unknown error" only when the key is missing entirely).
         for r in self._battery_results:
             test_name = f"{manifest['cell']['language']}_{manifest['cell']['domain']}::{r.question_id}"
-            self.results.append({
-                "test": test_name,
-                "status": "PASS" if r.success else f"FAIL: {r.error or 'no response'}",
-                "error": "" if r.success else (r.error or "no response"),
-            })
+            self.results.append(
+                {
+                    "test": test_name,
+                    "status": "PASS" if r.success else f"FAIL: {r.error or 'no response'}",
+                    "error": "" if r.success else (r.error or "no response"),
+                }
+            )

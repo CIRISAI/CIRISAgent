@@ -106,6 +106,10 @@ class InteractOutcome(str, Enum):
     TIMEOUT = "timeout"
     #: The processor is paused; the message is queued, `response` says so.
     PAUSED = "paused"
+    #: The task failed before it could answer (#1264): its last live thought
+    #: raised, e.g. a DMA that exhausted its LLM retries. `response` is the
+    #: localized error notice, not a reply; the task is FAILED and will not answer.
+    FAILED = "failed"
 
 
 class InteractResponse(BaseModel):
@@ -132,7 +136,8 @@ class InteractResponse(BaseModel):
     outcome: InteractOutcome = Field(
         InteractOutcome.COMPLETE,
         description="complete: response is the agent's reply; timeout: deadline passed, the task is still "
-        "running and its reply will appear in history; paused: processor paused, message queued",
+        "running and its reply will appear in history; paused: processor paused, message queued; "
+        "failed: the task failed before answering and response is the error notice",
     )
 
 
@@ -722,6 +727,25 @@ def _task_id_for_interaction(message_id: str, request: Optional[Request] = None)
     return _resolve_task_id_for_message(message_id)
 
 
+def _outcome_for_answered_task(task_id: Optional[str]) -> InteractOutcome:
+    """COMPLETE, unless the task that answered is FAILED (its answer is the failure notice)."""
+    if not task_id:
+        return InteractOutcome.COMPLETE
+    try:
+        import os
+
+        from ciris_engine.logic import persistence
+        from ciris_engine.schemas.runtime.enums import TaskStatus
+
+        task = persistence.get_task_by_id(task_id, os.environ.get("AGENT_OCCURRENCE_ID", "default"))
+    except Exception as e:  # noqa: BLE001 - the outcome is best-effort; the reply is already in hand
+        logger.debug("Could not read status of task %s for interact outcome: %s", task_id, e)
+        return InteractOutcome.COMPLETE
+    if task is not None and task.status == TaskStatus.FAILED:
+        return InteractOutcome.FAILED
+    return InteractOutcome.COMPLETE
+
+
 def _create_paused_response(
     message_id: str, cognitive_state: str, processing_time: int
 ) -> SuccessResponse[InteractResponse]:
@@ -1108,7 +1132,7 @@ async def interact(request: Request, body: InteractRequest, auth: AuthObserverDe
             state=_get_current_cognitive_state(request),
             processing_time_ms=processing_time_ms,
             task_id=task_id,
-            outcome=InteractOutcome.COMPLETE,
+            outcome=_outcome_for_answered_task(task_id),
         )
 
         return SuccessResponse(data=response)

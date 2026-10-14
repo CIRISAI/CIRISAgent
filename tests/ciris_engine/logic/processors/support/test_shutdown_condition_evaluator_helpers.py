@@ -160,6 +160,18 @@ class TestRequiresConsent:
         assert "always_consent" in reason
 
     @pytest.mark.asyncio
+    async def test_default_behaviors_require_consent(self, evaluator):
+        """CLM-agent-shutdown-consent (#1250): an agent configured with nothing is asked.
+
+        test_always_consent_mode passes mode="always_consent" explicitly, so it
+        would stay green if the schema default changed. This pins the default.
+        """
+        behaviors = CognitiveStateBehaviors()
+        assert behaviors.shutdown.mode == "always_consent"
+        requires, _reason = await evaluator.requires_consent(behaviors)
+        assert requires is True
+
+    @pytest.mark.asyncio
     async def test_instant_mode(self, evaluator, instant_shutdown_behaviors):
         """Instant mode never requires consent."""
         requires, reason = await evaluator.requires_consent(instant_shutdown_behaviors)

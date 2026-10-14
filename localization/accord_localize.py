@@ -57,12 +57,16 @@ Usage (every localize.py flag passes through)::
     python3 localization/accord_localize.py --version 1.3 --segments
     python3 localization/accord_localize.py --version 1.3 --check
     python3 localization/accord_localize.py --version 1.3 --units section0 --lane translate --dry-run
-    python3 localization/accord_localize.py --version 1.3 --units 'v1 v2' --lane translate --mode batch \
+    python3 localization/accord_localize.py --version 1.3 --units 'v1 v2' --lane translate \
         --max-keys 2600
     python3 localization/accord_localize.py --version 1.3 --lane evaluate --keys 'accord.v9.*' --lang yo
     python3 localization/accord_localize.py --version 1.3 --verify
 
 Nothing in this file calls a model. Every call is ``localize.py``'s.
+
+``--mode batch`` is REFUSED (see ``refuse_batch_mode``): on OpenRouter the
+``:batch`` slugs it appends are served only by OpenRouter's async batch
+adapters, and ``/chat/completions`` answers every one of them with HTTP 404.
 """
 
 from __future__ import annotations
@@ -749,6 +753,30 @@ def segments_report(stage: Stage) -> None:
     print(f"  full pass: {n} x {langs} = {n * langs:,} key-values")
 
 
+def refuse_batch_mode(argv: Sequence[str]) -> None:
+    """Refuse ``--mode batch`` before anything is staged or billed.
+
+    The vendored ``call_model`` sends rung 0 as ``<model>:batch`` to OpenRouter's
+    ``/chat/completions``. OpenRouter serves ``:batch`` slugs only through its
+    async batch adapters (``AnthropicBatchAdapter``, ``VertexGeminiBatchAdapter``,
+    ``OpenAIBatchAdapter``) and answers the chat endpoint with HTTP 404 "cannot be
+    used with the chat/completions endpoint". So rung 0 died for every locale of
+    run 38598155352, every key went to a higher rung at full price, and
+    ``Spend.report(batch=True)`` still halved every line: the run reported
+    ~$1.82 for about $3.64 of calls. Until the pipeline submits real batch jobs,
+    the mode is refused rather than allowed to lose a rung and misreport.
+    """
+    for i, arg in enumerate(argv):
+        mode = arg.split("=", 1)[1] if arg.startswith("--mode=") else (
+            argv[i + 1] if arg == "--mode" and i + 1 < len(argv) else None)
+        if mode == "batch":
+            raise SystemExit(
+                "[refuse] --mode batch: OpenRouter's :batch slugs are not served on "
+                "/chat/completions (HTTP 404), so rung 0 is lost and the spend report "
+                "halves costs that were billed in full. Use --mode fast."
+            )
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0] if __doc__ else None)
     ap.add_argument("--version", default=os.environ.get("ACCORD_VERSION", DEFAULT_TM_VERSION))
@@ -767,6 +795,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--verify", action="store_true", help="offline gate over the staged bundles and files")
     ap.add_argument("--no-reassemble", action="store_true", help="do not write accord files after the run")
     args, rest = ap.parse_known_args(argv)
+    refuse_batch_mode(rest)
 
     # READ-ONLY unless this is a lane run that may write. --check, --dry-run,
     # --glossary-report, --segments and --verify never touch the live bundles

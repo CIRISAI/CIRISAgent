@@ -84,7 +84,7 @@ on:
         default: "400"
         type: string
       mode:
-        description: "fast | batch (batch is 50% cheaper, for backfills)"
+        description: "fast (batch is refused by run_lane.sh: OpenRouter :batch slugs 404 on chat/completions)"
         required: false
         default: "fast"
         type: string

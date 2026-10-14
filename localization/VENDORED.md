@@ -60,7 +60,7 @@ moves. They are not drift-checked.
 | Here | Derived from | What changed |
 |---|---|---|
 | `.github/workflows/i18n-lane.yml` | same path | No CIRISServer `.emitters` checkout and no client bundle mirrors (the agent has neither). Adds a `target` input (`accord` / `ui`) and Accord inputs. The client's strict gate is replaced by this check plus `accord_localize.py --verify` (Accord) or `tools/dev/check_localization_sync.py` (UI). The vendoring digest is checked, never re-recorded. Inputs reach the shell through env, via `localization/run_lane.sh`. |
-| `.github/workflows/i18n-{translate,evaluate,repair}.yml` | same paths | Same `workflow_dispatch` callers, same `i18n-write-<ref>` one-writer concurrency group. They add the agent inputs, and `accord_units` defaults to one unit (`section0`). |
+| `.github/workflows/i18n-{translate,evaluate,repair}.yml` | same paths | Same `workflow_dispatch` callers, same `i18n-write-<ref>` one-writer concurrency group. They add the agent inputs, and `accord_units` defaults to one unit (`section0`). `mode` offers `fast` only (see "Local divergences"). |
 | `tools/dev/check_localize_vendoring.py` | `packaging/check_vendoring.py` | Same per-file-digest pattern, applied to this record instead of a `client/` tree digest. |
 
 Not vendored: `packaging/check_vendoring.py` itself (it hashes a `client/`
@@ -90,6 +90,26 @@ attribute that the vendored functions look up at call time.
   row, structural rules and per-unit selection, runs the lanes, and writes
   complete locales back to `ciris_engine/data/localized/accord_<v>_<lang>.txt`.
 - `localization/run_lane.sh` is the workflow entry point.
+
+## Local divergences
+
+Behaviour this repo changes without editing a vendored file. Each one should go
+upstream to CIRISClient, then be removed here on the next re-vendor.
+
+- **`--mode batch` is refused** (2026-10-14). The vendored `call_model` sends
+  rung 0 as `<model>:batch` to OpenRouter's `/chat/completions`. OpenRouter
+  serves `:batch` slugs only through its async batch adapters and answers the
+  chat endpoint with HTTP 404 ("cannot be used with the chat/completions
+  endpoint (adapter AnthropicBatchAdapter)"). This is true for every `:batch`
+  slug, not one model: `anthropic/claude-sonnet-5:batch`,
+  `google/gemini-3.7-flash:batch` and `openai/gpt-5.1:batch` all 404, while the
+  plain ids answer. In run 38598155352 rung 0 died for all 28 locales, every
+  key fell to a higher rung at full price, and `Spend.report(batch=True)`
+  still halved every line: it reported ~$1.82 for ~$3.64 of calls. The
+  refusal lives in `accord_localize.py` (`refuse_batch_mode`) and
+  `run_lane.sh` (both targets), and the workflows offer `mode: fast` only.
+  Upstream fix: drop the suffix on the chat path, or submit real batch jobs,
+  and halve only the calls that were batched.
 
 ## Re-vendoring
 

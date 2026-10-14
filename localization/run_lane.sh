@@ -41,6 +41,19 @@ case "${TARGET:-accord}" in
     ;;
 esac
 
+# --mode batch appends ":batch" to rung 0, and OpenRouter serves :batch slugs
+# only through its async batch API: /chat/completions answers 404, rung 0 is
+# lost, and the spend report still halves every line. Refused for both targets
+# (accord_localize.py refuses it too, for direct runs).
+prev=""
+for a in "$@"; do
+  if [ "$a" = "--mode=batch" ] || { [ "$prev" = "--mode" ] && [ "$a" = "batch" ]; }; then
+    echo "[refuse] --mode batch: OpenRouter :batch slugs 404 on /chat/completions. Use --mode fast." >&2
+    exit 2
+  fi
+  prev="$a"
+done
+
 cmd+=(--lane "${LANE:?LANE is required}" --max-keys "${MAX_KEYS:-400}")
 for p in ${KEYS:-}; do cmd+=(--keys "$p"); done
 for l in ${LANGS:-}; do cmd+=(--lang "$l"); done

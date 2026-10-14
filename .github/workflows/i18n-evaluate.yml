@@ -63,11 +63,11 @@ on:
         required: false
         default: "400"
       mode:
-        description: "fast, or batch for 50% off when nobody is waiting."
+        description: "fast (batch is refused: OpenRouter :batch slugs 404 on chat/completions)."
         required: false
         default: "fast"
         type: choice
-        options: [fast, batch]
+        options: [fast]
 
 concurrency:
   # One writer at a time. Parallel agents racing on one bundle is the failure

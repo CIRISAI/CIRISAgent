@@ -439,3 +439,45 @@ def test_read_only_modes_never_mutate_anything(monkeypatch: pytest.MonkeyPatch, 
     ui.main()
     capsys.readouterr()
     assert _snapshot(LOCALIZED, LOCALIZATION) == before
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# --mode batch (run 38598155352: rung 0 404'd for every locale)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("flags", [["--mode", "batch"], ["--mode=batch"]])
+def test_batch_mode_is_refused_before_anything_is_staged(flags: List[str]) -> None:
+    """OpenRouter serves ``:batch`` slugs only through its async batch API; the
+    chat endpoint answers 404, so rung 0 was lost and the report halved costs
+    that were billed in full."""
+    before = _snapshot(LOCALIZED, LOCALIZATION)
+    with pytest.raises(SystemExit, match="--mode batch"):
+        AL.main(["--version", "1.2b", "--lane", "translate", "--lang", "yo", *flags])
+    assert _snapshot(LOCALIZED, LOCALIZATION) == before
+
+
+def test_fast_mode_is_not_refused() -> None:
+    AL.refuse_batch_mode(["--lane", "translate", "--mode", "fast"])
+    AL.refuse_batch_mode(["--keys", "batch"])  # a value named batch is not the mode
+
+
+@pytest.mark.parametrize("flags", [["--mode", "batch"], ["--mode=batch"]])
+def test_run_lane_refuses_batch_mode_for_both_targets(flags: List[str]) -> None:
+    for target in ("accord", "ui"):
+        env = {**os.environ, "TARGET": target, "LANE": "translate", "ACCORD_VERSION": "1.2b"}
+        env.pop("OPENROUTER_API_KEY", None)
+        proc = subprocess.run(
+            ["bash", str(LOCALIZATION / "run_lane.sh"), *flags],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        assert proc.returncode == 2, (target, proc.stdout, proc.stderr)
+        assert "--mode batch" in proc.stderr
+
+
+def test_no_i18n_workflow_offers_batch_mode() -> None:
+    for wf in sorted((REPO / ".github" / "workflows").glob("i18n-*.yml")):
+        assert "[fast, batch]" not in wf.read_text(encoding="utf-8"), wf.name

@@ -14,11 +14,35 @@ from ciris_engine.schemas.types import JSONDict
 logger = logging.getLogger(__name__)
 
 
+# ShutdownResult.action -> recorded consent status. Only an explicit acceptance
+# is "accepted". This used to fall back on ``status == "completed"``, which every
+# terminal non-rejecting path also returns — the 300 s negotiation timeout, the
+# instant (no-consent) mode, and the accord-invocation kill — so a shutdown the
+# agent never agreed to was written to its identity graph as consented (#1250).
+_CONSENT_STATUS_BY_ACTION = {
+    "shutdown_accepted": "accepted",
+    "shutdown_rejected": "rejected",
+    "shutdown_negotiation_timeout": "no_response",
+    "instant_shutdown": "not_required",
+    "accord_invocation_shutdown": "accord_invocation",
+}
+
+
+def _rejection_reason(runtime: Any) -> Any:
+    """The agent's stated reason for refusing, if the shutdown result carries one."""
+    agent_processor = getattr(runtime, "agent_processor", None)
+    shutdown_proc = getattr(agent_processor, "shutdown_processor", None) if agent_processor else None
+    result = getattr(shutdown_proc, "shutdown_result", None) if shutdown_proc else None
+    return getattr(result, "reason", None) if result else None
+
+
 def determine_shutdown_consent_status(runtime: Any) -> str:
     """Determine if shutdown was consensual based on agent processor result.
 
     Returns:
-        Consent status: 'accepted', 'rejected', or 'manual'
+        Consent status: 'accepted', 'rejected', 'no_response' (objection window
+        expired with no answer), 'not_required' (instant mode),
+        'accord_invocation', or 'manual' (no negotiation took place)
     """
     if not runtime.agent_processor or not hasattr(runtime.agent_processor, "shutdown_processor"):
         return "manual"
@@ -31,12 +55,11 @@ def determine_shutdown_consent_status(runtime: Any) -> str:
     if not result:
         return "manual"
 
-    if result.action == "shutdown_accepted" or result.status == "completed":
-        return "accepted"
-    elif result.action == "shutdown_rejected" or result.status == "rejected":
+    # A refusal wins over any other field: it must never be recorded as consent.
+    if result.action == "shutdown_rejected" or result.status == "rejected":
         return "rejected"
 
-    return "manual"
+    return _CONSENT_STATUS_BY_ACTION.get(str(result.action), "manual")
 
 
 def build_shutdown_node_attributes(runtime: Any, reason: str, consent_status: str) -> JSONDict:
@@ -51,7 +74,7 @@ def build_shutdown_node_attributes(runtime: Any, reason: str, consent_status: st
         Dictionary of node attributes
     """
     now = runtime.time_service.now() if runtime.time_service else datetime.now(timezone.utc)
-    return {
+    attributes: JSONDict = {
         "created_at": now.isoformat(),
         "updated_at": now.isoformat(),
         "created_by": "runtime_shutdown",
@@ -59,6 +82,12 @@ def build_shutdown_node_attributes(runtime: Any, reason: str, consent_status: st
         "reason": reason,
         "consent_status": consent_status,
     }
+    if consent_status == "rejected":
+        # Plain rule 5a: the agent's objection and its reason are on the record.
+        objection = _rejection_reason(runtime)
+        if isinstance(objection, str) and objection:
+            attributes["agent_objection_reason"] = objection
+    return attributes
 
 
 async def update_identity_with_shutdown_reference(runtime: Any, shutdown_node_id: str) -> None:

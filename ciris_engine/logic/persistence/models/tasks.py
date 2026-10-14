@@ -19,19 +19,12 @@ from ciris_engine.protocols.services.graph.audit import AuditServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.audit.core import EventPayload
 from ciris_engine.schemas.runtime.enums import HandlerActionType, TaskStatus, ThoughtStatus
-from ciris_engine.schemas.runtime.models import (
-    ImageContent,
-    Task,
-    TaskContext,
-    TaskOutcome,
-)
+from ciris_engine.schemas.runtime.models import ImageContent, Task, TaskContext, TaskOutcome
 from ciris_engine.schemas.runtime.task_envelope import TaskEnvelope
 from ciris_engine.schemas.services.graph.audit import AuditEventData
 
 if TYPE_CHECKING:
-    from ciris_engine.protocols.services.infrastructure.authentication import (
-        AuthenticationServiceProtocol,
-    )
+    from ciris_engine.protocols.services.infrastructure.authentication import AuthenticationServiceProtocol
 
 logger = logging.getLogger(__name__)
 
@@ -47,10 +40,7 @@ def _get_engine() -> Any:
 
     engine = get_persist_engine()
     if engine is None:
-        raise RuntimeError(
-            "persist engine not initialized — call initialize_database() "
-            "before any tasks operation"
-        )
+        raise RuntimeError("persist engine not initialized — call initialize_database() " "before any tasks operation")
     return engine
 
 
@@ -174,9 +164,7 @@ def _persist_row_to_task(row: Dict[str, Any]) -> Task:
             agent_occurrence_id=agent_occurrence_id,
         )
 
-    preferred_language: Optional[str] = (
-        context.preferred_language if context is not None else None
-    )
+    preferred_language: Optional[str] = context.preferred_language if context is not None else None
 
     # Outcome.
     outcome: Optional[TaskOutcome] = None
@@ -242,9 +230,7 @@ def _list_with_filter(
     collected: List[Task] = []
 
     while True:
-        cursor_json = json.dumps(
-            {"version": "v1", "last_ts": last_ts, "last_id": last_id}
-        )
+        cursor_json = json.dumps({"version": "v1", "last_ts": last_ts, "last_id": last_id})
         raw = engine.task_list(json.dumps(filter_dict), cursor_json, page_size)
         try:
             parsed = json.loads(raw) if isinstance(raw, str) else raw
@@ -365,19 +351,13 @@ def get_task_occurrence_id_for_update(task_id: str) -> Optional[str]:
     return str(row.get("agent_occurrence_id", "default"))
 
 
-def get_tasks_by_status(
-    status: TaskStatus,
-    occurrence_id: str = "default"
-
-) -> List[Task]:
+def get_tasks_by_status(status: TaskStatus, occurrence_id: str = "default") -> List[Task]:
     """Returns all tasks with the given status and occurrence as Task objects, ASC by created_at."""
     if not isinstance(status, TaskStatus):
         raise TypeError(f"Expected TaskStatus enum, got {type(status)}: {status}")
 
     try:
-        tasks = _list_with_filter(
-            {"status": status.value, "agent_occurrence_id": occurrence_id}
-        )
+        tasks = _list_with_filter({"status": status.value, "agent_occurrence_id": occurrence_id})
     except Exception as e:
         logger.exception(f"Failed to get tasks with status {status.value} for occurrence {occurrence_id}: {e}")
         return []
@@ -398,9 +378,7 @@ def get_all_tasks(occurrence_id: str = "default") -> List[Task]:
 
 def _is_correlation_id_constraint_violation(error_msg: str) -> bool:
     """Check if error message indicates a unique constraint violation on correlation_id."""
-    return "unique constraint" in error_msg and (
-        "correlation" in error_msg or "json_extract" in error_msg
-    )
+    return "unique constraint" in error_msg and ("correlation" in error_msg or "json_extract" in error_msg)
 
 
 def _get_correlation_id_from_task(task: Task) -> Optional[str]:
@@ -446,9 +424,7 @@ def add_task(task: Task) -> str:
                 f"Added task ID {task.task_id} (occurrence: {task.agent_occurrence_id}) with {images_count} images."
             )
         else:
-            logger.info(
-                f"Added task ID {task.task_id} (occurrence: {task.agent_occurrence_id}) to database."
-            )
+            logger.info(f"Added task ID {task.task_id} (occurrence: {task.agent_occurrence_id}) to database.")
         return task.task_id
     except Exception as e:
         error_msg = str(e).lower()
@@ -458,11 +434,7 @@ def add_task(task: Task) -> str:
         raise
 
 
-def get_task_by_id(
-    task_id: str,
-    occurrence_id: str = "default"
-
-) -> Optional[Task]:
+def get_task_by_id(task_id: str, occurrence_id: str = "default") -> Optional[Task]:
     engine = _get_engine()
     try:
         raw = engine.task_get(task_id)
@@ -507,8 +479,7 @@ def transfer_task_ownership(
     from_occurrence_id: str,
     to_occurrence_id: str,
     time_service: TimeServiceProtocol,
-    audit_service: AuditServiceProtocol
-
+    audit_service: AuditServiceProtocol,
 ) -> bool:
     """Transfer task ownership from one occurrence to another.
 
@@ -538,9 +509,7 @@ def transfer_task_ownership(
                 row["updated_at"] = time_service.now_iso()
                 task = _persist_row_to_task(row)
                 engine.task_upsert(json.dumps(_task_to_persist_payload(task)))
-                logger.info(
-                    f"Transferred ownership of task {task_id} from {from_occurrence_id} to {to_occurrence_id}"
-                )
+                logger.info(f"Transferred ownership of task {task_id} from {from_occurrence_id} to {to_occurrence_id}")
                 success = True
             except Exception as e:
                 logger.exception(f"Failed to transfer task ownership for {task_id}: {e}")
@@ -682,9 +651,7 @@ def get_top_tasks(
     """Get top pending tasks for occurrence ordered by priority (highest first) then by creation date."""
     tasks_list = get_all_tasks(occurrence_id)
     pending = [t for t in tasks_list if getattr(t, "status", None) == TaskStatus.PENDING]
-    sorted_tasks = sorted(
-        pending, key=lambda t: (-getattr(t, "priority", 0), getattr(t, "created_at", ""))
-    )
+    sorted_tasks = sorted(pending, key=lambda t: (-getattr(t, "priority", 0), getattr(t, "created_at", "")))
     return sorted_tasks[:limit]
 
 
@@ -694,23 +661,15 @@ def get_pending_tasks_for_activation(
 ) -> List[Task]:
     """Get pending tasks for occurrence ordered by priority (highest first) then by creation date."""
     pending_tasks = get_tasks_by_status(TaskStatus.PENDING, occurrence_id)
-    sorted_tasks = sorted(
-        pending_tasks, key=lambda t: (-getattr(t, "priority", 0), getattr(t, "created_at", ""))
-    )
+    sorted_tasks = sorted(pending_tasks, key=lambda t: (-getattr(t, "priority", 0), getattr(t, "created_at", "")))
     return sorted_tasks[:limit]
 
 
-def count_tasks(
-    status: Optional[TaskStatus] = None,
-    occurrence_id: str = "default"
-
-) -> int:
+def count_tasks(status: Optional[TaskStatus] = None, occurrence_id: str = "default") -> int:
     """Count tasks matching the criteria."""
     try:
         if status:
-            tasks = _list_with_filter(
-                {"status": status.value, "agent_occurrence_id": occurrence_id}
-            )
+            tasks = _list_with_filter({"status": status.value, "agent_occurrence_id": occurrence_id})
         else:
             tasks = _list_with_filter({"agent_occurrence_id": occurrence_id})
         return len(tasks)
@@ -769,8 +728,7 @@ def delete_tasks_by_ids(task_ids: List[str]) -> int:
     # Two lines apart, flatly contradicting each other. Say which happened.
     if failed_ids:
         logger.error(
-            "%d task(s) could NOT be deleted and are still present: %s "
-            "(see the exception(s) above for why)",
+            "%d task(s) could NOT be deleted and are still present: %s " "(see the exception(s) above for why)",
             len(failed_ids),
             failed_ids,
         )
@@ -784,27 +742,17 @@ def delete_tasks_by_ids(task_ids: List[str]) -> int:
     return deleted_count
 
 
-def get_tasks_older_than(
-    older_than_timestamp: str,
-    occurrence_id: str = "default"
-
-) -> List[Task]:
+def get_tasks_older_than(older_than_timestamp: str, occurrence_id: str = "default") -> List[Task]:
     """Get all tasks for occurrence with created_at older than the given ISO timestamp."""
     try:
         all_tasks = _list_with_filter({"agent_occurrence_id": occurrence_id})
     except Exception as e:
-        logger.exception(
-            f"Failed to get tasks older than {older_than_timestamp} for occurrence {occurrence_id}: {e}"
-        )
+        logger.exception(f"Failed to get tasks older than {older_than_timestamp} for occurrence {occurrence_id}: {e}")
         return []
     return [t for t in all_tasks if t.created_at < older_than_timestamp]
 
 
-def get_active_task_for_channel(
-    channel_id: str,
-    occurrence_id: str = "default"
-
-) -> Optional[Task]:
+def get_active_task_for_channel(channel_id: str, occurrence_id: str = "default") -> Optional[Task]:
     """Get the active task for a specific channel and occurrence, if one exists."""
     try:
         active_tasks = _list_with_filter(
@@ -879,6 +827,25 @@ def _prepare_images(task: Task, images: List[Any]) -> tuple[List[ImageContent], 
     return combined, len(new_images_data)
 
 
+def clear_task_updated_info_flag(task_id: str) -> bool:
+    """Clear updated_info_available on a task (any occurrence). Returns True on a write."""
+    engine = _get_engine()
+    try:
+        raw = engine.task_get(task_id)
+        if raw is None:
+            return False
+        row = json.loads(raw) if isinstance(raw, str) else raw
+        if not isinstance(row, dict):
+            return False
+        task = _persist_row_to_task(row)
+        task.updated_info_available = False
+        engine.task_upsert(json.dumps(_task_to_persist_payload(task)))
+        return True
+    except Exception as e:
+        logger.exception(f"Failed to clear updated_info_available flag for task {task_id}: {e}")
+        return False
+
+
 def set_task_updated_info_flag(
     task_id: str,
     updated_content: str,
@@ -920,7 +887,6 @@ def set_task_updated_info_flag(
 
 
 # ==================== Multi-Occurrence Shared Task Functions ====================
-
 
 
 class SharedTaskClaimNotPersisted(RuntimeError):
@@ -1079,11 +1045,7 @@ def is_shared_task_completed(
     return status == TaskStatus.COMPLETED if status else False
 
 
-def get_latest_shared_task(
-    task_type: str,
-    within_hours: int = 24
-
-) -> Optional[Task]:
+def get_latest_shared_task(task_type: str, within_hours: int = 24) -> Optional[Task]:
     """Get the most recent shared task of a given type."""
     cutoff_time = datetime.now(timezone.utc) - timedelta(hours=within_hours)
     cutoff_iso = cutoff_time.isoformat()
@@ -1095,21 +1057,14 @@ def get_latest_shared_task(
         logger.exception(f"Failed to get latest shared task for {task_type}: {e}")
         return None
 
-    candidates = [
-        t for t in shared_tasks
-        if t.task_id.startswith(pattern_prefix) and t.created_at > cutoff_iso
-    ]
+    candidates = [t for t in shared_tasks if t.task_id.startswith(pattern_prefix) and t.created_at > cutoff_iso]
     if not candidates:
         return None
     candidates.sort(key=lambda t: t.created_at, reverse=True)
     return candidates[0]
 
 
-def get_task_by_correlation_id(
-    correlation_id: str,
-    occurrence_id: str = "default"
-
-) -> Optional[Task]:
+def get_task_by_correlation_id(correlation_id: str, occurrence_id: str = "default") -> Optional[Task]:
     """Query for a task by correlation_id (e.g., Reddit post/comment ID)."""
     try:
         all_tasks = _list_with_filter({"agent_occurrence_id": occurrence_id})
@@ -1117,9 +1072,7 @@ def get_task_by_correlation_id(
         logger.exception(f"Failed to get task by correlation_id {correlation_id}: {e}")
         return None
     matches = [
-        t for t in all_tasks
-        if t.context is not None
-        and getattr(t.context, "correlation_id", None) == correlation_id
+        t for t in all_tasks if t.context is not None and getattr(t.context, "correlation_id", None) == correlation_id
     ]
     if not matches:
         return None

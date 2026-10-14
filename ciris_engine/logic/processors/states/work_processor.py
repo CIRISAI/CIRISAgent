@@ -162,6 +162,10 @@ class WorkProcessor(BaseProcessor):
                 # Add recovery thoughts to total (generated was set on line 121)
                 round_metrics["thoughts_generated"] = generated + recovery_generated
 
+            # Phase 2.6: a message that arrived while the agent was refusing a task
+            # gets its own task — the refusal is never rewritten (#1250).
+            self.task_manager.requeue_updates_from_rejected_tasks()
+
             # Phase 3: Populate processing queue
             logger.debug("Phase 3: Populating processing queue...")
             queue_size = self.thought_manager.populate_queue(round_number)

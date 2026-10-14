@@ -292,3 +292,10 @@ claim_pin
 
 # Per-unit translation cache for tools/accord_i18n.py: resumable state, not source.
 ciris_engine/data/localized/.accord_i18n_cache/
+
+# Accord segment stage (localization/accord_localize.py): en.json and manifest.json
+# are regenerated from the English accord on every run; the locale bundles are
+# the lane state and ARE committed. Hard-case dumps from localization/drive.sh.
+localization/accord/*/en.json
+localization/accord/*/manifest.json
+localization/hard-cases/

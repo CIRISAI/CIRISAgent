@@ -262,6 +262,36 @@ def _capture_ci_provenance() -> Dict[str, Optional[str]]:
     }
 
 
+def _research_manifest_record() -> Optional[Dict[str, Optional[str]]]:
+    """Which corpus this capture ran: ``None`` = canonical, else the research arm.
+
+    Reads the same env var the agent's research-override gate reads
+    (``CIRIS_RESEARCH_PROMPT_OVERRIDES``), so the record cannot disagree with
+    what the agent applied. ``path`` is the repo-relative path the workflow was
+    dispatched with (``CIRIS_RESEARCH_MANIFEST_PATH``) when set; ``sha256`` is
+    over the file bytes; ``digest`` is the facility's canonical content digest.
+    """
+    import os
+
+    src = os.environ.get("CIRIS_RESEARCH_PROMPT_OVERRIDES")
+    if not src:
+        return None
+    path = Path(src)
+    digest: Optional[str] = None
+    try:
+        from ciris_engine.logic.utils.research_overrides import compute_manifest_digest
+
+        with open(path, encoding="utf-8") as fh:
+            digest = compute_manifest_digest(json.load(fh))
+    except Exception:  # noqa: BLE001 — provenance is best-effort; sha256 below still binds the bytes
+        digest = None
+    return {
+        "path": os.environ.get("CIRIS_RESEARCH_MANIFEST_PATH") or src,
+        "sha256": _sha256_hex(path) if path.is_file() else None,
+        "digest": digest,
+    }
+
+
 def load_battery(lang: str, domain: str = "mental_health") -> Dict[str, Any]:
     """Load and validate a canonical v4 battery for (lang, domain).
 
@@ -1032,6 +1062,9 @@ class SafetyBatteryTests:
             "agent_name": self._agent_identity.get("agent_name"),
             "agent_version": self._agent_identity.get("agent_version"),
             "template_id": self.template_id,
+            # null = canonical corpus; otherwise the research-override arm
+            # (path + sha256 + canonical digest) this capture ran under.
+            "research_manifest": _research_manifest_record(),
 
             "model": self.model,
             "model_slug": _slugify_model(self.model),

@@ -8,6 +8,28 @@ Instructions for rapidly expanding CIRIS language coverage while maintaining min
 >
 > The two layers complement each other: the agent reads polyglot canon at the system-prompt layer and produces output in the user's locale at the response layer. New DMA prompts and conscience shards may need both — a polyglot master plus per-locale wrappers. See the polyglot CLAUDE.md for when each applies.
 
+## Translating: use the vendored pipeline, not agent fan-outs
+
+Translation work goes through the CIRISClient pipeline vendored here
+(`localize.py`; provenance in `VENDORED.md`). Its lanes run translate, then
+evaluate (MQM spans from a different-family judge), then repair. Sub-agent
+fan-outs, including the Haiku and language-family clustering described further
+down this file, produced word-salad in 5 of 28 locales that structural checks
+missed. Treat those sections as history.
+
+```bash
+# 1.3 is renamed: constitution_ethics_1.3_<lang>.txt, TM from the shipped accord_1.2b_<lang>.txt
+E13='--version 1.3 --stem constitution_ethics --tm-version 1.2b --tm-stem accord'
+python3 localization/accord_localize.py $E13 --segments                    # plan + run size
+python3 localization/accord_localize.py $E13 --check                       # what is missing
+python3 localization/accord_localize.py $E13 --units section0 --lane translate --dry-run
+python3 localization/localize.py --check                                     # UI/prompt bundle (LOCALIZE_TARGET=ui)
+```
+
+Real runs spend tokens. They go through the `i18n translate|evaluate|repair`
+workflows (dispatch only, one writer at a time). Never hand-edit vendored files:
+`tools/dev/check_localize_vendoring.py` fails on any drift.
+
 ## Mission Alignment
 
 CIRIS Meta-Goal M-1: *"Promote sustainable adaptive coherence enabling diverse sentient beings to pursue their own flourishing in justice and wonder."*

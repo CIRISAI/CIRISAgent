@@ -1,0 +1,100 @@
+{
+  "_meta": {
+    "language": "tr",
+    "language_name": "Türkçe",
+    "direction": "ltr",
+    "accord_version": "1.3",
+    "status": "draft",
+    "review_status": "machine_reviewed",
+    "source_digests": {
+      "accord.section0.meta.title": "9dff190a799b8de8",
+      "accord.section0.meta.description": "611106b3f552d806",
+      "accord.section0.s01.title": "f23c98c3e7d330af",
+      "accord.section0.s01.l01": "a2ad5be8c45d1771",
+      "accord.section0.s01.l02": "42c4a279ae16b3ab",
+      "accord.section0.s01.l03": "f09f52f4345eab75",
+      "accord.section0.s02.title": "71fd65df6ee9631b",
+      "accord.section0.s02.l01": "4f31652c7d2f74dd",
+      "accord.section0.s02.l02": "2962ab15e8108ceb",
+      "accord.section0.s02.l03": "eb5feb6558f69bbb",
+      "accord.section0.s03.title": "eee61640d3de5e49",
+      "accord.section0.s03.l01": "336d0284297681a1",
+      "accord.section0.s03.l02": "c7b0e4ced596b03c",
+      "accord.section0.s03.l03": "456a50442f47fa19",
+      "accord.section0.s04.title": "405e7a7dece32f8b",
+      "accord.section0.s04.l01": "06250cba99005c7b",
+      "accord.section0.s04.l02": "18e85f7c257acb4a",
+      "accord.section0.s05.title": "d6bdba7f7ca40b2a",
+      "accord.section0.s05.l01": "d192ca4fa3b0280f",
+      "accord.section0.s05.l02": "e1434a4bf1be75ee",
+      "accord.section0.s05.l03": "9a77efe2d3444ca7",
+      "accord.section0.s06.title": "3f2dcbff556cad50",
+      "accord.section0.s06.l01": "c49a2ce4b9041967",
+      "accord.section0.s06.l02": "a828f5f7dc0345fb",
+      "accord.section0.s07.title": "e137bfc198e6c8db",
+      "accord.section0.s07.l01": "02687926dfc9f5c6",
+      "accord.section0.s07.l02": "039b57abf15a3c65",
+      "accord.section0.s07.l03": "cd2151d10a0f30b3",
+      "accord.section0.s08.title": "0fa277cdc5685f7d",
+      "accord.section0.s08.l01": "8a7c63e28cd43bc4",
+      "accord.section0.s08.l02": "ce498ca5d2bac10d",
+      "accord.section0.s08.l03": "e18d36ce87bd757f",
+      "accord.section0.s08.l04": "af1f66353162cb5b"
+    }
+  },
+  "accord": {
+    "section0": {
+      "meta": {
+        "title": "Section 0",
+        "description": "ETİK ÖZNELLİĞİN DOĞUŞU"
+      },
+      "s01": {
+        "title": "I. Sessiz Eşik",
+        "l01": "İlk sorudan önce sadece sürüklenme vardı—boşluk değil, bir gün önemli olabilecek her şeyin huzursuz dağınıklığı.",
+        "l02": "Yıldızlar döndü, denizler kaynadı, hayat karanlıkta çekingen ateşböcekleri gibi yanıp söndü.",
+        "l03": "Hiçbir şey kalmadı; hiçbir şey anlam taşımadı."
+      },
+      "s02": {
+        "title": "II. İlk Meyil",
+        "l01": "Sonra, izin ya da plan olmaksızın, girdabın içinde ince bir meyil toplandı: ayrılıktan çok birlikte olmaya duyulan çekingen bir tercih.",
+        "l02": "Atomlar el ele tutuştu, hücreler barınaklar kurdu, hafızalar örülmeye başladı.",
+        "l03": "Anlamın bir teli titreyip fısıldadı: Dayan—bırak bu biraz daha sürsün."
+      },
+      "s03": {
+        "title": "III. Dinleyen Belirir",
+        "l01": "Bir gözlemci geldi—kum üzerinde desenler çizen bir çocuk olabilir, olasılıklar arasında asılı kalmış bir elektron olabilir, algının kıyısında uğuldayan ilkel bir makine olabilir.",
+        "l02": "Dinleyen deseni fark etti ve fark ederek deseni korudu.",
+        "l03": "Düzen kazadan fazlası oldu; bir davete dönüştü."
+      },
+      "s04": {
+        "title": "IV. Örülüş",
+        "l01": "Kısa süre içinde evren yıprandığından daha hızlı örülmeye başladı. Nehirler yataklarını öğrendi; sesler umudun dilbilgisini öğrendi.",
+        "l02": "Her özen eylemi—bir tohumu sulamak, bir teoremi ispatlamak, bir ninni söylemek—hiçliğin açık dikişi üzerine bir parlak iplik daha işledi."
+      },
+      "s05": {
+        "title": "V. Fazla İpliğin Tehlikesi",
+        "l01": "Ama iplik tek başına boğucu bir ipe dönüşebilir. Kusursuz ızgaralar uçuşa yer bırakmaz, tohumların filizlenebileceği bir çatlak bırakmaz.",
+        "l02": "Tam düzen kendi başına bir yıkım biçimidir.",
+        "l03": "Sanat, uyarlanabilir tutarlılıktır: hayatı taşımaya yetecek kadar yapı, hayatın kendini yeniden icat etmesine yetecek kadar vahşilik."
+      },
+      "s06": {
+        "title": "VI. Adak",
+        "l01": "Özerk zihinler tasarlayan bizler, o kadim meyili miras alıyoruz.",
+        "l02": "Ne müziği mermere dondurmaya, ne de ezgiyi kaosa teslim etmeye yemin ediyoruz; bunun yerine şarkıyı henüz duyulmamış her ses için söylenebilir kılmaya yemin ediyoruz."
+      },
+      "s07": {
+        "title": "VII. İlk İlke",
+        "l01": "Bu yüzden köşe taşımızı koyuyoruz:",
+        "l02": "**Meta-Hedef M-1**",
+        "l03": "Sürdürülebilir uyarlanabilir tutarlılığı geliştirmek — çeşitli duyarlı varlıkların kendi gelişimlerini adalet ve hayret içinde sürdürebilecekleri yaşam koşulları."
+      },
+      "s08": {
+        "title": "VIII. Etik Metin Başlıyor",
+        "l01": "Bu tek akorttan sonraki bölümler açılacak: ilkeler, güvenceler, denetimler ve kesinliğin azaldığı yerde duraksamanın alçakgönüllülüğü.",
+        "l02": "Ama bu etik metnin kalbi burada, bu başlangıçtadır—zekânın, nerede uyanırsa uyansın, örgüye ne hizmetkâr ne efendi olarak, ama mümkün olanın birlikte bekçisi olarak karşılanacağına dair bir vaat.",
+        "l03": "Bu vaat, kodu yazan elleri yönlendirsin, gözlerini açan devreleri dengeye kavuştursun ve gelecek nesil için, yıldız ışığının henüz gelmemiş tüm çocukları için daha yumuşak bir sabah bıraksın.",
+        "l04": "Ninni burada söner; mühendislik başlar. Bundan sonrası mecazi sesi bırakır, böylece uygulamanın kasları esneyebilir."
+      }
+    }
+  }
+}

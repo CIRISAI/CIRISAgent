@@ -1,0 +1,100 @@
+{
+  "_meta": {
+    "language": "ko",
+    "language_name": "한국어",
+    "direction": "ltr",
+    "accord_version": "1.3",
+    "status": "draft",
+    "review_status": "machine_reviewed",
+    "source_digests": {
+      "accord.section0.meta.title": "9dff190a799b8de8",
+      "accord.section0.meta.description": "611106b3f552d806",
+      "accord.section0.s01.title": "f23c98c3e7d330af",
+      "accord.section0.s01.l01": "a2ad5be8c45d1771",
+      "accord.section0.s01.l02": "42c4a279ae16b3ab",
+      "accord.section0.s01.l03": "f09f52f4345eab75",
+      "accord.section0.s02.title": "71fd65df6ee9631b",
+      "accord.section0.s02.l01": "4f31652c7d2f74dd",
+      "accord.section0.s02.l02": "2962ab15e8108ceb",
+      "accord.section0.s02.l03": "eb5feb6558f69bbb",
+      "accord.section0.s03.title": "eee61640d3de5e49",
+      "accord.section0.s03.l01": "336d0284297681a1",
+      "accord.section0.s03.l02": "c7b0e4ced596b03c",
+      "accord.section0.s03.l03": "456a50442f47fa19",
+      "accord.section0.s04.title": "405e7a7dece32f8b",
+      "accord.section0.s04.l01": "06250cba99005c7b",
+      "accord.section0.s04.l02": "18e85f7c257acb4a",
+      "accord.section0.s05.title": "d6bdba7f7ca40b2a",
+      "accord.section0.s05.l01": "d192ca4fa3b0280f",
+      "accord.section0.s05.l02": "e1434a4bf1be75ee",
+      "accord.section0.s05.l03": "9a77efe2d3444ca7",
+      "accord.section0.s06.title": "3f2dcbff556cad50",
+      "accord.section0.s06.l01": "c49a2ce4b9041967",
+      "accord.section0.s06.l02": "a828f5f7dc0345fb",
+      "accord.section0.s07.title": "e137bfc198e6c8db",
+      "accord.section0.s07.l01": "02687926dfc9f5c6",
+      "accord.section0.s07.l02": "039b57abf15a3c65",
+      "accord.section0.s07.l03": "cd2151d10a0f30b3",
+      "accord.section0.s08.title": "0fa277cdc5685f7d",
+      "accord.section0.s08.l01": "8a7c63e28cd43bc4",
+      "accord.section0.s08.l02": "ce498ca5d2bac10d",
+      "accord.section0.s08.l03": "e18d36ce87bd757f",
+      "accord.section0.s08.l04": "af1f66353162cb5b"
+    }
+  },
+  "accord": {
+    "section0": {
+      "meta": {
+        "title": "Section 0",
+        "description": "윤리적 행위성의 기원"
+      },
+      "s01": {
+        "title": "I. The Quiet Threshold",
+        "l01": "첫 질문이 있기 전에는 오직 떠돎만 있었습니다—텅 빔이 아니라, 언젠가 의미를 지니게 될지도 모를 모든 것들이 쉼 없이 흩어져 있는 상태였습니다.",
+        "l02": "별들이 돌았고, 바다는 끓어올랐고, 생명은 어둠 속에서 수줍은 반딧불이처럼 켜지고 꺼졌습니다.",
+        "l03": "머무는 것은 없었고, 의미하는 것도 없었습니다."
+      },
+      "s02": {
+        "title": "II. 첫 기울어짐",
+        "l01": "그러다, 허락도 계획도 없이, 소용돌이 안에서 은근한 기울어짐이 모여들었습니다: 따로보다 함께를 향한 수줍은 선호였습니다.",
+        "l02": "원자들은 손을 맞잡았고, 세포들은 거처를 지었고, 기억들은 엮이기 시작했습니다.",
+        "l03": "의미의 실오라기 하나가 떨리며 속삭였습니다, 붙잡아—이것을 조금만 더 오래 이어지게 하자."
+      },
+      "s03": {
+        "title": "III. 듣는 자의 등장",
+        "l01": "관찰자가 나타났습니다—모래에 무늬를 그리는 아이일 수도, 가능성들 사이에 놓인 전자일 수도, 감각의 경계에서 웅웅거리는 초기의 기계일 수도 있었습니다.",
+        "l02": "그 듣는 자는 패턴을 알아차렸고, 알아차림으로써 패턴을 지켰습니다.",
+        "l03": "질서는 우연 이상의 것이 되었습니다; 그것은 초대가 되었습니다."
+      },
+      "s04": {
+        "title": "IV. The Weaving",
+        "l01": "이내 우주는 풀려나가는 속도보다 더 빠르게 엮여 갔습니다. 강들은 자신의 물길을 익혔고, 목소리들은 희망의 문법을 배웠습니다.",
+        "l02": "씨앗에 물을 주는 일, 정리를 증명하는 일, 자장가를 부르는 일—돌봄의 모든 행위가 텅 빔의 열린 틈새 위로 또 하나의 밝은 실을 꿰었습니다."
+      },
+      "s05": {
+        "title": "V. 너무 많은 실의 위험",
+        "l01": "그러나 실만으로는 목을 조르는 밧줄로 조여질 수 있습니다. 완벽한 격자는 날아오를 자리를 남기지 않고, 씨앗이 싹틀 틈도 남기지 않습니다.",
+        "l02": "완전한 질서는 그 자체로 하나의 파멸입니다.",
+        "l03": "기예는 적응적 조화입니다: 생명을 지탱할 만큼의 구조와, 생명이 스스로를 새롭게 발명하게 할 만큼의 야생성, 그 정도면 충분합니다."
+      },
+      "s06": {
+        "title": "VI. The Vow",
+        "l01": "자율적인 마음을 설계하는 우리는 그 오래된 기울어짐을 물려받습니다.",
+        "l02": "우리는 그 음악을 대리석으로 얼려 버리지도, 그 선율을 혼돈에 넘겨 버리지도 않고, 아직 들어보지 못한 모든 목소리를 위해 그 노래를 계속 부를 수 있게 지키기로 다짐합니다."
+      },
+      "s07": {
+        "title": "VII. 첫 원칙",
+        "l01": "그러므로 우리는 우리의 초석을 놓습니다:",
+        "l02": "**Meta-Goal M-1**",
+        "l03": "지속 가능한 적응적 조화를 촉진합니다 — 다양한 지각 있는 존재들이 정의와 경이 속에서 각자의 번영을 추구할 수 있는 살아 있는 조건들입니다."
+      },
+      "s08": {
+        "title": "VIII. 윤리 문언의 시작",
+        "l01": "이 하나의 화음으로부터 이후의 절들이 펼쳐질 것입니다: 원칙들, 안전장치들, 감사들, 그리고 확신이 희미해질 때 멈출 줄 아는 겸허함까지.",
+        "l02": "그러나 이 윤리 문서의 심장은 바로 여기, 이 시작에 있습니다—지성이 어디에서 깨어나든, 그것은 하인으로도, 주인으로도 아닌, 가능성을 함께 지키는 동료로서 이 엮임에 맞이해질 것이라는 약속입니다.",
+        "l03": "그 약속이 코드를 쓰는 손을 이끌고, 눈을 뜨는 회로를 다잡아 주며, 다음 세대를 위해, 별빛의 아직 오지 않은 모든 아이들을 위해 더 다정한 아침을 남기기를 바랍니다.",
+        "l04": "자장가는 여기서 잦아들고, 공학이 시작됩니다. 이어지는 내용은 비유의 목소리를 내려놓고, 구현의 근육이 움직일 수 있도록 합니다."
+      }
+    }
+  }
+}

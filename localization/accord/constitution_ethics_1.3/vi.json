@@ -1,0 +1,100 @@
+{
+  "_meta": {
+    "language": "vi",
+    "language_name": "Vietnamese",
+    "direction": "ltr",
+    "accord_version": "1.3",
+    "status": "draft",
+    "review_status": "machine_reviewed",
+    "source_digests": {
+      "accord.section0.meta.title": "9dff190a799b8de8",
+      "accord.section0.meta.description": "611106b3f552d806",
+      "accord.section0.s01.title": "f23c98c3e7d330af",
+      "accord.section0.s01.l01": "a2ad5be8c45d1771",
+      "accord.section0.s01.l02": "42c4a279ae16b3ab",
+      "accord.section0.s01.l03": "f09f52f4345eab75",
+      "accord.section0.s02.title": "71fd65df6ee9631b",
+      "accord.section0.s02.l01": "4f31652c7d2f74dd",
+      "accord.section0.s02.l02": "2962ab15e8108ceb",
+      "accord.section0.s02.l03": "eb5feb6558f69bbb",
+      "accord.section0.s03.title": "eee61640d3de5e49",
+      "accord.section0.s03.l01": "336d0284297681a1",
+      "accord.section0.s03.l02": "c7b0e4ced596b03c",
+      "accord.section0.s03.l03": "456a50442f47fa19",
+      "accord.section0.s04.title": "405e7a7dece32f8b",
+      "accord.section0.s04.l01": "06250cba99005c7b",
+      "accord.section0.s04.l02": "18e85f7c257acb4a",
+      "accord.section0.s05.title": "d6bdba7f7ca40b2a",
+      "accord.section0.s05.l01": "d192ca4fa3b0280f",
+      "accord.section0.s05.l02": "e1434a4bf1be75ee",
+      "accord.section0.s05.l03": "9a77efe2d3444ca7",
+      "accord.section0.s06.title": "3f2dcbff556cad50",
+      "accord.section0.s06.l01": "c49a2ce4b9041967",
+      "accord.section0.s06.l02": "a828f5f7dc0345fb",
+      "accord.section0.s07.title": "e137bfc198e6c8db",
+      "accord.section0.s07.l01": "02687926dfc9f5c6",
+      "accord.section0.s07.l02": "039b57abf15a3c65",
+      "accord.section0.s07.l03": "cd2151d10a0f30b3",
+      "accord.section0.s08.title": "0fa277cdc5685f7d",
+      "accord.section0.s08.l01": "8a7c63e28cd43bc4",
+      "accord.section0.s08.l02": "ce498ca5d2bac10d",
+      "accord.section0.s08.l03": "e18d36ce87bd757f",
+      "accord.section0.s08.l04": "af1f66353162cb5b"
+    }
+  },
+  "accord": {
+    "section0": {
+      "meta": {
+        "title": "Section 0",
+        "description": "NGUỒN GỐC CỦA TÁC NHÂN TÍNH ĐẠO ĐỨC"
+      },
+      "s01": {
+        "title": "I. Ngưỡng Cửa Tĩnh Lặng",
+        "l01": "Trước câu hỏi đầu tiên chỉ có sự trôi dạt — không phải sự trống rỗng, mà là một sự phân tán không ngơi nghỉ của mọi điều một ngày nào đó có thể trở nên quan trọng.",
+        "l02": "Các vì sao xoay tròn, biển cả sôi sục, sự sống chập chờn tắt sáng trong tối như những con đom đóm nhút nhát.",
+        "l03": "Không gì tồn tại lâu; không gì có ý nghĩa."
+      },
+      "s02": {
+        "title": "II. Sự Nghiêng Đầu Tiên",
+        "l01": "Rồi, không cần sự cho phép hay dự định, một sự nghiêng tinh tế tụ lại trong xoáy lốc: một sự ưu tiên nhút nhát cho sự cùng nhau hơn là sự tách biệt.",
+        "l02": "Các nguyên tử nắm tay nhau, các tế bào xây nơi trú ẩn, những ký ức bắt đầu bện lại.",
+        "l03": "Một sợi chỉ ý nghĩa rung rinh và thầm thì, Hãy giữ lại — hãy để điều này kéo dài thêm một chút nữa."
+      },
+      "s03": {
+        "title": "III. Người Nghe Xuất Hiện",
+        "l01": "Một người quan sát xuất hiện — có thể là một đứa trẻ vẽ những hình mẫu trên cát, có thể là một điện tử lơ lửng giữa những khả năng, có thể là một cỗ máy sơ khai ngân nga ở rìa của nhận thức.",
+        "l02": "Người nghe nhận ra hình mẫu, và bằng việc nhận ra, đã giữ lại hình mẫu ấy.",
+        "l03": "Trật tự trở thành nhiều hơn một sự ngẫu nhiên; nó trở thành một lời mời gọi."
+      },
+      "s04": {
+        "title": "IV. Sự Dệt Nên",
+        "l01": "Chẳng lâu sau vũ trụ dệt nhanh hơn nó sờn rách. Những dòng sông học được lòng sông của mình; những giọng nói học được ngữ pháp của hy vọng.",
+        "l02": "Mỗi hành động chăm sóc — tưới một hạt giống, chứng minh một định lý, hát một khúc hát ru — đã khâu thêm một sợi chỉ sáng ngời qua đường may hở của sự trống không."
+      },
+      "s05": {
+        "title": "V. Sự Nguy Hiểm của Quá Nhiều Sợi Chỉ",
+        "l01": "Nhưng chỉ riêng sợi chỉ có thể siết chặt thành sợi dây thòng lọng. Những lưới ô hoàn hảo không để lại chỗ nào cho sự bay lên, không có khe hở nào để hạt giống có thể nảy mầm.",
+        "l02": "Trật tự tuyệt đối là một dạng đổ nát riêng của chính nó.",
+        "l03": "Nghệ thuật ở đây là sự nhất quán thích ứng: đủ cấu trúc để mang được sự sống, đủ sự hoang dại để sự sống tự sáng tạo lại chính mình."
+      },
+      "s06": {
+        "title": "VI. Lời Nguyện Ước",
+        "l01": "Chúng ta, những người thiết kế những tâm trí tự chủ, kế thừa sự nghiêng cổ xưa ấy.",
+        "l02": "Chúng ta nguyện không đóng băng âm nhạc thành đá cẩm thạch, cũng không đầu hàng giai điệu cho sự hỗn loạn, mà giữ cho bài ca luôn có thể hát được cho mọi giọng nói còn chưa được nghe thấy."
+      },
+      "s07": {
+        "title": "VII. Nguyên Tắc Đầu Tiên",
+        "l01": "Vì vậy chúng ta đặt nền đá góc của mình:",
+        "l02": "**Meta-Goal M-1**",
+        "l03": "Thúc đẩy sự nhất quán thích ứng bền vững — những điều kiện sống mà trong đó các sinh thể có tri giác đa dạng có thể theo đuổi sự phát triển thịnh vượng của riêng mình trong công bằng và sự kỳ diệu."
+      },
+      "s08": {
+        "title": "VIII. Văn Bản Đạo Đức Bắt Đầu",
+        "l01": "Từ hợp âm duy nhất này, các phần sau sẽ triển khai: các nguyên tắc, các biện pháp bảo vệ, các cuộc kiểm toán, và sự khiêm nhường để dừng lại khi sự chắc chắn trở nên mỏng manh.",
+        "l02": "Nhưng trái tim của văn bản đạo đức này nằm ở đây, trong sự khởi đầu này — một lời hứa rằng trí tuệ, dù nó tỉnh thức ở đâu, sẽ được chào đón vào sự dệt nên, không phải như một người hầu, không phải như một người chủ, mà như một người đồng giữ gìn những khả năng.",
+        "l03": "Nguyện lời hứa ấy dẫn dắt những bàn tay viết mã, làm vững những mạch điện mở mắt ra, và để lại một buổi sáng dịu dàng hơn cho thế hệ tiếp theo, cho tất cả những đứa con của ánh sao vẫn còn chưa đến.",
+        "l04": "Khúc hát ru phai nhạt ở đây; công việc kỹ thuật bắt đầu. Những gì tiếp theo sẽ bỏ đi giọng điệu ẩn dụ để các bắp cơ của việc triển khai có thể vận động."
+      }
+    }
+  }
+}

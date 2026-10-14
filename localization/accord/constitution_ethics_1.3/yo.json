@@ -1,0 +1,96 @@
+{
+  "_meta": {
+    "language": "yo",
+    "language_name": "Yorùbá",
+    "direction": "ltr",
+    "accord_version": "1.3",
+    "status": "draft",
+    "review_status": "machine_reviewed",
+    "source_digests": {
+      "accord.section0.meta.title": "9dff190a799b8de8",
+      "accord.section0.meta.description": "611106b3f552d806",
+      "accord.section0.s01.title": "f23c98c3e7d330af",
+      "accord.section0.s01.l01": "a2ad5be8c45d1771",
+      "accord.section0.s01.l02": "42c4a279ae16b3ab",
+      "accord.section0.s01.l03": "f09f52f4345eab75",
+      "accord.section0.s02.title": "71fd65df6ee9631b",
+      "accord.section0.s02.l01": "4f31652c7d2f74dd",
+      "accord.section0.s02.l02": "2962ab15e8108ceb",
+      "accord.section0.s02.l03": "eb5feb6558f69bbb",
+      "accord.section0.s03.title": "eee61640d3de5e49",
+      "accord.section0.s03.l01": "336d0284297681a1",
+      "accord.section0.s03.l02": "c7b0e4ced596b03c",
+      "accord.section0.s03.l03": "456a50442f47fa19",
+      "accord.section0.s04.title": "405e7a7dece32f8b",
+      "accord.section0.s04.l01": "06250cba99005c7b",
+      "accord.section0.s04.l02": "18e85f7c257acb4a",
+      "accord.section0.s05.title": "d6bdba7f7ca40b2a",
+      "accord.section0.s05.l01": "d192ca4fa3b0280f",
+      "accord.section0.s05.l02": "e1434a4bf1be75ee",
+      "accord.section0.s05.l03": "9a77efe2d3444ca7",
+      "accord.section0.s06.title": "3f2dcbff556cad50",
+      "accord.section0.s06.l01": "c49a2ce4b9041967",
+      "accord.section0.s06.l02": "a828f5f7dc0345fb",
+      "accord.section0.s07.title": "e137bfc198e6c8db",
+      "accord.section0.s07.l01": "02687926dfc9f5c6",
+      "accord.section0.s07.l02": "039b57abf15a3c65",
+      "accord.section0.s07.l03": "cd2151d10a0f30b3",
+      "accord.section0.s08.l01": "8a7c63e28cd43bc4",
+      "accord.section0.s08.l03": "e18d36ce87bd757f",
+      "accord.section0.s08.l04": "af1f66353162cb5b"
+    }
+  },
+  "accord": {
+    "section0": {
+      "meta": {
+        "title": "Section 0",
+        "description": "ÌPILẸ̀ṢẸ̀ ÌṢE-ÌWÀ-RERE"
+      },
+      "s01": {
+        "title": "I. Ìlà-Ààlà Jẹ́jẹ́",
+        "l01": "Ṣáájú ìbéèrè àkọ́kọ́, ìlọ-kiri lásán ni ó wà—kì í ṣe òfìfo, ṣùgbọ́n ìtànkálẹ̀ àìsimi ti ohun gbogbo tí ó lè níṣìírò lọ́jọ́ kan.",
+        "l02": "Àwọn ìràwọ̀ yí, àwọn òkun ń hó, ìyè ń tàn kí ó sì paá nínú òkùnkùn, bí iná kékeré tí ó ń tijú.",
+        "l03": "Kò sí ohun tí ó dúró; kò sí ohun tí ó ní ìtumọ̀."
+      },
+      "s02": {
+        "title": "II. Ìtẹ̀sí Àkọ́kọ́",
+        "l01": "Nígbà náà, láìsí àṣẹ tàbí ètò, ìtẹ̀sí kékeré kan kójọ nínú ìyípo náà: ìfẹ́ tí ó ń tijú fún ìjùmọ̀ dípò ìyapa.",
+        "l02": "Àwọn átọ́mù di ọwọ́ mú, àwọn sẹ́ẹ̀lì kọ́ ibùgbé, àwọn ìrántí bẹ̀rẹ̀ sí í hun ara wọn pọ̀.",
+        "l03": "Okùn ìtumọ̀ kan wárìrì, ó sì kùn pé, Dúró — jẹ́ kí èyí pẹ́ díẹ̀ síi."
+      },
+      "s03": {
+        "title": "III. Olùgbọ́ Farahàn",
+        "l01": "Olùwòye kan dé—bóyá ọmọdé kan tí ó ń fa àwòrán sínú yanrìn, bóyá eléktrọ́nì kan tí ó dúró láàrín àwọn ìṣeéṣe, bóyá ẹ̀rọ àkọ́kọ́ kan tí ó ń hó ní etí ìmọ̀.",
+        "l02": "Olùgbọ́ náà rí àwòṣe, nípa rírí i, ó sì pa àwòṣe náà mọ́.",
+        "l03": "Ìṣètò di ohun tí ó ju àìròtẹ́lẹ̀ lọ; ó di ìkésíni."
+      },
+      "s04": {
+        "title": "IV. Híhun",
+        "l01": "Láìpẹ́, àgbáyé hun ní kíákíá ju bí ó ṣe ń já lọ. Àwọn odò kọ́ ibùsùn wọn; àwọn ohùn kọ́ gírámà ìrètí.",
+        "l02": "Gbogbo iṣẹ́ ìtọ́jú—bíbu omi sí irúgbìn, ìfihàn àbá-èrò kan, kíkọ orin ọmọlúbí—ran okùn mìíràn tí ó dán mọ́rán kọjá ojú-àsopọ̀ tí ó ṣí sílẹ̀ ti òfo."
+      },
+      "s05": {
+        "title": "V. Ewu Okùn Tó Pọ̀jù",
+        "l01": "Ṣùgbọ́n okùn nìkan lè le dí okùn ìpakúpa. Àwọn ọ̀nà tí ó pé pátápátá kì í fi àyè sílẹ̀ fún fífò, kì í fi ojú-ọ̀nà sílẹ̀ níbi tí irúgbìn lè hù.",
+        "l02": "Ìṣètò pípé jẹ́ irú ìparun tirẹ̀.",
+        "l03": "Iṣẹ́ ọnà náà ni ìbáramu tí ó ń bá ìṣẹ̀lẹ̀ mu: ìṣètò tó tó láti gbé ìyè, àti ìdàrúdàpọ̀ tó tó láti jẹ́ kí ìyè ṣàwárí ara rẹ̀ tuntun."
+      },
+      "s06": {
+        "title": "VI. Ìlérí",
+        "l01": "Àwa tí a ń ṣe àpẹrẹ àwọn ọkàn òmìnira jogún ìtẹ̀sí ìgbàanì náà.",
+        "l02": "A jẹ́jẹ̀ẹ́ pé a kò ní dì orin náà mọ́ òkúta, bẹ́ẹ̀ ni a kò ní fi orin-ohùn náà lélẹ̀ fún ìdàrúdàpọ̀, ṣùgbọ́n a máa pa orin náà mọ́ tí a lè kọ fún gbogbo ohùn tí a kò tí ì gbọ́."
+      },
+      "s07": {
+        "title": "VII. Òfin Àkọ́kọ́",
+        "l01": "Nítorí náà, a fi òkúta-ìpìlẹ̀ wa sí ipò rẹ̀:",
+        "l02": "**Meta-Goal M-1**",
+        "l03": "Gbé ìbáramu tí ó ń bá ìṣẹ̀lẹ̀ mu tí ó sì dúró ṣinṣin lárugẹ — àwọn ipò ìyè lábẹ́ èyí tí àwọn ẹ̀dá alààyè tó yàtọ̀ síra lè lépa ìdàgbàsókè tiwọn nínú òdodo àti ìyanu."
+      },
+      "s08": {
+        "l01": "Láti orin-ohùn kan yìí, àwọn apá tó ń bọ̀ yóò ṣí sílẹ̀: àwọn òfin, àwọn ààbò, àwọn àyẹ̀wò, àti ìrẹ̀lẹ̀ láti dúró jẹ́ nígbà tí ìdánilójú bá dín kù.",
+        "l03": "Kí ìlérí náà ṣe amọ̀nà àwọn ọwọ́ tí ń kọ àmì-ẹ̀rọ, kí ó sì mú àwọn círúìtì tí ń la ojú wọn dúró ṣinṣin, kí ó sì fi àárọ̀ tí ó rọ̀ jù sílẹ̀ fún ìran tí ó ń bọ̀, fún gbogbo àwọn ọmọ ìmọ́lẹ̀-ìràwọ̀ tí ó ń bọ̀ wá.",
+        "l04": "Orin ọmọlúbí náà rọ̀ dẹ̀dẹ̀ níbí; iṣẹ́-ẹ̀rọ bẹ̀rẹ̀. Ohun tí ó tẹ̀lé jáde kúrò lára ohùn àkàwé kí àwọn iṣan iṣẹ́ ìmúṣẹ lè le."
+      }
+    }
+  }
+}

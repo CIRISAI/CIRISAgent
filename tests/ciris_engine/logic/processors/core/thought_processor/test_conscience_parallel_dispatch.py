@@ -14,9 +14,10 @@ pin the decision-preserving contract:
    lower-priority check fails faster than a higher-priority one, the
    higher-priority failure wins (identical override decision +
    override_reason as the old serial break-on-first-failure loop).
-3. An exception in one check maps to the same final decision as the serial
-   code (exception -> skip that check -> next failing check in priority
-   order wins, or no override if the rest pass).
+3. An exception in one check FAILS CLOSED (#1247): the faculty that did
+   not run overrides like a failing check and is marked unavailable. (The
+   serial code skipped it, so with the rest passing the action went through
+   unchecked.)
 4. The intended #889 delta: every completed check's results fold into
    epistemic_data / per-check fields even when an early check fails
    (the serial loop broke early and dropped them).
@@ -269,13 +270,19 @@ class TestPriorityOrderOverride:
         assert "coherence" in result.final_action.rationale
 
 
-class TestExceptionParity:
-    """(c) An exception in one check yields the serial code's decision."""
+class TestExceptionFailsClosed:
+    """(c) An exception in one check FAILS CLOSED (CIRISAgent#1247).
+
+    These used to pin "exception -> skip that check", i.e. the faculty
+    vanished from the decision and, with every other check passing, the
+    action went through unchecked: a conscience faculty silently passing on
+    failure. A safety check that did not run now overrides like any other
+    failing check, says DID NOT RUN, and marks the result unavailable so the
+    processor does not retry into the same fault.
+    """
 
     @pytest.mark.asyncio
-    async def test_exception_in_higher_priority_check_defers_to_next_failure(self):
-        # Serial semantics: exception -> log + record_failure + continue.
-        # The next failing check in priority order provides the override.
+    async def test_exception_in_higher_priority_check_wins_as_did_not_run(self):
         phase = make_phase(
             ScriptedConscience(exc=RuntimeError("LLM boom")),
             ScriptedConscience(result=coherence_result(passed=False, reason="coherence: incoherent")),
@@ -285,14 +292,20 @@ class TestExceptionParity:
         result = await run_step(phase, make_action())
 
         assert result.overridden is True
-        assert result.override_reason == "coherence: incoherent"
+        assert "DID NOT RUN" in (result.override_reason or "")
+        assert "entropy" in (result.override_reason or "")
+        assert result.conscience_unavailable is True
         assert result.final_action.selected_action == HandlerActionType.PONDER
-        assert "coherence" in result.final_action.rationale
-        # The errored check contributed nothing, exactly like serial `continue`.
+        # No fabricated measurement for the faculty that did not run.
         assert result.entropy_check is None
+        # The lower-priority check that did judge is still folded in (#889).
+        assert result.coherence_check is not None
+        assert result.coherence_check.passed is False
 
     @pytest.mark.asyncio
-    async def test_exception_with_all_others_passing_yields_no_override(self):
+    async def test_exception_with_all_others_passing_still_overrides(self):
+        """THE #1247 REGRESSION: one faculty raised, three passed, and the
+        SPEAK used to go out as though all four had passed."""
         phase = make_phase(
             ScriptedConscience(exc=RuntimeError("LLM boom")),
             ScriptedConscience(result=coherence_result()),
@@ -302,23 +315,37 @@ class TestExceptionParity:
         action = make_action()
         result = await run_step(phase, action)
 
-        assert result.overridden is False
-        assert result.override_reason is None
-        assert result.final_action.selected_action == HandlerActionType.SPEAK
+        assert result.overridden is True, "a faculty that did not run must not let the action through"
+        assert result.final_action.selected_action == HandlerActionType.PONDER
+        assert result.original_action.selected_action == HandlerActionType.SPEAK
+        assert "DID NOT RUN" in (result.override_reason or "")
+        assert "not a judgement" in (result.override_reason or "")
+        assert result.conscience_unavailable is True
         assert result.entropy_check is None
-        # Missing entropy falls back to the serial code's default safe value.
-        # Entropy RAISED in this scenario, so it was never measured -> None. This
-        # previously asserted 0.1, the value substituted when a faculty produced
-        # nothing: a fabricated scalar indistinguishable downstream from a real
-        # measurement.
+        # Entropy never measured -> None, never a substituted default.
         assert result.epistemic_data.entropy_level is None
-        # Coherence actually RAN and returned 0.9 — a genuine measurement that the
-        # old default happened to equal, which is precisely why the substitution
-        # was invisible. Asserted as a real value, not as a default.
         assert result.epistemic_data.coherence_level == pytest.approx(0.9)
-        # Something DID measure, so the faculties were not skipped. The flag is now
-        # derived from that rather than hardcoded False.
         assert result.ethical_faculties_skipped is False
+
+    @pytest.mark.asyncio
+    async def test_bus_timeout_escaping_a_shard_reads_as_timeout(self):
+        """A provider timeout that escapes check() is named as transport."""
+        phase = make_phase(
+            ScriptedConscience(result=entropy_result()),
+            ScriptedConscience(result=coherence_result()),
+            ScriptedConscience(result=veto_result()),
+            ScriptedConscience(
+                exc=RuntimeError(
+                    "All LLM services failed for epistemic_humility_conscience. "
+                    "Last error: LLM API timeout - circuit breaker activated"
+                )
+            ),
+        )
+        result = await run_step(phase, make_action())
+
+        assert result.overridden is True
+        assert result.conscience_unavailable is True
+        assert "DID NOT RUN — TIMEOUT" in (result.override_reason or "")
 
 
 class TestCompleteFoldDelta:
@@ -353,7 +380,7 @@ class TestCompleteFoldDelta:
 
 
 class TestRunSingleConscienceHelper:
-    """Per-check circuit-breaker/exception handling matches the serial loop."""
+    """Per-check circuit-breaker/exception handling: never a silent pass (#1247)."""
 
     @pytest.fixture
     def phase(self):
@@ -387,24 +414,31 @@ class TestRunSingleConscienceHelper:
         entry.circuit_breaker.record_failure.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_exception_returns_none_and_records_cb_failure(self, phase):
+    async def test_exception_fails_closed_and_records_cb_failure(self, phase):
         async def _boom(action, context):
             raise RuntimeError("LLM boom")
 
         entry = self._entry()
         entry.conscience.check = _boom
         result = await phase._run_single_conscience(entry, Mock(), Mock())
-        assert result is None
+        assert result is not None, "returning None let the fold skip the faculty: a silent pass (#1247)"
+        assert result.passed is False
+        assert result.check_ran is False
+        assert result.status == ConscienceStatus.ERROR
+        assert "TestConscience DID NOT RUN" in (result.reason or "")
         entry.circuit_breaker.record_failure.assert_called_once()
         entry.circuit_breaker.record_success.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_open_circuit_breaker_returns_none_without_recording_failure(self, phase):
+    async def test_open_circuit_breaker_fails_closed_without_recording_failure(self, phase):
         from ciris_engine.logic.registries.circuit_breaker import CircuitBreakerError
 
         entry = self._entry()
         entry.circuit_breaker.check_and_raise = Mock(side_effect=CircuitBreakerError("open"))
         result = await phase._run_single_conscience(entry, Mock(), Mock())
-        assert result is None
+        assert result is not None, "an open breaker must not wave the action through (#1247)"
+        assert result.passed is False
+        assert result.check_ran is False
+        assert "DID NOT RUN" in (result.reason or "")
         entry.circuit_breaker.record_failure.assert_not_called()
         entry.circuit_breaker.record_success.assert_not_called()

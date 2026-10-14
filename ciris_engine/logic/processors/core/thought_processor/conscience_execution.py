@@ -230,9 +230,9 @@ class ConscienceExecutionPhase:
         )
 
         for entry, result in zip(entries, check_results):
-            if result is None:
-                # Circuit breaker open or check errored (already logged in helper).
-                continue
+            # No `None` skip here (#1247): _run_single_conscience always
+            # returns a result, and a faculty that could not run comes back
+            # as a fail-closed DID-NOT-RUN result, never as an absence.
             conscience_checks_ran += 1
 
             # Aggregate epistemic metrics from conscience results
@@ -457,17 +457,29 @@ class ConscienceExecutionPhase:
             resource_usage=None,
         )
 
-    async def _run_single_conscience(
-        self, entry: Any, action: ActionSelectionDMAResult, context: Any
-    ) -> Optional[Any]:
+    async def _run_single_conscience(self, entry: Any, action: ActionSelectionDMAResult, context: Any) -> Any:
         """Run one conscience.check() with circuit-breaker handling.
 
-        Returns the check result, or ``None`` if the circuit breaker is open
-        or the check errored (both already logged). Used to dispatch the
-        epistemic consciences CONCURRENTLY via ``asyncio.gather`` (issue #889)
-        — the override precedence is applied by the caller, which processes
-        results in priority order.
+        Used to dispatch the epistemic consciences CONCURRENTLY via
+        ``asyncio.gather`` (issue #889) — the override precedence is applied by
+        the caller, which processes results in priority order.
+
+        NEVER returns a silent pass (CIRISAgent#1247). This used to return
+        ``None`` when the circuit breaker was open or ``check()`` raised, and
+        the fold skips ``None`` -- so a faculty that could not run simply
+        vanished from the decision and the action went through as if it had
+        passed. A safety check that did not run fails CLOSED: the result is
+        the same DID-NOT-RUN shape the shards themselves return
+        (``passed=False, check_ran=False``), so the action is overridden, the
+        processor does not retry into the same fault, and the trace says the
+        check did not run rather than reading as a judgement.
         """
+        from ciris_engine.logic.conscience.transport import (
+            is_transport_failure,
+            unavailable_result,
+            unusable_answer_result,
+        )
+
         conscience = entry.conscience
         cb = entry.circuit_breaker
         try:
@@ -478,13 +490,15 @@ class ConscienceExecutionPhase:
                 cb.record_success()
             return result
         except CircuitBreakerError as e:
-            logger.warning(f"conscience {entry.name} unavailable: {e}")
-            return None
+            logger.warning(f"conscience {entry.name} unavailable (circuit open), failing closed: {e}")
+            return unavailable_result(entry.name, e)
         except Exception as e:  # noqa: BLE001
-            logger.error(f"conscience {entry.name} error: {e}", exc_info=True)
+            logger.error(f"conscience {entry.name} error, failing closed: {e}", exc_info=True)
             if cb:
                 cb.record_failure()
-            return None
+            if is_transport_failure(e):
+                return unavailable_result(entry.name, e)
+            return unusable_answer_result(entry.name, e)
 
     async def _check_single_bypass_conscience(
         self, entry: Any, current_action: ActionSelectionDMAResult, context: Any

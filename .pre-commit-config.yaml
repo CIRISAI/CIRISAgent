@@ -35,6 +35,9 @@ repos:
         # Never fail, just fix
         always_run: true
         fail_fast: false
+        # Vendored byte-identical from CIRISClient (localization/vendored.json):
+        # reformatting them is a silent fork the vendoring check then rejects.
+        exclude: '^localization/((localize|glossary|review_only)\.py|drive\.sh|TRANSLATION_GUIDE\.md|glossaries/.*|upstream/.*)$'
 
   - repo: https://github.com/PyCQA/isort
     rev: 5.13.2
@@ -44,15 +47,27 @@ repos:
         # Never fail, just fix
         always_run: true
         fail_fast: false
+        # Vendored byte-identical from CIRISClient (localization/vendored.json):
+        # reformatting them is a silent fork the vendoring check then rejects.
+        exclude: '^localization/((localize|glossary|review_only)\.py|drive\.sh|TRANSLATION_GUIDE\.md|glossaries/.*|upstream/.*)$'
 
   # Basic hygiene - Always fix
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.6.0
     hooks:
       - id: trailing-whitespace
+        # Vendored byte-identical from CIRISClient (localization/vendored.json):
+        # reformatting them is a silent fork the vendoring check then rejects.
+        exclude: '^localization/((localize|glossary|review_only)\.py|drive\.sh|TRANSLATION_GUIDE\.md|glossaries/.*|upstream/.*)$'
       - id: end-of-file-fixer
+        # Vendored byte-identical from CIRISClient (localization/vendored.json):
+        # reformatting them is a silent fork the vendoring check then rejects.
+        exclude: '^localization/((localize|glossary|review_only)\.py|drive\.sh|TRANSLATION_GUIDE\.md|glossaries/.*|upstream/.*)$'
       - id: mixed-line-ending
         args: ['--fix=lf']
+        # Vendored byte-identical from CIRISClient (localization/vendored.json):
+        # reformatting them is a silent fork the vendoring check then rejects.
+        exclude: '^localization/((localize|glossary|review_only)\.py|drive\.sh|TRANSLATION_GUIDE\.md|glossaries/.*|upstream/.*)$'
       # Critical checks that should block
       - id: check-merge-conflict
       - id: detect-private-key
@@ -167,6 +182,19 @@ repos:
         # shell ships as assets; `client/shared/**/*.kt` no longer exists, and a
         # pattern that can never match reads as coverage it does not provide.
         files: '^(ciris_engine/data/localized/.*\.json|apps/android/src/main/assets/localization/.*\.json)$'
+        always_run: false
+        stages: [pre-commit]
+        verbose: true
+
+      # Vendored CIRISClient localization pipeline - BLOCKING. A vendored file
+      # that differs from the digest localization/vendored.json records is a
+      # fork nobody declared; re-vendor it or record the edit as a patch.
+      - id: localize-vendoring
+        name: Vendored localize pipeline matches its record
+        entry: python tools/dev/check_localize_vendoring.py
+        language: python
+        pass_filenames: false
+        files: '^(localization/.*|tools/dev/check_localize_vendoring\.py)$'
         always_run: false
         stages: [pre-commit]
         verbose: true

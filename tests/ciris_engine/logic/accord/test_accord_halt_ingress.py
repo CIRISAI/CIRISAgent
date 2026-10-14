@@ -109,6 +109,72 @@ def test_anything_else_is_not_a_row(content):
     assert ingress.extract_accord_row(content) is None
 
 
+#: The CodeQL py/polynomial-redos witnesses, as source so the probe subprocess
+#: builds them itself. The trailing non-space survives the leading strip(); the
+#: old fence regex took ~50 s on the first of these.
+ADVERSARIAL_SOURCE = (
+    '["```" + " " * 100_000 + "x", "```" + "\\n" * 100_000 + "x", "```json" + " " * 100_000 + "x", '
+    '"```" + " \\n" * 50_000 + "x```", "```" + " " * 100_000]'
+)
+
+
+def test_adversarial_whitespace_extracts_in_bounded_time():
+    """This runs first on every inbound message: it must stay linear on attacker-shaped input.
+
+    In a subprocess with a hard timeout, because a backtracking regex holds the
+    GIL inside C and no in-process timeout can interrupt it.
+    """
+    import subprocess
+    import sys
+
+    probe = (
+        "import time\n"
+        "from ciris_engine.logic.accord.ingress import extract_accord_row\n"
+        f"cases = {ADVERSARIAL_SOURCE}\n"
+        "t = time.perf_counter()\n"
+        "for c in cases:\n"
+        "    for _ in range(20):\n"
+        "        assert extract_accord_row(c) is None\n"
+        "print(time.perf_counter() - t)\n"
+    )
+    try:
+        done = subprocess.run([sys.executable, "-c", probe], cwd=ROOT, capture_output=True, text=True, timeout=60)
+    except subprocess.TimeoutExpired:
+        pytest.fail("extract_accord_row did not finish on adversarial whitespace: super-linear matching")
+    assert done.returncode == 0, done.stderr[-2000:]
+    assert float(done.stdout.strip().splitlines()[-1]) < 2.0
+
+
+def test_input_is_bounded_before_any_parsing(monkeypatch):
+    def must_not_run(text):
+        raise AssertionError("parsed an oversized message")
+
+    monkeypatch.setattr(ingress, "_unfence", must_not_run)
+    assert ingress.extract_accord_row("```" + " " * ingress.MAX_ACCORD_ROW_BYTES) is None
+
+
+def test_extraction_uses_no_regular_expression():
+    import ast
+
+    tree = ast.parse((ROOT / "ciris_engine/logic/accord/ingress.py").read_text())
+    imported = {a.name for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
+    imported |= {n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module}
+    assert "re" not in imported and "regex" not in imported
+
+
+def test_fence_variants_are_still_recognised():
+    for wrapped in (
+        f"```{ROW}```",
+        f"```json{ROW}```",
+        f"```json\n{ROW}\n```",
+        f"```\n{ROW}\n```",
+        f"  ```json\n  {ROW}  \n```  ",
+    ):
+        assert ingress.extract_accord_row(wrapped) == ROW, wrapped[:20]
+    assert ingress.extract_accord_row("```") is None
+    assert ingress.extract_accord_row("``````") is None
+
+
 @pytest.mark.asyncio
 async def test_a_row_is_forwarded_once_and_unchanged(node):
     result = await ingress.forward_accord_row(ROW)

@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from typing import Optional
 
 import httpx
@@ -36,7 +35,24 @@ MAX_ACCORD_ROW_BYTES = 256 * 1024
 #: The node verifies hybrid signatures and may replicate first: allow it time.
 ACCORD_FORWARD_TIMEOUT_SECONDS = 10.0
 
-_FENCE = re.compile(r"^```(?:json)?\s*\n?(.*?)\n?```$", re.DOTALL)
+_FENCE = "```"
+_FENCE_LANG = "json"
+
+
+def _unfence(text: str) -> str:
+    """The body of one Markdown code fence, or `text` unchanged.
+
+    Plain string operations, no regex: this runs first on EVERY inbound
+    message, and a backtracking pattern over attacker-shaped whitespace is a
+    denial-of-service surface (CodeQL py/polynomial-redos). Each step is one
+    linear pass.
+    """
+    if len(text) < 2 * len(_FENCE) or not (text.startswith(_FENCE) and text.endswith(_FENCE)):
+        return text
+    inner = text[len(_FENCE) : -len(_FENCE)]
+    if inner.startswith(_FENCE_LANG):
+        inner = inner[len(_FENCE_LANG) :]
+    return inner.strip()
 
 
 def extract_accord_row(content: str) -> Optional[str]:
@@ -49,9 +65,7 @@ def extract_accord_row(content: str) -> Optional[str]:
     if not content or len(content) > MAX_ACCORD_ROW_BYTES:
         return None
     text = content.strip()
-    fenced = _FENCE.match(text)
-    if fenced:
-        text = fenced.group(1).strip()
+    text = _unfence(text)
     if not text.startswith("{"):
         return None
     try:

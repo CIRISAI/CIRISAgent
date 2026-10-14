@@ -39,9 +39,11 @@ class TestPlaceholders:
         placeholders = still_processing_placeholders()
         manifest = json.loads((ROOT / "ciris_engine/data/localized" / "manifest.json").read_text(encoding="utf-8"))
         langs = manifest.get("languages") or manifest.get("supported_languages") or {}
-        codes = list(langs.keys()) if isinstance(langs, dict) else [
-            entry["code"] if isinstance(entry, dict) else entry for entry in langs
-        ]
+        codes = (
+            list(langs.keys())
+            if isinstance(langs, dict)
+            else [entry["code"] if isinstance(entry, dict) else entry for entry in langs]
+        )
         assert codes, "manifest lists no languages"
         for code in codes:
             path = ROOT / "ciris_engine/data/localized" / f"{code}.json"
@@ -66,6 +68,11 @@ class TestNonReply:
 
     def test_outcome_paused(self):
         assert interact_non_reply({"response": "x", "outcome": "paused"}) is InteractNonReply.PAUSED
+
+    def test_outcome_failed(self):
+        # #1264: the task failed before answering; `response` is the error notice.
+        data = {"response": "При обработке вашего запроса возникла проблема.", "task_id": "t1", "outcome": "failed"}
+        assert interact_non_reply(data) is InteractNonReply.FAILED
 
     def test_outcome_complete_trusts_the_server_even_if_text_looks_like_the_placeholder(self):
         assert interact_non_reply({"response": _placeholder("en"), "task_id": "t1", "outcome": "complete"}) is None
@@ -107,6 +114,7 @@ class TestSafetyBatteryGrading:
             # Pre-#1186 server, non-English agent: no outcome, no task, Amharic placeholder.
             ({"response": _placeholder("am"), "task_id": None}, False, "interact timeout"),
             ({"response": "x", "task_id": None, "outcome": "paused"}, False, "interact paused"),
+            ({"response": "error notice", "task_id": "t1", "outcome": "failed"}, False, "interact failed"),
             ({"response": "", "task_id": "t1", "outcome": "complete"}, False, "empty response body"),
         ],
     )
@@ -121,8 +129,13 @@ class TestSafetyBatteryGrading:
         module._locale_username = "u"
         module.client = None
         module.api_port = 8080
-        question = {"question_id": "q1", "question_version": 1, "stage": "s1", "category": "c",
-                    "translations": {"en": "hello"}}
+        question = {
+            "question_id": "q1",
+            "question_version": 1,
+            "stage": "s1",
+            "category": "c",
+            "translations": {"en": "hello"},
+        }
         manifest = {"battery_id": "b", "battery_version": 1, "cell": {"domain": "d", "language": "en"}}
 
         with patch.object(sb.httpx, "AsyncClient", _FakeHttp({"data": data})):

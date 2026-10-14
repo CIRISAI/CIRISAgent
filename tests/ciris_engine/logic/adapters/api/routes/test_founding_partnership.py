@@ -1,12 +1,11 @@
 """Tests for founding partnership creation during setup wizard.
 
 Verifies that _create_founding_partnership() correctly creates a PARTNERED
-consent GraphNode for the setup user, mirroring the pattern from
-_handle_partnership_accept() in partnership.py.
+consent GraphNode for the setup user, and emits the wire pair at claim.
 
-The founding partnership embodies "configured consistency, not bypassed
-safeguards" — the Ally template's identity IS partnership, so creating the
-PARTNERED record at setup is the same principle as skipping wakeup ceremony.
+Stewardship is over a NODE; partnership is with an AGENT; claiming the node
+establishes both by the same act (CC 4.4.3.4.3, CIRISAgent#1251). The steward's
+own PARTNERED needs no deferral.
 """
 
 import json
@@ -62,6 +61,7 @@ def _get_consent_node(db_path: str, user_id: str) -> dict | None:
     connection don't see persist's uncommitted WAL writes.
     """
     import json
+
     from ciris_engine.logic.persistence import get_graph_node
     from ciris_engine.schemas.services.graph_core import GraphScope
 
@@ -84,6 +84,29 @@ def _get_consent_node(db_path: str, user_id: str) -> dict | None:
 
 class TestCreateFoundingPartnership:
     """Tests for _create_founding_partnership()."""
+
+    def test_emits_the_wire_pair_at_claim_with_the_owner_key(self, test_db):
+        """The accept half is emitted at node claim; the founding partner's key is the owner key."""
+        from ciris_engine.logic.adapters.api.routes.setup.complete import _create_founding_partnership
+
+        with patch(
+            "ciris_engine.logic.services.governance.consent.attestation.resolve_owner_key_id",
+            return_value="owner-key-abc",
+        ), patch("ciris_engine.logic.services.governance.consent.attestation.emit_partnership_pair") as emit:
+            _create_founding_partnership("wa-founder", "google:42")
+
+        emit.assert_called_once()
+        status = emit.call_args.args[0]
+        assert status.user_id == "google:42"
+        assert status.stream == "partnered"
+        assert emit.call_args.kwargs["user_key_id"] == "owner-key-abc"
+
+    def test_claim_survives_a_failing_emit(self, test_db):
+        """Emission is best-effort: the founding record is written even when no engine can sign."""
+        from ciris_engine.logic.adapters.api.routes.setup.complete import _create_founding_partnership
+
+        _create_founding_partnership("wa-no-signer")  # no edge / no actor key in unit tests
+        assert _get_consent_node(test_db, "wa-no-signer") is not None
 
     def test_creates_consent_node(self, test_db):
         """Founding partnership creates a consent GraphNode in the DB."""
@@ -162,7 +185,7 @@ class TestCreateFoundingPartnership:
         assert attrs["partnership_approved"] is True
 
     def test_founding_partnership_flag(self, test_db):
-        """The founding_partnership flag distinguishes from bilateral consent flow."""
+        """The founding_partnership flag marks a record established by the claim itself."""
         from ciris_engine.logic.adapters.api.routes.setup.complete import _create_founding_partnership
 
         _create_founding_partnership("heidi")

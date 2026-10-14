@@ -13,7 +13,7 @@
 4. [Consent Streams](#consent-streams)
 5. [Data Categories](#data-categories)
 6. [Core Operations](#core-operations)
-7. [Bilateral Partnership System](#bilateral-partnership-system)
+7. [Partnership: a data-management record](#partnership-a-data-management-record)
 8. [Decay Protocol](#decay-protocol)
 9. [API Endpoints](#api-endpoints)
 10. [Tool Interface](#tool-interface)
@@ -32,13 +32,14 @@ The CIRIS Consent Service implements the **Consensual Evolution Protocol v0.2**,
 - **No Fake Data**: If consent doesn't exist, the system fails fast rather than assuming permissions
 - **Fail Loud**: Validation errors are explicit and informative
 - **Default Privacy**: TEMPORARY stream with automatic expiration
-- **Bilateral Partnerships**: PARTNERED consent requires agent approval through task system
+- **Partnership is a data choice**: PARTNERED records the user's retention choice (CC 4.4.3.4.3). The agent has no veto; a non-steward user's request goes to the steward through Wisdom-Based Deferral
 
 ### Service Dependencies
 
 ```python
 - TimeService (required)
 - MemoryBus (optional, for graph operations)
+- WiseBus (optional, carries non-steward PARTNERED requests to the steward)
 - AdaptiveFilter (optional, for gaming detection)
 ```
 
@@ -46,18 +47,18 @@ The CIRIS Consent Service implements the **Consensual Evolution Protocol v0.2**,
 
 The protocol defines three consent streams representing different data relationships:
 
-| Stream | Duration | Learning | Identity | Requires Approval |
-|--------|----------|----------|----------|------------------|
-| **TEMPORARY** | 14 days | Limited | Linked | No (default) |
-| **PARTNERED** | Indefinite | Full | Linked | Yes (bilateral) |
-| **ANONYMOUS** | Indefinite | Statistical | Severed | No |
+| Stream | Duration | Learning | Identity | Who decides |
+|--------|----------|----------|----------|-------------|
+| **TEMPORARY** | 14 days | Limited | Linked | The user (default) |
+| **PARTNERED** | Indefinite | Full | Linked | The user if they are the steward; otherwise the steward, via WBD deferral |
+| **ANONYMOUS** | Indefinite | Statistical | Severed | The user |
 
 ### Stream Transitions
 
 ```mermaid
 graph TD
     A[No Consent] --> B[TEMPORARY - 14 days]
-    B --> C[PARTNERED - Requires Agent Approval]
+    B --> C[PARTNERED - Steward: immediate / Other user: deferred to steward]
     B --> D[ANONYMOUS - Immediate]
     C --> B[TEMPORARY - Immediate]
     C --> D[ANONYMOUS - Immediate]
@@ -77,7 +78,8 @@ ConsentService
 ├── ToolService (tool interface)
 ├── Consent Streams (TEMPORARY/PARTNERED/ANONYMOUS)
 ├── Category System (5 categories)
-├── Partnership Utils (bilateral consent)
+├── Partnership (PARTNERED-request deferral to the steward, WBD)
+├── Attestation (consent:stream row + signed partnership_accept half)
 ├── Decay Protocol (GDPR deletion)
 └── Metrics Collection (real data only)
 ```
@@ -119,16 +121,18 @@ request = ConsentRequest(
 )
 ```
 
-### PARTNERED (Bilateral Consent)
+### PARTNERED (Data-Management Record)
 - **Duration**: Indefinite until revoked
 - **Learning**: Full mutual growth and pattern learning
 - **Identity**: Persistent and linked
 - **Use Case**: Users wanting ongoing AI improvement relationship
-- **Approval**: Requires agent consent through task system
+- **Who decides**: the steward's own choice applies directly; any other user's
+  choice is deferred to the steward (see below). The agent does not decide.
 - **Categories**: Configurable, typically `[ESSENTIAL, BEHAVIORAL, PREFERENCE]`
 
 ```python
-# Partnership request (creates agent approval task)
+# A non-steward PARTNERED request is deferred to the steward; the current
+# stream is returned unchanged until the steward answers.
 request = ConsentRequest(
     user_id="user123",
     stream=ConsentStream.PARTNERED,
@@ -210,11 +214,13 @@ async def get_consent(self, user_id: str) -> ConsentStatus:
 async def grant_consent(
     self,
     request: ConsentRequest,
-    channel_id: Optional[str] = None
+    channel_id: Optional[str] = None,
+    *,
+    requester_is_steward: bool = False,
 ) -> ConsentStatus:
     """
-    Grants or updates consent with full validation.
-    Creates audit trail and handles partnership requests.
+    Grants or updates consent with full validation, audit trail and the
+    wire pair. A non-steward PARTNERED request is deferred to the steward.
     """
 ```
 
@@ -242,42 +248,51 @@ async def get_impact_report(self, user_id: str) -> ConsentImpactReport:
     """
 ```
 
-## Bilateral Partnership System
+## Partnership: a data-management record
 
-PARTNERED consent requires explicit approval from the AI agent through the task system:
+CC 4.4.3.4.3 / CC 3.3.1 (CIRISConstitution#168): the partnered pair records the
+user's retention/learning choice. It is not a relationship the agent may refuse;
+an agent below the line has no veto over its steward's or a user's data choices
+(CC 1.13.2). Stewardship is over a NODE; partnership is with an AGENT; claiming
+a node establishes both, by the same act.
 
-### Partnership Request Flow
+### Who decides
 
-1. **User Request**: User requests PARTNERED stream upgrade
-2. **Task Creation**: System creates partnership approval task
-3. **Agent Decision**: Agent can `TASK_COMPLETE`, `REJECT`, or `DEFER`
-4. **Bilateral Consent**: Both parties must agree for partnership
+| Requester | What happens |
+|-----------|--------------|
+| The steward (may resolve deferrals: owner / Wise Authority) | PARTNERED applies directly |
+| Any other user | Deferred to the steward through Wisdom-Based Deferral; stream unchanged until answered |
 
-### Task Integration
+### The WBD route
 
-```python
-# Partnership task creation
-task = Task(
-    task_id=f"partnership_{user_id}_{uuid}",
-    description="Partnership request for mutual learning",
-    priority=5,
-    status=TaskStatus.ACTIVE,
-    context=TaskContext(user_id=user_id, channel_id=channel_id)
-)
-```
-
-### Agent Response Options
-
-- **TASK_COMPLETE**: Accept partnership, upgrade to PARTNERED
-- **REJECT**: Decline partnership with reason
-- **DEFER**: Request more information or delay decision
-
-### Partnership Status Monitoring
+1. `grant_consent` sees a non-steward PARTNERED request and creates a DEFERRED
+   task in the shared namespace (`partnership.build_partnership_deferral_task`).
+2. It sends the deferral through the existing path, `WiseBus.send_deferral`,
+   tagged `consent_request=partnered_stream` in the deferral context.
+3. The steward answers through the ordinary resolve route
+   (`POST /v1/wa/deferrals/{id}/resolve`), which signs and records the decision.
+4. `WiseAuthorityService.resolve_deferral` hands it to
+   `ConsentService.apply_steward_partnership_decision` before marking the
+   deferral resolved. Approval writes PARTNERED and emits the wire pair;
+   refusal writes nothing, so the user keeps their current stream.
 
 ```python
-partnership_status = await consent_service.check_pending_partnership(user_id)
-# Returns: "pending", "accepted", "rejected", "deferred", or None
+status = await consent_service.get_partnership_request_status(user_id)
+# PartnershipRequestStatus.PENDING | PARTNERED | NONE
 ```
+
+### The wire pair
+
+Every stream write (at node claim, and on every stream change) emits:
+
+- the grant half's content: the per-user `consent:stream` row, carrying `bilateral_pair_id`;
+- the accept half: `consent:partnership_accept:v1`, hybrid-signed by this agent
+  occurrence's key (`Engine.emit_attestation_self`) and naming the owner the key's
+  owner-binding resolves to, with the same `bilateral_pair_id`.
+
+The user-signed `consent:partnership_grant:v1` half cannot be produced in-process:
+no user signer is reachable from Python (CIRISServer#342). A keyless user has no
+key to sign with at all; their accept half is still emitted.
 
 ## Decay Protocol
 
@@ -333,7 +348,7 @@ The service exposes RESTful endpoints through `/consent/` prefix:
 |----------|--------|---------|------|
 | `/streams` | GET | Available consent streams | Public |
 | `/categories` | GET | Available data categories | Public |
-| `/partnership/status` | GET | Check partnership request | User |
+| `/partnership/status` | GET | `pending` (with the steward) / `partnered` / `none` | User |
 
 ### Administrative Endpoints
 
@@ -363,21 +378,8 @@ curl -H "Authorization: Bearer $TOKEN" \
 
 ## Tool Interface
 
-The service implements the ToolService protocol with two tools:
-
-### upgrade_relationship
-- **Purpose**: Request PARTNERED consent upgrade
-- **Parameters**: `user_id`, `reason` (optional)
-- **Behavior**: Creates agent approval task
-- **Returns**: Partnership request status
-
-```python
-# Tool usage
-result = await consent_service.execute_tool(
-    "upgrade_relationship",
-    {"user_id": "user123", "reason": "Enhanced collaboration"}
-)
-```
+The service implements the ToolService protocol with one tool. There is no agent-initiated
+upgrade tool: PARTNERED is the user's choice, decided by the steward for non-steward users.
 
 ### degrade_relationship
 - **Purpose**: Downgrade to TEMPORARY or ANONYMOUS
@@ -401,7 +403,7 @@ The service tracks comprehensive metrics for operational insight:
 
 1. **consent_active_users**: Number of users with active consent
 2. **consent_stream_distribution**: Percentage breakdown by stream type
-3. **consent_partnership_success_rate**: Partnership approval rate
+3. **consent_partnership_success_rate**: Steward approval rate for deferred PARTNERED requests
 4. **consent_average_age_days**: Average age of active consents
 5. **consent_decay_completion_rate**: Decay process completion rate
 
@@ -415,9 +417,9 @@ consent_revokes_total         # Total consent revocations
 consent_expired_cleanups_total # Cleanup operations performed
 
 # Partnership metrics
-consent_partnership_requests_total    # Partnership requests created
-consent_partnership_approvals_total   # Partnerships approved
-consent_partnership_rejections_total  # Partnerships rejected
+consent_partnership_requests_total    # PARTNERED requests deferred to the steward
+consent_partnership_approvals_total   # Steward approvals
+consent_partnership_rejections_total  # Steward refusals (stream unchanged)
 
 # Decay metrics
 consent_total_decays_initiated # Decay protocols started
@@ -436,7 +438,7 @@ consent_anonymous_percent     # Percentage ANONYMOUS users
 
 ```python
 consent_service_uptime_seconds    # Service availability
-consent_pending_partnerships      # Pending approval requests
+consent_pending_partnerships      # PARTNERED requests awaiting the steward
 consent_oldest_consent_days       # Age of oldest active consent
 ```
 
@@ -491,7 +493,7 @@ The Consent Service directly enables human flourishing through:
 #### 1. **Respecting Human Agency**
 - **Informed Consent**: Users understand exactly how their data enables AI improvement
 - **Granular Control**: Five-category system allows precise data governance
-- **Bilateral Partnerships**: AI cannot unilaterally access extended data - requires mutual agreement
+- **Steward-governed Partnerships**: extended retention of a non-steward user is the steward's decision, carried by WBD - the agent has no veto and no unilateral upgrade
 - **Immediate Revocation**: Users maintain absolute control over data relationship
 
 #### 2. **Promoting Collective Well-Being**
@@ -531,7 +533,7 @@ if stream == ConsentStream.ANONYMOUS:
 impact_report = generate_real_impact_metrics()  # No fake data
 
 # User Control (Article 7 GDPR)
-bilateral_consent_required = stream == ConsentStream.PARTNERED
+steward_decides = stream == ConsentStream.PARTNERED and not requester_is_steward
 ```
 
 ### Long-term Vision Alignment
@@ -561,7 +563,7 @@ ciris_engine/logic/services/governance/consent/
 ├── __init__.py           # Service export
 ├── service.py            # Main ConsentService class
 ├── exceptions.py         # ConsentNotFoundError, ConsentValidationError
-├── partnership.py        # Partnership request handling
+├── partnership.py        # PARTNERED-request deferral to the steward (WBD)
 ├── decay.py             # Decay protocol implementation
 ├── metrics.py           # Metrics collection
 └── utils.py             # Helper functions
@@ -571,7 +573,7 @@ ciris_engine/logic/services/governance/consent/
 
 - **Unit Tests**: Complete coverage of all consent operations
 - **Integration Tests**: End-to-end consent flow testing
-- **Partnership Tests**: Bilateral consent approval workflow
+- **Partnership Tests**: WBD route (deferral, steward approve/refuse, steward self-request) and the wire pair
 - **Decay Tests**: 90-day deletion protocol verification
 - **GDPR Compliance Tests**: Regulatory requirement validation
 - **Performance Tests**: Large-scale consent management

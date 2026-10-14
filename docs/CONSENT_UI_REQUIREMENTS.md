@@ -15,7 +15,7 @@ CIRISGUI needs to implement a comprehensive consent management interface for the
 
 2. **PARTNERED**
    - Mutual growth agreement
-   - Requires agent approval
+   - Applies directly for the steward; otherwise deferred to the steward (stream unchanged until answered)
    - No expiration
    - Shows partnership status and benefits
 

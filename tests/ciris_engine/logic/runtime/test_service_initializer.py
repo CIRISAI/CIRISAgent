@@ -218,9 +218,7 @@ class TestServiceInitializer:
                 mock_wa.start.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_security_init_recovers_stranded_wa_certificates(
-        self, service_initializer, mock_essential_config
-    ):
+    async def test_security_init_recovers_stranded_wa_certificates(self, service_initializer, mock_essential_config):
         """The long-jump `wa_cert` recovery must run during security init.
 
         A 2.7.x -> 2.9.x upgrade leaves the owner's certificate in the AUDIT
@@ -493,7 +491,7 @@ class TestServiceInitializer:
             spec=["await_attestation_ready", "get_cached_attestation", "run_attestation", "start"]
         )
         service_initializer.wa_auth_system = Mock(
-            spec=["send_deferral", "get_pending_deferrals", "resolve_deferral", "start"]
+            spec=["send_deferral", "get_pending_deferrals", "resolve_deferral", "start", "attach_consent_service"]
         )
 
         with patch(

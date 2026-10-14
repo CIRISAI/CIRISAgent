@@ -94,7 +94,6 @@ Available modules:
   guidance        - Guidance system
   consent         - Consent management
   dsar            - DSAR automation
-  partnership     - Partnership management
   billing         - Billing and credit system
   reddit          - Reddit adapter testing
   sql_external_data - SQL external data service testing

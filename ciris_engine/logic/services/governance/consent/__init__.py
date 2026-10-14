@@ -9,7 +9,7 @@ Module Structure:
 - service.py: Core ConsentService implementation
 - exceptions.py: Custom exceptions (ConsentNotFoundError, ConsentValidationError, etc.)
 - metrics.py: Metrics collection (ConsentMetricsCollector)
-- partnership.py: Partnership management (PartnershipManager)
+- partnership.py: PARTNERED-request deferral to the steward (WBD route)
 - decay.py: Decay protocol (DecayProtocolManager)
 - air.py: Artificial Interaction Reminder (ArtificialInteractionReminder)
 """
@@ -23,10 +23,9 @@ from .exceptions import (
     ConsentValidationError,
     DecayInProgressError,
     DSARAutomationError,
-    PartnershipPendingError,
+    StewardDeferralUnavailableError,
 )
 from .metrics import ConsentMetricsCollector
-from .partnership import PartnershipManager
 from .service import ConsentService, logger
 
 # Version for consent service module
@@ -39,12 +38,11 @@ __all__ = [
     "ConsentNotFoundError",
     "ConsentValidationError",
     "ConsentExpiredError",
-    "PartnershipPendingError",
+    "StewardDeferralUnavailableError",
     "DecayInProgressError",
     "DSARAutomationError",
     # Managers
     "ConsentMetricsCollector",
-    "PartnershipManager",
     "DecayProtocolManager",
     "ArtificialInteractionReminder",
     "DSARAutomationService",

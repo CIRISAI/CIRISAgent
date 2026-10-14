@@ -520,7 +520,6 @@ class QARunner:
             QAModule.DSAR,
             QAModule.DSAR_MULTI_SOURCE,
             QAModule.DSAR_TICKET_WORKFLOW,
-            QAModule.PARTNERSHIP,
             QAModule.BILLING,
             QAModule.BILLING_INTEGRATION,
             QAModule.MESSAGE_ID_DEBUG,
@@ -1707,15 +1706,7 @@ class QARunner:
         """Run SDK-based test modules (consent, billing, etc.)."""
         from ciris_sdk.client import CIRISClient
 
-        from .modules import (
-            AIRTests,
-            BillingTests,
-            ConsentTests,
-            DSARTests,
-            MCPTests,
-            MessageIDDebugTests,
-            PartnershipTests,
-        )
+        from .modules import AIRTests, BillingTests, ConsentTests, DSARTests, MCPTests, MessageIDDebugTests
         from .modules.accord_metrics_tests import AccordMetricsTests
         from .modules.adapter_autoload_tests import AdapterAutoloadTests
         from .modules.adapter_availability_tests import AdapterAvailabilityTests
@@ -1763,7 +1754,6 @@ class QARunner:
             QAModule.DSAR: DSARTests,
             QAModule.DSAR_MULTI_SOURCE: DSARMultiSourceTests,
             QAModule.DSAR_TICKET_WORKFLOW: DSARTicketWorkflowTests,
-            QAModule.PARTNERSHIP: PartnershipTests,
             QAModule.BILLING: BillingTests,
             QAModule.BILLING_INTEGRATION: BillingIntegrationTests,
             QAModule.MESSAGE_ID_DEBUG: MessageIDDebugTests,

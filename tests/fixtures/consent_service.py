@@ -2,7 +2,7 @@
 Test fixtures for ConsentService testing.
 
 Provides reusable fixtures for testing the consent service functionality,
-including decay protocol, partnership management, DSAR automation, and AIR.
+including decay protocol, DSAR automation, and AIR.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -17,7 +17,6 @@ from ciris_engine.logic.services.governance.consent.air import ArtificialInterac
 from ciris_engine.logic.services.governance.consent.decay import DecayProtocolManager
 from ciris_engine.logic.services.governance.consent.dsar_automation import DSARAutomationService
 from ciris_engine.logic.services.governance.consent.metrics import ConsentMetricsCollector
-from ciris_engine.logic.services.governance.consent.partnership import PartnershipManager
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.consent.core import (
     ConsentAuditEntry,
@@ -29,9 +28,6 @@ from ciris_engine.schemas.consent.core import (
     DecayCounters,
     OperationalCounters,
     PartnershipCounters,
-    PartnershipOutcome,
-    PartnershipOutcomeType,
-    PartnershipRequest,
 )
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 
@@ -415,87 +411,6 @@ def sample_decay_completed(mock_time_service):
 def decay_protocol_manager(mock_time_service):
     """Create a decay protocol manager for testing."""
     return DecayProtocolManager(time_service=mock_time_service)
-
-
-# ============================================================================
-# Partnership Fixtures
-# ============================================================================
-
-
-@pytest.fixture
-def sample_partnership_request(mock_time_service):
-    """Create a sample partnership request."""
-    from ciris_engine.schemas.consent.core import PartnershipAgingStatus, PartnershipPriority
-
-    now = mock_time_service.now()
-    return PartnershipRequest(
-        user_id="partnership_user_001",
-        task_id="task_001",
-        categories=[ConsentCategory.PREFERENCE, ConsentCategory.RESEARCH],
-        reason="Want to collaborate on improving the system",
-        channel_id="channel_123",
-        created_at=now - timedelta(hours=2),
-        age_hours=2.0,
-        aging_status=PartnershipAgingStatus.NORMAL,
-        priority=PartnershipPriority.NORMAL,
-    )
-
-
-@pytest.fixture
-def sample_partnership_outcome_approved(mock_time_service):
-    """Create an approved partnership outcome."""
-    return PartnershipOutcome(
-        user_id="partnership_user_001",
-        outcome=PartnershipOutcomeType.APPROVED,
-        decided_at=mock_time_service.now(),
-        reason="User has been helpful and engaged",
-    )
-
-
-@pytest.fixture
-def sample_partnership_outcome_rejected(mock_time_service):
-    """Create a rejected partnership outcome."""
-    return PartnershipOutcome(
-        user_id="partnership_user_002",
-        outcome=PartnershipOutcomeType.REJECTED,
-        decided_at=mock_time_service.now(),
-        reason="Insufficient engagement history",
-    )
-
-
-@pytest.fixture
-def sample_partnership_outcome_deferred(mock_time_service):
-    """Create a deferred partnership outcome."""
-    return PartnershipOutcome(
-        user_id="partnership_user_003",
-        outcome=PartnershipOutcomeType.DEFERRED,
-        decided_at=mock_time_service.now(),
-        reason="Need more interaction time",
-    )
-
-
-@pytest.fixture
-def partnership_manager(mock_time_service):
-    """Create a partnership manager for testing."""
-    return PartnershipManager(time_service=mock_time_service)
-
-
-@pytest.fixture
-def pending_partnership_data(mock_time_service):
-    """Create sample pending partnership data structure."""
-    return {
-        "partnership_user_001": {
-            "task_id": "task_001",
-            "request": {
-                "user_id": "partnership_user_001",
-                "categories": ["preference", "research"],
-                "reason": "Want to collaborate",
-                "channel_id": "channel_123",
-            },
-            "created_at": mock_time_service.now().isoformat(),
-            "channel_id": "channel_123",
-        }
-    }
 
 
 # ============================================================================

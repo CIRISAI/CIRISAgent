@@ -38,18 +38,18 @@ and revocation (withdraws/recants) only function if these emits run.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import hashlib
+import json
 import logging
 import os
 import uuid
+from datetime import datetime, timezone
 from enum import Enum
 from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from ciris_engine.logic.utils.log_sanitizer import sanitize_for_log
-
 from ciris_engine.schemas.consent.core import ConsentStatus, ConsentStream
 
 logger = logging.getLogger(__name__)
@@ -119,6 +119,13 @@ class ConsentClaim(BaseModel):
     granted_at: Optional[str] = Field(None, description="ISO grant time")
     expires_at: Optional[str] = Field(None, description="ISO expiry (TEMPORARY)")
     reason: Optional[str] = Field(None, description="Reason for the change")
+    bilateral_pair_id: Optional[str] = Field(
+        None,
+        description=(
+            "Ratification key shared with the consent:partnership_accept half emitted for the same stream "
+            "change (CC 4.4.3.5.3). This row is the GRANT half's content: the user's retention choice."
+        ),
+    )
 
 
 class ConsentAttestationEnvelope(BaseModel):
@@ -148,7 +155,9 @@ class LocalAttestationInput(BaseModel):
     attestation_envelope: ConsentAttestationEnvelope = Field(..., description="The CEG envelope")
 
 
-def build_consent_grant_input(status: ConsentStatus, attesting_key_id: str) -> LocalAttestationInput:
+def build_consent_grant_input(
+    status: ConsentStatus, attesting_key_id: str, bilateral_pair_id: Optional[str] = None
+) -> LocalAttestationInput:
     """Map a ConsentStatus (grant/modify) to a local-tier attestation input."""
     claim = ConsentClaim(
         user_id=status.user_id,
@@ -157,6 +166,7 @@ def build_consent_grant_input(status: ConsentStatus, attesting_key_id: str) -> L
         state="active",
         granted_at=status.granted_at.isoformat() if status.granted_at else None,
         expires_at=status.expires_at.isoformat() if status.expires_at else None,
+        bilateral_pair_id=bilateral_pair_id,
     )
     envelope = ConsentAttestationEnvelope(
         dimension=_user_dimension(status.user_id),
@@ -208,7 +218,7 @@ def _resolve_engine() -> Optional[object]:
         return None
 
 
-def emit_consent_grant(status: ConsentStatus) -> Optional[str]:
+def emit_consent_grant(status: ConsentStatus, bilateral_pair_id: Optional[str] = None) -> Optional[str]:
     """Best-effort emit a local-tier CEG attestation for a consent grant/modify.
 
     No-op (returns None) when the flag is off, the engine/key is unavailable,
@@ -223,7 +233,7 @@ def emit_consent_grant(status: ConsentStatus) -> Optional[str]:
         logger.debug("consent-CEG: skip grant emit (engine=%s key=%s)", engine is not None, bool(key_id))
         return None
     try:
-        payload = build_consent_grant_input(status, key_id).model_dump_json()
+        payload = build_consent_grant_input(status, key_id, bilateral_pair_id).model_dump_json()
         attestation_id = engine.attestation_upsert_local(payload)  # type: ignore[attr-defined]
         logger.info(
             "consent-CEG: emitted grant attestation %s for user %s",
@@ -234,6 +244,305 @@ def emit_consent_grant(status: ConsentStatus) -> Optional[str]:
     except Exception as exc:
         logger.warning("consent-CEG: grant emit failed (non-fatal): %s", exc)
         return None
+
+
+# ===========================================================================
+# Partnership wire pair — consent:partnership_grant / consent:partnership_accept
+# ===========================================================================
+#
+# CC 4.4.3.4.3 / CIRISConstitution#168: the partnered pair is a DATA-MANAGEMENT
+# record, not a relationship the agent may refuse. The GRANT half is the user's
+# retention choice; the ACCEPT half is this agent occurrence's signature, under
+# the owner-binding, emitted at node claim and on EVERY stream change and never
+# withheld. Both halves carry one `bilateral_pair_id` so CC 4.4.3.5.3
+# `ratified_pair` can join them.
+#
+# What the substrate supports today, verified against ciris-server 0.5.223:
+#
+# - ACCEPT: `Engine.emit_attestation_self` hybrid-signs (Ed25519 + ML-DSA-65)
+#   with the engine's composed signer — the agent's actor key, the one
+#   `owner_of_json` resolves to the steward. So the accept half is SIGNED here.
+#   `attested_key_id` must FK into federation_keys, so it names the user only
+#   when the user holds a registered key; otherwise the row is a
+#   self-attestation and the subject rides in the claim as a hashed ref.
+# - GRANT: only the USER's own signer can author it. No user signer is
+#   reachable from Python (CIRISServer#342: `resolve_user_signer` is released
+#   only under a verified owner session and has no PyO3 export) and persist
+#   refuses a local row attested by an unregistered key. Until that lands the
+#   grant half's CONTENT rides in the per-user `consent:stream` row (which now
+#   carries the same `bilateral_pair_id`), attested by the agent as carrier and
+#   NOT presented as the user's signature. The signed grant shape is built
+#   (`build_partnership_grant_input`) so the upstream signer has nothing to
+#   invent. A keyless user can never have a signed grant: there is no key to
+#   sign with and nothing to seal to; the accept half is still emitted.
+#
+# Consent rows are not in `default_attestation_prefixes()`, and the accept half
+# is written at `cohort_scope=self`, so it does not replicate by default. The
+# claim still never carries the raw user identifier.
+
+_PARTNERSHIP_GRANT_DIMENSION = "consent:partnership_grant:v1"
+_PARTNERSHIP_ACCEPT_DIMENSION = "consent:partnership_accept:v1"
+_PAIR_COHORT_SCOPE = "self"
+
+
+class PartnershipHalf(str, Enum):
+    """Which half of the bilateral pair a claim is."""
+
+    GRANT = "grant"
+    ACCEPT = "accept"
+
+
+class PartnershipGrantState(str, Enum):
+    """Where the user-signed GRANT half stands for one stream change."""
+
+    #: The user holds a federation key; only their own signer may author the
+    #: grant, and that signer is not reachable in-process (CIRISServer#342).
+    AWAITING_USER_SIGNATURE = "awaiting_user_signature"
+    #: The user holds no federation key. Nothing can sign for them; the grant
+    #: content is the agent-carried consent:stream row only.
+    KEYLESS_USER = "keyless_user"
+
+
+class PartnershipPairClaim(BaseModel):
+    """Claim body shared by both halves of the pair (CC 3.3.1 consent_record)."""
+
+    model_config = ConfigDict(defer_build=True)
+
+    bilateral_pair_id: str = Field(..., description="Ratification key joining grant and accept (CC 4.4.3.5.3)")
+    half: PartnershipHalf = Field(..., description="grant (user) or accept (agent occurrence)")
+    subject_ref: str = Field(..., description="sha256(user_id)[:16] — never the raw user identifier")
+    stream: str = Field(..., description="The consent stream this pair records (temporary/partnered/anonymous)")
+    categories: List[str] = Field(default_factory=list, description="Consented categories")
+    user_key_id: Optional[str] = Field(None, description="User's federation key id, when the user holds one")
+    owner_key_id: Optional[str] = Field(None, description="Steward key the agent key's owner-binding resolves to")
+    decided_by: Optional[str] = Field(None, description="Steward who answered the WBD deferral, if one was needed")
+    deferral_id: Optional[str] = Field(None, description="WBD deferral that carried the steward's decision")
+
+
+class PartnershipPairEnvelope(BaseModel):
+    """CEG envelope for one half of the pair."""
+
+    model_config = ConfigDict(defer_build=True)
+
+    dimension: str = Field(..., description="consent:partnership_grant:v1 | consent:partnership_accept:v1")
+    id: str = Field(..., description="Envelope id (uuid4)")
+    score: float = Field(..., ge=0.0, le=1.0, description="Calibration score for the stream")
+    confidence: float = Field(1.0, ge=0.0, le=1.0, description="Producer confidence")
+    claim: PartnershipPairClaim = Field(..., description="Pair claim body")
+
+
+class PartnershipAcceptInput(BaseModel):
+    """``EmitAttestationInput`` for ``Engine.emit_attestation_self`` (the ACCEPT half)."""
+
+    model_config = ConfigDict(defer_build=True)
+
+    attestation_type: str = Field(_ATTESTATION_TYPE_SCORES, description="CEG attestation type")
+    attestation_envelope: PartnershipPairEnvelope = Field(..., description="The accept envelope")
+    cohort_scope: str = Field(_PAIR_COHORT_SCOPE, description="Audience; self = not replicated by default")
+    attested_key_id: Optional[str] = Field(None, description="The user's key when registered; omitted otherwise")
+
+
+class PartnershipGrantInput(BaseModel):
+    """The GRANT half as the user's signer must author it (attested by the USER key).
+
+    Built, never signed here: see the section comment. Exposed so the upstream
+    user-signer surface (CIRISServer#342) receives a fixed shape.
+    """
+
+    model_config = ConfigDict(defer_build=True)
+
+    attesting_key_id: str = Field(..., description="The USER's federation key id — the only valid author")
+    attestation_type: str = Field(_ATTESTATION_TYPE_SCORES, description="CEG attestation type")
+    attestation_envelope: PartnershipPairEnvelope = Field(..., description="The grant envelope")
+
+
+class PartnershipPairEmission(BaseModel):
+    """What one stream change produced on the wire."""
+
+    model_config = ConfigDict(defer_build=True)
+
+    bilateral_pair_id: str = Field(..., description="Pair id carried by both halves")
+    accept_attestation_id: Optional[str] = Field(None, description="Signed accept row id; None if not written")
+    stream_attestation_id: Optional[str] = Field(None, description="consent:stream row (grant content) id")
+    grant_state: PartnershipGrantState = Field(..., description="Where the user-signed grant half stands")
+
+
+def _subject_ref(user_id: str) -> str:
+    return hashlib.sha256(user_id.encode("utf-8")).hexdigest()[:16]
+
+
+def _pair_claim(
+    status: ConsentStatus,
+    half: PartnershipHalf,
+    bilateral_pair_id: str,
+    *,
+    user_key_id: Optional[str],
+    owner_key_id: Optional[str],
+    decided_by: Optional[str],
+    deferral_id: Optional[str],
+) -> PartnershipPairClaim:
+    return PartnershipPairClaim(
+        bilateral_pair_id=bilateral_pair_id,
+        half=half,
+        subject_ref=_subject_ref(status.user_id),
+        stream=str(status.stream),
+        categories=[str(c) for c in status.categories],
+        user_key_id=user_key_id,
+        owner_key_id=owner_key_id,
+        decided_by=decided_by,
+        deferral_id=deferral_id,
+    )
+
+
+def build_partnership_accept_input(
+    status: ConsentStatus,
+    bilateral_pair_id: str,
+    *,
+    user_key_id: Optional[str] = None,
+    owner_key_id: Optional[str] = None,
+    decided_by: Optional[str] = None,
+    deferral_id: Optional[str] = None,
+) -> PartnershipAcceptInput:
+    """The ACCEPT half: this agent occurrence's record of the user's stream."""
+    claim = _pair_claim(
+        status,
+        PartnershipHalf.ACCEPT,
+        bilateral_pair_id,
+        user_key_id=user_key_id,
+        owner_key_id=owner_key_id,
+        decided_by=decided_by,
+        deferral_id=deferral_id,
+    )
+    envelope = PartnershipPairEnvelope(
+        dimension=_PARTNERSHIP_ACCEPT_DIMENSION,
+        id=str(uuid.uuid4()),
+        score=_stream_score(str(status.stream)),
+        confidence=1.0,
+        claim=claim,
+    )
+    return PartnershipAcceptInput(attestation_envelope=envelope, attested_key_id=user_key_id)
+
+
+def build_partnership_grant_input(
+    status: ConsentStatus,
+    bilateral_pair_id: str,
+    user_key_id: str,
+    *,
+    owner_key_id: Optional[str] = None,
+) -> PartnershipGrantInput:
+    """The GRANT half, attested by the user's key. Shape only — the user signs it."""
+    claim = _pair_claim(
+        status,
+        PartnershipHalf.GRANT,
+        bilateral_pair_id,
+        user_key_id=user_key_id,
+        owner_key_id=owner_key_id,
+        decided_by=None,
+        deferral_id=None,
+    )
+    envelope = PartnershipPairEnvelope(
+        dimension=_PARTNERSHIP_GRANT_DIMENSION,
+        id=str(uuid.uuid4()),
+        score=_stream_score(str(status.stream)),
+        confidence=1.0,
+        claim=claim,
+    )
+    return PartnershipGrantInput(attesting_key_id=user_key_id, attestation_envelope=envelope)
+
+
+def resolve_owner_key_id() -> Optional[str]:
+    """The steward key the agent key's owner-binding resolves to, or None (unclaimed / no engine)."""
+    engine = _resolve_engine()
+    key_id = _resolve_attesting_key_id()
+    if engine is None or not key_id:
+        return None
+    try:
+        raw = engine.owner_of_json(key_id)  # type: ignore[attr-defined]
+        owner = json.loads(raw) if isinstance(raw, str) else raw
+        return str(owner) if owner else None
+    except Exception as exc:  # noqa: BLE001 - an unreadable binding is reported as "no owner"
+        logger.warning("consent-CEG: owner-binding unreadable for %s: %s", key_id, exc)
+        return None
+
+
+def _accept_payload(inp: PartnershipAcceptInput) -> str:
+    """Serialize for persist: omit ``attested_key_id`` when unnamed (omitted = self-attestation).
+
+    Only that top-level field is dropped; nulls inside the claim stay explicit,
+    so a reader sees "no owner-binding resolved" rather than a missing field.
+    """
+    body = inp.model_dump(mode="json")
+    if body.get("attested_key_id") is None:
+        body.pop("attested_key_id", None)
+    return json.dumps(body)
+
+
+def _emit_accept(engine: object, inp: PartnershipAcceptInput) -> str:
+    """Emit the accept half; if the named user key is not registered, fall back to self-attested."""
+    try:
+        return str(engine.emit_attestation_self(_accept_payload(inp)))  # type: ignore[attr-defined]
+    except ValueError:
+        if inp.attested_key_id is None:
+            raise
+        # attested_key_id FKs into federation_keys. A user key we were told about
+        # but the directory does not hold must not cost the user their accept half.
+        logger.warning("consent-CEG: user key not in federation_keys; emitting accept half self-attested")
+        unnamed = inp.model_copy(update={"attested_key_id": None})
+        return str(engine.emit_attestation_self(_accept_payload(unnamed)))  # type: ignore[attr-defined]
+
+
+def emit_partnership_pair(
+    status: ConsentStatus,
+    *,
+    user_key_id: Optional[str] = None,
+    decided_by: Optional[str] = None,
+    deferral_id: Optional[str] = None,
+) -> PartnershipPairEmission:
+    """Emit the pair for one stream change. Best-effort; never raises.
+
+    Writes the grant half's content (the per-user ``consent:stream`` row, now
+    carrying ``bilateral_pair_id``) and the SIGNED accept half. Returns what was
+    written so callers and tests can see which halves exist, rather than
+    inferring it from logs.
+    """
+    pair_id = str(uuid.uuid4())
+    grant_state = PartnershipGrantState.AWAITING_USER_SIGNATURE if user_key_id else PartnershipGrantState.KEYLESS_USER
+    stream_id = emit_consent_grant(status, bilateral_pair_id=pair_id)
+    emission = PartnershipPairEmission(
+        bilateral_pair_id=pair_id, stream_attestation_id=stream_id, grant_state=grant_state
+    )
+    if not consent_ceg_attestations_enabled():
+        return emission
+    engine = _resolve_engine()
+    if engine is None or not _resolve_attesting_key_id():
+        logger.debug("consent-CEG: skip partnership accept emit (no engine or actor key)")
+        return emission
+    owner_key_id = resolve_owner_key_id()
+    if owner_key_id is None:
+        # Emitted anyway: the accept half is never withheld. A reader checking
+        # ratified_pair sees the missing owner-binding in the claim and decides.
+        logger.warning("consent-CEG: no owner-binding resolvable for the agent key; accept half names no owner")
+    inp = build_partnership_accept_input(
+        status,
+        pair_id,
+        user_key_id=user_key_id,
+        owner_key_id=owner_key_id,
+        decided_by=decided_by,
+        deferral_id=deferral_id,
+    )
+    try:
+        emission.accept_attestation_id = _emit_accept(engine, inp)
+        logger.info(
+            "consent-CEG: emitted signed partnership_accept %s (pair %s, stream %s, grant %s) for user %s",
+            emission.accept_attestation_id,
+            pair_id,
+            status.stream,
+            grant_state.value,
+            sanitize_for_log(status.user_id),
+        )
+    except Exception as exc:  # noqa: BLE001 - emission must never break the consent write path
+        logger.warning("consent-CEG: partnership_accept emit failed (non-fatal): %s", exc)
+    return emission
 
 
 # --- v40 tier crossing --------------------------------------------------------
@@ -282,11 +591,15 @@ def cross_to_mesh(engine: object, attestation_id: str, *, label: str) -> "tuple[
     return w_outcome, placed
 
 
-def _log_crossing(label: str, attestation_id: str, outcome: str, placed: Optional[str], *, waiting_reads_as: str) -> None:
+def _log_crossing(
+    label: str, attestation_id: str, outcome: str, placed: Optional[str], *, waiting_reads_as: str
+) -> None:
     if outcome == "awaiting_actor":
         logger.warning(
             "consent-CEG: %s %s is waiting for its actor's signature -- it has NOT reached the mesh; %s",
-            label, attestation_id, waiting_reads_as,
+            label,
+            attestation_id,
+            waiting_reads_as,
         )
     elif placed and placed != str(attestation_id):
         logger.info("consent-CEG: %s %s placed at federation as %s (%s)", label, attestation_id, placed, outcome)
@@ -323,8 +636,13 @@ def emit_consent_revocation(user_id: str, reason: Optional[str] = None, promote:
     if promote:
         try:
             outcome, placed = cross_to_mesh(engine, str(attestation_id), label="revocation")
-            _log_crossing("revocation", str(attestation_id), outcome, placed,
-                          waiting_reads_as='peers keep reading the consent as GRANTED until it does')
+            _log_crossing(
+                "revocation",
+                str(attestation_id),
+                outcome,
+                placed,
+                waiting_reads_as="peers keep reading the consent as GRANTED until it does",
+            )
         except Exception as exc:  # noqa: BLE001
             # Expected in CLIENT mode (no PQC signer): the local row stands. An axis
             # refusal also lands here and its message names the axis -- keep it visible.
@@ -689,8 +1007,13 @@ def emit_community_consent_grant(granted_at: Optional[str] = None) -> Optional[s
             # mode (no PQC signer); the local row still gates the seal.
             try:
                 outcome, placed = cross_to_mesh(engine, str(attestation_id), label="directed grant")
-                _log_crossing("directed grant", str(attestation_id), outcome, placed,
-                              waiting_reads_as='the community cannot see the grant, so traces will seal locally and not replicate')
+                _log_crossing(
+                    "directed grant",
+                    str(attestation_id),
+                    outcome,
+                    placed,
+                    waiting_reads_as="the community cannot see the grant, so traces will seal locally and not replicate",
+                )
                 if placed:
                     # THE COMMUNITY IDENTITY OF THE GRANT IS THE WIDENED ROW'S ID: capture_grant_id
                     # and the revocation target carry it to peers; the self-scoped original is
@@ -753,8 +1076,13 @@ def emit_community_consent_revocation(
     if community:
         try:
             outcome, placed = cross_to_mesh(engine, str(attestation_id), label=f"{intent.value} revocation")
-            _log_crossing(f"{intent.value} revocation", str(attestation_id), outcome, placed,
-                          waiting_reads_as='the community keeps reading the grant as in force')
+            _log_crossing(
+                f"{intent.value} revocation",
+                str(attestation_id),
+                outcome,
+                placed,
+                waiting_reads_as="the community keeps reading the grant as in force",
+            )
         except Exception as exc:  # noqa: BLE001
             # Expected in CLIENT mode (no PQC signer): the local row stands. An axis
             # refusal also lands here and its message names the axis -- keep it visible.

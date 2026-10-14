@@ -995,8 +995,14 @@ This directory contains critical cryptographic keys for the CIRIS system.
             time_service=self.time_service,
             memory_bus=self.bus_manager.memory,  # Use memory bus for impact reporting and audit trail
             db_path=get_sqlite_db_full_path(self.essential_config),
+            # A non-steward PARTNERED request is deferred to the steward through
+            # the existing WBD path (CIRISAgent#1251)...
+            wise_bus=self.bus_manager.wise,
         )
         await self.consent_service.start()
+        # ...and the steward's answer comes back through WiseAuthorityService.resolve_deferral.
+        if self.wa_auth_system is not None:
+            self.wa_auth_system.attach_consent_service(self.consent_service)
         self._services_started_count += 1
         _log_service_started(12, "ConsentService")
 
@@ -2298,7 +2304,6 @@ This directory contains critical cryptographic keys for the CIRIS system.
                 capabilities=[
                     "execute_tool",
                     "get_available_tools",
-                    "upgrade_relationship",
                     "degrade_relationship",
                 ],
                 metadata={"service_name": "ConsentService", "provider": "core"},

@@ -57,17 +57,15 @@ class ConsentExpiredError(Exception):
     pass
 
 
-class PartnershipPendingError(Exception):
+class StewardDeferralUnavailableError(Exception):
     """
-    Raised when user tries to create duplicate partnership request.
+    Raised when a non-steward PARTNERED request cannot reach the steward.
 
-    This error indicates that a user already has a pending partnership request
-    that is awaiting agent approval. Only one pending request allowed per user.
-
-    Usage:
-        - Return to user with status of existing request
-        - Include task_id for tracking
-        - Direct user to check partnership status endpoint
+    Whether this agent retains a non-steward user under PARTNERED is the
+    steward's decision, carried by the Wisdom-Based Deferral path. When no
+    deferral path is wired, or no Wise Authority service accepts the deferral,
+    the request is refused loudly: it is never decided locally and never
+    silently dropped. The user's current stream is unchanged.
     """
 
     pass

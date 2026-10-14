@@ -1,760 +1,116 @@
 """
-Tests for Partnership Management API endpoints.
+Partnership API surface after CIRISAgent#1251.
 
-Tests only observability endpoints (read-only) as manual approve/reject/defer
-violate CIRIS's "No Bypass Patterns" philosophy.
+Partnership is a data-management record (CC 4.4.3.4.3): there is no agent-side
+approval queue, so the queue's endpoints are gone. The only partnership route
+left is the read-only description of the PARTNERED stream. Choosing it goes
+through POST /v1/consent/grant; a non-steward's choice is deferred to the
+steward through WBD and answered through POST /v1/wa/deferrals/{id}/resolve.
 """
 
-from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, patch
-
 import pytest
-from fastapi import HTTPException, status
+from fastapi import status
+from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
 from ciris_engine.logic.adapters.api.app import create_app
 from ciris_engine.logic.adapters.api.auth import get_current_user
 from ciris_engine.logic.adapters.api.models import TokenData
-from ciris_engine.logic.adapters.api.routes.partnership import create_partnership_response, require_admin
-from ciris_engine.schemas.consent.core import (
-    ConsentCategory,
-    PartnershipAgingStatus,
-    PartnershipHistory,
-    PartnershipMetrics,
-    PartnershipOutcome,
-    PartnershipOutcomeType,
-    PartnershipPriority,
-    PartnershipRequest,
-)
+
+REMOVED = [
+    ("POST", "/v1/partnership/decide"),
+    ("GET", "/v1/partnership/pending"),
+    ("GET", "/v1/partnership/metrics"),
+    ("GET", "/v1/partnership/history/discord_123456"),
+]
 
 
 @pytest.fixture
-def client():
-    """Create test client with mock auth that returns admin user."""
+def app(monkeypatch):
+    # Unmatched /v1 paths are forwarded to the folded node on 127.0.0.1:4243.
+    # A developer's own ciris_server may hold that port: point the proxy at a
+    # port nothing listens on so these requests never leave the test.
+    import socket
+
+    from ciris_engine.logic.adapters.api.routes import node_proxy
+
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        dead_port = sock.getsockname()[1]
+    monkeypatch.setattr(node_proxy, "NODE_FOLD_PORT", dead_port)
+
     app = create_app()
+    app.dependency_overrides[get_current_user] = lambda: TokenData(
+        username="admin", email="admin@test.com", role="SYSTEM_ADMIN"
+    )
+    return app
 
-    # Override auth dependency to return admin user
-    def mock_get_current_user():
-        return TokenData(username="admin", email="admin@test.com", role="ADMIN")
 
-    app.dependency_overrides[get_current_user] = mock_get_current_user
+@pytest.fixture
+def client(app):
     return TestClient(app)
 
 
-@pytest.fixture
-def admin_auth_headers():
-    """Create auth headers for admin user."""
-    return {"Authorization": "Bearer test_admin_token"}
+def _registered(app, method: str, path_template: str) -> bool:
+    return any(isinstance(r, APIRoute) and r.path == path_template and method in r.methods for r in app.router.routes)
 
 
-@pytest.fixture
-def mock_partnership_manager():
-    """Create mock partnership manager."""
-    manager = MagicMock()
-    now = datetime.now(timezone.utc)
+class TestRemovedQueueEndpoints:
+    """The approval queue and its observability endpoints no longer exist."""
 
-    # Mock pending partnership
-    mock_request = PartnershipRequest(
-        user_id="discord_123456",
-        task_id="TASK-001",
-        categories=[ConsentCategory.INTERACTION],
-        reason="I want to help improve the system",
-        channel_id="channel_001",
-        created_at=now - timedelta(hours=5),
-        age_hours=5.0,
-        aging_status=PartnershipAgingStatus.NORMAL,
-        priority=PartnershipPriority.NORMAL,
-        notes=None,
+    @pytest.mark.parametrize(
+        "method,template",
+        [
+            ("POST", "/v1/partnership/decide"),
+            ("GET", "/v1/partnership/pending"),
+            ("GET", "/v1/partnership/metrics"),
+            ("GET", "/v1/partnership/history/{user_id}"),
+        ],
     )
+    def test_route_not_registered(self, app, method, template):
+        assert not _registered(app, method, template), f"{method} {template} must not be mounted"
 
-    # Mock metrics
-    mock_metrics = PartnershipMetrics(
-        total_requests=10,
-        total_approvals=6,
-        total_rejections=2,
-        total_deferrals=1,
-        pending_count=1,
-        approval_rate_percent=60.0,
-        rejection_rate_percent=20.0,
-        deferral_rate_percent=10.0,
-        avg_pending_hours=12.5,
-        oldest_pending_hours=5.0,
-        critical_count=0,
-    )
-
-    # Mock outcome (agent-approved, not manual)
-    mock_outcome = PartnershipOutcome(
-        user_id="discord_123456",
-        task_id="TASK-001",
-        outcome_type=PartnershipOutcomeType.APPROVED,
-        decided_by="agent",  # Agent makes decisions, not admins
-        decided_at=now,
-        reason="User has built trust through interactions",
-        notes=None,
-    )
-
-    # Mock history
-    mock_history = PartnershipHistory(
-        user_id="discord_123456",
-        total_requests=1,
-        outcomes=[mock_outcome],
-        current_status="approved",
-        last_request_at=now - timedelta(hours=5),
-        last_decision_at=now,
-    )
-
-    # Set up manager methods (read-only)
-    manager.list_pending_partnerships_typed.return_value = [mock_request]
-    manager.get_partnership_metrics_typed.return_value = mock_metrics
-    manager.get_partnership_history.return_value = mock_history
-
-    return manager
-
-
-class TestPartnershipObservabilityEndpoints:
-    """Test partnership observability API endpoints (read-only)."""
-
-    @patch("ciris_engine.logic.adapters.api.routes.partnership.get_current_user")
-    def test_list_pending_partnerships_admin(self, mock_auth, client, mock_partnership_manager):
-        """Test listing pending partnerships as admin."""
-        # Mock admin user
-        mock_auth.return_value = MagicMock(user_id="admin", username="admin", role="ADMIN")
-
-        # Mock consent service and partnership manager
-        with patch.object(client.app.state, "consent_manager", create=True) as mock_consent:
-            mock_consent._partnership_manager = mock_partnership_manager
-
-            response = client.get("/v1/partnership/pending", headers={"Authorization": "Bearer admin_token"})
-
-            assert response.status_code == status.HTTP_200_OK
-            data = response.json()
-            assert data["success"] is True
-            assert "requests" in data["data"]
-            assert data["data"]["total"] == 1
-            assert "by_status" in data["data"]
-            assert data["data"]["by_status"]["normal"] == 1
-
-    def test_list_pending_partnerships_non_admin(self, client_with_user_auth):
-        """Test that non-admins cannot list pending partnerships."""
-        response = client_with_user_auth.get("/v1/partnership/pending")
-
-        assert response.status_code == status.HTTP_403_FORBIDDEN
-        assert "administrators" in response.json()["detail"].lower()
-
-    @patch("ciris_engine.logic.adapters.api.routes.partnership.get_current_user")
-    def test_get_partnership_metrics_admin(self, mock_auth, client, mock_partnership_manager):
-        """Test getting partnership metrics as admin."""
-        # Mock admin user
-        mock_auth.return_value = MagicMock(user_id="admin", username="admin", role="ADMIN")
-
-        # Mock consent service and partnership manager
-        with patch.object(client.app.state, "consent_manager", create=True) as mock_consent:
-            mock_consent._partnership_manager = mock_partnership_manager
-
-            response = client.get("/v1/partnership/metrics", headers={"Authorization": "Bearer admin_token"})
-
-            assert response.status_code == status.HTTP_200_OK
-            data = response.json()
-            assert data["success"] is True
-            assert data["data"]["total_requests"] == 10
-            assert data["data"]["total_approvals"] == 6
-            assert data["data"]["approval_rate_percent"] == 60.0
-            assert data["data"]["pending_count"] == 1
-
-    @patch("ciris_engine.logic.adapters.api.routes.partnership.get_current_user")
-    def test_get_partnership_history_admin(self, mock_auth, client, mock_partnership_manager):
-        """Test getting partnership history as admin."""
-        # Mock admin user
-        mock_auth.return_value = MagicMock(user_id="admin", username="admin", role="ADMIN")
-
-        # Mock consent service and partnership manager
-        with patch.object(client.app.state, "consent_manager", create=True) as mock_consent:
-            mock_consent._partnership_manager = mock_partnership_manager
-
-            response = client.get(
-                "/v1/partnership/history/discord_123456",
-                headers={"Authorization": "Bearer admin_token"},
-            )
-
-            assert response.status_code == status.HTTP_200_OK
-            data = response.json()
-            assert data["success"] is True
-            assert data["data"]["user_id"] == "discord_123456"
-            assert data["data"]["total_requests"] == 1
-            assert len(data["data"]["outcomes"]) == 1
-            assert data["data"]["current_status"] == "approved"
-            # Verify agent made the decision, not admin
-            assert data["data"]["outcomes"][0]["decided_by"] == "agent"
-
-    def test_partnership_history_non_admin(self, client_with_user_auth):
-        """Test that non-admins cannot view partnership history."""
-        response = client_with_user_auth.get("/v1/partnership/history/discord_123")
-
-        assert response.status_code == status.HTTP_403_FORBIDDEN
-        assert "administrators" in response.json()["detail"].lower()
-
-    @patch("ciris_engine.logic.adapters.api.routes.partnership.get_current_user")
-    def test_pending_partnerships_aging_status_classification(self, mock_auth, client):
-        """Test that pending partnerships are classified by aging status."""
-        # Mock admin user
-        mock_auth.return_value = MagicMock(user_id="admin", username="admin", role="ADMIN")
-
-        # Create mock manager with various aging statuses
-        manager = MagicMock()
-        now = datetime.now(timezone.utc)
-
-        pending_requests = [
-            PartnershipRequest(
-                user_id=f"user_{i}",
-                task_id=f"TASK-{i}",
-                categories=[ConsentCategory.INTERACTION],
-                reason="Test",
-                channel_id="channel_001",
-                created_at=now - timedelta(hours=age_hours),
-                age_hours=age_hours,
-                aging_status=aging_status,
-                priority=PartnershipPriority.NORMAL,
-            )
-            for i, (age_hours, aging_status) in enumerate(
-                [
-                    (5, PartnershipAgingStatus.NORMAL),  # <7 days
-                    (200, PartnershipAgingStatus.WARNING),  # 7-14 days
-                    (400, PartnershipAgingStatus.CRITICAL),  # >14 days
-                ]
-            )
-        ]
-
-        manager.list_pending_partnerships_typed.return_value = pending_requests
-
-        # Mock consent service and partnership manager
-        with patch.object(client.app.state, "consent_manager", create=True) as mock_consent:
-            mock_consent._partnership_manager = manager
-
-            response = client.get("/v1/partnership/pending", headers={"Authorization": "Bearer admin_token"})
-
-            assert response.status_code == status.HTTP_200_OK
-            data = response.json()
-            assert data["success"] is True
-            assert data["data"]["total"] == 3
-            assert data["data"]["by_status"]["normal"] == 1
-            assert data["data"]["by_status"]["warning"] == 1
-            assert data["data"]["by_status"]["critical"] == 1
-            assert data["metadata"]["critical_count"] == 1
-
-    def test_metrics_non_admin(self, client_with_user_auth):
-        """Test that non-admins cannot view metrics."""
-        response = client_with_user_auth.get("/v1/partnership/metrics")
-
-        assert response.status_code == status.HTTP_403_FORBIDDEN
-        assert "administrators" in response.json()["detail"].lower()
-
-
-class TestNoBypassEndpoints:
-    """Test that bypass endpoints are not available."""
-
-    def test_no_manual_approve_endpoint(self, client):
-        """Test that manual approve endpoint does not exist."""
-        response = client.post(
-            "/v1/partnership/discord_123/approve",
-            json={"notes": "test"},
+    @pytest.mark.parametrize("method,path", REMOVED)
+    def test_route_returns_404(self, client, method, path):
+        response = client.request(
+            method,
+            path,
+            json={"task_id": "partnership_u_1", "decision": "accept"} if method == "POST" else None,
             headers={"Authorization": "Bearer admin_token"},
         )
+        assert response.status_code == status.HTTP_404_NOT_FOUND, (method, path, response.status_code)
 
-        # Should return 404 or 405 (method not allowed), not 200
-        assert response.status_code in [status.HTTP_404_NOT_FOUND, status.HTTP_405_METHOD_NOT_ALLOWED]
-
-    def test_no_manual_reject_endpoint(self, client):
-        """Test that manual reject endpoint does not exist."""
-        response = client.post(
-            "/v1/partnership/discord_123/reject",
-            json={"notes": "test"},
-            headers={"Authorization": "Bearer admin_token"},
-        )
-
-        # Should return 404 or 405, not 200
-        assert response.status_code in [status.HTTP_404_NOT_FOUND, status.HTTP_405_METHOD_NOT_ALLOWED]
-
-    def test_no_manual_defer_endpoint(self, client):
-        """Test that manual defer endpoint does not exist."""
-        response = client.post(
-            "/v1/partnership/discord_123/defer",
-            json={"notes": "test"},
-            headers={"Authorization": "Bearer admin_token"},
-        )
-
-        # Should return 404 or 405, not 200
-        assert response.status_code in [status.HTTP_404_NOT_FOUND, status.HTTP_405_METHOD_NOT_ALLOWED]
-
-
-class TestPartnershipDecideEndpoint:
-    """Test POST /v1/partnership/decide endpoint for bilateral consent decisions."""
-
-    @patch("ciris_engine.logic.adapters.api.routes.partnership.get_current_user")
-    @patch("ciris_engine.logic.persistence.get_task_by_id")
-    @patch("ciris_engine.logic.persistence.models.tasks.update_task_status")
-    @patch("ciris_engine.logic.persistence.add_graph_node")
-    def test_accept_partnership_success(
-        self, mock_add_graph_node, mock_update_task_status, mock_get_task, mock_auth, client, mock_partnership_manager
-    ):
-        """Test user accepting a partnership request."""
-        from ciris_engine.schemas.runtime.enums import TaskStatus
-        from ciris_engine.schemas.runtime.models import Task, TaskContext
-
-        # Mock user auth
-        mock_auth.return_value = MagicMock(username="discord_123456", email="user@example.com", role="USER")
-
-        # Create mock task
-        task_context = TaskContext(
-            channel_id="test_channel",
-            user_id="discord_123456",
-            correlation_id="test_correlation",
-            parent_task_id=None,
-        )
-        mock_task = Task(
-            task_id="partnership_discord_123456_abc123",
-            channel_id="test_channel",
-            description="Partnership request",
-            priority=5,
-            status=TaskStatus.ACTIVE,
-            created_at=datetime.now(timezone.utc).isoformat(),
-            updated_at=datetime.now(timezone.utc).isoformat(),
-            context=task_context,
-            parent_task_id=None,
-        )
-
-        # Mock persistence calls
-        mock_get_task.return_value = mock_task
-        mock_update_task_status.return_value = None
-
-        # Mock partnership manager to return partnership data
-        mock_partnership_manager.finalize_partnership_approval.return_value = {
-            "user_id": "discord_123456",
-            "categories": [ConsentCategory.INTERACTION],
-            "task_id": "partnership_discord_123456_abc123",
-            "approved_at": datetime.now(timezone.utc),
-        }
-
-        # Mock consent service
-        with patch.object(client.app.state, "consent_manager", create=True) as mock_consent:
-            mock_consent._partnership_manager = mock_partnership_manager
-
-            response = client.post(
-                "/v1/partnership/decide",
-                json={
-                    "task_id": "partnership_discord_123456_abc123",
-                    "decision": "accept",
-                    "reason": "Trust established through interactions",
-                },
-                headers={"Authorization": "Bearer user_token"},
-            )
-
-            assert response.status_code == status.HTTP_200_OK
-            data = response.json()
-            assert data["success"] is True
-            assert data["data"]["decision"] == "accepted"
-            assert data["data"]["user_id"] == "discord_123456"
-            assert "consent_status" in data["data"]
-
-    @patch("ciris_engine.logic.adapters.api.routes.partnership.get_current_user")
-    @patch("ciris_engine.logic.persistence.get_task_by_id")
-    @patch("ciris_engine.logic.persistence.models.tasks.update_task_status")
-    def test_reject_partnership_success(
-        self, mock_update_task_status, mock_get_task, mock_auth, client, mock_partnership_manager
-    ):
-        """Test user rejecting a partnership request."""
-        from ciris_engine.schemas.runtime.enums import TaskStatus
-        from ciris_engine.schemas.runtime.models import Task, TaskContext
-
-        # Mock user auth
-        mock_auth.return_value = MagicMock(username="discord_123456", email="user@example.com", role="USER")
-
-        # Create mock task
-        task_context = TaskContext(
-            channel_id="test_channel",
-            user_id="discord_123456",
-            correlation_id="test_correlation",
-            parent_task_id=None,
-        )
-        mock_task = Task(
-            task_id="partnership_discord_123456_xyz789",
-            channel_id="test_channel",
-            description="Partnership request",
-            priority=5,
-            status=TaskStatus.ACTIVE,
-            created_at=datetime.now(timezone.utc).isoformat(),
-            updated_at=datetime.now(timezone.utc).isoformat(),
-            context=task_context,
-            parent_task_id=None,
-        )
-
-        # Mock persistence calls
-        mock_get_task.return_value = mock_task
-        mock_update_task_status.return_value = None
-
-        # Setup partnership manager
-        mock_partnership_manager._pending_partnerships = {
-            "discord_123456": {"task_id": "partnership_discord_123456_xyz789"}
-        }
-        mock_partnership_manager._partnership_history = {}
-
-        # Mock consent service
-        with patch.object(client.app.state, "consent_manager", create=True) as mock_consent:
-            mock_consent._partnership_manager = mock_partnership_manager
-
-            response = client.post(
-                "/v1/partnership/decide",
-                json={
-                    "task_id": "partnership_discord_123456_xyz789",
-                    "decision": "reject",
-                    "reason": "Not ready for partnership yet",
-                },
-                headers={"Authorization": "Bearer user_token"},
-            )
-
-            assert response.status_code == status.HTTP_200_OK
-            data = response.json()
-            assert data["success"] is True
-            assert data["data"]["decision"] == "rejected"
-            assert data["data"]["reason"] == "Not ready for partnership yet"
-
-    @patch("ciris_engine.logic.adapters.api.routes.partnership.get_current_user")
-    @patch("ciris_engine.logic.persistence.get_task_by_id")
-    @patch("ciris_engine.logic.persistence.models.tasks.update_task_status")
-    def test_defer_partnership_success(
-        self, mock_update_task_status, mock_get_task, mock_auth, client, mock_partnership_manager
-    ):
-        """Test user deferring a partnership request."""
-        from ciris_engine.schemas.runtime.enums import TaskStatus
-        from ciris_engine.schemas.runtime.models import Task, TaskContext
-
-        # Mock user auth
-        mock_auth.return_value = MagicMock(username="discord_123456", email="user@example.com", role="USER")
-
-        # Create mock task
-        task_context = TaskContext(
-            channel_id="test_channel",
-            user_id="discord_123456",
-            correlation_id="test_correlation",
-            parent_task_id=None,
-        )
-        mock_task = Task(
-            task_id="partnership_discord_123456_def456",
-            channel_id="test_channel",
-            description="Partnership request",
-            priority=5,
-            status=TaskStatus.ACTIVE,
-            created_at=datetime.now(timezone.utc).isoformat(),
-            updated_at=datetime.now(timezone.utc).isoformat(),
-            context=task_context,
-            parent_task_id=None,
-        )
-
-        # Mock persistence calls
-        mock_get_task.return_value = mock_task
-        mock_update_task_status.return_value = None
-
-        # Setup partnership manager
-        mock_partnership_manager._partnership_history = {}
-
-        # Mock consent service
-        with patch.object(client.app.state, "consent_manager", create=True) as mock_consent:
-            mock_consent._partnership_manager = mock_partnership_manager
-
-            response = client.post(
-                "/v1/partnership/decide",
-                json={
-                    "task_id": "partnership_discord_123456_def456",
-                    "decision": "defer",
-                    "reason": "Need more time to consider",
-                },
-                headers={"Authorization": "Bearer user_token"},
-            )
-
-            assert response.status_code == status.HTTP_200_OK
-            data = response.json()
-            assert data["success"] is True
-            assert data["data"]["decision"] == "deferred"
-            assert data["data"]["reason"] == "Need more time to consider"
-
-    @patch("ciris_engine.logic.adapters.api.routes.partnership.get_current_user")
-    @patch("ciris_engine.logic.persistence.get_task_by_id")
-    def test_decide_partnership_task_not_found(self, mock_get_task, mock_auth, client):
-        """Test decide endpoint with non-existent task."""
-        # Mock user auth
-        mock_auth.return_value = MagicMock(username="discord_123456", email="user@example.com", role="USER")
-
-        # Mock persistence to return None (task not found)
-        mock_get_task.return_value = None
-
-        response = client.post(
-            "/v1/partnership/decide",
-            json={
-                "task_id": "nonexistent_task",
-                "decision": "accept",
-            },
-            headers={"Authorization": "Bearer user_token"},
-        )
-
-        assert response.status_code == status.HTTP_404_NOT_FOUND
-        assert "not found" in response.json()["detail"].lower()
-
-    @pytest.mark.skip(reason="Permission check tested via integration - mock setup complex")
-    @patch("ciris_engine.logic.adapters.api.routes.partnership.get_current_user")
-    @patch("ciris_engine.logic.persistence.get_task_by_id")
-    @patch("ciris_engine.logic.persistence.models.tasks.update_task_status")
-    def test_decide_partnership_wrong_user(self, mock_update_task_status, mock_get_task, mock_auth, client):
-        """Test that users can only decide on their own partnership requests."""
-        # Mock user auth (different user)
-        from ciris_engine.logic.adapters.api.models import TokenData
-        from ciris_engine.schemas.runtime.enums import TaskStatus
-        from ciris_engine.schemas.runtime.models import Task, TaskContext
-
-        mock_auth.return_value = TokenData(username="different_user", email="other@example.com", role="USER")
-
-        # Create mock task for a different user
-        task_context = TaskContext(
-            channel_id="test_channel",
-            user_id="discord_123456",  # Different from authenticated user
-            correlation_id="test_correlation",
-            parent_task_id=None,
-        )
-        mock_task = Task(
-            task_id="partnership_discord_123456_abc123",
-            channel_id="test_channel",
-            description="Partnership request",
-            priority=5,
-            status=TaskStatus.ACTIVE,
-            created_at=datetime.now(timezone.utc).isoformat(),
-            updated_at=datetime.now(timezone.utc).isoformat(),
-            context=task_context,
-            parent_task_id=None,
-        )
-
-        mock_get_task.return_value = mock_task
-
-        response = client.post(
-            "/v1/partnership/decide",
-            json={
-                "task_id": "partnership_discord_123456_abc123",
-                "decision": "reject",  # Use reject instead of accept to test permission check before other logic
-            },
-            headers={"Authorization": "Bearer user_token"},
-        )
-
-        # Should get 403 because user is not authorized (different username than task user_id)
-        assert response.status_code == status.HTTP_403_FORBIDDEN
-        assert "only decide on your own" in response.json()["detail"].lower()
-
-    @patch("ciris_engine.logic.adapters.api.routes.partnership.get_current_user")
-    def test_decide_partnership_missing_task_id(self, mock_auth, client):
-        """Test decide endpoint without task_id."""
-        # Mock user auth
-        mock_auth.return_value = MagicMock(username="discord_123456", email="user@example.com", role="USER")
-
-        response = client.post(
-            "/v1/partnership/decide",
-            json={
-                "decision": "accept",
-            },
-            headers={"Authorization": "Bearer user_token"},
-        )
-
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "task_id" in response.json()["detail"].lower()
-
-    @patch("ciris_engine.logic.adapters.api.routes.partnership.get_current_user")
-    def test_decide_partnership_invalid_decision(self, mock_auth, client):
-        """Test decide endpoint with invalid decision value."""
-        # Mock user auth
-        mock_auth.return_value = MagicMock(username="discord_123456", email="user@example.com", role="USER")
-
-        response = client.post(
-            "/v1/partnership/decide",
-            json={
-                "task_id": "partnership_discord_123456_abc123",
-                "decision": "invalid_decision",
-            },
-            headers={"Authorization": "Bearer user_token"},
-        )
-
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "accept" in response.json()["detail"].lower() or "reject" in response.json()["detail"].lower()
-
-
-class TestPartnershipHelpers:
-    """Test partnership helper functions directly."""
-
-    def test_require_admin_allows_admin(self):
-        """Test require_admin passes for ADMIN role."""
-        user = MagicMock(role="ADMIN")
-        require_admin(user, "test action")  # Should not raise
-
-    def test_require_admin_allows_system_admin(self):
-        """Test require_admin passes for SYSTEM_ADMIN role."""
-        user = MagicMock(role="SYSTEM_ADMIN")
-        require_admin(user, "test action")  # Should not raise
-
-    def test_require_admin_rejects_user(self):
-        """Test require_admin raises 403 for USER role."""
-        user = MagicMock(role="USER")
-        with pytest.raises(HTTPException) as exc_info:
-            require_admin(user, "view metrics")
-        assert exc_info.value.status_code == 403
-        assert "view metrics" in exc_info.value.detail
-
-    def test_create_partnership_response_basic(self):
-        """Test create_partnership_response with minimal args."""
-        resp = create_partnership_response(
-            data={"key": "value"},
-            message="Test message",
-        )
-        assert resp.success is True
-        assert resp.data == {"key": "value"}
-        assert resp.message == "Test message"
-        assert "timestamp" in resp.metadata
-
-    def test_create_partnership_response_with_extra_metadata(self):
-        """Test create_partnership_response merges extra metadata."""
-        resp = create_partnership_response(
-            data={"key": "value"},
-            message="Test",
-            extra_metadata={"extra": "data"},
-        )
-        assert resp.metadata["extra"] == "data"
-        assert "timestamp" in resp.metadata
-
-    @patch("ciris_engine.logic.adapters.api.routes.partnership.get_current_user")
-    @patch("ciris_engine.logic.persistence.get_task_by_id")
-    def test_decide_partnership_no_user_context(self, mock_get_task, mock_auth, client):
-        """Test decide endpoint when task has no user context."""
-        from ciris_engine.schemas.runtime.enums import TaskStatus
-        from ciris_engine.schemas.runtime.models import Task
-
-        mock_auth.return_value = MagicMock(username="user1", role="USER")
-        mock_task = Task(
-            task_id="task_123",
-            channel_id="ch",
-            description="test",
-            priority=5,
-            status=TaskStatus.ACTIVE,
-            created_at=datetime.now(timezone.utc).isoformat(),
-            updated_at=datetime.now(timezone.utc).isoformat(),
-            context=None,
-            parent_task_id=None,
-        )
-        mock_get_task.return_value = mock_task
-
-        response = client.post(
-            "/v1/partnership/decide",
-            json={"task_id": "task_123", "decision": "accept"},
-            headers={"Authorization": "Bearer token"},
-        )
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "user context" in response.json()["detail"].lower()
-
-    @patch("ciris_engine.logic.adapters.api.routes.partnership.get_current_user")
-    @patch("ciris_engine.logic.persistence.get_task_by_id")
-    @patch("ciris_engine.logic.persistence.add_graph_node")
-    @patch("ciris_engine.logic.persistence.models.tasks.update_task_status")
-    def test_accept_partnership_approval_fails(
-        self, mock_update, mock_graph, mock_get_task, mock_auth, client, mock_partnership_manager
-    ):
-        """Test accept when finalize_partnership_approval returns None."""
-        from ciris_engine.schemas.runtime.enums import TaskStatus
-        from ciris_engine.schemas.runtime.models import Task, TaskContext
-
-        mock_auth.return_value = MagicMock(username="user1", role="USER")
-        mock_task = Task(
-            task_id="task_123",
-            channel_id="ch",
-            description="test",
-            priority=5,
-            status=TaskStatus.ACTIVE,
-            created_at=datetime.now(timezone.utc).isoformat(),
-            updated_at=datetime.now(timezone.utc).isoformat(),
-            context=TaskContext(channel_id="ch", user_id="user1", correlation_id="c", parent_task_id=None),
-            parent_task_id=None,
-        )
-        mock_get_task.return_value = mock_task
-        mock_partnership_manager.finalize_partnership_approval.return_value = None
-
-        with patch.object(client.app.state, "consent_manager", create=True) as mock_consent:
-            mock_consent._partnership_manager = mock_partnership_manager
-            response = client.post(
-                "/v1/partnership/decide",
-                json={"task_id": "task_123", "decision": "accept"},
-                headers={"Authorization": "Bearer token"},
-            )
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "approval failed" in response.json()["detail"].lower()
-
-    @patch("ciris_engine.logic.adapters.api.routes.partnership.get_current_user")
-    @patch("ciris_engine.logic.persistence.get_task_by_id")
-    @patch("ciris_engine.logic.persistence.models.tasks.update_task_status")
-    def test_reject_without_reason_uses_default(
-        self, mock_update, mock_get_task, mock_auth, client, mock_partnership_manager
-    ):
-        """Test reject without reason uses default message."""
-        from ciris_engine.schemas.runtime.enums import TaskStatus
-        from ciris_engine.schemas.runtime.models import Task, TaskContext
-
-        mock_auth.return_value = MagicMock(username="user1", role="USER")
-        mock_task = Task(
-            task_id="task_123",
-            channel_id="ch",
-            description="test",
-            priority=5,
-            status=TaskStatus.ACTIVE,
-            created_at=datetime.now(timezone.utc).isoformat(),
-            updated_at=datetime.now(timezone.utc).isoformat(),
-            context=TaskContext(channel_id="ch", user_id="user1", correlation_id="c", parent_task_id=None),
-            parent_task_id=None,
-        )
-        mock_get_task.return_value = mock_task
-        mock_partnership_manager._pending_partnerships = {}
-        mock_partnership_manager._partnership_history = {}
-
-        with patch.object(client.app.state, "consent_manager", create=True) as mock_consent:
-            mock_consent._partnership_manager = mock_partnership_manager
-            response = client.post(
-                "/v1/partnership/decide",
-                json={"task_id": "task_123", "decision": "reject"},
-                headers={"Authorization": "Bearer token"},
-            )
+    def test_negative_control_options_still_mounted(self, app, client):
+        """The 404 checks would pass vacuously if the router were simply not mounted."""
+        assert _registered(app, "GET", "/v1/partnership/options")
+        response = client.get("/v1/partnership/options", headers={"Authorization": "Bearer admin_token"})
         assert response.status_code == status.HTTP_200_OK
-        assert response.json()["data"]["reason"] == "Partnership request was declined"
 
-    @patch("ciris_engine.logic.adapters.api.routes.partnership.get_current_user")
-    @patch("ciris_engine.logic.persistence.get_task_by_id")
-    @patch("ciris_engine.logic.persistence.models.tasks.update_task_status")
-    def test_defer_without_reason_uses_default(
-        self, mock_update, mock_get_task, mock_auth, client, mock_partnership_manager
-    ):
-        """Test defer without reason uses default message."""
-        from ciris_engine.schemas.runtime.enums import TaskStatus
-        from ciris_engine.schemas.runtime.models import Task, TaskContext
 
-        mock_auth.return_value = MagicMock(username="user1", role="USER")
-        mock_task = Task(
-            task_id="task_123",
-            channel_id="ch",
-            description="test",
-            priority=5,
-            status=TaskStatus.ACTIVE,
-            created_at=datetime.now(timezone.utc).isoformat(),
-            updated_at=datetime.now(timezone.utc).isoformat(),
-            context=TaskContext(channel_id="ch", user_id="user1", correlation_id="c", parent_task_id=None),
-            parent_task_id=None,
-        )
-        mock_get_task.return_value = mock_task
-        mock_partnership_manager._partnership_history = {}
+class TestPartnershipOptions:
+    def test_options_describe_the_steward_route_not_agent_approval(self, client):
+        data = client.get("/v1/partnership/options", headers={"Authorization": "Bearer admin_token"}).json()["data"]
+        text = data["approval_process"].lower()
+        assert "steward" in text
+        assert "bilateral" not in text
+        assert "the agent will review" not in text
+        assert "interaction" in data["required_categories"]
 
-        with patch.object(client.app.state, "consent_manager", create=True) as mock_consent:
-            mock_consent._partnership_manager = mock_partnership_manager
-            response = client.post(
-                "/v1/partnership/decide",
-                json={"task_id": "task_123", "decision": "defer"},
-                headers={"Authorization": "Bearer token"},
-            )
-        assert response.status_code == status.HTTP_200_OK
-        assert response.json()["data"]["reason"] == "More information needed before deciding"
+
+class TestDoctrineRemoved:
+    """The superseded 'EQUAL moral agency ... No admin bypass' doctrine is gone from the code."""
+
+    @pytest.mark.parametrize(
+        "module",
+        [
+            "ciris_engine.logic.adapters.api.routes.partnership",
+            "ciris_engine.logic.services.governance.consent.partnership",
+        ],
+    )
+    def test_docstring(self, module):
+        import importlib
+        import inspect
+
+        source = inspect.getsource(importlib.import_module(module))
+        assert "EQUAL moral agency" not in source
+        assert "No admin bypass" not in source

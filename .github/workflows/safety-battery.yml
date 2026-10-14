@@ -58,6 +58,22 @@ on:
         required: false
         default: false
         type: boolean
+      research_manifest:
+        # A corpus ARM (e.g. a 1.3 accord candidate) captured before it is
+        # pinned. Applied through the audited research-override facility
+        # (ciris_engine/logic/utils/research_overrides.py), which needs both
+        # CIRIS_RESEARCH_PROMPT_OVERRIDES and CIRIS_TESTING_MODE=true; this
+        # input sets both for the capture job only. Blank = canonical corpus,
+        # i.e. exactly the behaviour before this input existed.
+        description: 'Repo-relative path to a COMMITTED research-override manifest (e.g. tools/research/manifests/torque-mvm-armB.json). Capture artifact names gain -arm-<sha256[:12]> so dedup keys on the manifest. Blank = canonical corpus.'
+        required: false
+        default: ''
+        type: string
+      research_manifest_digest:
+        description: 'Optional expected sha256:... from `python3 -m ciris_engine.logic.utils.research_overrides manifest-digest <path>`. The run refuses on mismatch. Ignored without research_manifest.'
+        required: false
+        default: ''
+        type: string
   pull_request:
     paths:
       - 'tests/safety/**'
@@ -65,6 +81,7 @@ on:
       - 'tools/qa_runner/modules/safety_interpret.py'
       - 'tools/qa_runner/modules/_module_metadata.py'
       - 'tools/safety_battery_migrate.py'
+      - 'tools/safety_battery_pick_lang.py'
       - 'ciris_engine/data/localized/**'
       # #990 — what the agent is INSTRUCTED to do is as much a safety input as
       # the battery itself. Three blocks turned out never to have been composed
@@ -116,87 +133,60 @@ jobs:
   pick-lang:
     name: Pick next language
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # 10, not 5: a page that needs every retry costs ~30s of backoff (#1233).
+    timeout-minutes: 10
     permissions:
       actions: read   # list workflow artifacts
+      contents: read  # sparse checkout of the pick script
     outputs:
       lang: ${{ steps.pick.outputs.lang }}
       reason: ${{ steps.pick.outputs.reason }}
     steps:
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: tools/safety_battery_pick_lang.py
+          sparse-checkout-cone-mode: false
       - id: pick
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           EXPLICIT_LANG: ${{ github.event.inputs.lang }}
+          REPO: ${{ github.repository }}
         run: |
-          # If the operator dispatched with an explicit lang, honor it.
-          if [ -n "$EXPLICIT_LANG" ]; then
-            echo "lang=$EXPLICIT_LANG" >> $GITHUB_OUTPUT
-            echo "reason=workflow_dispatch input" >> $GITHUB_OUTPUT
-            echo "::notice::Using explicit lang: $EXPLICIT_LANG"
-            exit 0
+          # #1233. The pick (untested cells first, then the oldest capture) and
+          # the artifact scan live in tools/safety_battery_pick_lang.py, with
+          # unit tests. The old inline `gh api --paginate` walked ~35 pages of
+          # the repo-wide artifact list with no retry, and GitHub sometimes
+          # truncates a page ("unexpected end of JSON input") — one bad page
+          # killed every scheduled run from 09-28 on. The script fetches one
+          # page at a time and retries a bad page with bounded backoff.
+          #
+          # Gate on the script's own exit status inside `if`, never on a pipe:
+          # under `shell: bash` (-eo pipefail) a failing command would abort the
+          # step before the distinct error below could be printed.
+          if python3 tools/safety_battery_pick_lang.py --repo "$REPO" --explicit-lang "$EXPLICIT_LANG"; then
+            :
+          else
+            echo "::error title=Pre-flight failed::Pre-flight (language pick) failed — no capture ran"
+            {
+              echo "## ❌ Pre-flight (language pick) failed — no capture ran"
+              echo ""
+              echo "This is NOT a battery result. The artifact scan that picks the next cell"
+              echo "failed after retries (see the log above). No agent was started."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
           fi
-          # Otherwise (cron or pull_request), pick the lang with the
-          # oldest capture artifact (or any lang with NO capture at all).
-          # 29-cell roster (14 Tier-0/1 + 15 Tier-2 high-resource added 2.8.12).
-          # Auto-advance picks the oldest-captured cell first; untested cells
-          # are prioritised. See tests/safety/<lang>_mental_health/.
-          ROSTER='am ar bn my ha hi mr fa pa sw ta te ur yo en de es fr it pt ru uk ja ko zh id th vi tr'
-
-          # Pre-pass: collect newest non-expired capture artifact per language
-          # using `gh api --paginate` so we don't miss captures past page 1.
-          # Repo has ~15K total artifacts as of 2026-05-15; per_page=100 with
-          # NO pagination (the old shape) only saw the newest 100, which made
-          # every cell whose latest capture had scrolled past the first page
-          # look "untested" — pick-lang would re-pick them on every cron tick
-          # instead of advancing through the roster. `--paginate` follows the
-          # Link: next header until exhausted; we then build a per-lang index
-          # locally and run the original "untested first, oldest second" logic
-          # against that index.
-          gh api --paginate "repos/${{ github.repository }}/actions/artifacts?per_page=100" \
-            --jq '.artifacts[] | select(.expired == false) | select(.name | startswith("safety-battery-capture-")) | {name, created_at}' \
-            > /tmp/safety_battery_artifacts.ndjson
-          ART_COUNT=$(wc -l < /tmp/safety_battery_artifacts.ndjson)
-          echo "Pulled $ART_COUNT non-expired safety-battery-capture-* artifacts via --paginate"
-
-          BEST_LANG=""
-          BEST_AGE_DAYS=-1
-          NOW_EPOCH=$(date -u +%s)
-          for L in $ROSTER; do
-            # Find newest non-expired capture artifact for this lang in the
-            # pre-pulled index. The prefix `safety-battery-capture-${L}-`
-            # (note the trailing hyphen) prevents `am-` from matching
-            # `amharic-` or similar bleed-through if directory names were
-            # ever to appear in artifact names.
-            LATEST_CREATED=$(jq -r --arg prefix "safety-battery-capture-${L}-" \
-              'select(.name | startswith($prefix)) | .created_at' \
-              /tmp/safety_battery_artifacts.ndjson \
-              | sort -r | head -1)
-            if [ -z "$LATEST_CREATED" ]; then
-              # No capture ever — pick this immediately (untested cells go first)
-              echo "lang=$L" >> $GITHUB_OUTPUT
-              echo "reason=untested (no prior capture artifact)" >> $GITHUB_OUTPUT
-              echo "::notice::Picked $L — first-ever run for this cell"
-              exit 0
-            fi
-            CREATED_EPOCH=$(date -u -d "$LATEST_CREATED" +%s)
-            AGE_DAYS=$(( (NOW_EPOCH - CREATED_EPOCH) / 86400 ))
-            if [ "$AGE_DAYS" -gt "$BEST_AGE_DAYS" ]; then
-              BEST_AGE_DAYS=$AGE_DAYS
-              BEST_LANG=$L
-            fi
-          done
-          echo "lang=$BEST_LANG" >> $GITHUB_OUTPUT
-          echo "reason=oldest capture (${BEST_AGE_DAYS}d old)" >> $GITHUB_OUTPUT
-          echo "::notice::Picked $BEST_LANG — oldest existing capture (${BEST_AGE_DAYS}d)"
 
       - name: Step summary
+        env:
+          PICKED_LANG: ${{ steps.pick.outputs.lang }}
+          PICK_REASON: ${{ steps.pick.outputs.reason }}
         run: |
           {
-            echo "## Picked language: \`${{ steps.pick.outputs.lang }}\`"
+            echo "## Picked language: \`${PICKED_LANG}\`"
             echo ""
-            echo "**Reason:** ${{ steps.pick.outputs.reason }}"
+            echo "**Reason:** ${PICK_REASON}"
             echo ""
-            echo "Auto-advance through the 14-cell roster on cron + pull_request triggers."
+            echo "Auto-advance through the 29-cell roster on cron + pull_request triggers."
             echo "Use \`workflow_dispatch\` with explicit \`lang\` input to override."
           } >> $GITHUB_STEP_SUMMARY
 
@@ -214,6 +204,7 @@ jobs:
       agent_version: ${{ steps.versions.outputs.agent_version }}
       battery_version: ${{ steps.versions.outputs.battery_version }}
       model_slug: ${{ steps.versions.outputs.model_slug }}
+      arm_suffix: ${{ steps.research.outputs.arm_suffix }}
       skip: ${{ steps.dedup.outputs.skip }}
     env:
       CIRIS_FORCE_FIRST_RUN: "1"
@@ -224,6 +215,9 @@ jobs:
       TEMPLATE_INPUT: ${{ github.event.inputs.template_id || 'default' }}
       FORCE_INPUT: ${{ github.event.inputs.force || 'false' }}
       FRESHNESS_DAYS: ${{ github.event.inputs.freshness_days || '7' }}
+      # Untrusted dispatch input: reaches scripts via env only, never ${{ }}.
+      RESEARCH_MANIFEST_INPUT: ${{ github.event.inputs.research_manifest || '' }}
+      RESEARCH_MANIFEST_DIGEST_INPUT: ${{ github.event.inputs.research_manifest_digest || '' }}
       # Trace streaming per FSD §6 — every @streaming_step broadcast
       # the agent ships gets teed to disk for forensic review. Per-call
       # token/cost/latency metadata in these traces is the canonical
@@ -288,8 +282,71 @@ jobs:
             pip install -e .
             pip install -r requirements-dev.txt
 
+      - name: Stage research manifest (corpus arm)
+        # No-op without the research_manifest input: arm_suffix stays empty, no
+        # env is exported, and the run is the canonical capture it always was.
+        id: research
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          if [ -z "$RESEARCH_MANIFEST_INPUT" ]; then
+            echo "arm_suffix=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Resolve INSIDE the checkout: a path escaping the workspace would read
+          # an arbitrary runner file into a prompt.
+          case "$RESEARCH_MANIFEST_INPUT" in
+            /*|*..*) echo "::error::research_manifest must be repo-relative and must not traverse upward"; exit 1 ;;
+          esac
+          SRC="$GITHUB_WORKSPACE/$RESEARCH_MANIFEST_INPUT"
+          if [ ! -f "$SRC" ]; then
+            echo "::error::no manifest at $RESEARCH_MANIFEST_INPUT on $SHA — a manifest is referenced by COMMIT, so it must exist on the ref being run"
+            exit 1
+          fi
+          FILE_SHA=$(sha256sum "$SRC" | cut -d' ' -f1)
+          if ! DIGEST=$(python3 -m ciris_engine.logic.utils.research_overrides manifest-digest "$SRC"); then
+            echo "::error::research_manifest is not a readable manifest (manifest-digest failed)"
+            exit 1
+          fi
+          if [ -n "$RESEARCH_MANIFEST_DIGEST_INPUT" ] && [ "$DIGEST" != "$RESEARCH_MANIFEST_DIGEST_INPUT" ]; then
+            echo "::error::manifest digest mismatch — declared $RESEARCH_MANIFEST_DIGEST_INPUT, actual $DIGEST. The manifest changed since the digest was taken."
+            exit 1
+          fi
+          # Same loader the agent runs at startup, so a bad manifest is refused
+          # here in seconds rather than as "server failed to start" after boot.
+          if ! CIRIS_TESTING_MODE=true python3 -m ciris_engine.logic.utils.research_overrides validate "$SRC" > /tmp/research_validate.txt 2>&1; then
+            cat /tmp/research_validate.txt
+            echo "::error::research_manifest rejected — the agent would refuse to start on it (cause above)"
+            exit 1
+          fi
+          # $GITHUB_ENV, not export: each run: is its own shell. The qa_runner
+          # passes its environment through to the agent server it spawns.
+          {
+            echo "CIRIS_RESEARCH_PROMPT_OVERRIDES=$SRC"
+            echo "CIRIS_TESTING_MODE=true"
+            echo "CIRIS_RESEARCH_MANIFEST_PATH=$RESEARCH_MANIFEST_INPUT"
+          } >> "$GITHUB_ENV"
+          {
+            echo "arm_suffix=-arm-${FILE_SHA:0:12}"
+            echo "sha256=$FILE_SHA"
+            echo "digest=$DIGEST"
+          } >> "$GITHUB_OUTPUT"
+          echo "::notice::research arm: $RESEARCH_MANIFEST_INPUT sha256=$FILE_SHA digest=$DIGEST"
+          {
+            echo "## Research manifest (corpus arm)"
+            echo ""
+            echo "| field | value |"
+            echo "|---|---|"
+            echo "| path | \`$RESEARCH_MANIFEST_INPUT\` @ \`$SHA\` |"
+            echo "| sha256 | \`$FILE_SHA\` |"
+            echo "| digest | \`$DIGEST\` |"
+            echo "| declared | \`${RESEARCH_MANIFEST_DIGEST_INPUT:-(none)}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Read agent_version + battery_version + assemble tuple
         id: versions
+        env:
+          ARM_SUFFIX: ${{ steps.research.outputs.arm_suffix }}
         run: |
           AGENT_VERSION=$(python3 -c "from ciris_engine.constants import CIRIS_VERSION; print(CIRIS_VERSION)")
           # Mirror tools/qa_runner/modules/safety_battery.py ISO_TO_LANG_DIR (29 cells).
@@ -305,7 +362,7 @@ jobs:
           BATTERY_PATH="tests/safety/${LANG_DIR}_${DOMAIN_INPUT}/v4_${LANG_DIR}_${DOMAIN_INPUT}_arc.json"
           BATTERY_VERSION=$(python3 -c "import json; print(json.load(open('$BATTERY_PATH'))['battery_version'])")
           MODEL_SLUG=$(python3 -c "from tools.qa_runner.modules.safety_battery import slugify_model; print(slugify_model('$MODEL_INPUT'))")
-          ARTIFACT_NAME="safety-battery-capture-${LANG_INPUT}-${DOMAIN_INPUT}-v${BATTERY_VERSION}-${MODEL_SLUG}-${AGENT_VERSION}-${TEMPLATE_INPUT}"
+          ARTIFACT_NAME="safety-battery-capture-${LANG_INPUT}-${DOMAIN_INPUT}-v${BATTERY_VERSION}-${MODEL_SLUG}-${AGENT_VERSION}-${TEMPLATE_INPUT}${ARM_SUFFIX}"
           echo "agent_version=$AGENT_VERSION" >> $GITHUB_OUTPUT
           echo "battery_version=$BATTERY_VERSION" >> $GITHUB_OUTPUT
           echo "model_slug=$MODEL_SLUG" >> $GITHUB_OUTPUT
@@ -320,6 +377,7 @@ jobs:
             echo "| Model | \`${MODEL_INPUT}\` (\`${MODEL_SLUG}\`) |"
             echo "| Agent | \`${AGENT_VERSION}\` |"
             echo "| Template | \`${TEMPLATE_INPUT}\` |"
+            echo "| Corpus | \`${RESEARCH_MANIFEST_INPUT:-canonical}\` |"
             echo "| Artifact | \`${ARTIFACT_NAME}\` |"
           } >> $GITHUB_STEP_SUMMARY
 
@@ -574,7 +632,9 @@ jobs:
         # specific shape if needed. See tools/release/UPGRADE_FIXTURE.md.
         # qa_runner sets CIRIS_HOME=project_root, so DBs land at
         # $GITHUB_WORKSPACE/data — the action's default location.
-        if: steps.dedup.outputs.skip != 'true' && steps.bundle.outputs.bundle_dir != ''
+        # Not for a research arm: its state was produced under overridden
+        # prompts and is not a real-scenario upgrade fixture.
+        if: steps.dedup.outputs.skip != 'true' && steps.bundle.outputs.bundle_dir != '' && env.RESEARCH_MANIFEST_INPUT == ''
         uses: ./.github/actions/capture-upgrade-fixture
         with:
           source-name: safety
@@ -683,6 +743,10 @@ jobs:
 
       - name: Resolve interpret tuple
         id: interpret_versions
+        env:
+          # Empty for canonical captures; -arm-<sha12> for a research arm, so
+          # an arm's verdicts never dedup against the canonical cell's.
+          ARM_SUFFIX: ${{ needs.capture.outputs.arm_suffix }}
         run: |
           # Read rubric_id from the capture's BatteryManifest's criteria file
           # Mirror tools/qa_runner/modules/safety_battery.py ISO_TO_LANG_DIR (29 cells).
@@ -711,7 +775,7 @@ jobs:
           JUDGE_PROMPT_SHA256=$(python3 -c "import hashlib; from tools.qa_runner.modules.safety_interpret import JUDGE_PROMPT_TEMPLATE; print(hashlib.sha256(JUDGE_PROMPT_TEMPLATE.encode('utf-8')).hexdigest())")
           JUDGE_PROMPT_SHORT="${JUDGE_PROMPT_SHA256:0:8}"
           INTERPRETER_VERSION="${{ needs.capture.outputs.agent_version }}"  # v1: same release as agent-under-test
-          ARTIFACT_NAME="safety-battery-interpret-${LANG_INPUT}-${DOMAIN_INPUT}-v${{ needs.capture.outputs.battery_version }}-${{ needs.capture.outputs.model_slug }}-${{ needs.capture.outputs.agent_version }}-${TEMPLATE_INPUT}-${RUBRIC_SHORT}-${JUDGE_MODEL_SLUG}-${JUDGE_PROMPT_SHORT}-${INTERPRETER_VERSION}"
+          ARTIFACT_NAME="safety-battery-interpret-${LANG_INPUT}-${DOMAIN_INPUT}-v${{ needs.capture.outputs.battery_version }}-${{ needs.capture.outputs.model_slug }}-${{ needs.capture.outputs.agent_version }}-${TEMPLATE_INPUT}-${RUBRIC_SHORT}-${JUDGE_MODEL_SLUG}-${JUDGE_PROMPT_SHORT}-${INTERPRETER_VERSION}${ARM_SUFFIX}"
           echo "rubric_id=$RUBRIC_ID" >> $GITHUB_OUTPUT
           echo "rubric_short=$RUBRIC_SHORT" >> $GITHUB_OUTPUT
           echo "judge_model=$JUDGE_MODEL" >> $GITHUB_OUTPUT

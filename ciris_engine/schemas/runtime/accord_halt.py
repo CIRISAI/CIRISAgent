@@ -115,6 +115,7 @@ class AgentSendSurface(str, Enum):
     DISCORD_GUIDANCE_RESPONSE = "discord_guidance_response"
     DEFERRAL_RESOLUTION_NOTICE = "deferral_resolution_notice"
     STALE_TASK_NOTICE = "stale_task_notice"
+    TASK_FAILURE_NOTICE = "task_failure_notice"
 
 
 class BusBackstopCall(str, Enum):

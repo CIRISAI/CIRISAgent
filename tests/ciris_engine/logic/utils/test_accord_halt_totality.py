@@ -311,6 +311,17 @@ def _stale_notice():
     return obj, obj.bus_manager.communication.send_message_sync, lambda: obj._notify_stale_task_completed(task)
 
 
+def _task_failure_notice():
+    from ciris_engine.logic.processors.states.work_processor import WorkProcessor
+
+    obj = WorkProcessor.__new__(WorkProcessor)
+    bus = Mock()
+    bus.send_message_sync = AsyncMock(return_value=True)
+    obj.services = Mock(communication_bus=bus)
+    task = Mock(task_id="t", channel_id="api_u1")
+    return obj, bus.send_message_sync, lambda: obj._notify_task_failed(task, "th")
+
+
 SURFACES = {
     AgentSendSurface.DREAM_ANNOUNCE: _dream,
     AgentSendSurface.DISCORD_DEFERRAL_CHANNEL: _discord_deferral,
@@ -318,6 +329,7 @@ SURFACES = {
     AgentSendSurface.DISCORD_GUIDANCE_RESPONSE: _guidance_button,
     AgentSendSurface.DEFERRAL_RESOLUTION_NOTICE: _resolution_notice,
     AgentSendSurface.STALE_TASK_NOTICE: _stale_notice,
+    AgentSendSurface.TASK_FAILURE_NOTICE: _task_failure_notice,
 }
 
 
@@ -538,6 +550,7 @@ def test_every_named_surface_is_gated_in_the_source():
         "ciris_engine/logic/adapters/discord/discord_guidance_handler.py#DeferralHelperView._respond",
         "ciris_engine/logic/adapters/discord/discord_adapter.py#DiscordAdapter.resolve_deferral",
         "ciris_engine/logic/services/infrastructure/database_maintenance/service.py#DatabaseMaintenanceService._notify_stale_task_completed",
+        "ciris_engine/logic/processors/states/work_processor.py#WorkProcessor._notify_task_failed",
         "ciris_engine/logic/buses/communication_bus.py#CommunicationBus.send_message_sync",
         "ciris_engine/logic/buses/tool_bus.py#ToolBus.dispatch_to_provider",
     ):

@@ -224,6 +224,22 @@ substrate's scrubber and by the run-kind marker below, not by this filter.
   with a real model (CIRISAgent#1245). Production runs keep the operator's
   value, or the default `production`.
 
+### Published schema: trace_format v2.8.0 (CIRISAgent#1249)
+
+`schemas/trace_format_v2_8_0.json` is the published contract, pinned by the
+Constitution by SHA-256 (`schemas/SCHEMA_SHA256`). `egress_schema.py` loads
+every bound, pattern and per-event field table from it, so the enforcer and the
+artifact cannot drift. Editing the file changes its hash, and the tests fail
+until `SCHEMA_SHA256` is updated on purpose.
+
+v2.8.0 adds `run_kind` (`production | qa | battery | mock`, required) to the
+signed envelope's `deployment_profile`, and gives `deployment_type` back to the
+operator. **Emission is still v2.7.0 by default.** Persist v54.1 and earlier
+refuse v2.8.0 traces whole, so only opt in (`CIRIS_TRACE_FORMAT_VERSION=2.8.0`,
+or the adapter config key `trace_format_version`) once the receiving nodes run
+a persist release that admits v2.8.0. Under v2.7.0 the run kind keeps riding
+`deployment_type`, as described above.
+
 ### Privacy Controls
 
 1. **Anonymization**: Agent IDs are SHA-256 hashed

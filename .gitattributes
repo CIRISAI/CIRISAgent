@@ -52,6 +52,11 @@ ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_MOBILE.txt -text
 # content whose bytes matter and which a future manifest is likely to cover.
 ciris_engine/data/localized/**            -text
 
+# Published trace_format schema artifacts. The Constitution pins them by
+# SHA-256 (schemas/SCHEMA_SHA256, CIRISAgent#1249), so their bytes must match
+# on every checkout.
+ciris_adapters/ciris_accord_metrics/schemas/**  -text
+
 # ── KEY MATERIAL — never translated, never diffed ───────────────────────────
 *.key                                     -text
 *.pem                                     -text

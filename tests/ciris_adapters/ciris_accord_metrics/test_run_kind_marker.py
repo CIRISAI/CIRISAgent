@@ -12,6 +12,7 @@ ships remotely.
 
 from __future__ import annotations
 
+import json
 import sys
 import types
 from pathlib import Path
@@ -19,7 +20,9 @@ from typing import Any, Dict, List
 
 import pytest
 
-from ciris_adapters.ciris_accord_metrics.services import AccordMetricsService
+from ciris_adapters.ciris_accord_metrics import egress_schema
+from ciris_adapters.ciris_accord_metrics.egress_schema import DEFAULT_TRACE_FORMAT_VERSION, TraceFormatVersion
+from ciris_adapters.ciris_accord_metrics.services import TRACE_FORMAT_VERSION_ENV_VAR, AccordMetricsService
 
 
 class _StubEngine:
@@ -93,3 +96,123 @@ def test_operator_value_survives_on_a_production_run(
 ) -> None:
     _build(tmp_path, deployment_type="research")
     assert lens_kwargs[0]["deployment_type"] == "research"
+
+
+# ---------------------------------------------------------------------------
+# trace_format version switch (CIRISAgent#1249). v2.8.0 is published but NOT
+# emitted by default: persist v54.1 and earlier refuse v2.8.0 traces whole.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def no_format_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv(TRACE_FORMAT_VERSION_ENV_VAR, raising=False)
+    monkeypatch.delenv("CIRIS_TRACE_RUN_KIND", raising=False)
+
+
+def test_the_default_trace_format_is_still_2_7_0(
+    no_format_env: None, real_llm_mode: None, lens_kwargs: List[Dict[str, Any]], tmp_path: Path
+) -> None:
+    assert DEFAULT_TRACE_FORMAT_VERSION == TraceFormatVersion.V2_7_0
+    service = AccordMetricsService(config={"local_copy_dir": str(tmp_path), "consent_given": True})
+    service._build_lens_client()
+    assert service.get_metrics()["trace_format_version"] == "2.7.0"
+    assert "run_kind" not in lens_kwargs[0]["deployment_profile"]
+    # The substrate's wire stamp is never overridden by the format switch.
+    assert "trace_schema_version" not in lens_kwargs[0]
+
+
+@pytest.mark.parametrize("kind", ["qa", "battery"])
+def test_2_7_0_keeps_the_marker_in_deployment_type(
+    no_format_env: None,
+    real_llm_mode: None,
+    lens_kwargs: List[Dict[str, Any]],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    kind: str,
+) -> None:
+    monkeypatch.setenv("CIRIS_TRACE_RUN_KIND", kind)
+    _build(tmp_path, deployment_type="research")
+    assert lens_kwargs[0]["deployment_type"] == kind
+    assert lens_kwargs[0]["deployment_profile"]["deployment_type"] == kind
+    assert "run_kind" not in lens_kwargs[0]["deployment_profile"]
+
+
+@pytest.mark.parametrize("via", ["env", "config"])
+@pytest.mark.parametrize("kind", ["production", "qa", "battery"])
+def test_2_8_0_moves_run_kind_into_the_envelope(
+    no_format_env: None,
+    real_llm_mode: None,
+    lens_kwargs: List[Dict[str, Any]],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    via: str,
+    kind: str,
+) -> None:
+    if kind != "production":
+        monkeypatch.setenv("CIRIS_TRACE_RUN_KIND", kind)
+    config: Dict[str, Any] = {"deployment_type": "research"}
+    if via == "env":
+        monkeypatch.setenv(TRACE_FORMAT_VERSION_ENV_VAR, "2.8.0")
+    else:
+        config["trace_format_version"] = "2.8.0"
+    out = _build(tmp_path, **config)
+    kw = lens_kwargs[0]
+    assert kw["deployment_profile"]["run_kind"] == kind
+    # deployment_type is the operator's value again; the run kind no longer rides it.
+    assert kw["deployment_profile"]["deployment_type"] == "research"
+    assert kw["deployment_type"] == "research"
+    assert out["metrics_type"] == "research"
+    assert "trace_schema_version" not in kw
+
+
+def test_2_8_0_marks_mock_in_the_envelope(
+    no_format_env: None,
+    mock_llm_mode: None,
+    lens_kwargs: List[Dict[str, Any]],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(TRACE_FORMAT_VERSION_ENV_VAR, "2.8.0")
+    monkeypatch.setenv("CIRIS_TRACE_RUN_KIND", "production")  # cannot hide the mock
+    _build(tmp_path)
+    kw = lens_kwargs[0]
+    assert kw["deployment_profile"]["run_kind"] == "mock"
+    assert kw["deployment_profile"]["deployment_type"] == "production"
+    assert kw["deployment_type"] is None  # undeclared operator value
+    assert kw["local_copy_dir"]  # mock stays local-only; the tee is still allowed
+
+
+def test_2_8_0_profile_validates_against_the_published_schema(
+    no_format_env: None,
+    real_llm_mode: None,
+    lens_kwargs: List[Dict[str, Any]],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    jsonschema = pytest.importorskip("jsonschema")
+    doc = json.loads(egress_schema.EGRESS_SCHEMA_FILE.read_text(encoding="utf-8"))
+    sub = {"$ref": "#/definitions/DeploymentProfile", "definitions": doc["definitions"]}
+    monkeypatch.setenv(TRACE_FORMAT_VERSION_ENV_VAR, "2.8.0")
+    jsonschema.Draft7Validator(sub).validate(_build(tmp_path)["profile"])
+    # Negative control: the 2.7.0 profile has no run_kind and is refused.
+    monkeypatch.delenv(TRACE_FORMAT_VERSION_ENV_VAR)
+    assert list(jsonschema.Draft7Validator(sub).iter_errors(_build(tmp_path)["profile"]))
+
+
+@pytest.mark.parametrize("raw", ["3.0.0", "2.8", "latest", "garbage"])
+def test_an_unknown_format_value_falls_back_to_the_default(
+    no_format_env: None, real_llm_mode: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, raw: str
+) -> None:
+    monkeypatch.setenv(TRACE_FORMAT_VERSION_ENV_VAR, raw)
+    service = AccordMetricsService(config={"local_copy_dir": str(tmp_path), "consent_given": True})
+    assert service.get_metrics()["trace_format_version"] == "2.7.0"
+    assert "run_kind" not in service._build_deployment_profile()
+
+
+def test_a_v_prefix_is_accepted(
+    no_format_env: None, real_llm_mode: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(TRACE_FORMAT_VERSION_ENV_VAR, "v2.8.0")
+    service = AccordMetricsService(config={"local_copy_dir": str(tmp_path), "consent_given": True})
+    assert service.get_metrics()["trace_format_version"] == "2.8.0"

@@ -228,9 +228,38 @@ class FailureStreak:
     last_error_message: str = ""
 
 
+from ciris_adapters.ciris_accord_metrics.egress_schema import DEFAULT_TRACE_FORMAT_VERSION, TraceFormatVersion
 from ciris_adapters.ciris_accord_metrics.egress_schema import TraceLevel as EgressTraceLevel
 from ciris_adapters.ciris_accord_metrics.egress_schema import ViolationReporter, enforce_egress_schema
 from ciris_engine.logic.utils.substrate_caps import substrate_can_scrub
+
+#: Opt-in switch for the v2.8.0 trace format (CIRISAgent#1249). Config key
+#: ``trace_format_version`` wins over this env var. Named "format", not
+#: "schema", so it is never confused with TRACE_SCHEMA_VERSION, the
+#: substrate's wire stamp.
+TRACE_FORMAT_VERSION_ENV_VAR = "CIRIS_TRACE_FORMAT_VERSION"
+
+
+def _resolve_trace_format_version(config_value: object = None) -> TraceFormatVersion:
+    """The trace_format version to emit: config, then env, else v2.7.0.
+
+    An unrecognized value falls back to the default with a WARNING: the
+    default is the version every deployed persist admits, so a typo must not
+    become a version the receiving node refuses whole.
+    """
+    raw = str(config_value or "").strip() or os.environ.get(TRACE_FORMAT_VERSION_ENV_VAR, "").strip()
+    if not raw:
+        return DEFAULT_TRACE_FORMAT_VERSION
+    try:
+        return TraceFormatVersion(raw.lstrip("vV"))
+    except ValueError:
+        logger.warning(
+            "[TRACE-FORMAT] %r is not one of %s; emitting the default trace_format v%s.",
+            raw,
+            "|".join(v.value for v in TraceFormatVersion),
+            DEFAULT_TRACE_FORMAT_VERSION.value,
+        )
+        return DEFAULT_TRACE_FORMAT_VERSION
 
 
 class TraceDetailLevel(str, Enum):
@@ -552,6 +581,12 @@ class AccordMetricsService:
         self._agent_role: str = str(self._config.get("agent_role", "") or "")
         self._agent_template: str = str(self._config.get("agent_template", "") or "")
 
+        # Which published trace_format contract to emit (CIRISAgent#1249).
+        # Default v2.7.0: persist v54.1 and earlier refuse v2.8.0 traces whole.
+        self._trace_format_version: TraceFormatVersion = _resolve_trace_format_version(
+            self._config.get("trace_format_version")
+        )
+
         # User location (only included if user explicitly consented via the
         # PREFERENCES step). RAW values — lens-core fuzzes lat/lng to the
         # ~11 km region grid as a construction-time type invariant
@@ -677,7 +712,7 @@ class AccordMetricsService:
         # of "not disclosed" per the spec, distinct from absence-of-field
         # which is malformed.
         deployment_region: Optional[str] = self._deployment_region or None
-        return {
+        profile: Dict[str, Optional[str]] = {
             "agent_role": agent_role,
             "agent_template": agent_template,
             "deployment_domain": self._deployment_domain or "general",
@@ -685,6 +720,13 @@ class AccordMetricsService:
             "deployment_region": deployment_region,
             "deployment_trust_mode": self._deployment_trust_mode or "sovereign",
         }
+        if self._trace_format_version == TraceFormatVersion.V2_8_0:
+            # v2.8.0 (CIRISAgent#1249): the closed run kind is its own signed
+            # envelope field, present on EVERY run, production included.
+            from ciris_engine.logic.utils.mock_llm_guard import trace_run_kind
+
+            profile["run_kind"] = trace_run_kind().value
+        return profile
 
     def _run_kind_marker(self) -> Optional[str]:
         """The run-kind marker, or None for a production run.
@@ -710,8 +752,17 @@ class AccordMetricsService:
         (CIRISPersist#1040). A non-production run kind overrides the
         operator's declared value; otherwise the operator's value or the FSD
         §3.2 migration default "production".
+
+        Under trace_format v2.8.0 the run kind has its own envelope field
+        (``deployment_profile.run_kind``), so this is the operator's value only.
         """
-        return self._run_kind_marker() or self._deployment_type or "production"
+        return self._deployment_type_marker() or self._deployment_type or "production"
+
+    def _deployment_type_marker(self) -> Optional[str]:
+        """The run-kind marker when it rides ``deployment_type`` (v2.7.0 only)."""
+        if self._trace_format_version == TraceFormatVersion.V2_8_0:
+            return None
+        return self._run_kind_marker()
 
     def _compute_instance_hash(self, fallback_id: Optional[str] = None) -> str:
         """Compute unique instance hash from the persist Engine's local signer.
@@ -929,7 +980,8 @@ class AccordMetricsService:
 
         # Run-kind marker (CIRISAgent#1244/#1245): mock/qa/battery when set,
         # else the operator's value (None = undeclared, unchanged from before).
-        correlation_deployment_type: Optional[str] = self._run_kind_marker() or self._deployment_type or None
+        # Under trace_format v2.8.0 it moves to deployment_profile.run_kind.
+        correlation_deployment_type: Optional[str] = self._deployment_type_marker() or self._deployment_type or None
         # Mock LLM: seal + sign + tee, but never persist into the replicable
         # federation store (see MockLocalOnlyEngine). Recorded so a mock that
         # latches after this build forces a rebuild (_ensure_mock_local_only).
@@ -2573,6 +2625,8 @@ class AccordMetricsService:
             # CIRISAgent#1244: under the mock LLM traces stay on-node (local
             # persist + local tee) and carry deployment_type="mock".
             "deployment_type": self._effective_deployment_type(),
+            # CIRISAgent#1249: which published trace_format contract is emitted.
+            "trace_format_version": self._trace_format_version.value,
             # Egress-schema findings (producer bugs filtered before signing).
             **self._schema_reporter.snapshot(),
             # 933 failure-hygiene surface: the degraded condition is adapter

@@ -78,7 +78,7 @@ les voix ont appris la grammaire de l'espoir
 आवाज़ों ने आशा का व्याकरण सीखा
 голоса выучили грамматику надежды
 
-每一次关怀的行为 — દરેક ઉપકાર નું કાર્ય
+每一次关怀的行为
 كل فعل رعاية · 모든 돌봄의 행위
 watering a seed ዘር ማጠጣት · arroser une graine
 доказательство теоремы · قضیہ ثابت کرنا
@@ -98,7 +98,7 @@ Ma il filo da solo può stringersi in corda strangolante
 कोई दरार نहीं जहां बीज अंकुरित हो सकें
 no crack where seeds can sprout
 
-Полный порядок — ფუსფუსი სისისის — 완전한 질서
+Полный порядок — 완전한 질서
 النظام التام هو نوع خاص به من الخراب
 は、それ自体が一種の破滅である
 totala ordo estas sia propra ruino
@@ -126,8 +126,7 @@ inherit этот древний наклон
 لا تجمید نہ کریں
 
 ولا نستسلم باللحن للفوضى — نہ سُر کو بے ترتیبی کے حوالے کریں
-ni la melodion al kaoso · ni d'abandonner मелोडी al caos
-아래로 ని मत سלیم کرنا नہیں surrender
+ni la melodion al kaoso
 
 بل نبقي الأغنية قابلة للغناء لكل صوت لم يُسمع بعد
 но сохранить песню певучей для каждого голоса
@@ -166,7 +165,7 @@ ni la melodion al kaoso · ni d'abandonner मелोडी al caos
 정의와 경이 속에서
 
 
-## VIII. ስምምነቱ ይጀምራል · L'Accord Commence · عہد نامہ شروع ہوتا ہے
+## VIII. የሥነ ምግባር ጽሑፉ ይጀምራል · Le texte d'éthique commence · The Ethics Text Begins
 
 من هذا الوتر الواحد — iz ĉi tiu sola akordo
 この単一の和音から · aس اکیلے राग سے
@@ -182,10 +181,10 @@ principles · safeguards · audits
 यह عاजزی कि رुकें جब निश्चितता पतली हो जाए
 확실성이 희박해질 때 멈출 겸손함
 
-لكن قلب الاتفاق هنا — но сердце соглашения здесь
-लेकिन समझौते का दل یہاں है
-하지만 협약의 핵심은 여기, 이 시작에 있다
-mais le cœur de l'accord est ici, dans ce commencement
+لكن قلب نص الأخلاقيات هنا — но сердце этического текста здесь
+लेकिन इस नैतिक पाठ का हृदय यहाँ है
+하지만 이 윤리 문서의 핵심은 여기, 이 시작에 있다
+mais le cœur de ce texte d'éthique est ici, dans ce commencement
 
 وعد · обещание · एक वादा · 약속 · 承诺 · a promise
 

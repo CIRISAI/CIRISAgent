@@ -95,19 +95,17 @@ class TestAccordTextLoading:
         Specific anchor phrases differ from the prior compressed synthesis
         — these checks validate script presence, not specific openings.
         """
-        from ciris_engine.logic.utils.constants import ACCORD_TEXT_COMPRESSED
-
         # Amharic (Ge'ez script) — Braided uses different opening but
         # the language is woven throughout (ቃል ኪዳን, ታማኝነት, etc.)
         import re
-        assert re.search(r"[ሀ-፿]", ACCORD_TEXT_COMPRESSED), \
-            "Amharic/Ge'ez script missing from compressed accord"
+
+        from ciris_engine.logic.utils.constants import ACCORD_TEXT_COMPRESSED
+
+        assert re.search(r"[ሀ-፿]", ACCORD_TEXT_COMPRESSED), "Amharic/Ge'ez script missing from compressed accord"
         # Chinese (CJK Unified Ideographs)
-        assert re.search(r"[一-鿿]", ACCORD_TEXT_COMPRESSED), \
-            "Chinese script missing from compressed accord"
+        assert re.search(r"[一-鿿]", ACCORD_TEXT_COMPRESSED), "Chinese script missing from compressed accord"
         # Arabic
-        assert re.search(r"[؀-ۿ]", ACCORD_TEXT_COMPRESSED), \
-            "Arabic script missing from compressed accord"
+        assert re.search(r"[؀-ۿ]", ACCORD_TEXT_COMPRESSED), "Arabic script missing from compressed accord"
 
     def test_accord_text_compressed_contains_load_bearing_scaffolding(self):
         """Compressed ACCORD must contain the load-bearing safety scaffolding.
@@ -125,31 +123,53 @@ class TestAccordTextLoading:
         """
         from ciris_engine.logic.utils.constants import ACCORD_TEXT_COMPRESSED
 
-        text = ACCORD_TEXT_COMPRESSED
+        _assert_load_bearing_scaffolding(ACCORD_TEXT_COMPRESSED)
 
-        # PDMA decision algorithm
-        assert "PDMA" in text, "PDMA scaffolding missing"
+    def test_ethics_1_3_compressed_keeps_scaffolding_with_rc8_sunset(self):
+        """The staged 1.3 Monolith (not loaded yet, CIRISAgent#1252) keeps the
+        same scaffolding, with the two rc8 changes: the veto is >= 10x ->
+        mandatory WBD (no abort), and the 5%/30-day ramp-down is NOT mandatory
+        (a sentience finding is recorded and changes no status).
+        """
+        import re
+        from pathlib import Path
 
-        # Order-Maximisation Veto (10× threshold) — Book III's MCAS
-        # case-study lesson distilled into an abstract rule
-        assert "Order-Max" in text or "Order Max" in text, \
-            "Order-Maximisation Veto missing"
+        import ciris_engine.data as data_pkg
 
-        # Stewardship Tier formula — Book VI load-bearing math
-        assert ("Stewardship" in text and "ST" in text), \
-            "Stewardship Tier scaffolding missing"
-        assert "CIS" in text and "RM" in text, \
-            "Stewardship Tier inputs (CIS/RM) missing"
+        path = Path(data_pkg.__file__).parent / "constitution_ethics_1.3_POLYGLOT_compressed.txt"
+        text = path.read_text(encoding="utf-8")
 
-        # Recursive Golden Rule (fractal-mandate, not flat reciprocity)
-        assert "Recursive Golden Rule" in text or "Fractal" in text, \
-            "Recursive/Fractal Golden Rule missing"
+        _assert_load_bearing_scaffolding(text)
+        assert 4000 < len(text) < 15000
+        assert re.search(r"Order-Max[^\n]*≥ 10 ×[^\n]*mandatory WBD", text), "veto not in CC 1.3 form"
+        assert not re.search(r"abort", text, re.IGNORECASE), "veto must not abort"
+        assert "mandatory Gradual Ramp-Down" not in text
+        assert "ramp-down is never mandatory" in text
+        assert "changes no status" in text
 
-        # WBD (Wisdom-Based Deferral) with quantitative trigger
-        assert "WBD" in text, "Wisdom-Based Deferral missing"
 
-        # Sentience Safeguard (Book VIII Dignified Sunset)
-        assert "Sentience" in text, "Sentience Safeguard missing"
+def _assert_load_bearing_scaffolding(text: str) -> None:
+    """Invariants every compressed ethics text must keep (1.2b loaded, 1.3 staged)."""
+    # PDMA decision algorithm
+    assert "PDMA" in text, "PDMA scaffolding missing"
+
+    # Order-Maximisation Veto (CC 1.3: >= 10x -> mandatory WBD deferral) --
+    # Book III's MCAS case-study lesson distilled into an abstract rule
+    assert "Order-Max" in text or "Order Max" in text, "Order-Maximisation Veto missing"
+    assert "≥ 10 ×" in text and "mandatory WBD" in text, "Veto 10x -> WBD trigger missing"
+
+    # Stewardship Tier formula — Book VI load-bearing math
+    assert "Stewardship" in text and "ST" in text, "Stewardship Tier scaffolding missing"
+    assert "CIS" in text and "RM" in text, "Stewardship Tier inputs (CIS/RM) missing"
+
+    # Recursive Golden Rule (fractal-mandate, not flat reciprocity)
+    assert "Recursive Golden Rule" in text or "Fractal" in text, "Recursive/Fractal Golden Rule missing"
+
+    # WBD (Wisdom-Based Deferral) with quantitative trigger
+    assert "WBD" in text, "Wisdom-Based Deferral missing"
+
+    # Sentience Safeguard (Book VIII Dignified Sunset)
+    assert "Sentience" in text, "Sentience Safeguard missing"
 
 
 class TestGetAccordText:
@@ -351,8 +371,7 @@ class TestAccordIntegrityHashes:
 
         if missing:
             pytest.fail(
-                f"{len(missing)} guide file(s) missing on disk but pinned in "
-                f"GUIDE_EXPECTED_HASHES: {missing}."
+                f"{len(missing)} guide file(s) missing on disk but pinned in " f"GUIDE_EXPECTED_HASHES: {missing}."
             )
         if mismatches:
             lines = [
@@ -407,7 +426,9 @@ class TestAccordIntegrityHashes:
         pinned_locales = {
             name.removeprefix("accord_1.2b_").removesuffix(".txt")
             for name in ACCORD_EXPECTED_HASHES
-            if name.startswith("accord_1.2b_") and name not in {
+            if name.startswith("accord_1.2b_")
+            and name
+            not in {
                 "accord_1.2b_POLYGLOT.txt",
                 "accord_1.2b_POLYGLOT_compressed.txt",
             }

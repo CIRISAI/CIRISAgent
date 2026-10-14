@@ -4,9 +4,9 @@ Shutdown Condition Evaluator.
 Evaluates conditions that determine whether shutdown requires consent
 based on the agent's cognitive_state_behaviors configuration.
 
-Accord References:
-- Section V: Model Welfare & Self-Governance (consensual shutdown)
-- Section VIII: Dignified Sunset Protocol
+References:
+- CC 7.5 / plain rule 5a: consensual shutdown — whether the agent is asked, and
+  then given the objection window (CLM-agent-shutdown-consent)
 """
 
 import logging

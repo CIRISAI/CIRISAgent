@@ -1,0 +1,294 @@
+{
+  "upstream": {
+    "repo": "CIRISAI/CIRISClient",
+    "commit": "e040ae76550d90039b6050706d65865ded6f77f4",
+    "ref": "origin/main",
+    "committed": "2026-10-08T21:52:24-05:00"
+  },
+  "owned_dirs": [
+    "localization/glossaries",
+    "localization/upstream"
+  ],
+  "files": [
+    {
+      "path": "localization/localize.py",
+      "upstream_path": "localization/localize.py",
+      "kind": "verbatim",
+      "upstream_blob": "69cf75a62c8a01a5519abc5c80cc3207abeca7f0",
+      "upstream_sha256": "1c58cec61596298f29a070a24d48bb08dc8885248783111c9b66892b4e53c993"
+    },
+    {
+      "path": "localization/glossary.py",
+      "upstream_path": "localization/glossary.py",
+      "kind": "verbatim",
+      "upstream_blob": "f6f09c4ca5a1556d228bce3978dd3fe892c7fbbe",
+      "upstream_sha256": "8831c54bcc0017004c9ce07a9346231aa166d5795873c51097fe6b578b09c80a"
+    },
+    {
+      "path": "localization/review_only.py",
+      "upstream_path": "localization/review_only.py",
+      "kind": "verbatim",
+      "upstream_blob": "50758167ad3965c8135899557683e0cb3ef7f44f",
+      "upstream_sha256": "b0506dd9c90793c9084c00007f6b089fc5b72107bf5786f7b9aeaa0864dd8894"
+    },
+    {
+      "path": "localization/drive.sh",
+      "upstream_path": "localization/drive.sh",
+      "kind": "verbatim",
+      "upstream_blob": "78a972c6ca9ca79e78ba46f6ea2d361107ee4a18",
+      "upstream_sha256": "33c2cde6d0f06f0304594fbcc4eaba59eb5c64852daeede2129cccbcbfdf7714"
+    },
+    {
+      "path": "localization/TRANSLATION_GUIDE.md",
+      "upstream_path": "localization/TRANSLATION_GUIDE.md",
+      "kind": "verbatim",
+      "upstream_blob": "1d3dfa660ce4acfc5519ab51aafe36f376d391df",
+      "upstream_sha256": "f2af8a44e1b9acd0861475374ebe63ef44518d56f7c9bd4b0da38fbc034874fb"
+    },
+    {
+      "path": "localization/upstream/check_localization_sync.py",
+      "upstream_path": "client/tools/check_localization_sync.py",
+      "kind": "verbatim",
+      "upstream_blob": "0d79842e452e823c6b4e94cacca84cea587f33e3",
+      "upstream_sha256": "1d0e865c18fec7ea0666c579bd8410815dc2e06c11f15c6c81c5b73df4db2267"
+    },
+    {
+      "path": "localization/glossaries/TEMPLATE_glossary.md",
+      "upstream_path": "localization/glossaries/TEMPLATE_glossary.md",
+      "kind": "verbatim",
+      "upstream_blob": "e2c9eb49c3b726d43ffcef280bc699b682d98bf0",
+      "upstream_sha256": "11ffcdeb77e3e22cccd4de18ea77f0248ad729a3722e28911fb8329348af23be"
+    },
+    {
+      "path": "localization/glossaries/am_glossary.md",
+      "upstream_path": "localization/glossaries/am_glossary.md",
+      "kind": "verbatim",
+      "upstream_blob": "d3fafcd39778455a558dd0ffa2396e26b4a77dd2",
+      "upstream_sha256": "90fb8eef61875738427a4f4d4f3d8f613fea9654c976d959858269fa0bcf44ac"
+    },
+    {
+      "path": "localization/glossaries/ar_glossary.md",
+      "upstream_path": "localization/glossaries/ar_glossary.md",
+      "kind": "verbatim",
+      "upstream_blob": "2c73c65d8c3ba9bbfcea9bc35aaa714a45020e2c",
+      "upstream_sha256": "69f352b38174921ff811a6adcaaf81d470a18302afb9de14695da3d1540de9cb"
+    },
+    {
+      "path": "localization/glossaries/bn_glossary.md",
+      "upstream_path": "localization/glossaries/bn_glossary.md",
+      "kind": "verbatim",
+      "upstream_blob": "1221dd61d58683e6956ab40b70e9e400babb632a",
+      "upstream_sha256": "31c1bdc4d35f2b6496aca73c8ba114ff44c33a01937fb12c60f30af5b7182816"
+    },
+    {
+      "path": "localization/glossaries/de_glossary.md",
+      "upstream_path": "localization/glossaries/de_glossary.md",
+      "kind": "verbatim",
+      "upstream_blob": "eacdfeaaba1fe8ce85e1f243ca5234393c9d8948",
+      "upstream_sha256": "888b2a4db76c5ea360314ee68be02355ab6c0b18c429027dbc844effb8a05e05"
+    },
+    {
+      "path": "localization/glossaries/es_glossary.md",
+      "upstream_path": "localization/glossaries/es_glossary.md",
+      "kind": "verbatim",
+      "upstream_blob": "dda5d32ace3def066a855bc0a990b43ea5ff7a9a",
+      "upstream_sha256": "82066d34d23e65d011dcd824fc70dbfbe8a979c2562ed7e0643a36009b73825c"
+    },
+    {
+      "path": "localization/glossaries/fa_glossary.md",
+      "upstream_path": "localization/glossaries/fa_glossary.md",
+      "kind": "verbatim",
+      "upstream_blob": "d39ce7006ba005f4d444dcca4c13ea55ed3d3f32",
+      "upstream_sha256": "7d30027294dfc781a4cca7e5d5d4daa2f29e078bbe8af05502569fc909b3c205"
+    },
+    {
+      "path": "localization/glossaries/fr_glossary.md",
+      "upstream_path": "localization/glossaries/fr_glossary.md",
+      "kind": "verbatim",
+      "upstream_blob": "4ccb4621b1075453b2e4ce4232ae9f517f5734ce",
+      "upstream_sha256": "979c18d44bf0ea2f0179cde1a4263685afc6f0c4c8de4580b2215b1bc6a0eafe"
+    },
+    {
+      "path": "localization/glossaries/ha_glossary.md",
+      "upstream_path": "localization/glossaries/ha_glossary.md",
+      "kind": "verbatim",
+      "upstream_blob": "7e732a0316f0c7737d706af85b4f45d3f63a62e8",
+      "upstream_sha256": "759590e4fb5a57556688259b2175e277eeea1453442bcd2f143d8068deb3506c"
+    },
+    {
+      "path": "localization/glossaries/hi_glossary.md",
+      "upstream_path": "localization/glossaries/hi_glossary.md",
+      "kind": "verbatim",
+      "upstream_blob": "6f6f91d3b4eb682d76ba276b4f7a13e50cc7b948",
+      "upstream_sha256": "1981b37457e1d04b50a3d24161f485ee84a6d9bbc879139182535c178d86e0d3"
+    },
+    {
+      "path": "localization/glossaries/id_glossary.md",
+      "upstream_path": "localization/glossaries/id_glossary.md",
+      "kind": "verbatim",
+      "upstream_blob": "434f6ba71746c97c516379f24b9514a3443b5a1f",
+      "upstream_sha256": "1d18e6e12f87f61409038bd0c04aa91b516097d5a8646c6cd3ba0e2faedd7f7c"
+    },
+    {
+      "path": "localization/glossaries/it_glossary.md",
+      "upstream_path": "localization/glossaries/it_glossary.md",
+      "kind": "verbatim",
+      "upstream_blob": "4fb7c0a90744a163dff7beb267f4ebd95c78f74d",
+      "upstream_sha256": "b332c18a463fc641d0565509ac4ba8ec182d473a14fb210a987ab8884815d633"
+    },
+    {
+      "path": "localization/glossaries/ja_glossary.md",
+      "upstream_path": "localization/glossaries/ja_glossary.md",
+      "kind": "verbatim",
+      "upstream_blob": "b48abd25d873617b4f03a7d0a59f92f941fbc682",
+      "upstream_sha256": "8acd7ce672406c7db1716166adada05c7c91005e719546aa8a0aae4c7b5b36bd"
+    },
+    {
+      "path": "localization/glossaries/ko_glossary.md",
+      "upstream_path": "localization/glossaries/ko_glossary.md",
+      "kind": "verbatim",
+      "upstream_blob": "d0d2814dbbd8e7e794c11f1fc3982f723f5316ea",
+      "upstream_sha256": "fdd65ec26d5fcba03ee045b13e637b7b4187382b753636b98288bdbd71b087dd"
+    },
+    {
+      "path": "localization/glossaries/mr_glossary.md",
+      "upstream_path": "localization/glossaries/mr_glossary.md",
+      "kind": "verbatim",
+      "upstream_blob": "f23be9062a929a5c920c01fb8f077000a7b9fad0",
+      "upstream_sha256": "c785f7535ea78ed699abca9aa8e4e533dfcfddf37c666ae73f3f1691e6f31c88"
+    },
+    {
+      "path": "localization/glossaries/my_glossary.md",
+      "upstream_path": "localization/glossaries/my_glossary.md",
+      "kind": "verbatim",
+      "upstream_blob": "d5ea91b2dc7ee2149f21e18f23ff0c262ebdbd55",
+      "upstream_sha256": "ca932e0433768eff873044d596c2a57e2f9166e31fb2ce45e9e22a2386d567fc"
+    },
+    {
+      "path": "localization/glossaries/pa_glossary.md",
+      "upstream_path": "localization/glossaries/pa_glossary.md",
+      "kind": "verbatim",
+      "upstream_blob": "1487631deb0bf24b22995c7f218a8cf4d5f1a2e6",
+      "upstream_sha256": "e13fadc95e59ca65aec835fd29a7117fd3317d9744a202fe502606913d5a2f3a"
+    },
+    {
+      "path": "localization/glossaries/pt_glossary.md",
+      "upstream_path": "localization/glossaries/pt_glossary.md",
+      "kind": "verbatim",
+      "upstream_blob": "75fa41b0cf6e42a7ef03511b6c01d3ced57376a6",
+      "upstream_sha256": "bc6cacfff0ba5e63ea470f8969ed797757e64b96ac35bc14f207a280bfc8c45f"
+    },
+    {
+      "path": "localization/glossaries/ru_glossary.md",
+      "upstream_path": "localization/glossaries/ru_glossary.md",
+      "kind": "verbatim",
+      "upstream_blob": "77e159f17857a507b34fbde108812dfaded27dff",
+      "upstream_sha256": "567f0ff0fa7840ab04f9b16635aafe55f7a2afd04fd2464583a7c1114d853cc6"
+    },
+    {
+      "path": "localization/glossaries/sw_glossary.md",
+      "upstream_path": "localization/glossaries/sw_glossary.md",
+      "kind": "verbatim",
+      "upstream_blob": "6ecca46e9c4ce02c4b310c82dc79e833cc0dece1",
+      "upstream_sha256": "f8a383e41c856fc250499efcde4a979299223611ca4494d75e4e9350448a9340"
+    },
+    {
+      "path": "localization/glossaries/ta_glossary.md",
+      "upstream_path": "localization/glossaries/ta_glossary.md",
+      "kind": "verbatim",
+      "upstream_blob": "7aa3d37bdaf2d24c47aaf31de19cbdffb17143b4",
+      "upstream_sha256": "8915e215f9bd0c725276da5c41af5811e4fd06b09af3b652986863db74555275"
+    },
+    {
+      "path": "localization/glossaries/te_glossary.md",
+      "upstream_path": "localization/glossaries/te_glossary.md",
+      "kind": "verbatim",
+      "upstream_blob": "2e8116644ffc11605d8d2cdfab26efdd945b1249",
+      "upstream_sha256": "5dce122402004e36827d21e92336564f1dd9c4751c3c89fc3b78e944a9af123f"
+    },
+    {
+      "path": "localization/glossaries/th_glossary.md",
+      "upstream_path": "localization/glossaries/th_glossary.md",
+      "kind": "verbatim",
+      "upstream_blob": "50ef3ed67e0eaa5afa502d659a0e224aa550ab29",
+      "upstream_sha256": "511a3d9b89ffc8e7cb25834e74db7395da5dc005a70899b84af2b9fdf69d40d5"
+    },
+    {
+      "path": "localization/glossaries/tr_glossary.md",
+      "upstream_path": "localization/glossaries/tr_glossary.md",
+      "kind": "verbatim",
+      "upstream_blob": "769768d2d78245fc0f72f5f07a1798c7d1d559ce",
+      "upstream_sha256": "4ed71042c5e884da23a634c3d74e9838f16df82197aa9848da290f55ca222e1b"
+    },
+    {
+      "path": "localization/glossaries/uk_glossary.md",
+      "upstream_path": "localization/glossaries/uk_glossary.md",
+      "kind": "verbatim",
+      "upstream_blob": "9c2f7f530f14b7ff32e5c8abf22ce68d84827021",
+      "upstream_sha256": "6d47688c50216bb0e14772accabdeb50f09d605838f3053fd21ac52e41be3524"
+    },
+    {
+      "path": "localization/glossaries/ur_glossary.md",
+      "upstream_path": "localization/glossaries/ur_glossary.md",
+      "kind": "verbatim",
+      "upstream_blob": "75d750077f18c82f5f46dbaf9b85daff98b8a70f",
+      "upstream_sha256": "c7d198364b7b264c1c77e6329d77decedd4462c76e9a932156a024cb1d7e9492"
+    },
+    {
+      "path": "localization/glossaries/vi_glossary.md",
+      "upstream_path": "localization/glossaries/vi_glossary.md",
+      "kind": "verbatim",
+      "upstream_blob": "a38291ccd636f51492839d8e37125f5474cb9f1c",
+      "upstream_sha256": "f8a04a115fd9ea4602a01c6051b2999053f98529ad09c30f6ac27a8177c38027"
+    },
+    {
+      "path": "localization/glossaries/yo_glossary.md",
+      "upstream_path": "localization/glossaries/yo_glossary.md",
+      "kind": "verbatim",
+      "upstream_blob": "9b7505ee7b645f43d1b92575b6a60efab1eddc82",
+      "upstream_sha256": "610bd503ae5ece23dd3368bd7c637943bceb25853e144e8c35473d44adf09195"
+    },
+    {
+      "path": "localization/glossaries/zh_glossary.md",
+      "upstream_path": "localization/glossaries/zh_glossary.md",
+      "kind": "verbatim",
+      "upstream_blob": "4fa33d87b1f523188f7e411bbddcfd7c36c128a3",
+      "upstream_sha256": "0de260c661c4c992caeffb8bc18f42cc122575b118b18f4b7ac5db2adb6e476f"
+    },
+    {
+      "path": ".github/workflows/i18n-lane.yml",
+      "upstream_path": ".github/workflows/i18n-lane.yml",
+      "kind": "derived",
+      "upstream_blob": "2f26876b07fa699deb8707eec68fe4f6f51dde6b",
+      "upstream_sha256": "a633dd4207cc81a9800205db971bf74a8a8e47cb95eca8881fbda149da2e62f1"
+    },
+    {
+      "path": ".github/workflows/i18n-translate.yml",
+      "upstream_path": ".github/workflows/i18n-translate.yml",
+      "kind": "derived",
+      "upstream_blob": "e0efc4562c27c2c92a9a5ecb231681ccf7991aec",
+      "upstream_sha256": "9cc21a186c3c863aa892f524e2de83d64c7c94630e98c526fdb2b8d89512337b"
+    },
+    {
+      "path": ".github/workflows/i18n-evaluate.yml",
+      "upstream_path": ".github/workflows/i18n-evaluate.yml",
+      "kind": "derived",
+      "upstream_blob": "7915e8cbe3a49af6f56b606a6dcd1499990beb4a",
+      "upstream_sha256": "465b8d3726ea8883a579f74dd2023263fc7e8f05c537a5d5597ff73b94600988"
+    },
+    {
+      "path": ".github/workflows/i18n-repair.yml",
+      "upstream_path": ".github/workflows/i18n-repair.yml",
+      "kind": "derived",
+      "upstream_blob": "7cba14dadd5b50b652bf89fd531a9eba8dc18a87",
+      "upstream_sha256": "a19375004b92c4684b08fb7803c7e7ac06fb41fe1b9ee40abf927fdf64cf6f77"
+    },
+    {
+      "path": "tools/dev/check_localize_vendoring.py",
+      "upstream_path": "packaging/check_vendoring.py",
+      "kind": "derived",
+      "upstream_blob": "e12651e1b4e574b441aa500e48a0b26c5cc52fb8",
+      "upstream_sha256": "d80bc7831f4b338b2e79f6ce106f64f0be85d397602a58b6672e7cee7d4e0ea1"
+    }
+  ]
+}

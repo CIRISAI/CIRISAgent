@@ -110,6 +110,44 @@ upstream to CIRISClient, then be removed here on the next re-vendor.
   `run_lane.sh` (both targets), and the workflows offer `mode: fast` only.
   Upstream fix: drop the suffix on the chat path, or submit real batch jobs,
   and halve only the calls that were batched.
+- **The drafting rung is `meta/muse-spark-1.3`** for accord runs on
+  OpenRouter (2026-10-14, Eric's ruling: "move to muse for that leg, better to
+  get off the claude family since you cover it inherently when you review").
+  The vendored rung 0 is `anthropic/claude-sonnet-5`. `install()` in
+  `accord_localize.py` replaces rung 0 only (`ACCORD_DRAFTER`). The repair rungs
+  (`google/gemini-3.7-flash`, then `anthropic/claude-opus-5`) and the judge
+  (`openai/gpt-5.1`) are the vendored ones. It also merges muse's price,
+  $1.25 / $4.25 per MTok from OpenRouter's model list, into `PRICE`
+  (`ACCORD_PRICE`). An explicit `LOCALIZE_LADDER` still wins. UI-target runs
+  (`localize.py` directly) keep the vendored ladder. In the 2026-10-14 trial
+  (18 hard keys across am/ha/yo/my/sw/es), muse-spark-1.3 passed 16, the best
+  of nine models, at $0.13 against Sonnet 5's $0.32. The vendored
+  `_openrouter_call` sends no `reasoning` setting, so muse reasons at its
+  default effort, and its output token count includes that reasoning.
+  Upstream fix: make rung 0 configurable per target, or adopt the rung.
+- **Glossary rows for accord runs** (2026-10-14), set through hooks on the
+  vendored `glossary` module (`terms`, `relevant`). The glossary files stay
+  verbatim.
+  - *constitution_ethics only:* the live `Ethics` row is dropped
+    (`CONSTITUTION_ETHICS_GLOSSARY_DROP`). In every glossary that has it, it is
+    the pipeline-stage label for the conscience step ("Conscience check"), not
+    the word. Sent with this text, it made am render "ethics text" as
+    "conscience text" (ህሊና ጽሑፍ) in every trial model, and the judge passed
+    it. It also failed every yo draft for not writing the label. One row,
+    `ethics text`, pins the document's own name per locale
+    (`ETHICS_TEXT_RENDERINGS`). Each rendering is taken from that locale's
+    accepted 1.3 output, or from the trial for the locales batch 1 withheld.
+    The derivation of each rendering is in the code comment.
+  - *every accord run:* the yo `Ethics` rendering is re-cased from the table's
+    `ÌWÀ RERE` to the corpus's `ìwà rere` (`GLOSSARY_RECASE`), so it can sit
+    inside a phrase.
+  - *every accord run:* a term that occurs only inside a longer matched term
+    is not sent (`drop_contained`, ported from the ciris-website copy of
+    `glossary.py`, where it is a local patch).
+
+  Upstream fix: fix `Ethics`' Context use (a UI label is not a prose term)
+  and the yo casing in the glossaries, and take `drop_contained` into
+  `glossary.relevant`.
 
 ## Re-vendoring
 

@@ -481,3 +481,58 @@ def test_run_lane_refuses_batch_mode_for_both_targets(flags: List[str]) -> None:
 def test_no_i18n_workflow_offers_batch_mode() -> None:
     for wf in sorted((REPO / ".github" / "workflows").glob("i18n-*.yml")):
         assert "[fast, batch]" not in wf.read_text(encoding="utf-8"), wf.name
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Drafting rung and glossary hooks (VENDORED.md, "Local divergences")
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _fresh(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, **env: str) -> Any:
+    for k, v in env.items():
+        monkeypatch.setenv(k, v)
+    stage = AL.Stage("1.2b", stage_dir=tmp_path / "stage")
+    stage.build()
+    L = AL.import_localize(stage.dir)
+    vendored = L.LADDER
+    AL.install(L, stage, {})
+    return L, vendored
+
+
+def test_the_drafting_rung_is_muse_and_only_rung_0_moves(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    L, vendored = _fresh(tmp_path, monkeypatch, LOCALIZE_PROVIDER="openrouter")
+    assert vendored[0].startswith("anthropic/"), "precondition: the vendored drafter is Claude"
+    assert L.LADDER[0] == AL.ACCORD_DRAFTER == "meta/muse-spark-1.3"
+    assert L.LADDER[1:] == vendored[1:], "the repair rungs are the vendored ones"
+    assert L.PRICE[AL.ACCORD_DRAFTER] == (1.25, 4.25), "the spend report prices the new rung"
+    assert all(m in L.PRICE for m in L.LADDER)
+
+
+def test_an_explicit_ladder_still_wins(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    L, _ = _fresh(tmp_path, monkeypatch, LOCALIZE_PROVIDER="openrouter", LOCALIZE_LADDER="a/x,b/y")
+    assert L.LADDER == ("a/x", "b/y")
+
+
+def test_a_term_seen_only_inside_a_longer_term_is_not_sent() -> None:
+    def mentions(term: str, texts: List[str]) -> bool:
+        return re.search(rf"\b{re.escape(term.lower())}\b", " ".join(texts).lower()) is not None
+
+    only_inside = ["a post-quantum decentralized constitutional mesh"]
+    assert AL.drop_contained(["Constitutional Mesh", "Constitutional"], only_inside, mentions) == [
+        "Constitutional Mesh"
+    ]
+    both = ["Defer to the Wise Authority.", "Authority is earned."]
+    assert AL.drop_contained(["Wise Authority", "Authority"], both, mentions) == ["Wise Authority", "Authority"]
+    assert AL.drop_contained(["Authority"], ["Wise Authority"], mentions) == ["Authority"], "no longer term chosen"
+
+
+def test_relevant_drops_contained_terms_through_the_vendored_glossary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    L, _ = _fresh(tmp_path, monkeypatch)
+    probe = ["The Trust Topology is public."]
+    vendored = L.gloss.terms("yo")
+    assert "Trust Topology" in vendored and "Trust" in vendored, "precondition"
+    sent = L.gloss.relevant("yo", probe)
+    assert "Trust Topology" in sent and "Trust" not in sent
+    assert "Trust" in L.gloss.relevant("yo", probe + ["Trust is earned."])

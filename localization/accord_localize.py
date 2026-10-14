@@ -31,6 +31,11 @@ time; no vendored file is edited. This module:
    would be told, for its own title, "retiring term, do not coin a rendering".
    For accord runs that row is dropped, and the name is pinned to how this
    language's shipped edition renders it (the translation memory) instead.
+   For constitution_ethics runs the pipeline-stage "Ethics" row (the UI label
+   for the conscience step) is dropped too, and one row pins "ethics text"
+   (``ETHICS_TEXT_RENDERINGS``). A term that occurs only inside a longer
+   matched term is not sent (``drop_contained``).
+   The drafting rung is ``ACCORD_DRAFTER``, not the vendored Claude rung 0.
 6. Runs the lanes ONE UNIT AT A TIME, because the pipeline sends a language's
    whole selection in one request and a whole accord does not fit in one reply.
    ``--units`` narrows a run to named units; selection within a unit stays
@@ -111,6 +116,85 @@ READ_ONLY_FLAGS = ("--check", "--dry-run", "--glossary-report")
 
 #: Glossary rows dropped for accord runs (see the module docstring, point 5).
 ACCORD_GLOSSARY_DROP = ("ACCORD",)
+
+#: Live rows dropped for constitution_ethics runs. "Ethics" is a PIPELINE-STAGE
+#: label in every glossary that has it (Context column "Conscience check" /
+#: "Ethics check": the UI's name for the conscience step), not the word ethics.
+#: Sent with the ethics text it made am render "ethics text" as the
+#: "conscience text" (ህሊና ጽሑፍ) in every model of the 2026-10-14 trial, which the
+#: judge passed, and made yo fail every draft for not writing the stage label.
+CONSTITUTION_ETHICS_GLOSSARY_DROP = ("ethics",)
+
+#: The document's own name in constitution_ethics runs: one row, "ethics text".
+#: Each rendering is taken from this language's accepted 1.3 output (the
+#: section 0 heading "The Ethics Text Begins" and line s08.l02, both accepted by
+#: the MQM judge in batch 1) or, for the four locales batch 1 withheld it in,
+#: from the 2026-10-14 model trial's accepted drafts and the judge's own
+#: suggestions. Machine-derived, not native-reviewed. A locale with no evidence
+#: has no row; there is none missing today, but the rule stands.
+#:   am  heading "የስነ-ምግባር ጽሑፉ" (accepted) + the judge's fix for the trial's
+#:       "የህሊና ጽሑፍ" (conscience text): "የዚህ ስነ-ምግባር ጽሑፍ"; ስነ-ምግባር 61x in 1.2b
+#:   ha  heading "Rubutun Ɗabi'a" + every trial draft + the judge's suggestion
+#:   my  heading "ကျင့်ဝတ် စာသား" + muse-spark-1.3's accepted s08.l02. The judge
+#:       flip-flopped between စာသား and စာတမ်း across the trial; the heading decides.
+#:   yo  no accepted output (heading and s08.l02 both withheld). "ìwé" is the
+#:       1.2b corpus's word for a document ("ìwé alààyè", a living document);
+#:       two trial drafts wrote "ìwé ìwà rere" and the judge proposed it twice,
+#:       rejecting only the casing of the stage label.
+#:   ko  heading "윤리 문언"; the accepted s08.l02 said "윤리 문서". The heading decides.
+#:   mr  heading "नैतिकतेचा ग्रंथ" (s08.l02 uses its oblique form).
+#:   everything else: heading and s08.l02 agree.
+ETHICS_TEXT_RENDERINGS: Dict[str, str] = {
+    "am": "የስነ-ምግባር ጽሑፍ",
+    "ar": "النص الأخلاقي",
+    "bn": "নৈতিক পাঠ্য",
+    "de": "Ethiktext",
+    "es": "texto ético",
+    "fa": "متن اخلاقی",
+    "fr": "texte éthique",
+    "ha": "rubutun ɗabi'a",
+    "hi": "नैतिकता-पाठ",
+    "id": "teks etika",
+    "it": "testo etico",
+    "ja": "倫理テキスト",
+    "ko": "윤리 문언",
+    "mr": "नैतिकतेचा ग्रंथ",
+    "my": "ကျင့်ဝတ် စာသား",
+    "pa": "ਨੈਤਿਕ ਪਾਠ",
+    "pt": "texto de ética",
+    "ru": "этический текст",
+    "sw": "maandishi ya maadili",
+    "ta": "நெறிமுறை உரை",
+    "te": "నైతిక గ్రంథం",
+    "th": "ข้อความจริยธรรม",
+    "tr": "etik metin",
+    "uk": "етичний текст",
+    "ur": "اخلاقی متن",
+    "vi": "văn bản đạo đức",
+    "yo": "ìwé ìwà rere",
+    "zh": "伦理文本",
+}
+ETHICS_TEXT_TERM = "ethics text"
+
+#: Glossary renderings re-cased for accord runs: {lang: {english: (table, used)}}.
+#: The yo pipeline-stage table is written in UI capitals, and the judge enforced
+#: "ÌWÀ RERE" inside running prose despite the block's own "case is not
+#: normative" line. The 1.2b yo corpus writes it "ìwà rere" (4x, plus one
+#: title-cased heading), which is what lets it sit inside a phrase.
+GLOSSARY_RECASE: Dict[str, Dict[str, Tuple[str, str]]] = {
+    "yo": {"Ethics": ("ÌWÀ RERE", "ìwà rere")},
+}
+
+#: THE DRAFTING RUNG for accord runs on OpenRouter (a local divergence, see
+#: VENDORED.md). Only rung 0 moves; the repair rungs and the judge stay the
+#: vendored ones. Off the Claude family because the work is reviewed by Claude
+#: anyway (ruling, 2026-10-14). In the trial muse-spark-1.3 passed 16 of 18
+#: hard keys, the best of the nine models, at 41% of Sonnet 5's spend.
+#: LOCALIZE_LADDER, when set, still wins.
+ACCORD_DRAFTER = "meta/muse-spark-1.3"
+#: $/MTok (input, output), from OpenRouter's model list on 2026-10-14. Merged
+#: into the vendored PRICE table so the spend report prices the new rung.
+ACCORD_PRICE: Dict[str, Tuple[float, float]] = {ACCORD_DRAFTER: (1.25, 4.25)}
 
 #: The document families this adapter may read and write, by filename stem
 #: (``<stem>_<version>_<lang>.txt``). A CLOSED list: the stem arrives from a
@@ -631,6 +715,68 @@ class Context:
     lang: Optional[str] = None  # the language being drafted or repaired
 
 
+def accord_terms(rows: Dict[str, str], code: str, stem: str) -> Dict[str, str]:
+    """The live glossary rows an accord run of ``stem`` sends for ``code``."""
+    out = dict(rows)
+    for english, (table, used) in GLOSSARY_RECASE.get(code, {}).items():
+        if out.get(english) == table:
+            out[english] = used
+    if stem == "constitution_ethics":
+        out = {e: t for e, t in out.items() if e.strip().lower() not in CONSTITUTION_ETHICS_GLOSSARY_DROP}
+        if code in ETHICS_TEXT_RENDERINGS:
+            out[ETHICS_TEXT_TERM] = ETHICS_TEXT_RENDERINGS[code]
+    return out
+
+
+def _contains_term(longer: str, short: str) -> bool:
+    """Is ``short`` a whole-word phrase inside ``longer``?"""
+    if len(short) >= len(longer):
+        return False
+    return re.search(rf"\b{re.escape(short.strip().lower())}\b", longer.strip().lower()) is not None
+
+
+def drop_contained(
+    chosen: Sequence[str], texts: Sequence[str], mentions: Callable[[str, List[str]], bool]
+) -> List[str]:
+    """Drop a term that occurs in ``texts`` ONLY inside a longer chosen term.
+
+    Ported from the ciris-website copy of glossary.py (a local patch there).
+    Such a term is not a separate instruction: it is the same words counted
+    twice, and sending both makes the block contradict itself. Vietnamese pinned
+    both "Constitutional Mesh" and "Constitutional"; the one phrase
+    "decentralized constitutional mesh" contains both, so every rendering broke
+    one row and the reviewer could always cite the other. A shorter term is kept
+    when it also occurs on its own, so "Authority" survives beside "Wise
+    Authority" in a text that uses both.
+    """
+    hay = " \n ".join(texts).lower()
+    keep: List[str] = []
+    for short in chosen:
+        longer = [c for c in chosen if c != short and _contains_term(c, short)]
+        if longer:
+            rest = hay
+            for c in sorted(longer, key=len, reverse=True):
+                rest = rest.replace(c.lower(), " ")
+            if not mentions(short, [rest]):
+                continue
+        keep.append(short)
+    return keep
+
+
+def make_relevant(gloss: ModuleType) -> Callable[..., Dict[str, str]]:
+    """The vendored ``relevant`` (longest-first, whole-word) plus ``drop_contained``."""
+
+    def relevant(code: str, texts: List[str], *, limit: int = 60) -> Dict[str, str]:
+        all_terms: Dict[str, str] = gloss.terms(code)
+        if not all_terms:
+            return {}
+        hits = sorted(((len(e), e) for e in all_terms if gloss._mentions(e, texts)), key=lambda p: (-p[0], p[1]))
+        chosen = drop_contained([e for _, e in hits], texts, gloss._mentions)
+        return {e: all_terms[e] for e in chosen[:limit]}
+
+    return relevant
+
+
 def import_localize(stage_dir: Path) -> ModuleType:
     """Import vendored localize.py against the staged accord bundle."""
     os.environ["LOCALIZE_TARGET"] = "accord"
@@ -656,6 +802,25 @@ def install(L: ModuleType, stage: Stage, tms: Dict[str, TM]) -> None:
         return {e: t for e, t in rows.items() if e.strip().upper() not in ACCORD_GLOSSARY_DROP}
 
     setattr(L.gloss, "deprecated", deprecated)
+
+    # Live rows: re-cased renderings, and for the ethics text its own name in
+    # place of the pipeline-stage "Ethics" label. The vendored relevant(),
+    # block() and require() all read terms() through the module global.
+    upstream_terms = L.gloss.terms
+
+    def terms(code: str) -> Dict[str, str]:
+        return accord_terms(upstream_terms(code), code, stage.stem)
+
+    setattr(L.gloss, "terms", terms)
+    setattr(L.gloss, "relevant", make_relevant(L.gloss))
+
+    # The drafting rung (VENDORED.md, "Local divergences"). Only when nobody
+    # chose a ladder: LOCALIZE_LADDER wins, and the Anthropic SDK path cannot
+    # reach a non-Anthropic drafter at all.
+    if L.PROVIDER == "openrouter" and not os.environ.get("LOCALIZE_LADDER"):
+        setattr(L, "LADDER", (ACCORD_DRAFTER, *L.LADDER[1:]))
+    for model, price in ACCORD_PRICE.items():
+        L.PRICE.setdefault(model, price)
 
     # Which language a structural check is about: the vendored check does not
     # take one, and the script / untranslated rules need it.
@@ -767,8 +932,11 @@ def refuse_batch_mode(argv: Sequence[str]) -> None:
     the mode is refused rather than allowed to lose a rung and misreport.
     """
     for i, arg in enumerate(argv):
-        mode = arg.split("=", 1)[1] if arg.startswith("--mode=") else (
-            argv[i + 1] if arg == "--mode" and i + 1 < len(argv) else None)
+        mode = (
+            arg.split("=", 1)[1]
+            if arg.startswith("--mode=")
+            else (argv[i + 1] if arg == "--mode" and i + 1 < len(argv) else None)
+        )
         if mode == "batch":
             raise SystemExit(
                 "[refuse] --mode batch: OpenRouter's :batch slugs are not served on "

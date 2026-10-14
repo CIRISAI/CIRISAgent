@@ -205,3 +205,47 @@ def test_real_1_3_round_trips_and_most_lines_have_an_exact_tm_anchor() -> None:
     tm_text = {e for e, _ in tm.values()}
     covered = sum(1 for v in doc.segments().values() if v in tm_text)
     assert covered / len(doc.slots) > 0.85
+
+
+# ── the glossary an ethics-text run sends ────────────────────────────────────
+
+ETHICS_PROBE = [
+    "VIII. The Ethics Text Begins",
+    "But the heart of this text, the ethics text of the CIRIS Constitution, is here.",
+]
+
+
+def _installed(tmp_path: Path, stem: str) -> Any:
+    stage = AL.Stage("1.3" if stem == "constitution_ethics" else "1.2b", stage_dir=tmp_path / "stage", stem=stem)
+    stage.build()
+    L = AL.import_localize(stage.dir)
+    AL.install(L, stage, {})
+    return L
+
+
+def test_ethics_run_drops_the_pipeline_stage_label_and_pins_the_texts_name(tmp_path: Path) -> None:
+    stage = AL.Stage("1.3", stage_dir=tmp_path / "stage", stem="constitution_ethics")
+    stage.build()
+    L = AL.import_localize(stage.dir)
+    # precondition: the vendored glossary sends the stage label as "Ethics"
+    assert L.gloss.relevant("am", ETHICS_PROBE) == {"Ethics": "ህሊና"}
+    AL.install(L, stage, {})
+    for lang in ("am", "my", "yo"):
+        sent = L.gloss.relevant(lang, ETHICS_PROBE)
+        assert "Ethics" not in sent, lang
+        assert sent["ethics text"] == AL.ETHICS_TEXT_RENDERINGS[lang]
+        assert AL.ETHICS_TEXT_RENDERINGS[lang] in L.gloss.block(lang, ETHICS_PROBE)
+    assert "ህሊና" not in L.gloss.block("am", ETHICS_PROBE), "am must not be told ethics = conscience"
+
+
+def test_every_ethics_text_rendering_is_a_supported_locale() -> None:
+    manifest = json.loads((LOCALIZED / "manifest.json").read_text(encoding="utf-8"))
+    assert set(AL.ETHICS_TEXT_RENDERINGS) <= set(manifest["languages"]) - {"en"}
+    assert all(v.strip() == v and v for v in AL.ETHICS_TEXT_RENDERINGS.values())
+
+
+def test_accord_runs_keep_the_ethics_row_but_recase_yoruba(tmp_path: Path) -> None:
+    L = _installed(tmp_path, "accord")
+    assert L.gloss.relevant("yo", ["Ethics."]) == {"Ethics": "ìwà rere"}
+    assert "ethics text" not in L.gloss.relevant("yo", ETHICS_PROBE), "the name row is for the ethics text only"
+    assert L.gloss.relevant("am", ["Ethics."]) == {"Ethics": "ህሊና"}, "only yo is re-cased"

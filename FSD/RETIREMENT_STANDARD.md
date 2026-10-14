@@ -104,7 +104,7 @@ Path roots (`ciris_engine/logic/utils/path_resolution.py`): `get_ciris_home()`
 | # | Item | Record category | Where it lives | Erasure paths today |
 |---|---|---|---|---|
 | B1 | IDENTITY-scope nodes, template snapshot, continuity nodes (`logic/runtime/shutdown_continuity.py:88,125`), stewardship tier (`schemas/config/agent.py:61`) | identity | persist store | `reset-account` deletes it |
-| B2 | Federation keys `<alias>.ed25519.seed.blob`, `.master.key`, `ml_dsa_65.seed` (`logic/persistence/db/core.py:527-562`); CIRISVerify `*.ed25519.enc` / `.tpm` / `agent_signing.key` (`routes/system/data_management.py:145-149`) | identity (public half) | `<home>/identity/`; `<home>/data/` | see the findings below |
+| B2 | Federation keys `<alias>.ed25519.seed.blob`, `.master.key`, `ml_dsa_65.seed` (`logic/persistence/db/core.py:527-562`); CIRISVerify `*.ed25519.enc` / `.tpm` / `agent_signing.key` (`routes/system/data_management.py:145-149`) | identity (public half) | `<home>/identity/`; `<home>/data/` | `wipe-signing-key` clears only `<home>/data/` (§2, #1261); managed: lost on container recreate (§2) |
 | B3 | Signed hash-chained audit trail (legacy path `<home>/data/ciris_audit.db`, `schemas/config/essential.py:34`) | audit | persist store | `cleanup_old_entries` (`graph/audit_service/service.py:877`) has no production caller; `reset-account` deletes it |
 | B4 | Memory graph, consent rows, TSDB summaries | memory | persist store | TSDB `_cleanup_old_data` (`graph/tsdb_consolidation/service.py:345`); consent decay (`governance/consent/service.py:810,930`) |
 | B5 | Tasks, thoughts, `service_correlations` (including conversation content), trace batches, deferral tickets | experience | persist store | `database_maintenance` startup cleanups (`infrastructure/database_maintenance/service.py:387,821,1061`) |
@@ -134,12 +134,25 @@ Service paths above are under `ciris_engine/logic/services/`.
   and no notice. The `data_archive` mount is unused by the agent and is the natural
   hand-over target.
 
-**Under verification (the main session is checking these now):**
-- whether `wipe-signing-key` reaches `<home>/identity/`. It clears only the data
-  dir, so it may not destroy the federation key its docstring claims;
-- whether managed agents mount `/app/identity`. It is absent from the mount list
-  above. If it is truly unmounted, the federation keys sit in the container layer
-  and are lost on recreate. That would be a defect independent of retirement.
+**Confirmed 2026-10-14 (read-only checks by the main session).** Both are defects
+independent of retirement:
+- **`wipe-signing-key` does not reach `<home>/identity/`** (CIRISAgent#1261).
+  - It clears only `get_data_dir()` (`_clear_data_directory`,
+    `data_management.py:133`) and the `.env` (`_delete_env_file`, `:172`).
+  - The federation identity, meaning the sealed classical keystore and the
+    ML-DSA-65 seed, lives in `<home>/identity/` (`path_resolution.py:431`).
+  - So it survives a wipe whose docstring says it "DESTROYS the signing key"
+    (`:280`).
+- **Managed agents re-mint their federation identity on every container
+  recreate.**
+  - `compose_generator.py:279-284` has no identity mount.
+  - On the production agents host, the managed containers (image 2.9.38-stable,
+    created 2026-08-26) have no identity mount. Their `/app/identity` holds six
+    files, each dated its container's creation day.
+  - The identity therefore lives in the container's writable layer, and is lost
+    whenever the container is recreated or removed.
+  - Upstream: CIRISManager#27 asks to mount `identity`, with a migration that
+    first copies the existing `/app/identity` out.
 
 ---
 
@@ -506,10 +519,28 @@ deletions, consent decays honoured, the 5-year claim window, hold ids, successor
     recorded lawful order. Both are gated on WA standing; a bare ADMIN gets 403.
   - Individual users of a held agent keep their subject-grain deletion rights
     throughout.
+  - **The wipe's reach (CIRISAgent#1261).** Today `wipe-signing-key` leaves
+    `<home>/identity/` untouched (§2). Wherever the wipe is allowed (a personal
+    agent, or a held agent after RETIRED or under a lawful order), it must also
+    destroy the federation identity there, or say plainly that it does not. A held
+    agent's identity is otherwise reached only through retirement, where keys are
+    retired in place, never deleted. P1 carries the fix.
 - **CIRISManager.** `delete_agent` calls the retirement endpoint, shows the
   operator the `PreserveRequest`, records the response, and only then removes the
   container; never `down -v` before HANDED_OVER (D6). This hook is what makes AT-1
   hold on agents.ciris.ai.
+  - **Identity mount (confirmed missing, §2).** Managed agents keep their
+    federation identity in the container's writable layer and re-mint it on every
+    recreate. Two things follow for retirement. First, "retired in place" (§5)
+    holds only if `/app/identity` is a bind mount: a container removal would
+    otherwise destroy the retained key material, and old signatures would no
+    longer verify against anything the operator holds. Second, the private halves
+    of identities minted under earlier containers are already gone. Entries those
+    identities signed verify only where their public keys are still in the store.
+    So the manifest lists every identity public key the chain was signed under,
+    and flags any key it cannot find. D6 (CIRISManager#27) mounts `identity`, with a migration
+    that copies the existing `/app/identity` out first. On managed agents it is a
+    prerequisite for E-21.
 
 ---
 
@@ -613,7 +644,7 @@ the evidence rows for `CLM-humane-ending`.
 | PR | Scope | Size | Tests | Dependency |
 |---|---|---|---|---|
 | **P0** content-free audit | every `log_action` / `log_event` caller; parameters restricted to ids, hashes, decisions; call-site registry | S-M (~400) | E-27 | none; ships now |
-| **P1** stop the bleeding | `runs_for_others()`; reset and wipe 409 on held agents; WA-standing gate; opt-in export on personal; drop the self-erasing audit write; settle the two findings under verification | S (~350) | E-13, AT-1 neg. 1 | none; ships now |
+| **P1** stop the bleeding | `runs_for_others()`; reset and wipe 409 on held agents; WA-standing gate; opt-in export on personal; drop the self-erasing audit write; make the wipe reach `<home>/identity/` or say it does not (#1261) | S (~350) | E-13, AT-1 neg. 1 | none; ships now |
 | **P2** order, state machine, authz, boot guard, custodian | schemas; shared-task claim; create / get / confirm / cancel; ShutdownProcessor composition; double marker; embedded-safe freeze; custodian mint and binding; chain closure | M-L (~1100) | E-3–E-5, E-8, E-18, E-25, E-28 | the forced-shutdown fix; #1231 |
 | **P3** retention hold | one flag across every eraser; registry test | S-M (~400) | E-11 | D2a later |
 | **P4** deletions, secrets, keys | step DELETIONS_EXECUTED (incl. TEMPORARY); step SECRETS_DESTROYED; keys retired in place | M (~650) | E-14, E-20, E-21, E-26 | D3 (interim: local row plus refusal) |
@@ -648,7 +679,7 @@ managed agents and for mobile.
 | D3 | CIRISPersist / CIRISServer | Key-retirement row distinct from compromise revocation; prior delegations survive it | new |
 | D4 | CIRISServer | Ship `escrow_*` in the wheel | CIRISPersist#751/#752 |
 | D5 | CIRISConstitution | Namespaces: retirement row, `preserve_request:v1`, `preserve_response:v1`, `archive_release:{basis}:v1`, `lawful_order:{effect}:v1`, `record_tombstone:v1` | CIRISConstitution#168 |
-| D6 | CIRISManager | `delete_agent` → retirement → show the `PreserveRequest` → record the response → only then remove; never `down -v` before HANDED_OVER; mount `/app/identity` (under verification) | CIRISManager#27 |
+| D6 | CIRISManager | `delete_agent` → retirement → show the `PreserveRequest` → record the response → only then remove; never `down -v` before HANDED_OVER; mount `identity`, with a migration that copies the existing `/app/identity` out first (confirmed missing, §2) | CIRISManager#27 |
 | D7 | CIRISClient | Steward retirement flow; operator preserve prompt; notice banner; mobile export | new |
 | D8 | CIRISPersist / CIRISServer / CIRISVerify | A custodian identity next to the agent's on one Engine; a `retirement_custody:<id>` delegation scope | new |
 
@@ -692,4 +723,4 @@ build on landed on CIRISConstitution rc8 at `f5cea2d`.
 | 24 | `reset-account` / `wipe-signing-key` | Route through the workflow or refuse on held agents; WA-standing gate | §12, E-13 |
 
 No questions remain open. The remaining dependencies are the upstream asks (§15.1),
-each with an interim, and the two findings under verification (§2).
+each with an interim, and the two confirmed defects in §2 (#1261, CIRISManager#27).

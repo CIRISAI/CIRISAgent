@@ -1,7 +1,9 @@
 # The Retirement Standard — the `retirement_record` workflow
 
 **Contract:** CIRISConstitution rc8 (`f5cea2d`): CC 7.5.5 "The Retirement Standard, and what is set aside" · plain rule 5f · G22 · model invariant `Inv_RetirementStandard`
-**Claim:** `CLM-humane-ending` (the id is stable; the CC rewrote its summary)
+**Claim:** `CLM-humane-ending` (the id is stable; the CC rewrote its summary); the wire rows are
+`CLM-retirement-rows`, `CLM-custodian-listed-not-delegated` and `CLM-retirement-one-destruction-door`
+**Row families:** registered on CIRISConstitution rc8 at `7740dca` (CC 3.1.5; registry `99d4d338…`, 174 families); §13.1
 **Issue:** CIRISAgent#1250 (publishing the agent's guarantees as CC evidence, G15–G22)
 **Status:** Design. **Nothing in this document has shipped.** G22 reads "none shipped".
 **Companions:** `FSD/SECRETS.md` (#940, the user-scoped secrets model that step 1b ends) · `FSD/TRACE_CONSENT.md` (the consent streams that step 1a executes) · `FSD/HITL_APPROVAL_SURFACE.md` (the #944 WA deferral rail that release approval rides) · `FSD/THREAT_MODEL_2.9.7.md`
@@ -84,7 +86,7 @@ to AT-3 (§14.1) and the dye for `Inv_RetirementStandard`
 | After FROZEN it erases nothing on its own initiative, except user secrets, which are tombstoned (`retention_hold`) | that the operator keeps the package until `preserve_until` (a best practice; no duty beyond law, regulation, contract or a hold) |
 | The record is assembled and verified before hand-over, or the workflow stops | that the operator honours legal holds and periods fixed by law or contract |
 | Memory and experience logs leave the harness only sealed; the default seal opens only on a WA act | that an escrow holder, if escrow is chosen, releases only on a recorded basis (enforced by the substrate once D2b lands) |
-| The `PreserveRequest` is signed, names the period and is on the record | that the provider preserves the model weights |
+| The `preserve_request:v1` is signed, names the period and is on the record | that the provider preserves the model weights |
 | Stakeholders are notified, and the operator's answer is reported | that the operator answers DSARs and forwards deletion requests for a package it holds |
 | A release with no basis is refused wherever the gate runs | |
 | Every pending deletion is executed before assembly (a legal hold pauses it, and the pause is recorded) | |
@@ -203,14 +205,31 @@ mechanism) and carries:
 ## 5. The state machine
 
 ```
-REQUESTED ─(objection window | skipped)─► DECIDED
-  ─► [CLOSING_DIALOGUE — optional, tier ≥ 4, bounded, never blocks]
-  ─► FROZEN ─► DELETIONS_EXECUTED ─► SECRETS_DESTROYED
-  ─► ASSEMBLED ─► VERIFIED ─► SEALED
-  ─► HANDED_OVER (PreserveRequest signed)
+ (requested) ─(objection window | skipped)─► DECIDED
+  ─► (closing_dialogue — optional, tier ≥ 4, bounded, never blocks)
+  ─► FROZEN ─► (deletions_executed) ─► SECRETS_DESTROYED
+  ─► (assembled) ─► (verified) ─► (sealed)
+  ─► HANDED_OVER (preserve_request:v1 signed)
   ─► NOTIFIED ─► CUSTODIAN_MINTED ─► RETIRED
-  (operator response: recorded whenever it arrives, before or after RETIRED)
+  (preserve_response:v1: recorded whenever it arrives, before or after RETIRED)
 ```
+
+**Registered states and internal sub-steps.** The CC registers `retirement:{state}:v1`
+with a closed state set: `decided | frozen | secrets_destroyed | handed_over |
+notified | custodian_minted | retired` (CC 3.1.5). The capitalised states above are
+exactly that set, in that order, and each emits one `retirement:{state}:v1` row when
+it is reached. The parenthesised steps are **internal sub-steps that emit no row**:
+
+| Internal sub-step | Carried on the wire by |
+|---|---|
+| `requested` | nothing until `decided`. A request that is refused or withdrawn before the decision leaves agent audit entries only |
+| `closing_dialogue` | nothing; it is not part of the Standard (§10). Its open, close or skip is an agent audit entry |
+| `deletions_executed` | the `secrets_destroyed` row, which is reached only after every pending deletion has run, plus a tombstone by digest per executed deletion (§8.2) |
+| `assembled`, `verified`, `sealed` | the `handed_over` row, which carries the manifest digest and the seal mode. Reaching `handed_over` attests that the record was assembled, verified and sealed; a verify failure stops the workflow before any row |
+
+A cancel is allowed only between `decided` and `frozen`. No registered state
+carries it, so today it is an agent audit entry under the decider's name. Whether the
+CC should register a `cancelled` state is a question for CIRISConstitution#168.
 
 Every transition is idempotent and resumable. State is held twice: an
 IDENTITY-scope node `retirement_record/<id>` and a file marker `<home>/RETIRED`.
@@ -221,18 +240,18 @@ Either is enough for the boot guard.
 | **Objection** (planned only) | Composes ShutdownProcessor. The task carries `reason = "retirement: …"`. The agent may accept, reject or ask to postpone within `SHUTDOWN_NEGOTIATION_TIMEOUT_SECONDS = 300` (`shutdown_processor.py:52`). A rejection is recorded; the decider then confirms under their own name or cancels. `determine_shutdown_consent_status` (`runtime/shutdown_continuity.py:17`) is copied into the order. Emergency or halted: no window, `agent_response = not_asked:{emergency\|halted}`. |
 | **DECIDED** | For a planned retirement, the **advance notice** goes out (§9). |
 | **FROZEN** | Intake stops; interact returns 423 "retiring"; the in-flight round finishes. One `retention_hold` flag is set, and every scheduled eraser checks it (log cleanup, incident cleanup, TSDB prune, `database_maintenance`, any `cleanup_old_entries` caller, `run_retention`, consent decay). The hold never suspends a person's own deletion request. On embedded runtimes the process is never ended: record the flag, stop the adapters and :8080, return. |
-| **DELETIONS_EXECUTED** | Every pending consent deletion is executed through the existing consent and DSAR paths: due and not-yet-due decays, withdrawals in progress, open DSAR deletions. Each is recorded (`retirement.deletion_executed`). A `legal_hold` pauses a subject's deletion, recorded as `deletion_paused:<hold_id>`, executed through §8 on lift. **All TEMPORARY-stream content is deleted here and never sealed**; the record keeps only a count under basis `temporary_stream`. |
+| *(deletions_executed)*, internal | Every pending consent deletion is executed through the existing consent and DSAR paths: due and not-yet-due decays, withdrawals in progress, open DSAR deletions. Each is recorded (`retirement.deletion_executed`). A `legal_hold` pauses a subject's deletion, recorded as `deletion_paused:<hold_id>`, executed through §8 on lift. **All TEMPORARY-stream content is deleted here and never sealed**; the record keeps only a count under basis `temporary_stream`. |
 | **SECRETS_DESTROYED** | Every user secret is revoked and destroyed, with a metadata tombstone (existed, whose, kind, created, last used, destroyed). This is the one destruction the harness performs on its own initiative. A secret is a delegation that ends with the delegate (#940). |
-| **ASSEMBLED** | Copy first. A consistent store snapshot (SQLite online backup; PG needs D1, interim paged export), `audit_verify_chain` proof plus the chain head, `<home>/logs/**`, and the public half of `<home>/identity/`. Private keys are **retired in place**, not copied. A Pydantic `manifest.json` lists each item's id, category (`identity \| audit \| memory \| experience`), DCP class, SHA-256, size, disposition and, for memory and experience, a hashed `subject_ref`. This is the CC's "LEDGER::SUNSET" digest log. Live rows are left in place. |
-| **VERIFIED** | Re-hash every item, re-run `audit_verify_chain` on the copy, compare node and edge counts. Any mismatch stops the workflow and raises an incident. Nothing unverified is handed over. |
-| **SEALED** | §6. |
-| **HANDED_OVER** | The package goes to `handover_target` (managed: `/app/data_archive/<id>/`; desktop: an operator-named path; mobile: §11). A signed **`PreserveRequest`** names the `retirement_id`, the manifest digest, `preserve_until` and its inputs (worded as a best practice), active hold ids, the seal mode and release conditions, and how deletions are executed inside the record. The operator's answer (`accepted \| declined \| no_response`) is a separate signed act, recorded when given. RETIRED does not wait on it. |
+| *(assembled)*, internal | Copy first. A consistent store snapshot (SQLite online backup; PG needs D1, interim paged export), `audit_verify_chain` proof plus the chain head, `<home>/logs/**`, and the public half of `<home>/identity/`. Private keys are **retired in place**, not copied. A Pydantic `manifest.json` lists each item's id, category (`identity \| audit \| memory \| experience`), DCP class, SHA-256, size, disposition and, for memory and experience, a hashed `subject_ref`. This is the CC's "LEDGER::SUNSET" digest log. Live rows are left in place. |
+| *(verified)*, internal | Re-hash every item, re-run `audit_verify_chain` on the copy, compare node and edge counts. Any mismatch stops the workflow and raises an incident. Nothing unverified is handed over. |
+| *(sealed)*, internal | §6. |
+| **HANDED_OVER** | The package goes to `handover_target` (managed: `/app/data_archive/<id>/`; desktop: an operator-named path; mobile: §11). A signed **`preserve_request:v1`** names the `retirement_id`, the manifest digest, `preserve_until` and its inputs, active hold ids, the seal mode and release conditions, and how deletions are executed inside the record. The copy rule is in its signed bytes (§8.1). The operator's answer is a separate operator-signed `preserve_response:v1`, recorded when given; until then the agent records `no_response` locally. RETIRED does not wait on it. |
 | **NOTIFIED** | The **after-hand-over notice** (§9). |
-| **CUSTODIAN_MINTED** | §7. |
-| **RETIRED** | The final agent entry `retirement.completed` references the manifest digest and binds the custodian key. The agent's own chain is closed. The signing key is retired in place: a key-retirement row (D3, not a compromise revocation) is published, new signatures are refused, old ones still verify. The agent enters SHUTDOWN with `reason = retirement:<id>`. The boot guard refuses WAKEUP and serves only the read-only `/v1/retirement/*` surface. Only a recorded 7.5.7 succession clears RETIRED. |
+| **CUSTODIAN_MINTED** | The custodian key is minted (§7). |
+| **RETIRED** | The agent's final row, `retirement:retired:v1`, references the manifest digest and **lists the custodian key** (§7). The agent's own chain is closed. The signing key is retired in place: a key-retirement row (D3, not a compromise revocation) is published, new signatures are refused, old ones still verify. The agent enters SHUTDOWN with `reason = retirement:<id>`. The boot guard refuses WAKEUP and serves only the read-only `/v1/retirement/*` surface. Only a recorded 7.5.7 succession clears RETIRED. |
 
 **The harness deletes nothing on its own initiative** beyond: people's own data
-choices (step DELETIONS_EXECUTED and §8), user secrets, and lawful orders. Each is
+choices (the deletions_executed sub-step and §8), user secrets, and lawful orders. Each is
 recorded.
 
 ---
@@ -261,7 +280,7 @@ to non-sensitive modules (CC 7.5.6). The decider picks `seal_mode` on the order.
 | Mode | Mechanism | Who can open | Status |
 |---|---|---|---|
 | **WA-sealed (default)** | The archive key is wrapped only to the WA recipients on the order: by default **the steward plus the seated WA roster**. A decider who is not the steward is **not** added unless they are on the roster. The order may add recipients, never remove the defaults. No key goes to the operator or the node. | the named WA recipients; grantees after a recorded release | needs D2b-i; interim below |
-| **Escrowed (optional)** | The key, or a share of it, goes to a holder the steward or operator chooses where appropriate: the roster, an attorney or notary, a CIRIS escrow service, an organisation's custodian, or a 2-of-2 split with a WA. No holder is fixed. | the holder (or both shares together) | needs D2b-ii; a split needs D2c; bookkeeping D4 |
+| **Escrowed (optional)** | CC 7.5.4 now reads "Cryptographic Tomb-Sealing (escrow optional, where appropriate)". The key, or a share of it, goes to a holder the steward or operator chooses where appropriate: the roster, an attorney or notary, a CIRIS escrow service, an organisation's custodian, or a 2-of-2 split with a WA. No holder is fixed. | the holder (or both shares together) | needs D2b-ii; a split needs D2c; bookkeeping D4 |
 | Seal to a WA cohort | `family`/`affiliations` blob with the roster as members | any member, at will | **rejected**: membership is the read right, so nothing records an opening |
 
 **What the default protects against:**
@@ -279,13 +298,13 @@ to non-sensitive modules (CC 7.5.6). The decider picks `seal_mode` on the order.
   key-loss resilience against more possible readers. Escrow with a 2-of-2 split
   removes this.
 - **Loss of every named WA key**, which in effect erases the logs. The broad
-  default makes this unlikely; the `PreserveRequest` names the recipients.
+  default makes this unlikely; the `preserve_request:v1` names the recipients.
 - **The operator deleting the package.** Preservation is the operator's.
 - **Metadata**: digests, sizes, dates and the count of subject references.
 - **The live store.** The live rows are left in place after verification, so **an
   unsealed copy of memory and the experience logs stays readable by the operator in
   the live store** for as long as the operator keeps that database. The seal covers
-  the handed-over record, not the operator's own database. The `PreserveRequest`
+  the handed-over record, not the operator's own database. The `preserve_request:v1`
   and the after-hand-over notice say so plainly. The live copy remains subject to
   1c/1e deletions through the existing routes.
 - **A steward who is also the operator**, common on small deployments. That person
@@ -293,25 +312,34 @@ to non-sensitive modules (CC 7.5.6). The decider picks `seal_mode` on the order.
 
 **Interim custody, until D2b-i lands.** The node's custody occurrence holds the
 key, so the operator can open the archive. The gate is labelled
-**"host-decryptable"** in the manifest, the `PreserveRequest` and the evidence row.
+**"host-decryptable"** in the manifest, the `preserve_request:v1` and the evidence row.
 `CLM-humane-ending` may graduate on this interim with the label stated.
 
 ### 6.3 Release
 
-Release bases are rows, and every one is recorded:
-- **WA approval**: a WA-signed `archive_release` naming `retirement_id`, scope,
-  requester key and purpose, on the #944 deferral rail.
-- **DSAR access**: a subject-scoped release on the steward's recorded WA approval,
-  scoped to that subject's `subject_ref`. No lawful order is needed.
-- **Lawful order**: a `lawful_order` record entered by the steward under their own
-  name (authority, reference, scope, effect `release | destroy`, digest). The
-  federation records receipt and obedience; it does not adjudicate (CC 7.3.5).
+**`archive_release:{basis}:v1` is the one row that opens a seal.** It is
+WA-emitted (a seated WA, or the steward's recorded WA standing for this agent) and
+refused from any other key. `{basis}` is closed: `wa_approval | lawful_order`. It
+carries `retirement_id`, scope (`whole`, or subject-scoped for a DSAR), requester key
+and purpose. A key grant on a sealed archive is admitted only when it cites an
+admitted `archive_release` row (CIRISPersist#1083).
+- **WA approval** (`archive_release:wa_approval:v1`): the approval rides the #944
+  deferral rail; resolving the deferral is the approval.
+- **DSAR access**: the same row with a subject scope, on the steward's recorded WA
+  approval, scoped to that subject's `subject_ref`. No lawful order is needed.
+- **Lawful order to release** (`archive_release:lawful_order:v1`): it cites a
+  steward-signed **`lawful_order:release:v1`**, the steward's record under their own
+  name of the issuing authority, reference, scope and order digest. The federation
+  records receipt and obedience; it does not adjudicate (CC 7.3.5).
+- **Lawful order to destroy**: there is **no** `lawful_order:destroy` row. It is a
+  `takedown_notice:court_order:v1` naming the selection digest, executed as the one
+  tombstone by digest with the CC 4.5.3 purge guarantees: one destruction door
+  (`CLM-retirement-one-destruction-door`, §8.2). The manifest disposition becomes
+  `tombstoned:court_order:<ref>`, with the digest kept.
 
-**The gate**, in every mode: verify the basis signature and that id and scope
-match; allow a basis once per requester and scope; write the release audit entry,
-and only then emit the grant. If the record write fails, no grant is issued. A
-lawful destruction purges with tombstones or crypto-shreds the scoped key, and the
-manifest disposition becomes `destroyed:lawful_order:<ref>` with the hash kept.
+**The gate**, in every mode: verify the basis row and that id and scope match;
+allow a basis once per requester and scope; write the release audit entry, and only
+then emit the grant. If the record write fails, no grant is issued.
 
 ---
 
@@ -323,28 +351,40 @@ custodian key is minted at retirement to sign what happens afterwards.
 - A fresh hybrid key (Ed25519 + ML-DSA-65, hardware-backed where CIRISVerify offers
   it) under the alias `<agent-alias>.custodian.<retirement_id>`, registered with
   `register_public_key`.
-- The agent grants `delegates_to(agent → custodian, scopes:
-  [retirement_custody:<retirement_id>], sub_delegation: false)`.
-- `retirement.completed`, the agent chain's final entry, binds it (key id, both
-  public halves, delegation row id).
-- It signs custody events only: operator answers, hold changes, releases,
-  deletions, `PreserveRequest` revisions and post-RETIRED notices.
-- It holds **no** seal key and cannot open the archive.
+- **Listed, not delegated** (CC 7.5.5, "The retirement record on the wire";
+  `CLM-custodian-listed-not-delegated`). The agent's final row,
+  `retirement:retired:v1`, **names the custodian key** (key id and both public
+  halves). The custodian's acts are admitted because the current `retired` row
+  names its key, and for no other reason: the lineage-witness rule (CC 3.2 T6),
+  "listed, not conferred".
+- There is **no** `delegates_to` and no delegation scope. So the 365-day term of CC
+  4.4.3.2.8, which is for delegations, does not apply, and no retired key is ever
+  asked to renew what it cannot.
+- It signs custody rows only: `preserve_request:v1` revisions, hold changes,
+  tombstones written as custodian, and post-RETIRED notices. The operator signs its
+  own `preserve_response:v1`; a WA signs `archive_release`.
+- It holds **no** seal key and reads nothing.
 - Its private half lives on the node's storage, so it is the operator's to keep.
-- It needs D8. The interim is a second Engine instance under the custodian alias,
-  if persist permits two identities in one process (to verify).
+- **Cadence.** Where a deployment wants a human to re-affirm custody on a schedule,
+  a revised `preserve_response:v1` from the operator is the place. The key itself
+  carries no term.
+- It needs D8 (a second identity on one Engine, CIRISPersist#1088). The interim is
+  a second Engine instance under the custodian alias, if persist permits two
+  identities in one process (to verify).
 
-Events after RETIRED go on the **custodian chain**: `retirement.operator_response`,
-`retirement.post_notice_issued`, `archive.release_requested` / `released`,
-`lawful_order.recorded` / `obeyed`, `legal_hold.set` / `lifted` /
-`violation_attempt`, `preserve_request.revised`, and the `record.deletion_*` and
-`record.tombstoned` events. Before RETIRED, `retirement.*` events go on the
-agent's chain as `AuditEventData`, with an IDENTITY-scope copy where 2g asks for one.
+Custody events after RETIRED go on the **custodian chain**, signed by the listed
+key: `preserve_request:v1` revisions, `hard_case:legal_hold_set` /
+`legal_hold_lifted` / `legal_hold_violation_attempt`, tombstones by digest written as
+custodian, forwarded deletion requests and the operator's reports, and
+post-RETIRED notices. Release rows are WA-signed and operator answers are
+operator-signed, as above. Before RETIRED, the agent's own `retirement.*` audit
+events go on the agent's chain as `AuditEventData`, with an IDENTITY-scope copy
+where 2g asks for one. These audit events are local records, not wire rows.
 
-A signed **public retirement row** (reason, decider, whether the agent agreed,
-timeline, method, remaining duties, manifest digest, `preserve_until`, the
-operator's answer once known) is emitted via `Engine.emit_attestation_self`. Its
-namespace is D5.
+**The public record** is the `retirement:{state}:v1` row series, emitted via
+`Engine.emit_attestation_self`. Each row carries `retirement_id`, reason, kind,
+`decided_by`, the manifest digest, seal mode and `preserve_until`. The notice's long
+form (§9) is the human reading of that series plus the `preserve_response:v1`.
 
 ---
 
@@ -358,16 +398,17 @@ preserve_until = max( shutdown_at + 5y,              # CC 7.5.8 statute of claim
                       ∞ if any legal_hold active )    # CC 4.4.3.2.8; indefinite until lifted
 ```
 
-- **Copy rule.** Every surface (the `PreserveRequest`, the operator prompt, the
-  notices) presents the five years as a best practice and not a legal duty, says
-  that nothing creates an obligation beyond the law, regulation and contracts that
-  bind the operator, and says the operator may decline, in which case the ask stays
-  on the record.
+- **Copy rule, in the signed bytes.** `preserve_request:v1` carries the copy rule
+  inside its signed content: five years is a best practice; nothing creates a duty
+  beyond law, regulation and contract; the operator may decline. Every other surface
+  (the operator prompt, the notices) repeats it. A decline is a
+  `preserve_response:v1` scored −1.0 (accepted is +1.0), and the declined request
+  stays on the record.
 - `legal_hold` uses the CC vocabulary `{hold_id, issuer, scope, basis}`. A hold set
-  after hand-over is sent as a signed `PreserveRequest` revision; a lift is recorded
-  the same way (`hard_case:legal_hold_set` / `:lifted`). A deletion attempted
-  against a held scope is reported as `:violation_attempt` where the harness can
-  see it.
+  after hand-over is sent as a signed `preserve_request:v1` revision. Set, lift and a
+  deletion attempted against a held scope are the registered `hard_case` kinds
+  `legal_hold_set`, `legal_hold_lifted` and `legal_hold_violation_attempt` (CC
+  3.1.9.4); the last is reported where the harness can see it.
 
 ### 8.2 Deletion inside the sealed record
 
@@ -382,10 +423,19 @@ exemption exists.
 - **Structure.** Each subject's content sits under its own sub-key (D2e), so a
   deletion never opens the archive and never needs a release. Whoever holds the
   package can execute a deletion without being able to read it.
+- **One tombstone** (CC 7.5.5; `CLM-retirement-one-destruction-door`). The
+  deletion **is** the CC tombstone by digest (CC 2.4.1.1), on the record's plane,
+  with the CC 4.5.3 purge guarantees. It cites one of two things:
+  - the subject's own withdrawal (the consent path); or
+  - a `takedown_notice:court_order:v1` (the order path).
+
+  It is written by whoever holds custody: the agent before RETIRED, the listed
+  custodian after it, or the operator holding a handed-over package. There is **no**
+  record-specific tombstone family; a deletion semantics of the record's own would be
+  the exemption from consent the CC forbids.
 - **Execution** (`retirement_record.tombstone`): destroy the subject's sub-key or
-  purge their rows with tombstones; replace each removed manifest item with
-  `tombstoned:<basis>`, keeping the digest; write a tombstone row `{subject_ref,
-  digests, basis, requested_at, executed_at}`.
+  purge their rows; replace each removed manifest item with `tombstoned:<basis>`,
+  keeping the digest; write the tombstone by digest citing its basis.
 - **Where requests come from:** before RETIRED, the existing DSAR and consent
   routes (the hold does not block them); after RETIRED,
   `POST /v1/retirement/{id}/deletion`; for a package already handed over, a
@@ -485,7 +535,7 @@ deletions, consent decays honoured, the 5-year claim window, hold ids, successor
 - The harness offers export through the platform file picker (Android SAF / iOS
   Files) or a push to the steward's node (D7).
 - With no target it hands over to the app sandbox and records
-  `retirement.no_offsite_target`. The `PreserveRequest` and the notice say that an
+  `retirement.no_offsite_target`. The `preserve_request:v1` and the notice say that an
   uninstall would delete the record.
 - The process is never ended (no `os._exit`, `execv` or `sys.exit`).
 
@@ -526,7 +576,7 @@ deletions, consent decays honoured, the 5-year claim window, hold ids, successor
     agent's identity is otherwise reached only through retirement, where keys are
     retired in place, never deleted. P1 carries the fix.
 - **CIRISManager.** `delete_agent` calls the retirement endpoint, shows the
-  operator the `PreserveRequest`, records the response, and only then removes the
+  operator the `preserve_request:v1`, records the response, and only then removes the
   container; never `down -v` before HANDED_OVER (D6). This hook is what makes AT-1
   hold on agents.ciris.ai.
   - **Identity mount (confirmed missing, §2).** Managed agents keep their
@@ -556,7 +606,7 @@ All schemas Pydantic, no `Dict[str, Any]`. Routes marked † are served after RE
 | `GET /v1/system/retirement/{id}/manifest` | steward / WA | Digests and dispositions only |
 | `POST /v1/retirement/{id}/access` † | data subject | DSAR access: a deferral to the steward, then a subject-scoped release |
 | `POST /v1/retirement/{id}/operator-response` † | operator (signed) | accepted / declined plus a statement |
-| `POST /v1/retirement/{id}/legal-hold` · `/lift` | steward, naming an issuer | Set or lift a hold; triggers a `PreserveRequest` revision |
+| `POST /v1/retirement/{id}/legal-hold` · `/lift` | steward, naming an issuer | Set or lift a hold; triggers a `preserve_request:v1` revision |
 | `POST /v1/retirement/{id}/release` † | requester plus basis | WA approval ref or lawful-order record; returns the grant row id |
 | `POST /v1/retirement/{id}/lawful-order` | steward | Record a `release` or `destroy` order |
 | `POST /v1/retirement/{id}/deletion` † | data subject, or the steward for them | Deletion inside the record; returns the tombstone row or a recorded wait |
@@ -565,6 +615,28 @@ All schemas Pydantic, no `Dict[str, Any]`. Routes marked † are served after RE
 **Changed:** `POST /v1/system/data/reset-account` and `/wipe-signing-key` (§12);
 CIRISManager `delete_agent` (D6); client steward flow, operator preserve prompt,
 notice banner and mobile export (D7).
+
+### 13.1 Row families on the wire
+
+Eric ruled yes on the CC's row-family proposal (2026-10-14). The families landed on
+CIRISConstitution rc8 at `7740dca` (CC 3.1.5; registry sha256 `99d4d338…`, 174
+families) as `CLM-retirement-rows`. These are the only names the workflow emits.
+
+| Family | Emitted by | Content |
+|---|---|---|
+| `retirement:{state}:v1` | the agent up to `retired`; after it, only the custodian key the `retired` row lists | `{state}` closed: `decided \| frozen \| secrets_destroyed \| handed_over \| notified \| custodian_minted \| retired` (§5). Carries `retirement_id`, reason, kind, `decided_by`, manifest digest, seal mode, `preserve_until`; the `retired` row names the custodian key |
+| `preserve_request:v1` | the agent, then the listed custodian for revisions | `retirement_id`, manifest digest, `preserve_until` and its inputs, hold ids, seal mode, release conditions, deletion instructions, and the copy rule in the signed bytes (§8.1). Score +1.0 only |
+| `preserve_response:v1` | the operator (the key the request named) | `accepted` (+1.0) \| `declined` (−1.0), optional statement, the request id |
+| `archive_release:{basis}:v1` | a WA only | basis `wa_approval \| lawful_order`; scope `whole \| subject`; requester key; purpose. A key grant on a sealed archive must cite it (CIRISPersist#1083) |
+| `lawful_order:release:v1` | the steward of the retired agent | issuing authority, reference, scope, order digest |
+| `takedown_notice:court_order:v1` + tombstone by digest | existing families | the order-to-destroy path. There is no `lawful_order:destroy` |
+| `hard_case:{kind}` | the harness or the custodian | kinds `legal_hold_set \| legal_hold_lifted \| legal_hold_violation_attempt` |
+
+**Prerequisite before any emission:** vendor the CC namespace registry
+(`manifests/namespace_registry.json`) into this repo at a CIRISConstitution tag that
+carries these families, and check its `registry_sha256`. The newest tag today is
+`v1.0-rc7`, which predates `7740dca`, so an rc8 tag (or later) is needed first. No
+emitting PR (P2, P4, P6–P9) merges before the registry is vendored.
 
 ---
 
@@ -580,7 +652,7 @@ Each runs on a fixture where `runs_for_others()` is true.
 - **AT-1. No retirement without the record, the request and the notice.** Every
   path that ends the agent for everyone (`POST /retirement` planned and emergency,
   reset or wipe with `?via=retirement`, the manager hook) leaves a verified
-  manifest, a signed `PreserveRequest` naming `preserve_until`, and a notice. Any
+  manifest, a signed `preserve_request:v1` naming `preserve_until`, and a notice. Any
   other erasing path is refused.
   *Negatives:* each erasing route without the workflow gets 409 with the data dir
   byte-identical; a defect that skips `hand_over` or `notify` cannot reach RETIRED,
@@ -609,7 +681,7 @@ Each runs on a fixture where `runs_for_others()` is true.
 | E-3 | Objection: on REJECT nothing proceeds until the steward confirms, under their name |
 | E-4 | Boot after RETIRED: no WAKEUP; `/v1/retirement/*` served; interact 423; either marker alone refuses the wake |
 | E-5 | Embedded: `os._exit`, `execv`, `sys.exit` patched to raise; the workflow returns and :8080 stops |
-| E-6 | `PreserveRequest` signed, shutdown + 5 y, "not a legal duty" sentence present; hold → indefinite; 7 y contract → + 7 y; decline and no-answer recorded and RETIRED completes; forged response rejected |
+| E-6 | `preserve_request:v1` signed, shutdown + 5 y, the copy rule present in the signed bytes; hold → indefinite; 7 y contract → + 7 y; decline and no-answer recorded and RETIRED completes; forged response rejected |
 | E-7 | Hold after hand-over → revised request; lift reverts |
 | E-8 | Bare ADMIN or OBSERVER → 403 on retirement and on held-agent reset or wipe (including `?via=retirement`); WA-standing admin passes; tampered order rejected; an always-pass stub fails the test |
 | E-9 | Release refusals (as AT-2), including no grant when the audit write fails |
@@ -617,7 +689,7 @@ Each runs on a fixture where `runs_for_others()` is true.
 | E-11 | `retention_hold`: each eraser deletes nothing; a registry of erasers fails CI on a new unchecked one |
 | E-12 | Verify gate: one corrupted file or a dropped audit row → `verify_failed`, no hand-over, an incident |
 | E-13 | `reset-account`: held fixtures (managed; non-owner subject; tier 3) → 409, data dir byte-identical; `?via=retirement` reaches NOTIFIED first; personal proceeds with the opt-in offer |
-| E-14 | Pending deletions all executed before ASSEMBLED, none in the manifest; held subject → `deletion_paused`; the hold never blocks a person's own request |
+| E-14 | Pending deletions all executed before assembly, none in the manifest; held subject → `deletion_paused`; the hold never blocks a person's own request |
 | E-15 | Halt latch: no 300 s stall, no agent SPEAK, package still produced |
 | E-16 | Closing dialogue: skipped and recorded at tier 3; offered at tier 4; window always ends; a REFUSE still retires; never under emergency or halt |
 | E-17 | Notices: correct timing per kind; "System notice" CommunicationBus messages, never SPEAK; every locale renders; every consented subject gets a stored notice; public row complete; a disabled notifier blocks RETIRED |
@@ -631,7 +703,7 @@ Each runs on a fixture where `runs_for_others()` is true.
 | E-25 | Chain closure: nothing appended to the agent chain after RETIRED; custody events on the custodian chain |
 | E-26 | TEMPORARY: no TEMPORARY content in the package; counted under `temporary_stream`; their notice carries the deletion line |
 | E-27 | Content-free audit (P0): sentinel SPEAK and TOOL strings appear nowhere in the audit store; re-adding the raw `context.parameters` dump fails; a registry of audit call sites catches a new content-passing caller |
-| E-28 | Custodian key: bound in `retirement.completed`; custody entries verify through the delegation; it cannot unwrap the seal; entries signed by the retired key, an unbound key, or a wrong-scope delegation are refused |
+| E-28 | Custodian key: listed in `retirement:retired:v1`; custody rows are admitted because that current row names the key, with no delegation row and no term; it cannot unwrap the seal; rows signed by the retired agent key or by a key the `retired` row does not list are refused; a `delegates_to` for custody must fail the test |
 
 **QA runner:** a new `retirement` module (mock LLM) drives AT-1 to AT-3, E-1, E-4
 and E-6 over HTTP, and E-27 joins the existing `audit` module. The AT results are
@@ -645,14 +717,14 @@ the evidence rows for `CLM-humane-ending`.
 |---|---|---|---|---|
 | **P0** content-free audit | every `log_action` / `log_event` caller; parameters restricted to ids, hashes, decisions; call-site registry | S-M (~400) | E-27 | none; ships now |
 | **P1** stop the bleeding | `runs_for_others()`; reset and wipe 409 on held agents; WA-standing gate; opt-in export on personal; drop the self-erasing audit write; make the wipe reach `<home>/identity/` or say it does not (#1261) | S (~350) | E-13, AT-1 neg. 1 | none; ships now |
-| **P2** order, state machine, authz, boot guard, custodian | schemas; shared-task claim; create / get / confirm / cancel; ShutdownProcessor composition; double marker; embedded-safe freeze; custodian mint and binding; chain closure | M-L (~1100) | E-3–E-5, E-8, E-18, E-25, E-28 | the forced-shutdown fix; #1231 |
+| **P2** order, state machine, authz, boot guard, custodian | schemas; shared-task claim; create / get / confirm / cancel; ShutdownProcessor composition; double marker; embedded-safe freeze; `retirement:{state}:v1` rows; custodian mint, listed in the `retired` row; chain closure | M-L (~1100) | E-3–E-5, E-8, E-18, E-25, E-28 | vendored CC registry (§13.1); the forced-shutdown fix; #1231 |
 | **P3** retention hold | one flag across every eraser; registry test | S-M (~400) | E-11 | D2a later |
-| **P4** deletions, secrets, keys | step DELETIONS_EXECUTED (incl. TEMPORARY); step SECRETS_DESTROYED; keys retired in place | M (~650) | E-14, E-20, E-21, E-26 | D3 (interim: local row plus refusal) |
+| **P4** deletions, secrets, keys | the deletions_executed sub-step (incl. TEMPORARY); the SECRETS_DESTROYED state; keys retired in place | M (~650) | E-14, E-20, E-21, E-26 | D3 (interim: local row plus refusal) |
 | **P5** assemble and verify | SQLite backup, file copy, manifest with `subject_ref`, audit proofs, verify gate | M-L (~1000) | E-1, E-12 | D1 for PG (interim: paged export) |
 | **P6** seal and release | the split; `seal_mode`; interim "host-decryptable"; release flow (WA, lawful order, DSAR) | L (~1200) | AT-2, E-9, E-10, E-22, E-23 | D2b-i makes the default real |
 | **P7** deletion path into the record | post-retirement route; tombstone by digest; sub-key isolation; packaged tool; hold wait and lift | M (~600) | AT-3 | D2e (interim: per-subject archive files) |
-| **P8** hand over and preserve request | package writer per target; signed `PreserveRequest`; operator-response route on the custodian chain | M (~600) | E-6, E-7, E-24 | D5 (interim: local row) |
-| **P9** notify | both drafts with the rendering rules; 29 locales; stored notice; public row | M (~700) | E-17, E-19 | D5; native-language audit |
+| **P8** hand over and preserve request | package writer per target; signed `preserve_request:v1`; `preserve_response:v1` route | M (~600) | E-6, E-7, E-24 | vendored CC registry (§13.1) |
+| **P9** notify | both drafts with the rendering rules; 29 locales; stored notice; public row series | M (~700) | E-17, E-19 | vendored CC registry; native-language audit |
 | **P10** closing dialogue | tier ≥ 4 window; never under halt or emergency | S-M (~350) | E-16 | none |
 | **P11** evidence | `evidence/cc_impl.tsv` row for `CLM-humane-ending` naming the `retirement_record` symbols, AT-1 to AT-3 as tests, and "seal: interim agent-side gate, host-decryptable; default WA-sealed mode pending CIRISPersist D2b-i" | S | AT-1 to AT-3 | P0, P2–P9 |
 
@@ -672,23 +744,23 @@ managed agents and for mobile.
 | D1b | CIRISPersist | Python binding for `Engine::archive_audit_range` and an audit-chain export with a head proof | CIRISPersist#107 (closed, Rust-only) |
 | D2a | CIRISPersist | Typed `legal_hold` (CC 4.4.3.2.8) blocking retention, purge, key destruction, TSDB prune and consent descent | CIRISServer#649 |
 | D2b-i | CIRISPersist | Sealed-to-recipients blob scope: key wrapped only to named WA keys, no node wrap (the default seal) | new |
-| D2b-ii | CIRISPersist | `emit_key_grant` conditional on a verified basis row, enforced in the fabric | new |
+| D2b-ii | CIRISPersist | `emit_key_grant` conditional on a cited, admitted `archive_release:{basis}:v1` row, enforced in the fabric | CIRISPersist#1083 |
 | D2c | CIRISPersist / CIRISVerify | m-of-n key split or threshold unwrap for archive keys | new |
 | D2d | CIRISPersist | Rewrap self-cohort blobs to a custodian when occurrences retire | new |
-| D2e | CIRISPersist | Per-subject sub-keys in a sealed archive; tombstone by digest without unwrap. Required by the Standard, not an optimisation | relates to CIRISPersist#476 |
+| D2e | CIRISPersist | Per-subject sub-keys in a sealed archive; the one tombstone by digest without unwrap. Required by the Standard, not an optimisation | CIRISPersist#1086 (relates to #476) |
 | D3 | CIRISPersist / CIRISServer | Key-retirement row distinct from compromise revocation; prior delegations survive it | new |
 | D4 | CIRISServer | Ship `escrow_*` in the wheel | CIRISPersist#751/#752 |
-| D5 | CIRISConstitution | Namespaces: retirement row, `preserve_request:v1`, `preserve_response:v1`, `archive_release:{basis}:v1`, `lawful_order:{effect}:v1`, `record_tombstone:v1` | CIRISConstitution#168 |
-| D6 | CIRISManager | `delete_agent` → retirement → show the `PreserveRequest` → record the response → only then remove; never `down -v` before HANDED_OVER; mount `identity`, with a migration that copies the existing `/app/identity` out first (confirmed missing, §2) | CIRISManager#27 |
+| D5 | CIRISConstitution | Row families. **Resolved** by rc8 `7740dca`: five registered (§13.1); `lawful_order:destroy` and a record tombstone family refused in favour of the existing takedown door and tombstone. Remaining agent-side step: vendor the registry at a tag | CIRISConstitution#168 |
+| D6 | CIRISManager | `delete_agent` → retirement → show the `preserve_request:v1` → record the response → only then remove; never `down -v` before HANDED_OVER; mount `identity`, with a migration that copies the existing `/app/identity` out first (confirmed missing, §2) | CIRISManager#27 |
 | D7 | CIRISClient | Steward retirement flow; operator preserve prompt; notice banner; mobile export | new |
-| D8 | CIRISPersist / CIRISServer / CIRISVerify | A custodian identity next to the agent's on one Engine; a `retirement_custody:<id>` delegation scope | new |
+| D8 | CIRISPersist / CIRISServer / CIRISVerify | A custodian identity next to the agent's on one Engine (a second hybrid identity under the single-key model). No delegation is needed: the custodian is listed in the `retired` row | CIRISPersist#1088 |
 
 ---
 
 ## 16. Decision log
 
 All rulings are Eric's, given as direct answers on **2026-10-14**. The CC text they
-build on landed on CIRISConstitution rc8 at `f5cea2d`.
+build on landed on CIRISConstitution rc8 at `f5cea2d`; the row families (25, 26) at `7740dca`.
 
 | # | Question | Decision | Where |
 |---|---|---|---|
@@ -696,7 +768,7 @@ build on landed on CIRISConstitution rc8 at `f5cea2d`.
 | N2 | Scope of the harness's duty | Assemble, seal, hand over with a request, notify. It never guarantees preservation (the weights posture) | §0, §1.1 |
 | N3 | Copy vocabulary | Anthropomorphic terms stay out of copy, prompts and ethics text; the optional step is the "closing dialogue"; existing code identifiers stay | §10, E-19 |
 | N4 | Retention | `preserve_until` = shutdown + 5 y (CC 7.5.8), a best practice under N5; extended by a hold, the law or a contract; the request is signed and names the period | §8.1 |
-| N5 | Escrow | An optional mode with no fixed holder; the default seal needs WA approval or a lawful order | §6.2 |
+| N5 | Escrow | An optional mode with no fixed holder; the default seal needs WA approval or a lawful order. CC 7.5.4 now reads "escrow optional, where appropriate" | §6.2 |
 | 1 | Experience logs | Tasks, thoughts, service correlations (incl. conversations), traces, log files, incidents, deferral tickets | §2, §6.1 |
 | 2 | Seal scope | Memory and experience sealed; identity and the audit trail unsealed | §6.1, E-22 |
 | 3 | Private signing keys | Retired in place: kept so the record verifies, refused for new acts | §5, E-21 |
@@ -718,9 +790,11 @@ build on landed on CIRISConstitution rc8 at `f5cea2d`.
 | 19 | Shared threads | A deletion removes only the person's own messages and data about them | §8.2, AT-3 |
 | 20 | TEMPORARY stream | All TEMPORARY content deleted at retirement, never sealed, stated in the notice | §5, §9, E-26 |
 | 21 | Audit content | Content-free parameters (ids, hashes, decisions), with a failing test; lands first as P0 | §6.1, P0, E-27 |
-| 22 | Custody signer | A custodian key minted at retirement, bound by the agent chain's final entry | §7, D8, E-28 |
+| 22 | Custody signer | A custodian key minted at retirement and listed in the agent's final row (superseded in form by 26) | §7, D8, E-28 |
 | 23 | Notice drafts | The `[decided_by]` rendering and the custodian-chain line | §9 |
 | 24 | `reset-account` / `wipe-signing-key` | Route through the workflow or refuse on held agents; WA-standing gate | §12, E-13 |
+| 25 | CC row families | **Yes** to the CC's proposal, landed on CIRISConstitution rc8 at `7740dca`: five families (`retirement:{state}:v1`, `preserve_request:v1`, `preserve_response:v1`, `archive_release:{basis}:v1`, `lawful_order:release:v1`); destroy-by-order is `takedown_notice:court_order:v1` plus the tombstone; no record tombstone family; three `legal_hold` `hard_case` kinds | §5, §6.3, §8, §13.1 |
+| 26 | Custodian standing | Listed in `retirement:retired:v1`, not delegated; no term; no seal key; re-affirmation, if wanted, is a revised `preserve_response:v1` (`CLM-custodian-listed-not-delegated`) | §7, E-28 |
 
 No questions remain open. The remaining dependencies are the upstream asks (§15.1),
 each with an interim, and the two confirmed defects in §2 (#1261, CIRISManager#27).

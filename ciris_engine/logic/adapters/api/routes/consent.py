@@ -9,7 +9,13 @@ from typing import Annotated, Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
-from ciris_engine.logic.services.governance.consent import ConsentNotFoundError, ConsentService, ConsentValidationError
+from ciris_engine.logic.services.governance.consent import (
+    ConsentNotFoundError,
+    ConsentService,
+    ConsentValidationError,
+    StewardDeferralUnavailableError,
+)
+from ciris_engine.schemas.api.auth import Permission
 from ciris_engine.schemas.consent.core import (
     CategoryMetadata,
     ConsentAuditEntry,
@@ -27,6 +33,7 @@ from ciris_engine.schemas.consent.core import (
     ConsentStreamsResponse,
     DSARInitiateResponse,
     DSARStatusResponse,
+    PartnershipRequestStatus,
     PartnershipStatusResponse,
     StreamMetadata,
 )
@@ -96,13 +103,12 @@ CATEGORY_METADATA: Dict[ConsentCategory, Dict[str, str]] = {
     },
 }
 
-# Partnership status messages - eliminate duplication
+# Partnership status messages. A non-steward PARTNERED choice waits on the
+# steward (WBD); there is no agent-side decision to report.
 PARTNERSHIP_MESSAGES = {
-    "accepted": "Partnership approved! You now have PARTNERED consent.",
-    "rejected": "Partnership request was declined by the agent.",
-    "deferred": "Agent needs more information about the partnership.",
-    "pending": "Partnership request is being considered by the agent.",
-    "none": "No pending partnership request.",
+    PartnershipRequestStatus.PENDING: "Your PARTNERED choice is with the steward. Your current stream is unchanged.",
+    PartnershipRequestStatus.PARTNERED: "You have PARTNERED consent.",
+    PartnershipRequestStatus.NONE: "No PARTNERED request is open.",
 }
 
 
@@ -247,38 +253,33 @@ async def grant_consent(
     - TEMPORARY: 14-day auto-forget (default)
     - PARTNERED: Explicit consent for mutual growth
     - ANONYMOUS: Statistics only, no identity
+
+    The stream is the user's data choice. A steward (anyone who may resolve
+    deferrals: the owner / a Wise Authority) choosing PARTNERED gets it
+    directly. Any other user's PARTNERED choice is deferred to the steward
+    through WBD and the CURRENT stream is returned unchanged; poll
+    ``GET /v1/consent/partnership/status`` for ``pending`` -> ``partnered``.
     """
     # Ensure user can only update their own consent
     request.user_id = auth.user_id
 
-    # Generate channel_id for API requests (needed for partnership tasks)
+    # Channel the deferral is attributed to, for a non-steward PARTNERED request
     channel_id = f"api_{auth.user_id}"
 
     try:
-        result = await manager.grant_consent(request, channel_id=channel_id)
-
-        # Check if this created a pending partnership request
-        if request.stream == ConsentStream.PARTNERED:
-            # Check if there's a pending partnership
-            partnership_status = await manager.check_pending_partnership(auth.user_id)
-            if partnership_status == "pending":
-                # Return a special response indicating partnership is pending
-                return ConsentStatus(
-                    user_id=result.user_id,
-                    stream=result.stream,  # Still shows current stream
-                    categories=result.categories,
-                    granted_at=result.granted_at,
-                    expires_at=result.expires_at,
-                    last_modified=result.last_modified,
-                    impact_score=result.impact_score,
-                    attribution_count=result.attribution_count,
-                    # Add a note about pending partnership
-                )
-
-        return result
+        return await manager.grant_consent(
+            request,
+            channel_id=channel_id,
+            requester_is_steward=auth.has_permission(Permission.RESOLVE_DEFERRALS),
+        )
     except ConsentValidationError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except StewardDeferralUnavailableError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(e),
         )
 
@@ -422,14 +423,15 @@ async def check_partnership_status(
     manager: ConsentManagerDep,
 ) -> PartnershipStatusResponse:
     """
-    Check status of pending partnership request.
+    Where the caller's PARTNERED choice stands.
 
-    Returns current status and any pending partnership request outcome.
+    ``pending``: deferred to the steward, nothing changed yet. ``partnered``:
+    the stream is PARTNERED. ``none``: neither (including a steward refusal,
+    which leaves the stream as it was).
     """
     user_id = auth.user_id
 
-    # Check for pending partnership
-    status = await manager.check_pending_partnership(user_id)
+    request_status = await manager.get_partnership_request_status(user_id)
 
     # Get current consent status
     try:
@@ -441,14 +443,10 @@ async def check_partnership_status(
     # Convert enum to string
     stream_value = current_stream.value if hasattr(current_stream, "value") else str(current_stream)
 
-    # Use the message lookup to eliminate duplicate if/elif chains
-    message_key = status if status in PARTNERSHIP_MESSAGES else "none"
-    message = PARTNERSHIP_MESSAGES[message_key]
-
     return PartnershipStatusResponse(
         current_stream=stream_value,
-        partnership_status=status or "none",
-        message=message,
+        partnership_status=request_status.value,
+        message=PARTNERSHIP_MESSAGES[request_status],
     )
 
 

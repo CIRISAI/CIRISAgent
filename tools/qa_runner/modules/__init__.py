@@ -14,8 +14,8 @@ from .billing_tests import BillingTests
 from .cognitive_state_api_tests import CognitiveStateAPITests
 from .consent_tests import ConsentTests
 from .context_enrichment_tests import ContextEnrichmentTests
-from .degraded_mode_tests import DegradedModeTests
 from .deferral_taxonomy_tests import DeferralTaxonomyTests
+from .degraded_mode_tests import DegradedModeTests
 from .dream_live_tests import DreamLiveTests
 from .dsar_multi_source_tests import DSARMultiSourceTests
 from .dsar_tests import DSARTests
@@ -28,7 +28,6 @@ from .identity_update_tests import IdentityUpdateTests
 from .mcp_tests import MCPTests
 from .message_id_debug_test import MessageIDDebugTests
 from .multi_occurrence_tests import MultiOccurrenceTestModule
-from .partnership_tests import PartnershipTests
 from .play_live_tests import PlayLiveTests
 from .sdk_tests import SDKTestModule
 from .solitude_live_tests import SolitudeLiveTests
@@ -62,7 +61,6 @@ __all__ = [
     "DSARTests",
     "DSARMultiSourceTests",
     "DSARTicketWorkflowTests",
-    "PartnershipTests",
     "BillingTests",
     "FilterTestModule",
     "MultiOccurrenceTestModule",

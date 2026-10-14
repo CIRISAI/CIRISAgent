@@ -297,7 +297,9 @@ class ConsentResource:
 
         Streams:
         - temporary: 14-day auto-forget (default)
-        - partnered: Explicit consent for mutual growth (requires approval)
+        - partnered: Explicit consent for mutual growth. Applies directly for the
+          steward; for any other user it is deferred to the steward and the
+          CURRENT stream is returned until they answer (see get_partnership_status).
         - anonymous: Statistics only, no identity
 
         Args:
@@ -438,12 +440,11 @@ class ConsentResource:
 
     async def get_partnership_status(self) -> Dict[str, Any]:
         """
-        Check status of pending partnership request.
-
-        Returns current status and any pending partnership request outcome.
+        Where the caller's PARTNERED choice stands.
 
         Returns:
-            Dictionary with current_stream, partnership_status, and message
+            Dictionary with current_stream, partnership_status
+            ("pending" = with the steward, "partnered", or "none"), and message
 
         Example:
             status = await client.consent.get_partnership_status()
@@ -517,17 +518,22 @@ class ConsentResource:
         assert isinstance(result, dict), "Expected dict response from transport"
         return result
 
-    # ========== PARTNERSHIP MANAGEMENT METHODS ==========
+    # ========== PARTNERSHIP ==========
+    #
+    # Partnership is a data-management record (CIRISAgent#1251). There is no
+    # accept/reject/defer surface: a steward's own PARTNERED choice applies
+    # directly, and any other user's is deferred to the steward, who answers
+    # through the Wise Authority deferral API (client.wise_authority).
 
     async def get_partnership_options(self) -> Dict[str, Any]:
         """
-        Get available partnership categories and requirements.
+        Get what the PARTNERED stream entails.
 
-        Returns information about what partnership entails:
-        - Required consent categories
-        - Approval process description
-        - Benefits and responsibilities
-        - Example use cases
+        Returns information about:
+        - Required and optional consent categories
+        - How the choice is applied (directly for the steward, deferred to the
+          steward for anyone else)
+        - Benefits, responsibilities and revocation
 
         Returns:
             Dictionary with partnership options and requirements
@@ -537,83 +543,5 @@ class ConsentResource:
             print(f"Required categories: {options['required_categories']}")
         """
         result = await self._transport.request("GET", "/v1/partnership/options")
-        assert isinstance(result, dict), "Expected dict response from transport"
-        return result
-
-    async def accept_partnership(self, task_id: str, reason: Optional[str] = None) -> Dict[str, Any]:
-        """
-        Accept a pending partnership request (agent-side).
-
-        This method is used by the agent to approve a user's partnership request.
-        The partnership request is tracked as a task in the task system.
-
-        Args:
-            task_id: ID of the partnership approval task
-            reason: Optional reason for accepting the partnership
-
-        Returns:
-            Dictionary with acceptance confirmation and updated consent status
-
-        Example:
-            result = await client.consent.accept_partnership(
-                task_id="task_123",
-                reason="User demonstrated commitment to mutual growth"
-            )
-            print(f"Partnership approved: {result['user_id']}")
-        """
-        payload = {"task_id": task_id, "decision": "accept", "reason": reason}
-        result = await self._transport.request("POST", "/v1/partnership/decide", json=payload)
-        assert isinstance(result, dict), "Expected dict response from transport"
-        return result
-
-    async def reject_partnership(self, task_id: str, reason: str) -> Dict[str, Any]:
-        """
-        Reject a pending partnership request (agent-side).
-
-        This method is used by the agent to decline a user's partnership request.
-        A reason must be provided to help the user understand the decision.
-
-        Args:
-            task_id: ID of the partnership approval task
-            reason: Reason for rejecting the partnership (required)
-
-        Returns:
-            Dictionary with rejection confirmation and message to user
-
-        Example:
-            result = await client.consent.reject_partnership(
-                task_id="task_123",
-                reason="More interaction history needed before partnership"
-            )
-            print(f"Partnership rejected: {result['message']}")
-        """
-        payload = {"task_id": task_id, "decision": "reject", "reason": reason}
-        result = await self._transport.request("POST", "/v1/partnership/decide", json=payload)
-        assert isinstance(result, dict), "Expected dict response from transport"
-        return result
-
-    async def defer_partnership(self, task_id: str, reason: str) -> Dict[str, Any]:
-        """
-        Defer a pending partnership request for more information (agent-side).
-
-        This method is used by the agent to request more context before deciding.
-        The partnership request remains pending, allowing for further interaction.
-
-        Args:
-            task_id: ID of the partnership approval task
-            reason: What additional information is needed (required)
-
-        Returns:
-            Dictionary with deferral confirmation and next steps
-
-        Example:
-            result = await client.consent.defer_partnership(
-                task_id="task_123",
-                reason="Would like to understand your goals for the partnership better"
-            )
-            print(f"Partnership deferred: {result['message']}")
-        """
-        payload = {"task_id": task_id, "decision": "defer", "reason": reason}
-        result = await self._transport.request("POST", "/v1/partnership/decide", json=payload)
         assert isinstance(result, dict), "Expected dict response from transport"
         return result

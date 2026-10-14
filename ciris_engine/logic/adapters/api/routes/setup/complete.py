@@ -209,10 +209,7 @@ def _node_owner_named(username: str) -> Optional[_AdoptedNodeOwner]:
     way, by consulting `_list_active_by_role` alongside `list_was()`).
     """
     try:
-        from ciris_engine.logic.persistence.stores.authentication_store import (
-            _is_brain_wa_row,
-            _list_active_by_role,
-        )
+        from ciris_engine.logic.persistence.stores.authentication_store import _is_brain_wa_row, _list_active_by_role
     except Exception:  # pragma: no cover - store unavailable in some test rigs
         return None
 
@@ -300,8 +297,7 @@ async def _set_password_for_wa(auth_service: Any, setup: SetupCompleteRequest, w
     """
     if isinstance(wa_cert, _AdoptedNodeOwner):
         logger.info(
-            "CIRIS_USER_CREATE: skipping password for node-claimed owner %s — "
-            "the node owns auth for this identity",
+            "CIRIS_USER_CREATE: skipping password for node-claimed owner %s — " "the node owns auth for this identity",
             wa_cert.wa_id,
         )
         return
@@ -331,11 +327,10 @@ async def _ensure_system_wa(auth_service: Any) -> None:
 def _create_founding_partnership(wa_id: str, oauth_user_id: Optional[str] = None) -> None:
     """Create a default PARTNERED consent record for the setup user.
 
-    The user who completes the setup wizard has explicitly consented by
-    provisioning the agent.  The agent's consent is expressed through its
-    template configuration — Ally's foundational identity is partnership
-    ("Your growth supports mine").  This is configured consistency, not
-    bypassed safeguards (see COGNITIVE_STATE_BEHAVIORS FSD).
+    Stewardship is over a NODE; partnership is with an AGENT. Claiming the node
+    establishes both, at the same moment, by the same act: the user who
+    completes setup is the steward, and the steward's own PARTNERED choice
+    needs no deferral (CC 4.4.3.4.3).
 
     Creates a GraphNode with type=CONSENT using the consent/{user_id}
     pattern that matches the ConsentService lookups.
@@ -398,7 +393,7 @@ def _create_founding_partnership(wa_id: str, oauth_user_id: Optional[str] = None
             "attribution_count": partnered_status.attribution_count,
             "partnership_approved": True,
             "approval_task_id": None,  # No task — founding partnership via setup wizard
-            "founding_partnership": True,  # Distinguishes from bilateral consent flow
+            "founding_partnership": True,  # Established by the claim itself, not by a stream request
             "linked_wa_id": wa_id,  # WA certificate that owns this consent
         },
         updated_by="setup_wizard",
@@ -407,6 +402,15 @@ def _create_founding_partnership(wa_id: str, oauth_user_id: Optional[str] = None
 
     time_service = TimeService()
     add_graph_node(node, time_service)
+
+    # The wire pair (CIRISAgent#1251, CC 4.4.3.4.3): the accept half is emitted
+    # at node claim, signed by this agent occurrence's key under the
+    # owner-binding the claim just created. The founding partner IS the
+    # claimer, so the user key is the owner key the binding resolves to.
+    # Best-effort and never raises: a claim must not fail on an emit.
+    from ciris_engine.logic.services.governance.consent.attestation import emit_partnership_pair, resolve_owner_key_id
+
+    emit_partnership_pair(partnered_status, user_key_id=resolve_owner_key_id())
     # FALSE POSITIVE (py/clear-text-logging-sensitive-data). `node_id` is a graph
     # node key -- `consent/{user_id}` -- where user_id is an OAuth external id
     # ("google:12345") or a WA id ("wa-2026-04-01-337AE1"). Both are identifiers
@@ -522,9 +526,7 @@ def _enforce_single_holder(setup: SetupCompleteRequest, wa_cert: Any) -> None:
     from ciris_engine.logic.persistence.stores import authentication_store
 
     try:
-        holders = authentication_store.live_oauth_holders(
-            str(setup.oauth_provider), str(setup.oauth_external_id)
-        )
+        holders = authentication_store.live_oauth_holders(str(setup.oauth_provider), str(setup.oauth_external_id))
     except Exception:  # noqa: BLE001
         logger.exception("CIRIS_USER_CREATE: could not verify the single-holder invariant")
         return
@@ -551,9 +553,7 @@ def _enforce_single_holder(setup: SetupCompleteRequest, wa_cert: Any) -> None:
     )
     if ours in holders and len(holders) > 1:
         authentication_store.update_wa_certificate(str(ours), {"active": False})
-        remaining = authentication_store.live_oauth_holders(
-            str(setup.oauth_provider), str(setup.oauth_external_id)
-        )
+        remaining = authentication_store.live_oauth_holders(str(setup.oauth_provider), str(setup.oauth_external_id))
         logger.error(
             "CIRIS_USER_CREATE: retired our own cert; %d live holder(s) remain "
             "(1 is correct — the fabric's owner-binding).",
@@ -736,9 +736,7 @@ async def _create_setup_users(
         if existing_wa is None and setup.oauth_provider and setup.oauth_external_id:
             fabric_provider = str(setup.oauth_provider)
             fabric_provider_subject = str(setup.oauth_external_id)
-            fabric_holder_id = authentication_store.fabric_oauth_holder_id(
-                fabric_provider, fabric_provider_subject
-            )
+            fabric_holder_id = authentication_store.fabric_oauth_holder_id(fabric_provider, fabric_provider_subject)
 
         if fabric_holder_id:
             # LOG THE FACT, NOT THE SUBJECT.
@@ -1015,9 +1013,7 @@ def _emit_accord_metrics_consent(setup: SetupCompleteRequest) -> None:
     if "ciris_accord_metrics" not in setup.enabled_adapters:
         return
     try:
-        from ciris_engine.logic.services.governance.consent.trace_sharing import (
-            grant_trace_sharing,
-        )
+        from ciris_engine.logic.services.governance.consent.trace_sharing import grant_trace_sharing
         from ciris_engine.schemas.consent.trace_sharing import TraceConsentSource
 
         result = grant_trace_sharing(
@@ -1149,12 +1145,17 @@ def _write_run_without_ai(f: Any) -> None:
     logger.info(
         "[RUN-WITHOUT-AI] recorded in the home's .env: %s=true %s=%s -- from now on every boot is ciris-server "
         "and the client (no brain); the read API will be on :%d. Set %s=false in the environment to run the brain once.",
-        ENV_FLAG, ENV_KEY_ID, key_id or "<unresolved: the node will use the wheel's default label>", 4243, ENV_FLAG,
+        ENV_FLAG,
+        ENV_KEY_ID,
+        key_id or "<unresolved: the node will use the wheel's default label>",
+        4243,
+        ENV_FLAG,
     )
     if not key_id:
         logger.error(
             "[RUN-WITHOUT-AI] the node key alias could not be resolved at setup-complete; node-only boots will "
-            "NOT serve the identity this wizard claimed until %s is set in .env", ENV_KEY_ID
+            "NOT serve the identity this wizard claimed until %s is set in .env",
+            ENV_KEY_ID,
         )
 
 

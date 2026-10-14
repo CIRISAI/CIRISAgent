@@ -615,3 +615,18 @@ decimal_id	claim_id	repo	path#symbol	status
 # while carrying the same manifest. Without it a manifest edited in place left
 # two dumps indistinguishable from the artifacts alone.
 4.2.2	CLM-await-manifest-content-identity	CIRISAgent	ciris_engine/logic/utils/research_overrides.py#compute_manifest_digest	impl
+# CC 4.4.3.4.3 / CIRISConstitution#168 (CIRISAgent#1251): the consent stream is the
+# user's data choice; partnership is a data-management record the agent may not
+# refuse. The stream-change path: a steward's own PARTNERED applies directly, a
+# non-steward's is deferred to the steward over the existing WBD path, and the
+# steward's answer is applied by the consent service from resolve_deferral BEFORE
+# the deferral is marked resolved (refusal: stream unchanged). The accept half is
+# emitted on every stream write, hybrid-signed by the agent occurrence key under
+# the owner-binding, sharing one bilateral_pair_id with the grant content. SCOPE,
+# stated: the USER-signed consent:partnership_grant half is not produced — no user
+# signer is reachable from Python (CIRISServer#342) — so CC 4.4.3.5.3 ratified_pair
+# can join the halves but cannot yet verify the grant's signature.
+4.4.3.4.3	CLM-consent-stream-is-data-choice	CIRISAgent	ciris_engine/logic/services/governance/consent/service.py#ConsentService.grant_consent	impl
+4.4.3.4.3	CLM-consent-stream-is-data-choice	CIRISAgent	ciris_engine/logic/services/governance/consent/service.py#ConsentService.apply_steward_partnership_decision	impl
+4.4.3.4.3	CLM-consent-stream-is-data-choice	CIRISAgent	ciris_engine/logic/services/governance/wise_authority/service.py#WiseAuthorityService._apply_partnership_decision	impl
+4.4.3.4.3	CLM-consent-stream-is-data-choice	CIRISAgent	ciris_engine/logic/services/governance/consent/attestation.py#emit_partnership_pair	impl

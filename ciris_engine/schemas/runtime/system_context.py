@@ -269,7 +269,7 @@ class UserProfile(BaseModel):
     consent_stream: str = Field("TEMPORARY", description="Consent stream: TEMPORARY, PARTNERED, or ANONYMOUS")
     consent_expires_at: Optional[datetime] = Field(None, description="When TEMPORARY consent expires (14 days)")
     partnership_requested_at: Optional[datetime] = Field(None, description="When partnership was requested")
-    partnership_approved: bool = Field(False, description="Whether partnership was approved by agent")
+    partnership_approved: bool = Field(False, description="Whether PARTNERED was established (claim or steward)")
 
     # Agent memorized data - arbitrary attributes the agent chose to store about this user
     memorized_attributes: Dict[str, str] = Field(

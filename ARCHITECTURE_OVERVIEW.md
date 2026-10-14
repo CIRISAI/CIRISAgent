@@ -227,7 +227,7 @@ Foundation services that enable the system:
 **Purpose**: User consent management and privacy compliance
 **Protocol**: `ConsentServiceProtocol`
 **Access**: Direct injection
-**Why**: GDPR compliance and ethical data handling. Manages TEMPORARY (14-day), PARTNERED (bilateral), and ANONYMOUS consent streams. Coordinates with modular DSAR services for external data compliance.
+**Why**: GDPR compliance and ethical data handling. Manages TEMPORARY (14-day), PARTNERED (a steward-governed data choice), and ANONYMOUS consent streams. Coordinates with modular DSAR services for external data compliance.
 
 ### Governance Services (5)
 

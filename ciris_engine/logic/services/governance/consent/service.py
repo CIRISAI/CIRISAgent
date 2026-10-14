@@ -8,7 +8,7 @@ This is the 22nd core CIRIS service.
 REFACTORED: Now uses modular architecture with separate modules for:
 - exceptions: Custom errors
 - metrics: Metrics collection
-- partnership: Partnership management
+- partnership: PARTNERED-request deferral to the steward (WBD)
 - decay: Decay protocol
 """
 
@@ -19,6 +19,7 @@ from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
 from ciris_engine.logic.buses.memory_bus import MemoryBus
+from ciris_engine.logic.buses.wise_bus import WiseBus
 from ciris_engine.logic.persistence import add_graph_node, get_graph_node
 from ciris_engine.logic.services.base_service import BaseService
 from ciris_engine.logic.utils.jsondict_helpers import get_dict, get_float, get_list, get_str, get_str_optional
@@ -34,6 +35,8 @@ from ciris_engine.schemas.consent.core import (
     ConsentRequest,
     ConsentStatus,
     ConsentStream,
+    PartnershipRequestStatus,
+    PartnershipStewardDecision,
 )
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.services.core import ServiceCapabilities
@@ -43,11 +46,11 @@ from ciris_engine.schemas.types import JSONDict
 
 # Import from new modules
 from .air import ArtificialInteractionReminder
-from .attestation import emit_consent_grant, emit_consent_revocation
+from .attestation import PartnershipPairEmission, emit_consent_revocation, emit_partnership_pair
 from .decay import DecayProtocolManager
-from .exceptions import ConsentNotFoundError, ConsentValidationError
+from .exceptions import ConsentNotFoundError, ConsentValidationError, StewardDeferralUnavailableError
 from .metrics import ConsentMetricsCollector
-from .partnership import PartnershipManager
+from .partnership import build_partnership_deferral_context, build_partnership_deferral_task, find_open_partnership_task
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +75,8 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
     - No fake data or fallbacks
     - Immutable audit trail
     - Real decay protocol
-    - Bilateral agreement for PARTNERED
+    - PARTNERED is a data-management record: the steward's own choice applies
+      directly; any other user's request is deferred to the steward (WBD)
     """
 
     def __init__(
@@ -80,15 +84,18 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         time_service: TimeServiceProtocol,
         memory_bus: Optional[MemoryBus] = None,
         db_path: Optional[str] = None,
+        wise_bus: Optional[WiseBus] = None,
     ):
         super().__init__(time_service=time_service, service_name="ConsentService")
         self._time_service = time_service
         self._memory_bus = memory_bus
         self._db_path = db_path
+        # The existing Wisdom-Based Deferral path. A non-steward PARTNERED request
+        # travels to the steward through it; there is no consent-local queue.
+        self._wise_bus = wise_bus
 
         # Initialize modular managers
         self._metrics_collector = ConsentMetricsCollector()
-        self._partnership_manager = PartnershipManager(time_service=time_service)
         self._decay_manager = DecayProtocolManager(time_service=time_service, db_path=db_path)
         self._air_manager = ArtificialInteractionReminder(
             time_service=time_service,
@@ -109,6 +116,11 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
 
         # Downgrade tracking
         self._downgrades_completed = 0
+
+        # PARTNERED requests carried to the steward (WBD) and their answers
+        self._partnership_deferrals = 0
+        self._partnership_approvals = 0
+        self._partnership_refusals = 0
 
     def _now(self) -> datetime:
         """Get current time from time service."""
@@ -267,15 +279,25 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         """
         return self._air_manager.track_interaction(user_id, channel_id, channel_type, message_content)
 
-    async def grant_consent(self, request: ConsentRequest, channel_id: Optional[str] = None) -> ConsentStatus:
+    async def grant_consent(
+        self,
+        request: ConsentRequest,
+        channel_id: Optional[str] = None,
+        *,
+        requester_is_steward: bool = False,
+    ) -> ConsentStatus:
         """
         Grant or update consent.
-        VALIDATES everything, creates audit trail.
+        VALIDATES everything, creates audit trail, emits the wire pair.
 
-        PARTNERED requires bilateral agreement:
-        - Creates task for agent approval
-        - Agent can REJECT, DEFER, or TASK_COMPLETE (accept)
-        - Returns pending status until agent decides
+        The stream is the user's data choice (CC 4.4.3.4.3). One case is not
+        theirs alone: whether this agent retains a NON-steward user under
+        PARTNERED is the steward's decision. That request is deferred to the
+        steward through the existing WBD path and the user's current stream is
+        returned unchanged; ``apply_steward_partnership_decision`` applies the
+        answer. ``requester_is_steward`` is set by the caller that authenticated
+        the request (the API route: the caller may resolve deferrals), and a
+        steward's own PARTNERED choice applies directly.
         """
         self._consent_grants += 1
 
@@ -285,14 +307,13 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         # Get previous status if exists
         previous_status = await self._get_previous_status(request.user_id)
 
-        # Check if upgrading to PARTNERED - requires bilateral agreement
-        if request.stream == ConsentStream.PARTNERED:
-            return await self._partnership_manager.create_partnership_request(request, previous_status, channel_id)
+        already_partnered = previous_status is not None and previous_status.stream == ConsentStream.PARTNERED
+        if request.stream == ConsentStream.PARTNERED and not requester_is_steward and not already_partnered:
+            return await self._defer_partnership_to_steward(request, previous_status, channel_id)
 
         # Check for gaming behavior if switching streams
         await self._check_gaming_behavior(request, previous_status)
 
-        # For TEMPORARY and ANONYMOUS - no bilateral agreement needed
         new_status = self._create_consent_status(request, previous_status)
 
         # Persist consent and audit trail
@@ -416,19 +437,188 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         # Update cache
         self._consent_cache[new_status.user_id] = new_status
 
-        # CEG-native consent (#869/#866): write the consent state as a
-        # local-tier CEG attestation — the consent wire artifact. Best-effort,
-        # never breaks the consent write path. Default ON as of 2.9.6;
-        # CIRIS_CONSENT_CEG_ATTESTATIONS=false is the emergency kill-switch.
-        emit_consent_grant(new_status)
+        # CEG-native consent (#869/#866) + the partnership wire pair (#1251).
+        self._record_stream_change(new_status)
+
+    def _record_stream_change(
+        self,
+        new_status: ConsentStatus,
+        *,
+        decided_by: Optional[str] = None,
+        deferral_id: Optional[str] = None,
+    ) -> PartnershipPairEmission:
+        """Emit the wire pair for a stream write: the grant content + the SIGNED accept half.
+
+        Runs on every consent write, whatever the stream: the accept half is
+        emitted on every stream change and never withheld (CC 4.4.3.4.3).
+        Best-effort, never breaks the consent write path. Default ON;
+        CIRIS_CONSENT_CEG_ATTESTATIONS=false is the emergency kill-switch.
+
+        End users hold no federation key the agent can name (``user_key_id``
+        stays None), so the grant half is recorded as KEYLESS_USER: its content
+        rides in the consent:stream row and no user signature is claimed.
+        """
+        return emit_partnership_pair(new_status, decided_by=decided_by, deferral_id=deferral_id)
+
+    async def _defer_partnership_to_steward(
+        self, request: ConsentRequest, previous_status: Optional[ConsentStatus], channel_id: Optional[str]
+    ) -> ConsentStatus:
+        """Carry a non-steward PARTNERED request to the steward through WBD. Changes nothing else.
+
+        Idempotent: while one request is open, asking again returns the current
+        status without raising a second deferral. Raises
+        ``StewardDeferralUnavailableError`` when no deferral path exists rather
+        than dropping the request or deciding it here.
+        """
+        from ciris_engine.logic.persistence.models.tasks import add_task
+
+        current = previous_status or self._unrecorded_default_status(request.user_id)
+        if find_open_partnership_task(request.user_id) is not None:
+            logger.info(
+                "PARTNERED request for %s is already with the steward; not deferring again",
+                _sanitize_for_log(request.user_id),
+            )
+            return current
+
+        if self._wise_bus is None:
+            raise StewardDeferralUnavailableError(
+                "No Wise Authority deferral path is wired, so a PARTNERED request cannot reach the steward"
+            )
+        if self._time_service is None:
+            raise ValueError("TimeService required to defer a PARTNERED request")
+
+        task = build_partnership_deferral_task(
+            request.user_id, request.categories, request.reason, channel_id, self._time_service
+        )
+        add_task(task)
+        context = build_partnership_deferral_context(
+            task,
+            request.user_id,
+            request.categories,
+            request.reason,
+            previous_status.stream if previous_status else None,
+        )
+        delivered = await self._wise_bus.send_deferral(context, "ConsentService")
+        if not delivered:
+            raise StewardDeferralUnavailableError(
+                "No Wise Authority service accepted the deferral, so the PARTNERED request did not reach the steward"
+            )
+        self._partnership_deferrals += 1
+        logger.info(
+            "PARTNERED request for %s deferred to the steward (task %s); stream unchanged until answered",
+            _sanitize_for_log(request.user_id),
+            task.task_id,
+        )
+        return current
+
+    def _unrecorded_default_status(self, user_id: str) -> ConsentStatus:
+        """The TEMPORARY default a user without a record is under. Returned, NOT persisted."""
+        now = self._now()
+        return ConsentStatus(
+            user_id=user_id,
+            stream=ConsentStream.TEMPORARY,
+            categories=[],
+            granted_at=now,
+            expires_at=now + timedelta(days=14),
+            last_modified=now,
+            impact_score=0.0,
+            attribution_count=0,
+        )
+
+    async def apply_steward_partnership_decision(self, decision: PartnershipStewardDecision) -> Optional[ConsentStatus]:
+        """Apply the steward's answer to a PARTNERED-request deferral.
+
+        Called by ``WiseAuthorityService.resolve_deferral`` BEFORE it marks the
+        deferral resolved, so a failure here leaves the request pending rather
+        than recorded-but-unapplied. Approval writes PARTNERED and emits the
+        pair, naming the steward and the deferral in the accept half. Refusal
+        writes nothing: the user keeps their current stream. Returns the new
+        status on approval, None on refusal.
+
+        The steward decides whether to retain the user; the steward never
+        overrides the user. If the user has changed their stream or revoked
+        consent since asking, their later choice stands and an approval
+        writes nothing.
+        """
+        if not decision.approved:
+            self._partnership_refusals += 1
+            logger.info(
+                "Steward %s declined PARTNERED for %s (deferral %s); stream unchanged",
+                _sanitize_for_log(decision.steward_id),
+                _sanitize_for_log(decision.user_id),
+                _sanitize_for_log(decision.deferral_id),
+            )
+            return None
+
+        if self._user_choice_superseded(decision, await self._get_previous_status(decision.user_id)):
+            logger.info(
+                "Steward %s approved PARTNERED for %s (deferral %s), but the user has changed their consent "
+                "since asking; their later choice stands and nothing is written",
+                _sanitize_for_log(decision.steward_id),
+                _sanitize_for_log(decision.user_id),
+                _sanitize_for_log(decision.deferral_id),
+            )
+            return None
+
+        categories = decision.categories or [ConsentCategory.INTERACTION]
+        new_status = await self.update_consent(
+            decision.user_id,
+            ConsentStream.PARTNERED,
+            categories,
+            reason=decision.reason or f"PARTNERED approved by steward via deferral {decision.deferral_id}",
+            initiated_by=f"steward:{decision.steward_id}",
+            decided_by=decision.steward_id,
+            deferral_id=decision.deferral_id,
+        )
+        self._partnership_approvals += 1
+        return new_status
+
+    def _user_choice_superseded(self, decision: PartnershipStewardDecision, current: Optional[ConsentStatus]) -> bool:
+        """True when the user revoked consent or changed their stream after making the request.
+
+        Compared on the STREAM, not ``last_modified``: interaction-driven
+        TEMPORARY expiry extension rewrites ``last_modified`` without the user
+        choosing anything.
+        """
+        if self._decay_manager.check_decay_status(decision.user_id) is not None:
+            return True
+        if decision.stream_at_request is None:
+            # No record when they asked: only a record that now says otherwise supersedes.
+            return current is not None and current.stream != ConsentStream.TEMPORARY
+        if current is None:
+            return True  # The record they had is gone: revoked since.
+        return current.stream != decision.stream_at_request
+
+    async def get_partnership_request_status(self, user_id: str) -> PartnershipRequestStatus:
+        """Where the user's PARTNERED choice stands: with the steward, applied, or neither."""
+        if find_open_partnership_task(user_id) is not None:
+            return PartnershipRequestStatus.PENDING
+        try:
+            current = await self.get_consent(user_id, extend_expiry=False)
+        except ConsentNotFoundError:
+            return PartnershipRequestStatus.NONE
+        if current.stream == ConsentStream.PARTNERED:
+            return PartnershipRequestStatus.PARTNERED
+        return PartnershipRequestStatus.NONE
 
     async def update_consent(
-        self, user_id: str, stream: ConsentStream, categories: List[ConsentCategory], reason: Optional[str] = None
+        self,
+        user_id: str,
+        stream: ConsentStream,
+        categories: List[ConsentCategory],
+        reason: Optional[str] = None,
+        *,
+        initiated_by: str = "tool",
+        decided_by: Optional[str] = None,
+        deferral_id: Optional[str] = None,
     ) -> ConsentStatus:
         """
-        Internal method to update consent status directly.
-        Used by tool handlers for consent transitions.
-        Does NOT perform bilateral agreement checks - those should be done by caller.
+        Write a consent status directly and emit the wire pair.
+
+        Callers own the decision: a user's own downgrade (degrade_relationship),
+        or the steward's answer to a PARTNERED deferral
+        (apply_steward_partnership_decision). This method does not route
+        anything to the steward itself.
         """
         # Get previous status if exists
         previous_status = None
@@ -484,7 +674,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
             new_stream=new_status.stream,
             previous_categories=previous_status.categories if previous_status else [],
             new_categories=new_status.categories,
-            initiated_by="tool",
+            initiated_by=initiated_by,
             reason=reason or "Tool-initiated update",
         )
 
@@ -503,6 +693,8 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
 
         # Update cache
         self._consent_cache[user_id] = new_status
+
+        self._record_stream_change(new_status, decided_by=decided_by, deferral_id=deferral_id)
 
         logger.info(f"Consent updated for {user_id}: {new_status.stream}")
         return new_status
@@ -676,90 +868,6 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
                 logger.warning(f"Failed to query audit trail for {user_id}: {e}")
 
         return audit_entries
-
-    async def check_pending_partnership(self, user_id: str) -> Optional[str]:
-        """
-        Check status of pending partnership request.
-        Delegates to PartnershipManager for checking and finalization.
-
-        Returns:
-            - "accepted": Partnership approved by agent
-            - "rejected": Partnership declined by agent
-            - "deferred": Agent needs more information
-            - "pending": Still processing
-            - None: No pending request
-        """
-        # Check status via partnership manager
-        status = await self._partnership_manager.check_partnership_status(user_id)
-
-        # If not accepted, return the status as-is
-        if status != "accepted":
-            return status
-
-        # Partnership was accepted - finalize it
-        # Get task_id from pending partnerships
-        pending_list = self._partnership_manager.list_pending_partnerships()
-        task_id = None
-        for pending in pending_list:
-            if pending.get("user_id") == user_id:
-                task_id = pending.get("task_id")
-                break
-
-        if not task_id:
-            logger.warning(f"Partnership accepted for {user_id} but no task_id found")
-            return status
-
-        # Finalize via partnership manager
-        partnership_data = self._partnership_manager.finalize_partnership_approval(user_id, str(task_id))
-
-        if not partnership_data:
-            logger.warning(f"Partnership finalization failed for {user_id}")
-            return status
-
-        # Create and persist PARTNERED consent status
-        now = self._now()
-        categories = partnership_data.get("categories", [])
-
-        partnered_status = ConsentStatus(
-            user_id=user_id,
-            stream=ConsentStream.PARTNERED,
-            categories=categories,
-            granted_at=now,
-            expires_at=None,  # PARTNERED doesn't expire
-            last_modified=now,
-            impact_score=0.0,
-            attribution_count=0,
-        )
-
-        # Store in graph
-        node = GraphNode(
-            id=f"consent/{user_id}",
-            type=NodeType.CONSENT,
-            scope=GraphScope.LOCAL,
-            attributes={
-                "stream": partnered_status.stream,
-                "categories": list(partnered_status.categories),
-                "granted_at": partnered_status.granted_at.isoformat(),
-                "expires_at": None,
-                "last_modified": partnered_status.last_modified.isoformat(),
-                "impact_score": partnered_status.impact_score,
-                "attribution_count": partnered_status.attribution_count,
-                "partnership_approved": True,
-                "approval_task_id": task_id,
-            },
-            updated_by="consent_manager",
-            updated_at=now,
-        )
-
-        if self._time_service is None:
-            raise ValueError("TimeService required for finalizing partnership")
-        add_graph_node(node, self._time_service)
-
-        # Update cache
-        self._consent_cache[user_id] = partnered_status
-
-        # Return "partnered" to indicate successful finalization (different from "accepted")
-        return "partnered"
 
     async def _get_example_contributions(self, user_id: str) -> List[str]:
         """Get example contributions from the graph."""
@@ -1019,7 +1127,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         Top 5 Most Important Metrics:
         1. consent_active_users - Number of users with active consent
         2. consent_stream_distribution - Breakdown by stream type (TEMPORARY/PARTNERED/ANONYMOUS)
-        3. consent_partnership_success_rate - Approval rate for partnership requests
+        3. consent_partnership_success_rate - Steward approval rate for deferred PARTNERED requests
         4. consent_average_age_days - Average age of active consents
         5. consent_decay_completion_rate - Percentage of decays completed vs initiated
         """
@@ -1032,10 +1140,13 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         stream_metrics = self._metrics_collector.collect_stream_distribution(self._consent_cache, now)
         metrics.update(stream_metrics)
 
-        # Get partnership metrics from manager
-        partnership_requests, partnership_approvals, _ = self._partnership_manager.get_request_counts()
+        # PARTNERED requests carried to the steward and the steward's answers
+        answered = self._partnership_approvals + self._partnership_refusals
         partnership_metrics = self._metrics_collector.collect_partnership_metrics(
-            partnership_requests, partnership_approvals, 0, self._partnership_manager.get_pending_count()
+            self._partnership_deferrals,
+            self._partnership_approvals,
+            self._partnership_refusals,
+            max(0, self._partnership_deferrals - answered),
         )
         metrics.update(partnership_metrics)
 
@@ -1073,7 +1184,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
 
     def _get_actions(self) -> List[str]:
         """Get available actions - not used for non-bussed services."""
-        return ["upgrade_relationship", "degrade_relationship"]
+        return ["degrade_relationship"]
 
     # ToolService Protocol Implementation
 
@@ -1082,9 +1193,9 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         self._track_request()  # Track the tool execution
         self._tool_executions += 1
 
-        if tool_name == "upgrade_relationship":
-            result = await self._upgrade_relationship_tool(parameters)
-        elif tool_name == "degrade_relationship":
+        # There is no agent-initiated upgrade tool (#1251): PARTNERED is the
+        # user's choice, routed to the steward when the user is not the steward.
+        if tool_name == "degrade_relationship":
             result = await self._degrade_relationship_tool(parameters)
         else:
             self._tool_failures += 1  # Unknown tool is a failure!
@@ -1112,27 +1223,15 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
 
     async def get_available_tools(self) -> List[str]:
         """Get list of available tool names."""
-        return ["upgrade_relationship", "degrade_relationship"]
+        return ["degrade_relationship"]
 
     async def list_tools(self) -> List[str]:
         """List available tools - required by ToolServiceProtocol."""
-        return ["upgrade_relationship", "degrade_relationship"]
+        return ["degrade_relationship"]
 
     async def get_tool_schema(self, tool_name: str) -> Optional[ToolParameterSchema]:
         """Get parameter schema for a specific tool."""
         schemas = {
-            "upgrade_relationship": ToolParameterSchema(
-                type="object",
-                properties={
-                    "user_id": {"type": "string", "description": "User ID requesting the upgrade"},
-                    "reason": {
-                        "type": "string",
-                        "description": "Reason for upgrade request",
-                        "default": "User requested partnership",
-                    },
-                },
-                required=["user_id"],
-            ),
             "degrade_relationship": ToolParameterSchema(
                 type="object",
                 properties={
@@ -1156,22 +1255,6 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
     async def get_tool_info(self, tool_name: str) -> Optional[ToolInfo]:
         """Get detailed information about a specific tool."""
         tools_info = {
-            "upgrade_relationship": ToolInfo(
-                name="upgrade_relationship",
-                description="Request to upgrade user relationship to PARTNERED (requires bilateral consent)",
-                parameters=ToolParameterSchema(
-                    type="object",
-                    properties={
-                        "user_id": {"type": "string", "description": "User ID requesting the upgrade"},
-                        "reason": {
-                            "type": "string",
-                            "description": "Reason for upgrade request",
-                            "default": "User requested partnership",
-                        },
-                    },
-                    required=["user_id"],
-                ),
-            ),
             "degrade_relationship": ToolInfo(
                 name="degrade_relationship",
                 description="Request to downgrade user relationship to TEMPORARY or ANONYMOUS",
@@ -1199,12 +1282,9 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
     async def get_all_tool_info(self) -> List[ToolInfo]:
         """Get info for all available tools."""
         tools = []
-        tool1 = await self.get_tool_info("upgrade_relationship")
-        if tool1:
-            tools.append(tool1)
-        tool2 = await self.get_tool_info("degrade_relationship")
-        if tool2:
-            tools.append(tool2)
+        degrade = await self.get_tool_info("degrade_relationship")
+        if degrade:
+            tools.append(degrade)
         return tools
 
     async def get_tool_result(self, correlation_id: str, timeout: float = 30.0) -> Optional[ToolExecutionResult]:
@@ -1214,66 +1294,9 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
 
     async def validate_parameters(self, tool_name: str, parameters: JSONDict) -> bool:
         """Validate parameters for a tool."""
-        if tool_name == "upgrade_relationship":
-            return "user_id" in parameters
-        elif tool_name == "degrade_relationship":
+        if tool_name == "degrade_relationship":
             return "user_id" in parameters
         return False
-
-    async def _upgrade_relationship_tool(self, parameters: JSONDict) -> JSONDict:
-        """Tool implementation for upgrading relationship to PARTNERED."""
-        try:
-            user_id = get_str(parameters, "user_id", "")
-            reason = get_str(parameters, "reason", "User requested partnership")
-
-            if not user_id:
-                return {"success": False, "error": "user_id is required"}
-
-            # Get current consent status
-            try:
-                current = await self.get_consent(user_id)
-            except ConsentNotFoundError:
-                # Create default TEMPORARY consent if none exists
-                request = ConsentRequest(
-                    user_id=user_id,
-                    stream=ConsentStream.TEMPORARY,
-                    categories=[],  # TEMPORARY doesn't need categories
-                    reason="Default consent for impact calculation",
-                )
-                current = await self.grant_consent(request)
-
-            if current.stream == ConsentStream.PARTNERED:
-                return {
-                    "success": True,
-                    "message": "Already in PARTNERED relationship",
-                    "current_stream": "PARTNERED",
-                    "user_id": user_id,
-                }
-
-            # Create upgrade request - this will need agent approval
-            request = ConsentRequest(
-                user_id=user_id,
-                stream=ConsentStream.PARTNERED,
-                categories=[ConsentCategory.INTERACTION, ConsentCategory.PREFERENCE],
-                reason=reason,
-            )
-
-            # Update to PARTNERED (pending agent approval via thought/task system)
-            await self.update_consent(user_id, ConsentStream.PARTNERED, request.categories)
-
-            # Note: Partnership requests are now tracked by PartnershipManager
-            return {
-                "success": True,
-                "message": "Partnership upgrade requested - requires agent approval",
-                "current_stream": current.stream.value if hasattr(current.stream, "value") else current.stream,
-                "requested_stream": "PARTNERED",
-                "user_id": user_id,
-                "status": "PENDING_APPROVAL",
-            }
-
-        except Exception as e:
-            logger.error(f"Failed to upgrade relationship: {e}")
-            return {"success": False, "error": str(e)}
 
     async def _degrade_relationship_tool(self, parameters: JSONDict) -> JSONDict:
         """Tool implementation for downgrading relationship."""

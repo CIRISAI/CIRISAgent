@@ -83,12 +83,11 @@ python3 -m tools.qa_runner <module> --no-auto-start # use existing server
 | `multi_occurrence` | `multi_occurrence_tests.py` | Multi-occurrence horizontal scaling |
 | `cirisnode` | `cirisnode_tests.py` | CIRISNode deferral routing, trace forwarding |
 
-### Billing & Partnership
+### Billing
 | Module | File | Tests |
 |--------|------|-------|
 | `billing` | `billing_tests.py` | Credit system, usage tracking |
 | `billing_integration` | `billing_integration_tests.py` | OAuth user billing flows |
-| `partnership` | `partnership_tests.py` | Partnership management |
 
 ### Other
 | Module | File | Tests |

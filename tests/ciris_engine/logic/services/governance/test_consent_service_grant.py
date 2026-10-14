@@ -3,11 +3,11 @@ Tests for ConsentService grant_consent() and related helper methods.
 
 Focuses on:
 - grant_consent() flow with all consent streams
-- Partnership request handling
+- PARTNERED applied directly when already partnered (WBD route: test_partnership_wbd_route.py)
 - Gaming behavior detection
 - Helper method coverage (_validate_consent_request, _get_previous_status, etc.)
 - update_consent() method
-- Tool handlers (upgrade/degrade relationship)
+- Tool handlers (degrade relationship; there is no upgrade tool)
 """
 
 from datetime import datetime, timedelta, timezone
@@ -266,33 +266,8 @@ class TestGrantConsentFlow:
             assert result.expires_at is None
 
     @pytest.mark.asyncio
-    async def test_grant_partnered_creates_task(self, consent_service):
-        """Test granting PARTNERED consent creates partnership task."""
-        request = ConsentRequest(
-            user_id="partner_user",
-            stream=ConsentStream.PARTNERED,
-            categories=[ConsentCategory.INTERACTION, ConsentCategory.PREFERENCE],
-            reason="Want to partner",
-        )
-
-        consent_service.get_consent = AsyncMock(side_effect=ConsentNotFoundError())
-
-        with patch("ciris_engine.logic.utils.consent.partnership_utils.PartnershipRequestHandler") as MockHandler:
-            mock_handler = Mock()
-            mock_task = Mock(task_id="task_123")
-            mock_handler.create_partnership_task.return_value = mock_task
-            MockHandler.return_value = mock_handler
-
-            result = await consent_service.grant_consent(request, channel_id="test_channel")
-
-            # Should return pending status (not PARTNERED yet)
-            assert result.stream != ConsentStream.PARTNERED
-            assert "partner_user" in consent_service._partnership_manager._pending_partnerships
-            assert consent_service._partnership_manager._pending_partnerships["partner_user"]["task_id"] == "task_123"
-
-    @pytest.mark.asyncio
-    async def test_grant_already_partnered_returns_existing(self, consent_service):
-        """Test granting PARTNERED when already partnered returns existing status."""
+    async def test_grant_already_partnered_applies_directly(self, consent_service):
+        """PARTNERED -> PARTNERED (new categories) applies directly, no deferral."""
         existing_partnered = ConsentStatus(
             user_id="partner_user",
             stream=ConsentStream.PARTNERED,
@@ -310,10 +285,17 @@ class TestGrantConsentFlow:
 
         consent_service.get_consent = AsyncMock(return_value=existing_partnered)
 
-        result = await consent_service.grant_consent(request)
+        # Already PARTNERED: a category change is the user's own data choice and
+        # applies directly — there is nothing to defer (#1251).
+        with patch("ciris_engine.logic.services.governance.consent.service.add_graph_node"), patch(
+            "ciris_engine.logic.services.governance.consent.service.find_open_partnership_task"
+        ) as find_open:
+            result = await consent_service.grant_consent(request)
 
-        # Should return existing status without creating new task
-        assert result == existing_partnered
+        find_open.assert_not_called()
+        assert result.stream == ConsentStream.PARTNERED
+        assert result.categories == [ConsentCategory.PREFERENCE]
+        assert result.attribution_count == 5
 
 
 class TestUpdateConsentMethod:
@@ -364,34 +346,6 @@ class TestUpdateConsentMethod:
 
 class TestToolHandlers:
     """Test tool handler methods."""
-
-    @pytest.mark.asyncio
-    async def test_upgrade_relationship_tool_creates_partnership(self, consent_service):
-        """Test upgrade_relationship_tool creates partnership request."""
-        existing = ConsentStatus(
-            user_id="user1",
-            stream=ConsentStream.TEMPORARY,
-            categories=[ConsentCategory.INTERACTION],
-            granted_at=datetime.now(timezone.utc),
-            expires_at=datetime.now(timezone.utc) + timedelta(days=14),
-            last_modified=datetime.now(timezone.utc),
-            impact_score=0.0,
-            attribution_count=0,
-        )
-
-        consent_service.get_consent = AsyncMock(return_value=existing)
-        consent_service.update_consent = AsyncMock(return_value=existing)
-
-        with patch("ciris_engine.logic.utils.consent.partnership_utils.PartnershipRequestHandler") as MockHandler:
-            mock_handler = Mock()
-            mock_task = Mock(task_id="partnership_task")
-            mock_handler.create_partnership_task.return_value = mock_task
-            MockHandler.return_value = mock_handler
-
-            result = await consent_service._upgrade_relationship_tool({"user_id": "user1", "reason": "Trust built"})
-
-            assert result["success"] is True
-            assert result["status"] == "PENDING_APPROVAL"
 
     @pytest.mark.asyncio
     async def test_degrade_relationship_tool_to_temporary(self, consent_service):

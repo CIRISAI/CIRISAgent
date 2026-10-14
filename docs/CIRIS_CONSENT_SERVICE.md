@@ -30,7 +30,7 @@ The CIRIS Consent Service is the 22nd core service (Governance Service #5) that 
 ### 2. PARTNERED
 - **Duration**: Persistent (no auto-expiry)
 - **Categories**: ESSENTIAL, BEHAVIORAL, IMPROVEMENT
-- **Requirement**: Bilateral consent (user request + agent approval)
+- **Requirement**: The user's choice. Applies directly for the steward; for any other user it is deferred to the steward (Wisdom-Based Deferral)
 - **Data Handling**: Retained for relationship duration
 - **Use Case**: Long-term collaborative relationships
 
@@ -66,17 +66,24 @@ Anonymized aggregate data:
 - Performance benchmarks
 - Trend analysis
 
-## Bilateral Partnership Protocol
+## Partnership: a data-management record (CIRISAgent#1251)
 
-Partnership upgrades require mutual agreement:
+PARTNERED records the user's retention/learning choice (CC 4.4.3.4.3). It is not a
+relationship the agent may refuse, and there is no agent-side approval queue.
 
-1. **User Request**: User initiates upgrade via tool or API
-2. **Agent Review**: Creates task for agent consideration
-3. **Agent Decision**:
-   - TASK_COMPLETE: Partnership approved
-   - REJECT: Partnership declined
-   - DEFER: Decision postponed
-4. **Status Update**: User notified of decision
+1. **Steward's own choice**: anyone who may resolve deferrals (the owner / a Wise
+   Authority) choosing PARTNERED gets it immediately.
+2. **Any other user**: `POST /v1/consent/grant` with `stream=partnered` is deferred to
+   the steward through the existing Wisdom-Based Deferral path. The user's current
+   stream is returned unchanged; `GET /v1/consent/partnership/status` reads `pending`.
+3. **Steward answers** through `POST /v1/wa/deferrals/{deferral_id}/resolve`. The
+   signed decision is recorded on the deferral. Approval writes PARTNERED and emits
+   the wire pair; refusal leaves the user's stream unchanged.
+4. **Wire pair**: every stream write (at node claim and on every change) emits the
+   grant content (consent:stream row) and the accept half
+   (`consent:partnership_accept:v1`, signed by the agent occurrence key under the
+   owner-binding) with one `bilateral_pair_id`. The user-signed grant half is blocked
+   on CIRISServer#342.
 
 ### Downgrade Protocol
 Users can unilaterally downgrade at any time:
@@ -225,12 +232,7 @@ Check status of DSAR request.
 
 ## Tool Interface
 
-### upgrade_relationship
-Request partnership upgrade (requires bilateral consent).
-
-**Parameters**:
-- `user_id`: User requesting upgrade
-- `reason`: Justification for partnership
+There is no agent-initiated upgrade tool (removed in CIRISAgent#1251).
 
 ### degrade_relationship
 Immediate relationship downgrade (unilateral).
@@ -309,7 +311,7 @@ The service tracks five key metrics:
 
 1. **consent_active_users**: Users with valid consent
 2. **consent_stream_distribution**: Percentage per stream type
-3. **consent_partnership_success_rate**: Approval rate for partnerships
+3. **consent_partnership_success_rate**: Steward approval rate for deferred PARTNERED requests
 4. **consent_average_age_days**: Average consent duration
 5. **consent_expiry_rate**: Daily expiry count
 

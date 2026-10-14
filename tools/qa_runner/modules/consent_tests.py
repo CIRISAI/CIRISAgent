@@ -4,7 +4,7 @@ Consent management QA tests.
 Tests the complete consent lifecycle including:
 - Initial consent creation on interaction
 - Consent status queries
-- Partnership requests
+- PARTNERED as the steward's own choice (applies directly)
 - Stream changes (temporary/anonymous/partnered)
 - Consent revocation and decay
 """
@@ -37,7 +37,7 @@ class ConsentTests:
             ("Create Default Consent", self.test_create_default_consent),
             ("Query Consent Records", self.test_query_consents),
             ("Change Consent Stream", self.test_change_stream),
-            ("Request Partnership", self.test_request_partnership),
+            ("Steward PARTNERED Applies Directly", self.test_steward_partnered_applies_directly),
             ("Get Impact Report", self.test_impact_report),
             ("Audit Trail", self.test_audit_trail),
             ("Revoke Consent", self.test_revoke_consent),
@@ -130,28 +130,24 @@ class ConsentTests:
         if result.stream != "temporary":
             raise ValueError(f"Stream not changed to temporary: {result.stream}")
 
-    async def test_request_partnership(self):
-        """Test requesting partnership (requires agent approval)."""
-        try:
-            # Request partnership
-            result = await self.client.consent.grant_consent(
-                stream="partnered",
-                categories=["interaction", "preference", "improvement", "research", "sharing"],
-                reason="Testing partnership request from QA suite",
-            )
+    async def test_steward_partnered_applies_directly(self):
+        """The QA admin is the steward: its own PARTNERED choice applies with no deferral (#1251)."""
+        result = await self.client.consent.grant_consent(
+            stream="partnered",
+            categories=["interaction", "preference", "improvement"],
+            reason="Steward choosing PARTNERED from the QA suite",
+        )
+        if result.stream != "partnered":
+            raise ValueError(f"Steward's PARTNERED choice was not applied directly: stream={result.stream}")
 
-            # Partnership requires approval, so check status
-            partnership_status = await self.client.consent.get_partnership_status()
+        status = await self.client.consent.get_partnership_status()
+        if status.get("partnership_status") != "partnered":
+            raise ValueError(f"Expected partnership_status=partnered, got {status}")
 
-            # Should be pending or none
-            status_val = partnership_status.get("status", "none")
-            if status_val not in ["pending", "none", "approved", "rejected"]:
-                raise ValueError(f"Invalid partnership status: {status_val}")
-
-        except Exception as e:
-            # Partnership might not be available in test environment
-            if "partnership" not in str(e).lower():
-                raise
+        # Leave the account where the rest of the suite expects it.
+        await self.client.consent.grant_consent(
+            stream="temporary", categories=["interaction"], reason="Reset after PARTNERED check"
+        )
 
     async def test_impact_report(self):
         """Test getting consent impact report - FAIL FAST."""

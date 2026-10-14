@@ -6,7 +6,7 @@ Focuses on:
 - revoke_consent() and decay protocol
 - get_impact_report() with real TSDB data
 - check_expiry() flows
-- check_pending_partnership()
+- get_partnership_request_status()
 - Service infrastructure (tool schemas, execute_tool, etc.)
 """
 
@@ -282,34 +282,27 @@ class TestCheckExpiry:
             await consent_service.check_expiry("nonexistent")
 
 
-class TestCheckPendingPartnership:
-    """Test check_pending_partnership() method."""
+class TestPartnershipRequestStatus:
+    """get_partnership_request_status() reads the WBD deferral and the stream; no queue."""
 
     @pytest.mark.asyncio
-    async def test_check_pending_partnership_exists(self, consent_service):
-        """Test checking pending partnership that exists."""
-        consent_service._partnership_manager._pending_partnerships["pending_user"] = {
-            "task_id": "task_123",
-            "request": Mock(),
-            "created_at": datetime.now(timezone.utc),
-        }
-
-        # Mock the handler to return pending status
-        with patch("ciris_engine.logic.utils.consent.partnership_utils.PartnershipRequestHandler") as MockHandler:
-            mock_handler = Mock()
-            mock_handler.check_task_outcome.return_value = ("pending", None)
-            MockHandler.return_value = mock_handler
-
-            status = await consent_service.check_pending_partnership("pending_user")
-
-            assert status == "pending"
+    async def test_open_deferral_reads_pending(self, consent_service):
+        with patch(
+            "ciris_engine.logic.services.governance.consent.service.find_open_partnership_task",
+            return_value=Mock(task_id="consent_partnered_x_1"),
+        ):
+            status = await consent_service.get_partnership_request_status("pending_user")
+        assert status.value == "pending"
 
     @pytest.mark.asyncio
-    async def test_check_pending_partnership_not_exists(self, consent_service):
-        """Test checking pending partnership that doesn't exist."""
-        task_id = await consent_service.check_pending_partnership("no_pending_user")
-
-        assert task_id is None
+    async def test_no_request_no_record_reads_none(self, consent_service):
+        consent_service.get_consent = AsyncMock(side_effect=ConsentNotFoundError("none"))
+        with patch(
+            "ciris_engine.logic.services.governance.consent.service.find_open_partnership_task",
+            return_value=None,
+        ):
+            status = await consent_service.get_partnership_request_status("no_pending_user")
+        assert status.value == "none"
 
 
 class TestGetImpactReport:
@@ -398,16 +391,15 @@ class TestServiceInfrastructure:
     """Test service infrastructure methods."""
 
     @pytest.mark.asyncio
-    async def test_execute_tool_upgrade_relationship(self, consent_service):
-        """Test execute_tool dispatches to upgrade handler."""
-        consent_service._upgrade_relationship_tool = AsyncMock(
-            return_value={"success": True, "status": "PENDING_APPROVAL"}
-        )
-
+    async def test_upgrade_relationship_tool_is_gone(self, consent_service):
+        """There is no agent-initiated upgrade tool (#1251): NOT_FOUND, and not advertised."""
         result = await consent_service.execute_tool("upgrade_relationship", {"user_id": "test"})
 
-        assert result.status.value == "completed"
-        consent_service._upgrade_relationship_tool.assert_called_once()
+        assert result.status.value == "not_found"
+        assert "upgrade_relationship" not in await consent_service.list_tools()
+        assert "upgrade_relationship" not in await consent_service.get_available_tools()
+        assert await consent_service.get_tool_info("upgrade_relationship") is None
+        assert [t.name for t in await consent_service.get_all_tool_info()] == ["degrade_relationship"]
 
     @pytest.mark.asyncio
     async def test_execute_tool_unknown_tool(self, consent_service):
@@ -420,7 +412,7 @@ class TestServiceInfrastructure:
     @pytest.mark.asyncio
     async def test_get_tool_schema(self, consent_service):
         """Test getting tool parameter schema."""
-        schema = await consent_service.get_tool_schema("upgrade_relationship")
+        schema = await consent_service.get_tool_schema("degrade_relationship")
 
         assert schema is not None
         assert schema.type == "object"
@@ -436,13 +428,13 @@ class TestServiceInfrastructure:
     @pytest.mark.asyncio
     async def test_validate_parameters_valid(self, consent_service):
         """Test validating valid parameters."""
-        is_valid = await consent_service.validate_parameters("upgrade_relationship", {"user_id": "test"})
+        is_valid = await consent_service.validate_parameters("degrade_relationship", {"user_id": "test"})
 
         assert is_valid is True
 
     @pytest.mark.asyncio
     async def test_validate_parameters_missing_required(self, consent_service):
         """Test validating parameters with missing required field."""
-        is_valid = await consent_service.validate_parameters("upgrade_relationship", {})
+        is_valid = await consent_service.validate_parameters("degrade_relationship", {})
 
         assert is_valid is False

@@ -13,7 +13,7 @@ Authentication (who are you?) is handled by AuthenticationService.
 import json
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Dict, List, Optional, Union
 
 from ciris_engine.logic.config import get_sqlite_db_full_path
 from ciris_engine.logic.persistence.db.dialect import get_adapter
@@ -41,6 +41,10 @@ from ciris_engine.schemas.services.authority_core import (
 )
 from ciris_engine.schemas.services.context import GuidanceContext
 from ciris_engine.schemas.services.core import ServiceStatus
+
+if TYPE_CHECKING:
+    from ciris_engine.logic.services.governance.consent.service import ConsentService
+    from ciris_engine.schemas.consent.core import PartnershipStewardDecision
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +85,12 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
         # Metrics tracking
         self._guidance_provided_count = 0
         self._queries_handled_count = 0
+
+        # The consent service applies a steward's answer to a PARTNERED-request
+        # deferral (CIRISAgent#1251). Attached after both services exist; until
+        # then such a deferral cannot be resolved (it stays pending, never
+        # recorded-but-unapplied).
+        self._consent_service: Optional["ConsentService"] = None
 
         # All deferrals and guidance are persisted in the database
 
@@ -911,6 +921,22 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                     response, self._now().isoformat(), verification
                 )
 
+            # A PARTNERED-stream request deferred by the consent service
+            # (CIRISAgent#1251): the steward's answer is applied HERE, before the
+            # deferral is marked resolved, so a failure leaves the request
+            # pending instead of recorded-but-unapplied.
+            from ciris_engine.logic.services.governance.consent.partnership import (
+                is_partnership_deferral,
+                partnership_decision_from_deferral,
+            )
+
+            stored_context = deferral_info.get("context") if isinstance(deferral_info, dict) else None
+            is_consent_request = is_partnership_deferral(stored_context)
+            if is_consent_request:
+                decision = partnership_decision_from_deferral(stored_context, response, deferral_id)
+                if decision is None or not await self._apply_partnership_decision(decision):
+                    return False
+
             # Mark original deferred task as COMPLETED with outcome
             # Use TaskOutcome schema: status, summary, actions_taken, memories_created, errors
             if response.approved:
@@ -945,8 +971,10 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
 
             logger.info(f"Marked original deferred task {task_id} as COMPLETED with outcome")
 
-            # If approved, create a NEW guidance task
-            if response.approved and response.reason:
+            # If approved, create a NEW guidance task. Not for a PARTNERED-stream
+            # request: its effect is the stream write applied above, and there is
+            # no agent work to resume — the request never came from a thought.
+            if response.approved and response.reason and not is_consent_request:
                 # Track guidance provided via deferral resolution
                 self._guidance_provided_count += 1
 
@@ -1072,6 +1100,31 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
         except Exception as e:
             logger.error(f"Failed to resolve deferral: {e}")
             return False
+
+    # ========== PARTNERED-request decisions (CIRISAgent#1251) ==========
+
+    def attach_consent_service(self, consent_service: "ConsentService") -> None:
+        """Wire the consent service that applies a steward's PARTNERED decision."""
+        self._consent_service = consent_service
+
+    async def _apply_partnership_decision(self, decision: "PartnershipStewardDecision") -> bool:
+        """Hand the steward's answer to the consent service. False refuses the resolution."""
+        if self._consent_service is None:
+            logger.error(
+                "Cannot resolve PARTNERED deferral %s: no consent service is attached, so the steward's "
+                "decision could not be applied. The deferral stays pending.",
+                decision.deferral_id,
+            )
+            return False
+        try:
+            await self._consent_service.apply_steward_partnership_decision(decision)
+        except Exception:
+            logger.exception(
+                "Applying the steward's PARTNERED decision for deferral %s failed; the deferral stays pending",
+                decision.deferral_id,
+            )
+            return False
+        return True
 
     # ========== Tool-Approval Envelope Issuance (CIRISAgent#942) ==========
 

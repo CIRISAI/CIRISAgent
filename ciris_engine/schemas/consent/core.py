@@ -209,94 +209,37 @@ class DSARDeletionStatus(BaseModel):
     safety_patterns_retained: int = Field(0, ge=0, description="Anonymized safety patterns retained")
 
 
-# Partnership Management Schemas
+# Partnership Schemas
+#
+# Partnership is a DATA-MANAGEMENT record (CC 4.4.3.4.3, CIRISConstitution#168),
+# not a relationship the agent may refuse. A non-steward user's PARTNERED request
+# is carried to the steward through the existing Wisdom-Based Deferral path; the
+# steward's answer is recorded on that deferral and applied by the consent
+# service. There is no agent-side approval queue.
 
 
-class PartnershipAgingStatus(str, Enum):
-    """Aging status for partnership requests."""
+class PartnershipRequestStatus(str, Enum):
+    """Where a user's PARTNERED request stands."""
 
-    NORMAL = "normal"  # <7 days
-    WARNING = "warning"  # 7-14 days
-    CRITICAL = "critical"  # >14 days
-
-
-class PartnershipOutcomeType(str, Enum):
-    """Outcome types for partnership decisions."""
-
-    APPROVED = "approved"
-    REJECTED = "rejected"
-    DEFERRED = "deferred"
-    EXPIRED = "expired"  # Auto-rejected due to age
+    PENDING = "pending"  # Deferred to the steward via WBD; nothing has changed yet
+    PARTNERED = "partnered"  # The user's stream is PARTNERED
+    NONE = "none"  # No open request and not PARTNERED
 
 
-class PartnershipPriority(str, Enum):
-    """Priority levels for partnership requests."""
-
-    HIGH = "high"  # Long-term users (>90 days TEMPORARY) or high impact
-    NORMAL = "normal"  # Standard requests
-    LOW = "low"  # New users
-
-
-class PartnershipRequest(BaseModel):
-    """Partnership request awaiting approval."""
+class PartnershipStewardDecision(BaseModel):
+    """The steward's answer to a PARTNERED-request deferral, as the consent service applies it."""
 
     model_config = ConfigDict(defer_build=True)
 
-    user_id: str = Field(..., description="User requesting partnership")
-    task_id: str = Field(..., description="Agent approval task ID")
-    categories: List[ConsentCategory] = Field(..., description="Categories requested")
-    reason: Optional[str] = Field(None, description="User's reason for partnership")
-    channel_id: str = Field(..., description="Channel where request originated")
-    created_at: datetime = Field(..., description="When request was created")
-    age_hours: float = Field(..., ge=0.0, description="Hours since request created")
-    aging_status: PartnershipAgingStatus = Field(..., description="Aging classification")
-    priority: PartnershipPriority = Field(PartnershipPriority.NORMAL, description="Request priority level")
-    notes: Optional[str] = Field(None, description="Admin notes about request")
-
-
-class PartnershipOutcome(BaseModel):
-    """Outcome of partnership decision."""
-
-    model_config = ConfigDict(defer_build=True)
-
-    user_id: str = Field(..., description="User whose partnership was decided")
-    task_id: str = Field(..., description="Task ID for this partnership")
-    outcome_type: PartnershipOutcomeType = Field(..., description="Decision outcome")
-    decided_by: str = Field(..., description="Who made decision (agent_id or admin username)")
-    decided_at: datetime = Field(..., description="When decision was made")
-    reason: Optional[str] = Field(None, description="Reason for decision")
-    notes: Optional[str] = Field(None, description="Additional notes")
-
-
-class PartnershipMetrics(BaseModel):
-    """Partnership system metrics."""
-
-    model_config = ConfigDict(defer_build=True)
-
-    total_requests: int = Field(..., ge=0, description="Total requests all-time")
-    total_approvals: int = Field(..., ge=0, description="Total approved")
-    total_rejections: int = Field(..., ge=0, description="Total rejected")
-    total_deferrals: int = Field(..., ge=0, description="Total deferred")
-    pending_count: int = Field(..., ge=0, description="Currently pending")
-    approval_rate_percent: float = Field(..., ge=0.0, le=100.0, description="Approval rate percentage")
-    rejection_rate_percent: float = Field(..., ge=0.0, le=100.0, description="Rejection rate percentage")
-    deferral_rate_percent: float = Field(..., ge=0.0, le=100.0, description="Deferral rate percentage")
-    avg_pending_hours: float = Field(..., ge=0.0, description="Average hours requests are pending")
-    oldest_pending_hours: float = Field(0.0, ge=0.0, description="Age of oldest pending request")
-    critical_count: int = Field(0, ge=0, description="Requests in critical aging status")
-
-
-class PartnershipHistory(BaseModel):
-    """Historical partnership decisions for a user."""
-
-    model_config = ConfigDict(defer_build=True)
-
-    user_id: str = Field(..., description="User ID")
-    total_requests: int = Field(..., ge=0, description="Total requests by this user")
-    outcomes: List[PartnershipOutcome] = Field(..., description="All past outcomes")
-    current_status: str = Field(..., description="Current partnership status (pending/approved/none)")
-    last_request_at: Optional[datetime] = Field(None, description="When last request was made")
-    last_decision_at: Optional[datetime] = Field(None, description="When last decision was made")
+    user_id: str = Field(..., description="User whose PARTNERED request was deferred")
+    categories: List[ConsentCategory] = Field(..., description="Categories the user requested")
+    approved: bool = Field(..., description="True: write PARTNERED and emit the pair. False: stream unchanged")
+    steward_id: str = Field(..., description="WA / owner who resolved the deferral")
+    deferral_id: str = Field(..., description="The WBD deferral that carried the decision")
+    reason: Optional[str] = Field(None, description="Steward's stated reason")
+    stream_at_request: Optional[ConsentStream] = Field(
+        None, description="User's stream when they asked (None = no record); a later change supersedes the request"
+    )
 
 
 # Metrics Collection Input Schemas

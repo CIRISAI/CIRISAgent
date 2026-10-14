@@ -24,7 +24,6 @@ class QAModule(Enum):
     DSAR = "dsar"  # DSAR automation testing
     DSAR_MULTI_SOURCE = "dsar_multi_source"  # Multi-source DSAR orchestration testing
     DSAR_TICKET_WORKFLOW = "dsar_ticket_workflow"  # DSAR ticket-based workflow testing
-    PARTNERSHIP = "partnership"  # Partnership bilateral consent testing
     BILLING = "billing"
     BILLING_INTEGRATION = "billing_integration"  # Full OAuth user billing workflow
     MULTI_OCCURRENCE = "multi_occurrence"
@@ -130,7 +129,6 @@ ALL_MODULE_SEQUENCE = [
     # "No consent found", "Verify SQL Deletion: user data still present").
     # Special-setup module, same exclusion class as sql_external_data /
     # multi_occurrence — run it standalone.
-    QAModule.PARTNERSHIP,
     QAModule.BILLING,
     # NOTE: reddit is intentionally excluded — it requires live Reddit API
     # credentials (a secrets file CI does not have); its module raises
@@ -405,9 +403,6 @@ class QAConfig:
             return []  # Will be handled separately by runner
         elif module == QAModule.DSAR_TICKET_WORKFLOW:
             # DSAR ticket workflow tests use SDK client
-            return []  # Will be handled separately by runner
-        elif module == QAModule.PARTNERSHIP:
-            # Partnership tests use SDK client
             return []  # Will be handled separately by runner
         elif module == QAModule.BILLING:
             # Billing tests use SDK client

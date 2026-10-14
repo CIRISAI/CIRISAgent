@@ -3,7 +3,8 @@
 # Adds alignment_score scalar [0,1] for DMA-bounce composability per
 # FSD/DMA_BOUNCE.md §2.1 and FSD/PROOF_OF_BENEFIT_FEDERATION.md §2.5 (recursive II).
 #
-# Weaving rule (inherited from accord_1.2b_POLYGLOT.txt:270-273):
+# Weaving rule (inherited from the header comment of the polyglot's Book 1,
+# "Core Ethics — POLYGLOT COMPOSITE"):
 #   Light passages: 1 language | Moderate: 2 | Heavy/foundational: 3+
 # Concept-words sit in the tradition where the moral concept is load-bearing,
 # not the language of the user — the user-language gloss is in response_format.

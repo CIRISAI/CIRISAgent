@@ -89,7 +89,7 @@ Every thought flows through a fixed 11-step pipeline: gather context, run severa
 **Policy text (the human-readable method declaration).**
 - `MISSION.md:24-30` — Meta-Goal M-1: the single objective every method choice is checked against
 - `MISSION.md:36-66` — the apophatic bounds (what CIRIS will not do; enforced by `ciris_engine/logic/buses/prohibitions.py`)
-- `ciris_engine/data/accord_1.2b.txt` — the Accord text, loaded into every prompt via `get_accord_text()` (see `pdma.py:11`)
+- `ciris_engine/data/localized/accord_1.2b_en.txt` — the Accord text, loaded into every prompt via `get_accord_text()` (see `pdma.py:11`)
 - `ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE.txt:201-237` — the H3ERE pipeline written out in agent-readable form
 
 **Test coverage for the method discipline.**

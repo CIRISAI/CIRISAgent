@@ -24,9 +24,15 @@ WA_API_USER = get_env_var("WA_API_USER", "somecomputerguy")  # API username for 
 # ==============================================================================
 # ACCORD TEXT - Single Source of Truth
 # ==============================================================================
-# CIRIS uses ONE accord file: accord_1.2b_POLYGLOT.txt
-# This is the polyglot version containing all 16 languages woven together.
-# We do NOT localize the ACCORD per-language - the polyglot version IS the accord.
+# CIRIS loads three accord artifacts:
+#   - accord_1.2b_POLYGLOT.txt: the full polyglot, woven across the traditions of
+#     the 29 supported locales (localization/manifest.json). The consciences read it.
+#   - accord_1.2b_POLYGLOT_compressed.txt: the Braided Monolith. Round-1 DMAs read it.
+#   - localized/accord_1.2b_{lang}.txt: per-locale translations (29, incl. en).
+#     Action selection reads them via get_localized_accord_text().
+# The two polyglot artifacts are universal: never create per-locale copies of them.
+# The 1.3 text (constitution_ethics_1.3_*, CIRISAgent#1252) is staged beside these
+# files and is NOT loaded yet; the loader switch follows once all 29 locales exist.
 #
 # ACCORD_MODE controls which version is used in system prompts:
 #   - "compressed" (default): ~7KB "Braided Monolith" — dense polyglot canon

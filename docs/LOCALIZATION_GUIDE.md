@@ -67,7 +67,7 @@ Phase 6: Final Review (Sequential - 1 agent)
 
 ```bash
 # Extract unique terms from English ACCORD
-grep -oE '\b[A-Z][A-Z_]+\b' ciris_engine/data/accord_1.2b.txt | sort -u > /tmp/accord_terms.txt
+grep -oE '\b[A-Z][A-Z_]+\b' ciris_engine/data/localized/accord_1.2b_en.txt | sort -u > /tmp/accord_terms.txt
 
 # Extract unique terms from English Guide
 grep -oE '\b[A-Z][A-Z_]+\b' ciris_engine/data/CIRIS_COMPREHENSIVE_GUIDE.md | sort -u >> /tmp/accord_terms.txt

@@ -130,6 +130,6 @@ Cross-references:
 - localized/polyglot/CLAUDE.md §4 (notes-file convention)
 - localized/polyglot/CLAUDE.md §9 (validation criteria)
 - project_recursive_golden_rule memory (fractal/Mandelbrot semantics)
-- ciris_engine/data/accord_1.2b.txt lines 539-614 (EN source)
+- ciris_engine/data/localized/accord_1.2b_en.txt Section V (EN source)
 - Per-locale source: ciris_engine/data/localized/accord_1.2b_<lang>.txt
   for hi/zh/ja/ar/am/de/ru/ko (used for the woven translations)

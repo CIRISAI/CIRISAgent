@@ -30,14 +30,17 @@ def test_ios_launch_env_forwards_the_run_kind(monkeypatch: pytest.MonkeyPatch) -
     assert env == {"SIMCTL_CHILD_CIRIS_TRACE_RUN_KIND": "qa"}
 
 
-def test_ios_launch_env_untouched_without_a_declaration(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ios_launch_env_defaults_to_qa_without_a_declaration(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A standalone harness run declares nothing and is still a harness run (H3)."""
     monkeypatch.delenv("CIRIS_TRACE_RUN_KIND", raising=False)
     env: Dict[str, str] = {}
     web_ui._forward_run_kind_ios(env)
-    assert env == {}
+    assert env == {"SIMCTL_CHILD_CIRIS_TRACE_RUN_KIND": "qa"}
 
 
-@pytest.mark.parametrize("declared,expected", [("qa", "qa"), ("", "''")])
+@pytest.mark.parametrize(
+    "declared,expected", [("qa", "qa"), ("battery", "battery"), ("", "qa"), ("production", "qa"), ("typo", "qa")]
+)
 def test_android_sets_the_property(monkeypatch: pytest.MonkeyPatch, declared: str, expected: str) -> None:
     calls: List[List[str]] = []
     monkeypatch.setattr(web_ui, "_adb", lambda args, **_: calls.append(list(args)))
@@ -46,10 +49,11 @@ def test_android_sets_the_property(monkeypatch: pytest.MonkeyPatch, declared: st
     assert calls == [["shell", "setprop", ANDROID_RUN_KIND_PROP, expected]]
 
 
-def test_the_harness_and_the_resolver_agree_on_the_property_name() -> None:
-    import inspect
+def test_the_harness_and_the_resolver_agree_on_the_names() -> None:
+    from tools.qa_runner import run_kind
 
-    assert ANDROID_RUN_KIND_PROP in inspect.getsource(web_ui._forward_run_kind_android)
+    assert run_kind.ANDROID_RUN_KIND_PROP == ANDROID_RUN_KIND_PROP
+    assert run_kind.RUN_KIND_ENV_VAR == mock_llm_guard.RUN_KIND_ENV_VAR
 
 
 class TestResolverSources:

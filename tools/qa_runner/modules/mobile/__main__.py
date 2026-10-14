@@ -630,7 +630,7 @@ def build_command(args) -> int:
 
                     if not args.no_launch:
                         print("[INFO] Launching app...")
-                        adb._run_adb(["shell", "am", "start", "-n", "ai.ciris.mobile/.MainActivity"])
+                        adb.launch_app("ai.ciris.mobile", ".MainActivity")  # forwards the run kind
                         print("[SUCCESS] App launched")
             except Exception as e:
                 print(f"[WARN] Install/launch failed: {e}")
@@ -1142,6 +1142,13 @@ def test_command(args) -> int:
 def main():
     """CLI entry point for mobile QA runner."""
     import argparse
+
+    # Every app this harness launches is a harness run (CIRISAgent#1245).
+    from tools.qa_runner.run_kind import declare_process_run_kind
+
+    _run_kind_warning = declare_process_run_kind()
+    if _run_kind_warning:
+        print(f"[WARN] {_run_kind_warning}")
 
     parser = argparse.ArgumentParser(
         description="CIRIS Mobile QA Runner - Testing and Debugging Tools",

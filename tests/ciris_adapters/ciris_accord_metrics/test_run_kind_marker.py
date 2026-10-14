@@ -93,3 +93,51 @@ def test_operator_value_survives_on_a_production_run(
 ) -> None:
     _build(tmp_path, deployment_type="research")
     assert lens_kwargs[0]["deployment_type"] == "research"
+
+
+#: The v2.7.0 deployment_profile a default production run signed in 2.15.0.
+#: The harness-flag backstop must not move these bytes by one.
+_PRODUCTION_PROFILE_BYTES_2_15_0 = (
+    b'{"agent_role":"unknown","agent_template":"unknown-default-unspecified",'
+    b'"deployment_domain":"general","deployment_region":null,'
+    b'"deployment_trust_mode":"sovereign","deployment_type":"production"}'
+)
+
+
+def _canonical(obj: Any) -> bytes:
+    import json
+
+    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+
+
+def test_production_profile_bytes_are_unchanged_under_v2_7_0(
+    real_llm_mode: None, lens_kwargs: List[Dict[str, Any]], tmp_path: Path
+) -> None:
+    """No harness flag, no declaration: byte-identical to the 2.15.0 profile."""
+    out = _build(tmp_path)
+    assert _canonical(lens_kwargs[0]["deployment_profile"]) == _PRODUCTION_PROFILE_BYTES_2_15_0
+    assert _canonical(out["profile"]) == _PRODUCTION_PROFILE_BYTES_2_15_0
+    assert lens_kwargs[0]["deployment_type"] is None
+
+
+@pytest.mark.parametrize(
+    "flag,value",
+    [
+        ("CIRIS_TESTING_MODE", "true"),
+        ("CIRIS_BENCHMARK_MODE", "true"),
+        ("CIRIS_TEST_MODE", "true"),
+        ("CIRIS_RESEARCH_PROMPT_OVERRIDES", "/tmp/m.json"),
+    ],
+)
+def test_harness_flag_without_a_declaration_marks_qa(
+    real_llm_mode: None,
+    lens_kwargs: List[Dict[str, Any]],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    flag: str,
+    value: str,
+) -> None:
+    monkeypatch.setenv(flag, value)
+    _build(tmp_path, deployment_type="production")  # an operator value cannot hide a harness run
+    assert lens_kwargs[0]["deployment_type"] == "qa"
+    assert lens_kwargs[0]["deployment_profile"]["deployment_type"] == "qa"

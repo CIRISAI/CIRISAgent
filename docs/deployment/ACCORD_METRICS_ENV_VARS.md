@@ -122,9 +122,28 @@ data:
 These fields are set via the setup wizard or adapter config, not environment variables:
 
 - `deployment_region`: Geographic region (na, eu, uk, apac, latam, mena, africa, oceania)
-- `deployment_type`: personal, business, research, nonprofit
+- `deployment_type`: operator free-form label; the wizard offers personal, business, research, nonprofit. On a non-production run (trace_format v2.7.0) the agent overrides it with the run kind `mock`, `qa` or `battery`; see "Run kind" below.
 - `agent_role`: assistant, customer_support, content, coding, research, education, moderation, automation
 - `agent_template`: CIRIS template name if applicable (e.g., `discord-moderator`)
+
+## Run kind (`CIRIS_TRACE_RUN_KIND`)
+
+Every trace says what kind of run produced it: `production`, `qa`,
+`battery` or `mock` (CIRISAgent#1245). Anything outside a harness run is
+production, so production deployments set nothing.
+
+- `mock`: the mock LLM is active. Always wins, cannot be overridden;
+  mock traces never leave the node.
+- `qa` / `battery`: declared by the harness with
+  `CIRIS_TRACE_RUN_KIND`. The QA runner, its web_ui and mobile
+  harnesses, the HE-300 runner, the AgentBeats image and the demo
+  recorder all declare it themselves, and replace an inherited
+  `production`.
+- Backstop: if a process carries a harness-only launch flag
+  (`CIRIS_TESTING_MODE`, `CIRIS_BENCHMARK_MODE`, `CIRIS_TEST_MODE`,
+  `CIRIS_RESEARCH_PROMPT_OVERRIDES`) but declares no run kind (or
+  `production`), its traces are marked `qa`. These flags only ever move
+  a run away from production.
 
 ## Verification
 

@@ -333,7 +333,7 @@ These optional fields help power the CIRIS Early Warning System by enabling corr
 | Field | Values | Description |
 |-------|--------|-------------|
 | `deployment_region` | `na`, `eu`, `uk`, `apac`, `latam`, `mena`, `africa`, `oceania` | Geographic region for timezone/regulatory correlation |
-| `deployment_type` | `personal`, `business`, `research`, `nonprofit` | Deployment context for risk pattern analysis |
+| `deployment_type` | operator free-form; the wizard offers `personal`, `business`, `research`, `nonprofit` | Deployment context for risk pattern analysis. On a non-production run (trace_format v2.7.0) the agent overrides it with the run kind `mock`, `qa` or `battery` (`CIRIS_TRACE_RUN_KIND`, CIRISAgent#1245); a production run carries the operator's value, or `production` in the signed profile when none is set. |
 | `agent_role` | `assistant`, `customer_support`, `content`, `coding`, `research`, `education`, `moderation`, `automation`, `other` | Primary agent function for role-specific risk detection |
 | `agent_template` | string | CIRIS template name if using a standard template (e.g., `discord-moderator`) |
 

@@ -113,6 +113,7 @@ class iOSBuildHelper:
         cwd: Optional[Path] = None,
         timeout: int = 600,
         capture: bool = True,
+        env: Optional[Dict[str, str]] = None,
     ) -> subprocess.CompletedProcess:
         """Run a command with optional output capture."""
         if self.config.verbose:
@@ -124,6 +125,7 @@ class iOSBuildHelper:
             capture_output=capture,
             text=True,
             timeout=timeout,
+            env=env,
         )
 
     # ========== Device Discovery ==========
@@ -528,7 +530,11 @@ class iOSBuildHelper:
         return True
 
     def _launch_on_simulator(self, device: DeviceInfo) -> bool:
-        """Launch on simulator using simctl."""
+        """Launch on simulator using simctl, forwarding the harness run kind (CIRISAgent#1245)."""
+        from tools.qa_runner.run_kind import ios_simctl_env
+
+        env = dict(os.environ)
+        ios_simctl_env(env)
         result = self._run_command(
             [
                 "xcrun",
@@ -536,7 +542,8 @@ class iOSBuildHelper:
                 "launch",
                 device.identifier,
                 self.config.bundle_id,
-            ]
+            ],
+            env=env,
         )
 
         if result.returncode != 0:

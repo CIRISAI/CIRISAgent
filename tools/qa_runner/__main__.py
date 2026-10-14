@@ -739,6 +739,15 @@ def main():
         ),
     )
 
+    # Run-kind declaration on the runner's OWN env (CIRISAgent#1245), not only
+    # the server child's: web_ui / mobile / he300 / sibling launches inside a
+    # module read os.environ, and a harness run is never production.
+    from .run_kind import declare_process_run_kind, harness_run_kind
+
+    _run_kind_warning = declare_process_run_kind(harness_run_kind(modules))
+    if _run_kind_warning:
+        print(f"[WARN] {_run_kind_warning}")
+
     # Create and run runner
     runner = QARunner(config, modules=modules)
     success = runner.run(modules)

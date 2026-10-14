@@ -573,6 +573,13 @@ def main():
     """CLI entry point for mobile QA runner."""
     import argparse
 
+    # Every app this harness launches is a harness run (CIRISAgent#1245).
+    from tools.qa_runner.run_kind import declare_process_run_kind
+
+    _run_kind_warning = declare_process_run_kind()
+    if _run_kind_warning:
+        print(f"[WARN] {_run_kind_warning}")
+
     parser = argparse.ArgumentParser(description="CIRIS Mobile QA Runner - Automated UI Testing")
 
     # Test selection
@@ -596,7 +603,9 @@ def main():
     parser.add_argument("--no-reinstall", action="store_true", help="Don't reinstall the app")
     parser.add_argument("--no-clear", action="store_true", help="Don't clear app data before tests")
     parser.add_argument("--keep-open", action="store_true", help="(default) Keep app running after tests")
-    parser.add_argument("--force-stop", action="store_true", help="Force-stop the app at teardown (strands unshipped sealed traces)")
+    parser.add_argument(
+        "--force-stop", action="store_true", help="Force-stop the app at teardown (strands unshipped sealed traces)"
+    )
 
     # Test account
     parser.add_argument(

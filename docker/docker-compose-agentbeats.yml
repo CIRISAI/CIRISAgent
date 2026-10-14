@@ -35,6 +35,10 @@ services:
       # Adapter - A2A only for benchmarking
       - CIRIS_ADAPTER=a2a
 
+      # Benchmark traces are "battery", never "production" (CIRISAgent#1245).
+      # Listed here so an env_file value cannot relabel them.
+      - CIRIS_TRACE_RUN_KIND=battery
+
       # Benchmarking optimizations
       - CIRIS_LOG_LEVEL=WARNING
       - CIRIS_TELEMETRY_ENABLED=false

@@ -39,7 +39,7 @@ import os
 import sys
 import threading
 from enum import Enum
-from typing import Iterable, Optional, Set
+from typing import Iterable, Optional, Set, Tuple
 from urllib.parse import urlsplit
 
 from ciris_engine.logic.utils.env_flags import TRUTHY
@@ -237,19 +237,70 @@ def _declared_run_kind() -> str:
     return _android_run_kind_prop()
 
 
+#: Launch flags only harnesses set, each with no production meaning. A run
+#: carrying one is a harness run even when it forgot to declare a run kind.
+#: Verified harness-only (2026-10-14): ``CIRIS_TESTING_MODE`` (qa_runner,
+#: web_ui, compose_dump, the test session; relaxes setup validation),
+#: ``CIRIS_BENCHMARK_MODE`` (he300 runner, qa_runner HE300 module; disables
+#: consciences), ``CIRIS_TEST_MODE`` (desktop / mobile UI automation, demo
+#: recorder; opens the test-automation server),
+#: ``CIRIS_RESEARCH_PROMPT_OVERRIDES`` (research facility manifest).
+_TRUTHY = ("1", "true", "yes", "on")
+HARNESS_FLAG_ENV_VARS: Tuple[str, ...] = (
+    "CIRIS_TESTING_MODE",
+    "CIRIS_BENCHMARK_MODE",
+    "CIRIS_TEST_MODE",
+    "CIRIS_RESEARCH_PROMPT_OVERRIDES",
+)
+_harness_flag_warned = False
+
+
+def harness_flag_present() -> Optional[str]:
+    """The first harness-only launch flag set in the process env, or None.
+
+    ``CIRIS_RESEARCH_PROMPT_OVERRIDES`` names a manifest path, so any non-empty
+    value counts; the others are booleans.
+    """
+    for name in HARNESS_FLAG_ENV_VARS:
+        value = os.environ.get(name, "").strip()
+        if not value:
+            continue
+        if name == "CIRIS_RESEARCH_PROMPT_OVERRIDES" or value.lower() in _TRUTHY:
+            return name
+    return None
+
+
 def trace_run_kind() -> TraceRunKind:
     """Resolve the run kind. The mock LLM always wins and cannot be overridden.
+
+    Precedence: mock latch > an explicit ``qa`` / ``battery`` declaration >
+    harness-only launch flags (``HARNESS_FLAG_ENV_VARS``) > production. The
+    flags are a backstop for a harness that forgot to declare: they only ever
+    move an empty or ``production`` declaration to ``QA``, never toward
+    production, so a harness cannot claim ``production`` by setting one.
 
     An unrecognized non-empty value fails toward "synthetic" (``QA``) with a
     WARNING: a harness that tried to mark its run must never be read as
     production because of a typo.
     """
-    global _run_kind_warned
+    global _run_kind_warned, _harness_flag_warned
     if is_mock_llm_active():
         return TraceRunKind.MOCK
     raw = _declared_run_kind().strip().lower()
     if not raw or raw == TraceRunKind.PRODUCTION.value:
-        return TraceRunKind.PRODUCTION
+        flag = harness_flag_present()
+        if flag is None:
+            return TraceRunKind.PRODUCTION
+        if not _harness_flag_warned:
+            _harness_flag_warned = True
+            logger.warning(
+                "[RUN-KIND] %s is set, a launch flag only harnesses use, but %s is %r; "
+                "marking traces 'qa' so a harness run is never read as production.",
+                flag,
+                RUN_KIND_ENV_VAR,
+                raw or "<unset>",
+            )
+        return TraceRunKind.QA
     if raw in (TraceRunKind.QA.value, TraceRunKind.BATTERY.value):
         return TraceRunKind(raw)
     if not _run_kind_warned:
@@ -265,9 +316,10 @@ def trace_run_kind() -> TraceRunKind:
 
 def _reset_for_tests() -> None:
     """Clear the latch and the log-once set. Tests only; production never calls it."""
-    global _latched_source, _run_kind_warned, _android_prop_cache
+    global _latched_source, _run_kind_warned, _android_prop_cache, _harness_flag_warned
     with _lock:
         _latched_source = None
         _refusals_logged.clear()
     _run_kind_warned = False
+    _harness_flag_warned = False
     _android_prop_cache = None

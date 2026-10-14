@@ -314,6 +314,11 @@ class ServerManager:
         # Set up environment variables like the regular QA runner
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
+        # Every backend this harness starts is a harness run (CIRISAgent#1245):
+        # "qa" unless the job declared "battery"; never an inherited "production".
+        from tools.qa_runner.run_kind import declare_run_kind
+
+        declare_run_kind(env)
 
         # Force deterministic data path across BOTH the first-run and
         # configured-mode backend invocations. Without this:
@@ -437,7 +442,11 @@ class ServerManager:
                     # initialising before running the step whose whole job is to
                     # initialise it. initialization_complete is the right signal:
                     # the API is serving and can accept the wizard's POST.
-                    is_setup = bool(agent_state) and agent_state.lower() == "setup" and health_data.get("initialization_complete", False)
+                    is_setup = (
+                        bool(agent_state)
+                        and agent_state.lower() == "setup"
+                        and health_data.get("initialization_complete", False)
+                    )
 
                     if is_ready or is_first_run or (self.config.first_run_mode and is_setup):
                         status.running = True

@@ -22,7 +22,7 @@ import hashlib
 import json
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 import pytest
 
@@ -284,7 +284,7 @@ def test_a_trailing_newline_never_satisfies_a_pattern(kind: str) -> None:
 # 3. What survives the enforcer validates against the schema (and only that)
 # ---------------------------------------------------------------------------
 
-PROFILE = {
+PROFILE: Dict[str, Any] = {
     "agent_role": "datum",
     "agent_template": "datum-default-unspecified",
     "deployment_domain": "general",
@@ -293,7 +293,17 @@ PROFILE = {
     "deployment_trust_mode": "sovereign",
     "run_kind": "production",
     "trace_format_version": "2.8.0",
+    "pipeline_metadata": {
+        "agent_version": "2.15.0-stable",
+        "accord_version": "1.2-Beta",
+        "identity_hash": "ab" * 32,
+        "pdma_version": None,
+        "dsdma_domain_registry_version": None,
+    },
+    "calibration_version": "crc-v2",
 }
+
+RUN_KINDS = ["production", "prod-personal", "prod-managed", "qa", "battery", "mock"]
 
 MARIA = "Ideación suicida reportada por @María; requiere intervención inmediata de un profesional."
 
@@ -350,7 +360,7 @@ def _trace(level: TraceLevel, enforce: bool) -> Dict[str, Any]:
         "started_at": "2026-10-13T00:00:00+00:00",
         "trace_level": level.value,
         "trace_schema_version": "3.0.0",
-        "deployment_profile": dict(PROFILE),
+        "deployment_profile": copy.deepcopy(PROFILE),
         "components": components,
     }
 
@@ -402,7 +412,7 @@ def test_run_kind_is_required_and_closed(bad: Optional[str]) -> None:
     assert list(_validator().iter_errors(trace))
 
 
-@pytest.mark.parametrize("kind", ["production", "qa", "battery", "mock"])
+@pytest.mark.parametrize("kind", RUN_KINDS)
 def test_every_run_kind_is_admitted_by_the_schema(kind: str) -> None:
     """Admission policy (refusing `mock`) is the admitter's, not the schema shape's."""
     trace = _trace(TraceLevel.GENERIC, enforce=True)
@@ -414,6 +424,133 @@ def test_run_kind_vocabulary_matches_the_agent_enum() -> None:
     from ciris_engine.logic.utils.mock_llm_guard import TraceRunKind
 
     assert DEFS["RunKind"]["enum"] == [k.value for k in TraceRunKind]
+    # Direct user ruling 2026-10-14: managed/personal are two more values; production stays valid.
+    assert DEFS["RunKind"]["enum"] == RUN_KINDS
+
+
+# ---------------------------------------------------------------------------
+# 4. The deployment_profile block (v2.8.0: closed, bounded, level generic)
+# ---------------------------------------------------------------------------
+
+PROFILE_DEF: Dict[str, Any] = DEFS["DeploymentProfile"]
+
+
+def test_the_profile_is_closed_and_every_member_is_required() -> None:
+    assert PROFILE_DEF["additionalProperties"] is False
+    assert set(PROFILE_DEF["required"]) == set(PROFILE_DEF["properties"])
+    assert tuple(PROFILE_DEF["required"]) == es.DEPLOYMENT_PROFILE_REQUIRED
+    pm = PROFILE_DEF["properties"]["pipeline_metadata"]
+    assert pm["additionalProperties"] is False
+    assert set(pm["required"]) == set(pm["properties"])
+
+
+def _walk_profile(node: Dict[str, Any], spec: Dict[str, FieldSpec], path: str) -> None:
+    assert set(node["properties"]) == set(spec), path
+    for name, child in node["properties"].items():
+        field = spec[name]
+        where = f"{path}.{name}"
+        assert child["x-ciris-kind"] == field.kind.value, where
+        # The profile is stamped on every trace at every level.
+        assert child["level"] == "generic" and field.min_level == TraceLevel.GENERIC, where
+        if field.kind == FieldKind.OBJECT:
+            _walk_profile(child, field.children or {}, where)
+            continue
+        assert child["pattern"] == EGRESS["patterns"][field.kind.value], where
+        assert child["maxLength"] == field.max_chars, where
+
+
+def test_every_profile_member_is_bounded_and_matches_the_loaded_spec() -> None:
+    _walk_profile(PROFILE_DEF, es.DEPLOYMENT_PROFILE_SCHEMA, "deployment_profile")
+
+
+def test_a_conformant_profile_passes_the_filter_unchanged() -> None:
+    result = es.enforce_deployment_profile(copy.deepcopy(PROFILE))
+    assert result.violations == []
+    assert result.data == PROFILE
+
+
+def test_the_filter_drops_what_the_schema_refuses() -> None:
+    bad = copy.deepcopy(PROFILE)
+    bad["agent_role"] = "two\nlines"
+    bad["deployment_region"] = "x" * 65
+    bad["pipeline_metadata"]["identity_hash"] = "not a token"
+    bad["extra_member"] = "nope"
+    result = es.enforce_deployment_profile(bad)
+    assert "agent_role" not in result.data
+    assert "deployment_region" not in result.data
+    assert "extra_member" not in result.data
+    assert "identity_hash" not in cast(Dict[str, Any], result.data["pipeline_metadata"])
+    # ... and the schema refuses the unfiltered profile (negative control).
+    trace = _trace(TraceLevel.GENERIC, enforce=True)
+    trace["deployment_profile"] = bad
+    assert list(_validator().iter_errors(trace))
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda p: p.pop("pipeline_metadata"),
+        lambda p: p.pop("calibration_version"),
+        lambda p: p.__setitem__("extra_member", "x"),
+        lambda p: p["pipeline_metadata"].__setitem__("extra", "x"),
+        lambda p: p["pipeline_metadata"].pop("agent_version"),
+        lambda p: p["pipeline_metadata"].__setitem__("agent_version", None),
+        lambda p: p.__setitem__("calibration_version", "crc v2"),
+    ],
+    ids=[
+        "no_pipeline_metadata",
+        "no_calibration_version",
+        "extra_member",
+        "extra_pipeline_member",
+        "no_agent_version",
+        "null_agent_version",
+        "calibration_not_a_token",
+    ],
+)
+def test_the_schema_refuses_a_malformed_profile(mutate: Any) -> None:
+    trace = _trace(TraceLevel.GENERIC, enforce=True)
+    mutate(trace["deployment_profile"])
+    assert list(_validator().iter_errors(trace))
+
+
+def test_unsourced_provenance_is_null_and_admitted() -> None:
+    trace = _trace(TraceLevel.GENERIC, enforce=True)
+    trace["deployment_profile"]["calibration_version"] = None
+    trace["deployment_profile"]["deployment_region"] = None
+    for name in ("accord_version", "identity_hash", "pdma_version", "dsdma_domain_registry_version"):
+        trace["deployment_profile"]["pipeline_metadata"][name] = None
+    assert not list(_validator().iter_errors(trace))
+
+
+# ---------------------------------------------------------------------------
+# 5. SNAPSHOT_AND_CONTEXT.disclosure_version (#832): per event, generic, optional
+# ---------------------------------------------------------------------------
+
+
+def test_disclosure_version_is_a_generic_optional_token() -> None:
+    node = DEFS["EventData_SNAPSHOT_AND_CONTEXT"]["properties"]["disclosure_version"]
+    assert node["x-ciris-kind"] == "token" and node["level"] == "generic"
+    assert node["type"] == ["string", "null"]
+    assert "disclosure_version" in DEFS["EventData_SNAPSHOT_AND_CONTEXT__generic"]["propertyNames"]["enum"]
+    assert "disclosure_version" not in DEFS["EventData_SNAPSHOT_AND_CONTEXT"].get("required", [])
+
+
+@pytest.mark.parametrize("value", [None, "d17-v1"])
+def test_disclosure_version_validates_at_generic(value: Optional[str]) -> None:
+    trace = _trace(TraceLevel.GENERIC, enforce=True)
+    trace["components"].append(
+        {
+            "component_type": "context",
+            "event_type": "SNAPSHOT_AND_CONTEXT",
+            "timestamp": "2026-10-13T00:00:00+00:00",
+            "data": enforce_egress_schema(
+                "SNAPSHOT_AND_CONTEXT", TraceLevel.GENERIC, {"disclosure_version": value}
+            ).data,
+        }
+    )
+    assert not list(_validator().iter_errors(trace))
+    trace["components"][-1]["data"]["disclosure_version"] = "free text version"
+    assert list(_validator().iter_errors(trace))
 
 
 def test_the_description_names_the_admitter_refusal_tokens() -> None:

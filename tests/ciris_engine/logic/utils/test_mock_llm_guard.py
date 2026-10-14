@@ -18,6 +18,7 @@ from ciris_engine.logic.utils.mock_llm_guard import (
     mark_mock_llm_active,
     remote_trace_export_permitted,
     trace_run_kind,
+    wire_run_kind,
 )
 
 PRODUCTION_LENS = "https://lens.ciris-services-1.ai/lens-api/api/v1"
@@ -159,6 +160,73 @@ class TestRunKind:
         with caplog.at_level(logging.WARNING, logger=mock_llm_guard.__name__):
             assert trace_run_kind() == TraceRunKind.QA
         assert any("is not one of qa|battery|production" in r.getMessage() for r in caplog.records)
+
+
+class TestWireRunKind:
+    """trace_format v2.8.0's signed run kind: managed vs personal (direct user ruling 2026-10-14)."""
+
+    @pytest.fixture(autouse=True)
+    def _no_managed(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("CIRIS_MANAGED", raising=False)
+
+    def test_undeclared_personal_install(self, real_llm_mode: None) -> None:
+        assert wire_run_kind() == TraceRunKind.PROD_PERSONAL
+        # The coarse resolver (what v2.7.0 reads) is unchanged.
+        assert trace_run_kind() == TraceRunKind.PRODUCTION
+
+    @pytest.mark.parametrize("value", ["true", "TRUE", "1"])
+    def test_ciris_manager_sets_managed(self, real_llm_mode: None, monkeypatch: pytest.MonkeyPatch, value: str) -> None:
+        monkeypatch.setenv("CIRIS_MANAGED", value)
+        assert wire_run_kind() == TraceRunKind.PROD_MANAGED
+
+    @pytest.mark.parametrize("value", ["", "false", "0"])
+    def test_not_managed_is_personal(self, real_llm_mode: None, monkeypatch: pytest.MonkeyPatch, value: str) -> None:
+        monkeypatch.setenv("CIRIS_MANAGED", value)
+        assert wire_run_kind() == TraceRunKind.PROD_PERSONAL
+
+    def test_docker_mounts_alone_do_not_make_it_managed(
+        self, real_llm_mode: None, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """is_managed() counts /app mounts and calls a personal install.sh Docker install managed; we do not."""
+        from ciris_engine.logic.utils import path_resolution
+
+        monkeypatch.setattr(path_resolution, "is_managed", lambda: True)
+        assert wire_run_kind() == TraceRunKind.PROD_PERSONAL
+
+    @pytest.mark.parametrize("value", ["production", "prod-personal", "prod-managed"])
+    def test_explicit_production_declaration_wins(
+        self, real_llm_mode: None, monkeypatch: pytest.MonkeyPatch, value: str
+    ) -> None:
+        monkeypatch.setenv("CIRIS_MANAGED", "true")
+        monkeypatch.setenv("CIRIS_TRACE_RUN_KIND", value)
+        assert wire_run_kind() == TraceRunKind(value)
+        assert trace_run_kind().is_production
+
+    @pytest.mark.parametrize("override", ["production", "prod-personal", "prod-managed", "qa", "battery"])
+    def test_operator_override(self, real_llm_mode: None, monkeypatch: pytest.MonkeyPatch, override: str) -> None:
+        monkeypatch.setenv("CIRIS_MANAGED", "true")
+        assert wire_run_kind(override) == TraceRunKind(override)
+
+    @pytest.mark.parametrize("harness", ["qa", "battery"])
+    def test_config_cannot_relabel_a_harness_run_production(
+        self, real_llm_mode: None, monkeypatch: pytest.MonkeyPatch, harness: str
+    ) -> None:
+        monkeypatch.setenv("CIRIS_TRACE_RUN_KIND", harness)
+        assert wire_run_kind("prod-managed") == TraceRunKind(harness)
+
+    def test_config_cannot_hide_the_mock(self, mock_llm_mode: None) -> None:
+        assert wire_run_kind("prod-managed") == TraceRunKind.MOCK
+
+    @pytest.mark.parametrize("override", ["mock", "prod_managed", "managed"])
+    def test_unknown_override_fails_toward_synthetic(self, real_llm_mode: None, override: str) -> None:
+        assert wire_run_kind(override) == TraceRunKind.QA
+
+    def test_production_kinds(self) -> None:
+        assert {k for k in TraceRunKind if k.is_production} == {
+            TraceRunKind.PRODUCTION,
+            TraceRunKind.PROD_PERSONAL,
+            TraceRunKind.PROD_MANAGED,
+        }
 
 
 class TestBootstrapModulesLatchBeforeEdge:

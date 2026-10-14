@@ -47,7 +47,9 @@ reads it. The enforcer applies each string kind's JSON ``pattern`` with
 ``fullmatch``, so whatever survives the filter also validates against the
 schema. The bounds apply whichever trace format version is being emitted
 (see :data:`TraceFormatVersion`): v2.7.0 emission is filtered to the same
-contract, and v2.8.0 adds ``run_kind`` to the envelope.
+contract, and v2.8.0 adds ``run_kind`` and the provenance members to the
+envelope's ``deployment_profile``, which :func:`enforce_deployment_profile`
+filters to the same file's ``DeploymentProfile`` definition.
 """
 
 from __future__ import annotations
@@ -100,8 +102,9 @@ class TraceFormatVersion(str, Enum):
     * ``V2_7_0`` (default): the run-kind marker rides ``deployment_type``, as
       in 2.15.0.
     * ``V2_8_0``: ``deployment_profile.run_kind`` carries the closed run kind
-      at every run (``production`` included), and ``deployment_type`` goes back
-      to the operator's value.
+      at every run (production kinds included), ``deployment_type`` goes back
+      to the operator's value, and the profile gains ``pipeline_metadata`` and
+      ``calibration_version`` (SNAPSHOT_AND_CONTEXT gains ``disclosure_version``).
 
     Persist v54.1 and earlier refuse v2.8.0 traces WHOLE
     (``schema_unsupported_version``), so the default stays v2.7.0 until a
@@ -280,6 +283,14 @@ EVENT_SCHEMAS: Dict[str, Dict[str, FieldSpec]] = {
 
 #: Event types without a dedicated builder fall through to the minimal shape.
 FALLBACK_SCHEMA: Dict[str, FieldSpec] = _fields_from_json(_resolve(str(_EGRESS["fallback"])))
+
+#: The v2.8.0 ``deployment_profile`` block. Every member is level GENERIC (the
+#: profile rides every trace level); kinds and bounds as for component fields.
+DEPLOYMENT_PROFILE_SCHEMA: Dict[str, FieldSpec] = _fields_from_json(_resolve("#/definitions/DeploymentProfile"))
+#: Members a v2.8.0 admitter requires; dropping one would refuse the whole trace.
+DEPLOYMENT_PROFILE_REQUIRED: Tuple[str, ...] = tuple(
+    str(name) for name in cast(List[str], _resolve("#/definitions/DeploymentProfile")["required"])
+)
 
 
 def _is_empty(value: object) -> bool:
@@ -485,6 +496,17 @@ def enforce_egress_schema(event_type: str, level: TraceLevel, data: Mapping[str,
     """Filter ``data`` to what ``level`` allows for ``event_type``. Pure; does not log."""
     enforcer = _Enforcer(event_type, level)
     cleaned = enforcer.fields(schema_for(event_type), data, "")
+    return EnforcementResult(data=cleaned, violations=enforcer.violations)
+
+
+def enforce_deployment_profile(profile: Mapping[str, object]) -> EnforcementResult:
+    """Filter a v2.8.0 ``deployment_profile`` to its schema. Pure; does not log.
+
+    The caller restores a default for any REQUIRED member this drops: a
+    profile missing one is refused whole by the admitter.
+    """
+    enforcer = _Enforcer("DEPLOYMENT_PROFILE", TraceLevel.GENERIC)
+    cleaned = enforcer.fields(DEPLOYMENT_PROFILE_SCHEMA, profile, "deployment_profile.")
     return EnforcementResult(data=cleaned, violations=enforcer.violations)
 
 

@@ -22,7 +22,11 @@ import pytest
 
 from ciris_adapters.ciris_accord_metrics import egress_schema
 from ciris_adapters.ciris_accord_metrics.egress_schema import DEFAULT_TRACE_FORMAT_VERSION, TraceFormatVersion
-from ciris_adapters.ciris_accord_metrics.services import TRACE_FORMAT_VERSION_ENV_VAR, AccordMetricsService
+from ciris_adapters.ciris_accord_metrics.services import (
+    DEPLOYMENT_REGION_ENV_VAR,
+    TRACE_FORMAT_VERSION_ENV_VAR,
+    AccordMetricsService,
+)
 
 
 class _StubEngine:
@@ -108,6 +112,10 @@ def test_operator_value_survives_on_a_production_run(
 def no_format_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv(TRACE_FORMAT_VERSION_ENV_VAR, raising=False)
     monkeypatch.delenv("CIRIS_TRACE_RUN_KIND", raising=False)
+    monkeypatch.delenv("CIRIS_MANAGED", raising=False)
+    monkeypatch.delenv(DEPLOYMENT_REGION_ENV_VAR, raising=False)
+    # Empty, not unset: an unset var would fall through to a developer's ~/ciris/.env.
+    monkeypatch.setenv("CIRIS_TEMPLATE", "")
 
 
 def test_the_default_trace_format_is_still_2_7_0(
@@ -163,7 +171,7 @@ def test_2_7_0_keeps_the_marker_in_deployment_type(
 
 
 @pytest.mark.parametrize("via", ["env", "config"])
-@pytest.mark.parametrize("kind", ["production", "qa", "battery"])
+@pytest.mark.parametrize("kind", ["prod-personal", "qa", "battery"])
 def test_2_8_0_moves_run_kind_into_the_envelope(
     no_format_env: None,
     real_llm_mode: None,
@@ -173,7 +181,7 @@ def test_2_8_0_moves_run_kind_into_the_envelope(
     via: str,
     kind: str,
 ) -> None:
-    if kind != "production":
+    if kind != "prod-personal":  # undeclared, not managed: a personal production run
         monkeypatch.setenv("CIRIS_TRACE_RUN_KIND", kind)
     config: Dict[str, Any] = {"deployment_type": "research"}
     if via == "env":
@@ -242,3 +250,198 @@ def test_a_v_prefix_is_accepted(
     monkeypatch.setenv(TRACE_FORMAT_VERSION_ENV_VAR, "v2.8.0")
     service = AccordMetricsService(config={"local_copy_dir": str(tmp_path), "consent_given": True})
     assert service.get_metrics()["trace_format_version"] == "2.8.0"
+
+
+# ---------------------------------------------------------------------------
+# Managed vs personal (direct user ruling 2026-10-14): two more run_kind
+# values, v2.8.0 only. v2.7.0 bytes do not move.
+# ---------------------------------------------------------------------------
+
+V270_DEFAULT_PROFILE = (
+    '{"agent_role": "unknown", "agent_template": "unknown-default-unspecified", '
+    '"deployment_domain": "general", "deployment_type": "production", '
+    '"deployment_region": null, "deployment_trust_mode": "sovereign"}'
+)
+
+
+@pytest.mark.parametrize(
+    "env",
+    [
+        {"CIRIS_MANAGED": "true"},
+        {"CIRIS_TRACE_RUN_KIND": "prod-managed"},
+        {"CIRIS_TRACE_RUN_KIND": "prod-personal"},
+        {"CIRIS_TEMPLATE": "ally"},
+        {DEPLOYMENT_REGION_ENV_VAR: "eu"},
+    ],
+    ids=["managed", "declared_managed", "declared_personal", "template_env", "region_env"],
+)
+def test_2_7_0_bytes_do_not_move_for_any_new_input(
+    no_format_env: None,
+    real_llm_mode: None,
+    lens_kwargs: List[Dict[str, Any]],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    env: Dict[str, str],
+) -> None:
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    service = AccordMetricsService(
+        config={"local_copy_dir": str(tmp_path), "consent_given": True, "run_kind": "prod-managed"}
+    )
+    service.set_agent_id("", identity_hash="ab" * 32)  # ignored: invalid agent id
+    service._build_lens_client()
+    kw = lens_kwargs[0]
+    assert json.dumps(kw["deployment_profile"]) == V270_DEFAULT_PROFILE
+    assert kw["deployment_type"] is None
+    assert kw["deployment_region"] is None
+    assert kw["agent_template"] is None
+
+
+@pytest.mark.parametrize(
+    "managed,declared,override,expected",
+    [
+        (None, None, None, "prod-personal"),
+        ("true", None, None, "prod-managed"),
+        ("false", None, None, "prod-personal"),
+        ("true", "production", None, "production"),
+        ("true", None, "prod-personal", "prod-personal"),
+        (None, None, "production", "production"),
+        (None, "qa", "prod-managed", "qa"),
+        (None, "battery", None, "battery"),
+    ],
+)
+def test_2_8_0_run_kind_resolution(
+    no_format_env: None,
+    real_llm_mode: None,
+    lens_kwargs: List[Dict[str, Any]],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    managed: Any,
+    declared: Any,
+    override: Any,
+    expected: str,
+) -> None:
+    monkeypatch.setenv(TRACE_FORMAT_VERSION_ENV_VAR, "2.8.0")
+    if managed is not None:
+        monkeypatch.setenv("CIRIS_MANAGED", managed)
+    if declared is not None:
+        monkeypatch.setenv("CIRIS_TRACE_RUN_KIND", declared)
+    config: Dict[str, Any] = {} if override is None else {"run_kind": override}
+    _build(tmp_path, **config)
+    assert lens_kwargs[0]["deployment_profile"]["run_kind"] == expected
+    # The run kind never rides deployment_type under v2.8.0.
+    assert lens_kwargs[0]["deployment_profile"]["deployment_type"] == "production"
+
+
+def test_2_8_0_mock_beats_a_managed_override(
+    no_format_env: None,
+    mock_llm_mode: None,
+    lens_kwargs: List[Dict[str, Any]],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(TRACE_FORMAT_VERSION_ENV_VAR, "2.8.0")
+    monkeypatch.setenv("CIRIS_MANAGED", "true")
+    _build(tmp_path, run_kind="prod-managed")
+    assert lens_kwargs[0]["deployment_profile"]["run_kind"] == "mock"
+
+
+# ---------------------------------------------------------------------------
+# v2.8.0 provenance members (#1245, #878, #820, #832)
+# ---------------------------------------------------------------------------
+
+
+def _v280_service(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, **config: Any) -> AccordMetricsService:
+    monkeypatch.setenv(TRACE_FORMAT_VERSION_ENV_VAR, "2.8.0")
+    return AccordMetricsService(config={"local_copy_dir": str(tmp_path), "consent_given": True, **config})
+
+
+def test_2_8_0_pipeline_metadata_and_calibration(
+    no_format_env: None, real_llm_mode: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from ciris_engine.constants import ACCORD_VERSION, CIRIS_VERSION
+
+    fake = types.ModuleType("ciris_server")
+    fake.AXIS_CALIBRATION_VERSION = "crc-v2"  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "ciris_server", fake)
+    service = _v280_service(tmp_path, monkeypatch)
+    service.set_agent_id("Ally", identity_hash="ab" * 32)
+    profile = service._build_deployment_profile()
+    assert profile["pipeline_metadata"] == {
+        "agent_version": CIRIS_VERSION,
+        "accord_version": ACCORD_VERSION,
+        "identity_hash": "ab" * 32,
+        "pdma_version": None,
+        "dsdma_domain_registry_version": None,
+    }
+    assert profile["calibration_version"] == "crc-v2"
+    assert list(profile) == list(egress_schema.DEPLOYMENT_PROFILE_REQUIRED)
+
+
+def test_2_8_0_unsourced_values_are_null(
+    no_format_env: None, real_llm_mode: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setitem(sys.modules, "ciris_server", types.ModuleType("ciris_server"))
+    profile = _v280_service(tmp_path, monkeypatch)._build_deployment_profile()
+    assert profile["calibration_version"] is None
+    assert profile["deployment_region"] is None
+    assert profile["pipeline_metadata"]["identity_hash"] is None
+    assert profile["agent_template"] == "unknown-default-unspecified"
+
+
+def test_2_8_0_template_and_region_sources(
+    no_format_env: None,
+    real_llm_mode: None,
+    lens_kwargs: List[Dict[str, Any]],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CIRIS_TEMPLATE", "ally")
+    monkeypatch.setenv(DEPLOYMENT_REGION_ENV_VAR, "eu")
+    service = _v280_service(tmp_path, monkeypatch)
+    service.set_agent_id("Ally")
+    service._build_lens_client()
+    kw = lens_kwargs[0]
+    assert kw["deployment_profile"]["agent_template"] == "ally"
+    assert kw["deployment_profile"]["deployment_region"] == "eu"
+    # The unsigned correlation copies mirror the signed profile.
+    assert kw["agent_template"] == "ally"
+    assert kw["deployment_region"] == "eu"
+    # Operator config wins over both env channels.
+    service = _v280_service(tmp_path, monkeypatch, agent_template="ally-v3", deployment_region="uk")
+    profile = service._build_deployment_profile()
+    assert profile["agent_template"] == "ally-v3"
+    assert profile["deployment_region"] == "uk"
+
+
+def test_2_8_0_a_bad_operator_value_falls_back_to_the_default(
+    no_format_env: None, real_llm_mode: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A dropped REQUIRED member would get the whole trace refused; the default goes in instead."""
+    jsonschema = pytest.importorskip("jsonschema")
+    service = _v280_service(tmp_path, monkeypatch, agent_role="two\nlines", deployment_region="not a token")
+    profile = service._build_deployment_profile()
+    assert profile["agent_role"] == "unknown"
+    assert profile["deployment_region"] is None
+    doc = json.loads(egress_schema.EGRESS_SCHEMA_FILE.read_text(encoding="utf-8"))
+    sub = {"$ref": "#/definitions/DeploymentProfile", "definitions": doc["definitions"]}
+    jsonschema.Draft7Validator(sub).validate(profile)
+    assert service.get_metrics()["schema_violations_wrong_type"] >= 2
+
+
+@pytest.mark.parametrize("fmt,present", [("2.7.0", False), ("2.8.0", True)])
+def test_disclosure_version_is_emitted_only_under_2_8_0(
+    no_format_env: None,
+    real_llm_mode: None,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    fmt: str,
+    present: bool,
+) -> None:
+    monkeypatch.setenv(TRACE_FORMAT_VERSION_ENV_VAR, fmt)
+    service = AccordMetricsService(config={"local_copy_dir": str(tmp_path), "consent_given": True})
+    event = {"system_snapshot": {"verify_attestation": {"attestation_level": 1, "disclosure_severity": "info"}}}
+    data = service._extract_component_data("SNAPSHOT_AND_CONTEXT", event)
+    assert ("disclosure_version" in data) is present
+    if present:
+        assert data["disclosure_version"] is None  # CIRISVerify publishes no version today

@@ -126,6 +126,17 @@ These fields are set via the setup wizard or adapter config, not environment var
 - `agent_role`: assistant, customer_support, content, coding, research, education, moderation, automation
 - `agent_template`: CIRIS template name if applicable (e.g., `discord-moderator`)
 
+### trace_format v2.8.0 only (`CIRIS_TRACE_FORMAT_VERSION=2.8.0`)
+
+Under v2.8.0 these inputs are also read. Adapter config wins over each env var, and none of them is read under the default v2.7.0.
+
+| Input | Signed member | Used when |
+|-------|---------------|-----------|
+| `CIRIS_ACCORD_METRICS_DEPLOYMENT_REGION` | `deployment_profile.deployment_region` | the config has no `deployment_region` |
+| `CIRIS_TEMPLATE` (setup wizard / CIRISManager) | `deployment_profile.agent_template` | the config has no `agent_template` |
+| `CIRIS_MANAGED=true` (CIRISManager) | `deployment_profile.run_kind = prod-managed` | the run is production and nobody declared a run kind; otherwise `prod-personal` |
+| adapter config `run_kind` | `deployment_profile.run_kind` | an operator override (`production`, `prod-personal`, `prod-managed`, `qa`, `battery`); a harness `CIRIS_TRACE_RUN_KIND=qa|battery` and the mock LLM still win |
+
 ## Verification
 
 After deployment, check the agent logs for:

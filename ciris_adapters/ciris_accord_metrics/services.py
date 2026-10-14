@@ -228,9 +228,17 @@ class FailureStreak:
     last_error_message: str = ""
 
 
-from ciris_adapters.ciris_accord_metrics.egress_schema import DEFAULT_TRACE_FORMAT_VERSION, TraceFormatVersion
+from ciris_adapters.ciris_accord_metrics.egress_schema import (
+    DEFAULT_TRACE_FORMAT_VERSION,
+    DEPLOYMENT_PROFILE_REQUIRED,
+    TraceFormatVersion,
+)
 from ciris_adapters.ciris_accord_metrics.egress_schema import TraceLevel as EgressTraceLevel
-from ciris_adapters.ciris_accord_metrics.egress_schema import ViolationReporter, enforce_egress_schema
+from ciris_adapters.ciris_accord_metrics.egress_schema import (
+    ViolationReporter,
+    enforce_deployment_profile,
+    enforce_egress_schema,
+)
 from ciris_engine.logic.utils.substrate_caps import substrate_can_scrub
 
 #: Opt-in switch for the v2.8.0 trace format (CIRISAgent#1249). Config key
@@ -238,6 +246,23 @@ from ciris_engine.logic.utils.substrate_caps import substrate_can_scrub
 #: "schema", so it is never confused with TRACE_SCHEMA_VERSION, the
 #: substrate's wire stamp.
 TRACE_FORMAT_VERSION_ENV_VAR = "CIRIS_TRACE_FORMAT_VERSION"
+
+#: v2.8.0 only: an env channel for the operator-declared deployment_region
+#: (adapter config ``deployment_region`` wins), so a deployer such as
+#: CIRISManager can set it. The agent never infers a region.
+DEPLOYMENT_REGION_ENV_VAR = "CIRIS_ACCORD_METRICS_DEPLOYMENT_REGION"
+
+#: FSD §3.2 migration defaults, restored for a required v2.8.0 profile member
+#: whose operator value the schema filter dropped.
+_V2_8_0_PROFILE_DEFAULTS: Dict[str, Optional[str]] = {
+    "agent_role": "unknown",
+    "agent_template": "unknown-default-unspecified",
+    "deployment_domain": "general",
+    "deployment_type": "production",
+    "deployment_region": None,
+    "deployment_trust_mode": "sovereign",
+    "calibration_version": None,
+}
 
 
 def _resolve_trace_format_version(config_value: object = None) -> TraceFormatVersion:
@@ -586,6 +611,13 @@ class AccordMetricsService:
         self._trace_format_version: TraceFormatVersion = _resolve_trace_format_version(
             self._config.get("trace_format_version")
         )
+        # v2.8.0 only: the operator's run_kind override (prod-personal /
+        # prod-managed / production / qa / battery). A harness declaration
+        # and the mock LLM still win (mock_llm_guard.wire_run_kind).
+        self._run_kind_override: str = str(self._config.get("run_kind", "") or "")
+        # v2.8.0 only: AgentIdentityRoot.identity_hash, the persona this agent
+        # runs under (set with the agent id; None until the identity exists).
+        self._identity_hash: Optional[str] = None
 
         # User location (only included if user explicitly consented via the
         # PREFERENCES step). RAW values — lens-core fuzzes lat/lng to the
@@ -721,17 +753,88 @@ class AccordMetricsService:
             "deployment_trust_mode": self._deployment_trust_mode or "sovereign",
         }
         if self._trace_format_version == TraceFormatVersion.V2_8_0:
-            # v2.8.0 (CIRISAgent#1249, CC 3.1.5): the trace declares its format
-            # in a DISTINCT signed member (never trace_schema_version, which
-            # stays the substrate's "3.0.0" canonicalization epoch), and the
-            # closed run kind is its own field on EVERY run, production
-            # included. Under v2.7.0 neither key exists, so that profile is
-            # byte-identical to 2.15.0.
-            from ciris_engine.logic.utils.mock_llm_guard import trace_run_kind
-
-            profile["trace_format_version"] = TraceFormatVersion.V2_8_0.value
-            profile["run_kind"] = trace_run_kind().value
+            return self._build_v2_8_0_profile(profile)
+        # v2.7.0: exactly the six FSD §3.2 members, byte-identical to 2.15.0.
         return profile
+
+    def _v2_8_0_agent_template(self) -> Optional[str]:
+        """Operator config, else CIRIS_TEMPLATE (wizard / CIRISManager), else None."""
+        if self._agent_template:
+            return self._agent_template
+        try:
+            from ciris_engine.logic.config.env_utils import get_env_var
+
+            return (str(get_env_var("CIRIS_TEMPLATE", "") or "")).strip() or None
+        except Exception:  # noqa: BLE001 - env layer unavailable: read the process env
+            return (os.environ.get("CIRIS_TEMPLATE") or "").strip() or None
+
+    def _v2_8_0_deployment_region(self) -> Optional[str]:
+        """Operator config, else DEPLOYMENT_REGION_ENV_VAR, else None ("not disclosed")."""
+        return self._deployment_region or (os.environ.get(DEPLOYMENT_REGION_ENV_VAR) or "").strip() or None
+
+    @staticmethod
+    def _calibration_version() -> Optional[str]:
+        """The substrate's axis-calibration bundle (CIRISAgent#820), or None."""
+        try:
+            import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
+
+            value = getattr(ciris_server, "AXIS_CALIBRATION_VERSION", None)
+        except Exception:  # noqa: BLE001 - no substrate: nothing to declare
+            return None
+        return value if isinstance(value, str) and value else None
+
+    def _pipeline_metadata(self) -> Dict[str, Optional[str]]:
+        """Agent-side provenance (CIRISAgent#878, #1245). null = no source today."""
+        from ciris_engine.constants import ACCORD_VERSION, CIRIS_VERSION
+
+        return {
+            "agent_version": CIRIS_VERSION,
+            "accord_version": ACCORD_VERSION or None,
+            "identity_hash": self._identity_hash,
+            # Declared by #878; nothing in the agent versions these yet.
+            "pdma_version": None,
+            "dsdma_domain_registry_version": None,
+        }
+
+    def _build_v2_8_0_profile(self, base: Dict[str, Optional[str]]) -> Dict[str, Any]:
+        """The v2.8.0 deployment_profile (CIRISAgent#1249, CC 3.1.5).
+
+        The trace declares its format in a DISTINCT signed member (never
+        trace_schema_version, which stays the substrate's "3.0.0"
+        canonicalization epoch), the closed run kind is its own member on
+        EVERY run, and the provenance members ride here because
+        deployment_profile is the only signed block the agent supplies
+        (ciris-lens-core assembles and signs the envelope).
+
+        The result is filtered to the published DeploymentProfile schema
+        before it reaches the signer. A required member the filter drops (an
+        operator value that is not a one-line label, say) falls back to its
+        migration default, so the admitter never refuses the trace for it.
+        """
+        from ciris_engine.logic.utils.mock_llm_guard import wire_run_kind
+
+        profile: Dict[str, Any] = dict(base)
+        profile["agent_template"] = self._v2_8_0_agent_template() or base["agent_template"]
+        profile["deployment_region"] = self._v2_8_0_deployment_region()
+        profile["run_kind"] = wire_run_kind(self._run_kind_override).value
+        profile["trace_format_version"] = TraceFormatVersion.V2_8_0.value
+        profile["pipeline_metadata"] = self._pipeline_metadata()
+        profile["calibration_version"] = self._calibration_version()
+        result = enforce_deployment_profile(profile)
+        if result.violations:
+            self._schema_reporter.report(result.violations, self._adapter_instance_id)
+        cleaned: Dict[str, Any] = dict(result.data)
+        if not isinstance(cleaned.get("pipeline_metadata"), dict) or set(cleaned["pipeline_metadata"]) != set(
+            profile["pipeline_metadata"]
+        ):
+            # A dropped provenance member becomes null; agent_version is a
+            # constant of this build and always survives.
+            kept = cleaned.get("pipeline_metadata") or {}
+            cleaned["pipeline_metadata"] = {name: kept.get(name) for name in profile["pipeline_metadata"]}
+        for name in DEPLOYMENT_PROFILE_REQUIRED:
+            if name not in cleaned:
+                cleaned[name] = _V2_8_0_PROFILE_DEFAULTS.get(name)
+        return {name: cleaned[name] for name in DEPLOYMENT_PROFILE_REQUIRED}
 
     def _run_kind_marker(self) -> Optional[str]:
         """The run-kind marker, or None for a production run.
@@ -742,10 +845,12 @@ class AccordMetricsService:
         Re-evaluated at every LensClient (re)build because the mock may latch
         after this service was constructed.
         """
-        from ciris_engine.logic.utils.mock_llm_guard import TraceRunKind, trace_run_kind
+        from ciris_engine.logic.utils.mock_llm_guard import trace_run_kind
 
         kind = trace_run_kind()
-        return None if kind == TraceRunKind.PRODUCTION else kind.value
+        # Every production kind (production / prod-personal / prod-managed)
+        # leaves deployment_type alone, so the v2.7.0 bytes do not change.
+        return None if kind.is_production else kind.value
 
     def _effective_deployment_type(self) -> str:
         """The ``deployment_type`` stamped on sealed traces (deployment_profile).
@@ -987,6 +1092,13 @@ class AccordMetricsService:
         # else the operator's value (None = undeclared, unchanged from before).
         # Under trace_format v2.8.0 it moves to deployment_profile.run_kind.
         correlation_deployment_type: Optional[str] = self._deployment_type_marker() or self._deployment_type or None
+        # The unsigned correlation copies of region/template. v2.8.0 mirrors
+        # what its signed profile resolved; v2.7.0 is unchanged.
+        correlation_region: Optional[str] = self._deployment_region or None
+        correlation_template: Optional[str] = self._agent_template or None
+        if self._trace_format_version == TraceFormatVersion.V2_8_0:
+            correlation_region = self._v2_8_0_deployment_region()
+            correlation_template = self._v2_8_0_agent_template()
         # Mock LLM: seal + sign + tee, but never persist into the replicable
         # federation store (see MockLocalOnlyEngine). Recorded so a mock that
         # latches after this build forces a rebuild (_ensure_mock_local_only).
@@ -1002,10 +1114,10 @@ class AccordMetricsService:
                 deployment_profile=self._build_deployment_profile(),
                 consent_attesting_key_id=consent_key_id,
                 local_copy_dir=str(self._local_copy_dir) if self._local_copy_dir else None,
-                deployment_region=self._deployment_region or None,
+                deployment_region=correlation_region,
                 deployment_type=correlation_deployment_type,
                 agent_role=self._agent_role or None,
-                agent_template=self._agent_template or None,
+                agent_template=correlation_template,
                 share_location=self._share_location_in_traces,
                 user_location=self._user_location or None,
                 user_timezone=self._user_timezone or None,
@@ -1811,6 +1923,13 @@ class AccordMetricsService:
                 "play_integrity_ok": verify_attestation.get("play_integrity_ok") if verify_attestation else None,
                 "hardware_backed": verify_attestation.get("hardware_backed") if verify_attestation else None,
             }
+            if self._trace_format_version == TraceFormatVersion.V2_8_0:
+                # CIRISAgent#832: per event, because the disclosure follows the
+                # license status and can change mid-process. CIRISVerify
+                # publishes no version today, so this is null until it does.
+                data["disclosure_version"] = (
+                    verify_attestation.get("disclosure_version") if verify_attestation else None
+                )
             # Counts are privacy-safe (no content, just cardinality) and carry
             # per-thought diversity signal — emit at GENERIC so they're always
             # available for k_eff analysis, don't gate behind DETAILED.
@@ -2562,7 +2681,7 @@ class AccordMetricsService:
             except RuntimeError:
                 logger.exception("   LensClient rebuild failed")
 
-    def set_agent_id(self, agent_id: str) -> None:
+    def set_agent_id(self, agent_id: str, identity_hash: Optional[str] = None) -> None:
         """Set agent identity for traces.
 
         The agent_id (template name like "Ally") is stored in _agent_name for display
@@ -2571,11 +2690,16 @@ class AccordMetricsService:
 
         Args:
             agent_id: Agent identifier (template name like "Ally", "Echo", etc.)
+            identity_hash: AgentIdentityRoot.identity_hash, the persona this
+                agent runs under (trace_format v2.8.0
+                ``pipeline_metadata.identity_hash``; unused under v2.7.0).
         """
         # Validate agent_id is a proper string (not a mock or other type)
         if not isinstance(agent_id, str) or not agent_id:
             logger.warning(f"Invalid agent_id type: {type(agent_id).__name__}, skipping")
             return
+        if isinstance(identity_hash, str) and identity_hash:
+            self._identity_hash = identity_hash
 
         # Store template name for display in traces (agent_name field)
         if not self._agent_name:

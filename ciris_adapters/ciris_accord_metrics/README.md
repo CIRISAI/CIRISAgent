@@ -232,11 +232,30 @@ every bound, pattern and per-event field table from it, so the enforcer and the
 artifact cannot drift. Editing the file changes its hash, and the tests fail
 until `SCHEMA_SHA256` is updated on purpose.
 
-v2.8.0 adds two required members to the signed envelope's `deployment_profile`:
-`trace_format_version: "2.8.0"`, which is how a v2.8.0 trace identifies itself,
-and `run_kind` (`production | qa | battery | mock`). It also gives
-`deployment_type` back to the operator. `trace_schema_version` is not the
-format version. It stays the substrate's `"3.0.0"` canonicalization epoch. **Emission is still v2.7.0 by default.** Persist v54.1 and earlier
+v2.8.0 closes the signed envelope's `deployment_profile` (every member
+required, bounded, level generic) and adds to it:
+
+- `trace_format_version: "2.8.0"`, which is how a v2.8.0 trace identifies itself;
+- `run_kind`: `production | prod-personal | prod-managed | qa | battery | mock`.
+  An undeclared production run is `prod-managed` when `CIRIS_MANAGED=true`
+  (CIRISManager sets it), else `prod-personal`. An operator overrides it with
+  `CIRIS_TRACE_RUN_KIND` or the adapter config key `run_kind`; a harness
+  declaration (`qa`/`battery`) and the mock LLM still win;
+- `pipeline_metadata`: `agent_version`, `accord_version`, `identity_hash`
+  (the persona actually running), plus `pdma_version` and
+  `dsdma_domain_registry_version`, which have no source yet and are null;
+- `calibration_version`: the substrate's axis calibration
+  (`ciris_server.AXIS_CALIBRATION_VERSION`), or null.
+
+It also reads `agent_template` from `CIRIS_TEMPLATE` when the config has none,
+and `deployment_region` from `CIRIS_ACCORD_METRICS_DEPLOYMENT_REGION` when the
+config has none (never inferred). SNAPSHOT_AND_CONTEXT gains
+`disclosure_version` (null until CIRISVerify publishes one). `deployment_type`
+goes back to the operator. `trace_schema_version` is not the format version. It
+stays the substrate's `"3.0.0"` canonicalization epoch. The full contract is in
+`FSD/TRACE_WIRE_FORMAT.md`.
+
+**Emission is still v2.7.0 by default.** Persist v54.1 and earlier
 refuse v2.8.0 traces whole, so only opt in (`CIRIS_TRACE_FORMAT_VERSION=2.8.0`,
 or the adapter config key `trace_format_version`) once the receiving nodes run
 a persist release that admits v2.8.0. Under v2.7.0 the run kind keeps riding

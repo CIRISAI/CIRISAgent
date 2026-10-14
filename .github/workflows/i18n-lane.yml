@@ -63,6 +63,11 @@ on:
         required: false
         default: false
         type: boolean
+      extra_tm:
+        description: "target=accord: anchor terminology on the ciris-website + CIRISClient strings (pinned read-only checkouts) and the agent UI; anchors only, never values"
+        required: false
+        default: true
+        type: boolean
       accord_units:
         description: "accord units, space-separated (section0 v1 .. v9 annexes). Empty = every unit, one at a time"
         required: false
@@ -130,6 +135,69 @@ jobs:
 
       - name: Vendored pipeline matches its record
         run: python3 tools/dev/check_localize_vendoring.py
+
+      # Extra translation memory (--extra-tm): the website's and the apps'
+      # translated strings, as terminology anchors only -- the adapter never
+      # writes them as values. Each repository is resolved to its default
+      # branch's commit FIRST, checked out at exactly that SHA (read-only, no
+      # credentials kept), and the SHA goes into the step summary, the plan
+      # log and the commit message.
+      - name: Extra translation memory -- pin the default-branch commits
+        id: extra_tm
+        if: inputs.extra_tm && inputs.target == 'accord'
+        run: |
+          set -euo pipefail
+          website=$(git ls-remote https://github.com/CIRISAI/ciris-website.git HEAD | cut -f1)
+          client=$(git ls-remote https://github.com/CIRISAI/CIRISClient.git HEAD | cut -f1)
+          for sha in "$website" "$client"; do
+            if ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::error::could not resolve a default-branch commit for the extra translation memory"
+              exit 1
+            fi
+          done
+          echo "website=$website" >> "$GITHUB_OUTPUT"
+          echo "client=$client" >> "$GITHUB_OUTPUT"
+
+      - name: Extra translation memory -- ciris-website (read-only)
+        if: steps.extra_tm.outcome == 'success'
+        uses: actions/checkout@v4
+        with:
+          repository: CIRISAI/ciris-website
+          ref: ${{ steps.extra_tm.outputs.website }}
+          path: .extra-tm/ciris-website
+          persist-credentials: false
+          sparse-checkout: |
+            src/i18n
+
+      - name: Extra translation memory -- CIRISClient (read-only)
+        if: steps.extra_tm.outcome == 'success'
+        uses: actions/checkout@v4
+        with:
+          repository: CIRISAI/CIRISClient
+          ref: ${{ steps.extra_tm.outputs.client }}
+          path: .extra-tm/CIRISClient
+          persist-credentials: false
+          sparse-checkout: |
+            client/shared/src/desktopMain/resources/localization
+
+      - name: Extra translation memory -- provenance
+        if: steps.extra_tm.outcome == 'success'
+        env:
+          WEBSITE_SHA: ${{ steps.extra_tm.outputs.website }}
+          CLIENT_SHA: ${{ steps.extra_tm.outputs.client }}
+        run: |
+          set -euo pipefail
+          test "$(git -C .extra-tm/ciris-website rev-parse HEAD)" = "$WEBSITE_SHA"
+          test "$(git -C .extra-tm/CIRISClient rev-parse HEAD)" = "$CLIENT_SHA"
+          provenance="CIRISAI/ciris-website@$WEBSITE_SHA, CIRISAI/CIRISClient@$CLIENT_SHA, agent UI bundle at $GITHUB_SHA"
+          {
+            echo "EXTRA_TM=. .extra-tm/ciris-website .extra-tm/CIRISClient"
+            echo "EXTRA_TM_PROVENANCE=$provenance"
+          } >> "$GITHUB_ENV"
+          {
+            echo "### Extra translation memory (anchors only, never values)"
+            echo "$provenance"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Plan (no API call)
         env:
@@ -220,6 +288,9 @@ jobs:
           repaired where the review found a critical, major or terminology error.
           Every value is status=draft / review_status=machine_reviewed: this
           guarantees terminology, structure and meaning, not native fluency.
+
+          Extra translation memory (terminology anchors only, never values):
+          ${EXTRA_TM_PROVENANCE:-none}
 
           Gated in this run by tools/dev/check_localize_vendoring.py and, for the
           Accord, accord_localize.py --verify. The MQM findings are attached to

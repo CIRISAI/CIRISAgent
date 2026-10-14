@@ -45,6 +45,11 @@ on:
         required: false
         default: false
         type: boolean
+      extra_tm:
+        description: "Also anchor terminology on the ciris-website and CIRISClient strings and the agent UI (target=accord): read-only checkouts at their default-branch commit, pinned and recorded. Anchors only, never values."
+        required: false
+        default: true
+        type: boolean
       accord_units:
         description: "Accord units to run (target=accord), space-separated: section0 v1 v2 v3 v4 v5 v6 v7 v8 v9 annexes. Defaults to ONE unit so a dispatch spends on a section, not the whole Accord; clear it for every unit (run one at a time)."
         required: false
@@ -89,6 +94,7 @@ jobs:
       accord_stem: ${{ inputs.accord_stem }}
       tm_stem: ${{ inputs.tm_stem }}
       seed_exact_tm: ${{ inputs.seed_exact_tm }}
+      extra_tm: ${{ inputs.extra_tm }}
       accord_units: ${{ inputs.accord_units }}
       keys: ${{ inputs.keys }}
       langs: ${{ inputs.langs }}

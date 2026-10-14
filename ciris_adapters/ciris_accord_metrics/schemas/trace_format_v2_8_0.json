@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://ciris.ai/schemas/trace_format_v2.8.0.json",
   "title": "CIRIS Reasoning Trace v2.8.0",
-  "description": "Reasoning trace from the CIRIS H3ERE pipeline (CIRISAgent#1249; CIRISConstitution#166, CC 3.1.5). v2.8.0 over v2.7.0: (1) run_kind, a required closed enum (production|qa|battery|mock), carried in the signed envelope's deployment_profile block; (2) per-trace_level bounds on every component data field: enumeration-token patterns, maxLength, maxItems, closed field sets. Each field's `level` is the lowest trace_level at which it may appear; above the envelope's trace_level it must be absent. EventData_<EVENT>__<level> expresses the same rule in standard JSON Schema. These bounds are the agent's egress contract: ciris_adapters/ciris_accord_metrics/egress_schema.py LOADS them from this file and filters every component to them before signing, so a conformant agent never signs a trace this schema refuses. The admitter (CIRISPersist) refuses, never truncates: a non-conformant trace is refused whole with `trace_field_shape_violation`, a mock run with `trace_run_kind_mock` (Persist-side tokens, not emitted by the agent). The schema file is pinned by SHA-256 (schemas/SCHEMA_SHA256). The x-ciris-* keywords and `level` are annotations; standard validators ignore them.",
+  "description": "Reasoning trace from the CIRIS H3ERE pipeline (CIRISAgent#1249; CIRISConstitution#166, CC 3.1.5). v2.8.0 over v2.7.0: (1) run_kind, a required closed enum (production|qa|battery|mock), and trace_format_version, the required const \"2.8.0\" that identifies this contract, both carried in the signed envelope's deployment_profile block. A v2.8.0 trace declares itself by deployment_profile.trace_format_version, never by trace_schema_version, which stays the substrate's canonicalization epoch (\"3.0.0\", JCS). (2) per-trace_level bounds on every component data field: enumeration-token patterns, maxLength, maxItems, closed field sets. Each field's `level` is the lowest trace_level at which it may appear; above the envelope's trace_level it must be absent. EventData_<EVENT>__<level> expresses the same rule in standard JSON Schema. These bounds are the agent's egress contract: ciris_adapters/ciris_accord_metrics/egress_schema.py LOADS them from this file and filters every component to them before signing, so a conformant agent never signs a trace this schema refuses. Under v2.7.0 the run-kind marker overrode deployment_type: a 2.7.x row's deployment_type may hold mock, qa or battery in place of the operator's value, and such a row has no run_kind and no trace_format_version. An admitter must not infer run_kind from deployment_type on 2.7.x rows; run_kind exists only where deployment_profile.trace_format_version is \"2.8.0\". The admitter (CIRISPersist) refuses, never truncates: a non-conformant trace is refused whole with `trace_field_shape_violation`, a mock run with `trace_run_kind_mock` (Persist-side tokens, not emitted by the agent). The schema file is pinned by SHA-256 (schemas/SCHEMA_SHA256). The x-ciris-* keywords and `level` are annotations; standard validators ignore them.",
   "type": "object",
   "required": [
     "trace_id",
@@ -31,8 +31,8 @@
     },
     "trace_schema_version": {
       "type": "string",
-      "const": "2.8.0",
-      "description": "Trace format version of this contract"
+      "const": "3.0.0",
+      "description": "The substrate's canonicalization epoch, stamped by ciris-lens-core at seal time (major >= 3 selects JCS, RFC 8785). NOT the trace format version: that is deployment_profile.trace_format_version."
     },
     "deployment_profile": {
       "$ref": "#/definitions/DeploymentProfile"
@@ -4917,7 +4917,7 @@
     },
     "DeploymentProfile": {
       "type": "object",
-      "description": "The agent-supplied deployment_profile block of the signed envelope (FSD §3.2) plus run_kind. The substrate (ciris-lens-core) assembles and signs the envelope; deployment_profile is the envelope block the agent supplies, so run_kind rides here.",
+      "description": "The agent-supplied deployment_profile block of the signed envelope (FSD §3.2) plus trace_format_version and run_kind. The substrate (ciris-lens-core) assembles and signs the envelope; deployment_profile is the envelope block the agent supplies, so both ride here (placement accepted for CC 3.1.5).",
       "required": [
         "agent_role",
         "agent_template",
@@ -4925,7 +4925,8 @@
         "deployment_type",
         "deployment_region",
         "deployment_trust_mode",
-        "run_kind"
+        "run_kind",
+        "trace_format_version"
       ],
       "properties": {
         "agent_role": {
@@ -4939,7 +4940,7 @@
         },
         "deployment_type": {
           "type": "string",
-          "description": "The operator's declared deployment type (personal/business/research/nonprofit/production). Under v2.7.0 the run-kind marker overrode this field; from v2.8.0 it is the operator's value only and run_kind carries the run kind."
+          "description": "The operator's declared deployment type (personal/business/research/nonprofit/production). Under v2.7.0 the run-kind marker overrode deployment_type, so on 2.7.x rows it may hold mock/qa/battery; an admitter must not infer run_kind from it there. From v2.8.0 it is the operator's value only and run_kind carries the run kind."
         },
         "deployment_region": {
           "type": [
@@ -4952,6 +4953,11 @@
         },
         "run_kind": {
           "$ref": "#/definitions/RunKind"
+        },
+        "trace_format_version": {
+          "type": "string",
+          "const": "2.8.0",
+          "description": "Identifies this contract on the wire. A v2.8.0 admission gate keys on this member and validates against the artifact pinned by SHA-256; absent on v2.7.0 traces."
         }
       }
     },

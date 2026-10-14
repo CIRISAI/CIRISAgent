@@ -721,10 +721,15 @@ class AccordMetricsService:
             "deployment_trust_mode": self._deployment_trust_mode or "sovereign",
         }
         if self._trace_format_version == TraceFormatVersion.V2_8_0:
-            # v2.8.0 (CIRISAgent#1249): the closed run kind is its own signed
-            # envelope field, present on EVERY run, production included.
+            # v2.8.0 (CIRISAgent#1249, CC 3.1.5): the trace declares its format
+            # in a DISTINCT signed member (never trace_schema_version, which
+            # stays the substrate's "3.0.0" canonicalization epoch), and the
+            # closed run kind is its own field on EVERY run, production
+            # included. Under v2.7.0 neither key exists, so that profile is
+            # byte-identical to 2.15.0.
             from ciris_engine.logic.utils.mock_llm_guard import trace_run_kind
 
+            profile["trace_format_version"] = TraceFormatVersion.V2_8_0.value
             profile["run_kind"] = trace_run_kind().value
         return profile
 

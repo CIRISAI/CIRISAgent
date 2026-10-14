@@ -117,9 +117,31 @@ def test_the_default_trace_format_is_still_2_7_0(
     service = AccordMetricsService(config={"local_copy_dir": str(tmp_path), "consent_given": True})
     service._build_lens_client()
     assert service.get_metrics()["trace_format_version"] == "2.7.0"
-    assert "run_kind" not in lens_kwargs[0]["deployment_profile"]
-    # The substrate's wire stamp is never overridden by the format switch.
-    assert "trace_schema_version" not in lens_kwargs[0]
+    # Byte-identical to 2.15.0: exactly the six FSD §3.2 fields, nothing added.
+    assert lens_kwargs[0]["deployment_profile"] == {
+        "agent_role": "unknown",
+        "agent_template": "unknown-default-unspecified",
+        "deployment_domain": "general",
+        "deployment_type": "production",
+        "deployment_region": None,
+        "deployment_trust_mode": "sovereign",
+    }
+    assert json.dumps(lens_kwargs[0]["deployment_profile"]) == (
+        '{"agent_role": "unknown", "agent_template": "unknown-default-unspecified", '
+        '"deployment_domain": "general", "deployment_type": "production", '
+        '"deployment_region": null, "deployment_trust_mode": "sovereign"}'
+    )
+    _assert_wire_stamp_untouched(lens_kwargs[0])
+
+
+def _assert_wire_stamp_untouched(kw: Dict[str, Any]) -> None:
+    """trace_schema_version stays the substrate's "3.0.0" canonicalization epoch
+    in both modes: the agent never passes it, so lens-core stamps its default."""
+    from ciris_adapters.ciris_accord_metrics.services import TRACE_SCHEMA_VERSION
+
+    assert TRACE_SCHEMA_VERSION == "3.0.0"
+    assert "trace_schema_version" not in kw
+    assert "trace_schema_version" not in kw["deployment_profile"]
 
 
 @pytest.mark.parametrize("kind", ["qa", "battery"])
@@ -136,6 +158,8 @@ def test_2_7_0_keeps_the_marker_in_deployment_type(
     assert lens_kwargs[0]["deployment_type"] == kind
     assert lens_kwargs[0]["deployment_profile"]["deployment_type"] == kind
     assert "run_kind" not in lens_kwargs[0]["deployment_profile"]
+    assert "trace_format_version" not in lens_kwargs[0]["deployment_profile"]
+    _assert_wire_stamp_untouched(lens_kwargs[0])
 
 
 @pytest.mark.parametrize("via", ["env", "config"])
@@ -159,11 +183,13 @@ def test_2_8_0_moves_run_kind_into_the_envelope(
     out = _build(tmp_path, **config)
     kw = lens_kwargs[0]
     assert kw["deployment_profile"]["run_kind"] == kind
+    # The format is declared in its own signed member (CC 3.1.5).
+    assert kw["deployment_profile"]["trace_format_version"] == "2.8.0"
     # deployment_type is the operator's value again; the run kind no longer rides it.
     assert kw["deployment_profile"]["deployment_type"] == "research"
     assert kw["deployment_type"] == "research"
     assert out["metrics_type"] == "research"
-    assert "trace_schema_version" not in kw
+    _assert_wire_stamp_untouched(kw)
 
 
 def test_2_8_0_marks_mock_in_the_envelope(

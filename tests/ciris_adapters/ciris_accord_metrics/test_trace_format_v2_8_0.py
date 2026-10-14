@@ -292,6 +292,7 @@ PROFILE = {
     "deployment_region": None,
     "deployment_trust_mode": "sovereign",
     "run_kind": "production",
+    "trace_format_version": "2.8.0",
 }
 
 MARIA = "Ideación suicida reportada por @María; requiere intervención inmediata de un profesional."
@@ -348,7 +349,7 @@ def _trace(level: TraceLevel, enforce: bool) -> Dict[str, Any]:
         "agent_id_hash": "abc",
         "started_at": "2026-10-13T00:00:00+00:00",
         "trace_level": level.value,
-        "trace_schema_version": "2.8.0",
+        "trace_schema_version": "3.0.0",
         "deployment_profile": dict(PROFILE),
         "components": components,
     }
@@ -421,6 +422,41 @@ def test_the_description_names_the_admitter_refusal_tokens() -> None:
 
 
 def test_every_emittable_version_has_its_published_artifact() -> None:
-    for version, name in es.TRACE_FORMAT_FILES.items():
-        doc = json.loads((SCHEMAS / name).read_text(encoding="utf-8"))
-        assert doc["properties"]["trace_schema_version"]["const"] == version.value
+    for name in es.TRACE_FORMAT_FILES.values():
+        assert (SCHEMAS / name).is_file()
+    # v2.7.0 is the frozen historical artifact; v2.8.0 identifies itself by a
+    # distinct signed member, not by trace_schema_version (CC 3.1.5).
+    v270 = json.loads((SCHEMAS / es.TRACE_FORMAT_FILES[es.TraceFormatVersion.V2_7_0]).read_text(encoding="utf-8"))
+    assert v270["properties"]["trace_schema_version"]["const"] == "2.7.0"
+    assert DEFS["DeploymentProfile"]["properties"]["trace_format_version"]["const"] == "2.8.0"
+    assert "trace_format_version" in DEFS["DeploymentProfile"]["required"]
+
+
+def test_trace_schema_version_stays_the_canonicalization_epoch() -> None:
+    from ciris_adapters.ciris_accord_metrics.services import TRACE_SCHEMA_VERSION
+
+    assert TRACE_SCHEMA_VERSION == "3.0.0"
+    assert DOC["properties"]["trace_schema_version"]["const"] == TRACE_SCHEMA_VERSION
+
+
+@pytest.mark.parametrize("bad", [None, "2.7.0", "3.0.0", "v2.8.0"])
+def test_trace_format_version_is_required_and_exact(bad: Optional[str]) -> None:
+    trace = _trace(TraceLevel.GENERIC, enforce=True)
+    if bad is None:
+        del trace["deployment_profile"]["trace_format_version"]
+    else:
+        trace["deployment_profile"]["trace_format_version"] = bad
+    assert list(_validator().iter_errors(trace))
+
+
+def test_a_2_8_0_trace_stamped_with_the_format_as_its_schema_version_is_refused() -> None:
+    """The format never rides trace_schema_version (that selects the canonicalizer)."""
+    trace = _trace(TraceLevel.GENERIC, enforce=True)
+    trace["trace_schema_version"] = "2.8.0"
+    assert list(_validator().iter_errors(trace))
+
+
+def test_the_description_forbids_inferring_run_kind_from_2_7_deployment_type() -> None:
+    text = DOC["description"]
+    assert "Under v2.7.0 the run-kind marker overrode deployment_type" in text
+    assert "must not infer run_kind from deployment_type on 2.7.x rows" in text

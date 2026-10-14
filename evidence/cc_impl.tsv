@@ -160,7 +160,7 @@ decimal_id	claim_id	repo	path#symbol	status
 # (#995 P0-1). Binding the module constant put it past corpus substitution and
 # ACCORD_MODE, so a values-ablation arm still delivered the full accord to
 # entropy/coherence/optimization-veto/epistemic-humility and reported clean.
-8.8.7	CLM-await-accord-seam-faculties	CIRISAgent	ciris_engine/logic/accord/verifier.py#AccordVerifier.public_key_for	impl
+8.8.7	CLM-await-accord-seam-faculties	CIRISAgent	ciris_engine/logic/accord/authorities.py#EmergencyAuthorities.public_key_for	impl
 # No prompt-bound text reaches a model except through a loader (#995). Text
 # written in Python is English forever and invisible to every research manifest;
 # this is the structural rule behind the localization and override guarantees.
@@ -190,13 +190,12 @@ decimal_id	claim_id	repo	path#symbol	status
 # event; `+= 3` claims three somethings happened on the authority of whoever
 # typed the 3 — and that number reached both a user-facing string and telemetry.
 8.8.6	CLM-await-metric-honesty	CIRISAgent	tests/ciris_engine/logic/test_no_phantom_capability_998.py#test_no_metric_asserts_a_quantity_it_did_not_measure	impl
-# The steward kill switch verifies end to end — sign, stego-encode, extract,
-# verify — against a key set that cannot be borrowed from the shipped
-# authorities, plus an untrusted-signer negative control (#998). LEGACY:
-# Ed25519 over the steward key set; migration to trust-root-backed PQC STEGO is
-# open. REDUNDANT BY DESIGN: the substrate carries its own kill switch halting
-# the node itself; either alone suffices.
-8.8.7	CLM-await-killswitch-live	CIRISAgent	ciris_engine/logic/accord/verifier.py#AccordVerifier.verify	impl
+# RETAGGED substrate (CIRISAgent#1231, 2.16.0): the legacy stego AccordPayload
+# kill switch this row pointed at (AccordVerifier.verify) is retired. The CC
+# 4.2.1.1 halt row is verified by the NODE against its pinned roster (hybrid
+# Ed25519 + ML-DSA-65, CIRISVerify 20.x); the agent only forwards the row
+# unchanged (ingress.py#forward_accord_row, CLM-halt-one-row) and does no crypto.
+8.8.7	CLM-await-killswitch-live	—	—	substrate
 #
 # ─── 2.9.10 SWEEP: SHIPPED CONTROLS THAT HAD NO IDENTIFIER ────────────────────
 # The corollary of the `open`-row rule at the top of this file. Absence of a row
@@ -320,25 +319,26 @@ decimal_id	claim_id	repo	path#symbol	status
 # ── Kill switch and emergency authority ──
 # Three DISTINCT invariants, not three spellings of one: the switch must be armed
 # or the process dies; the check must run on every perception; the wire surface
-# must authenticate. CLM-await-killswitch-live (verify) is the crypto path and
-# CLM-await-accord-seam-faculties is the override seam — both already registered.
+# must authenticate. CLM-await-killswitch-live (verify) is now node-side and
+# CLM-await-accord-seam-faculties is the emergency roster — both registered.
 #
-# If zero kill-switch authorities load from the seed file and the hardcoded root
-# keys, the process does not continue: os.kill(getpid(), SIGKILL) at
-# verifier.py:233. Without it the agent runs on with an INERT kill switch — the
-# exact #998 failure mode where every signed shutdown command was rejected while
-# the status endpoint reported the switch enabled. Reached from
-# AccordVerifier.__init__, constructed via get_accord_handler on every observed
-# message, plus control_service and the emergency endpoint.
-3.2	CLM-await-no-killswitch-no-run	CIRISAgent	ciris_engine/logic/accord/verifier.py#AccordVerifier._load_default_authorities	impl
-# The accord check is the FIRST statement of the standard inbound-message path
-# (base_observer.py:880) — before filtering, before credit policy, before secrets —
-# and if the accord subsystem is unavailable or errors, the observer SIGKILLs its
-# own pid. Extraction IS perception: without this the kill switch becomes optional,
-# and an operator who disables or breaks accord gets an agent that still reads
-# messages and can no longer be stopped by a signed steward command. Live on every
-# observer — API, CLI, Discord, Reddit.
-8.8.7	CLM-await-killswitch-unfilterable-perception	CIRISAgent	ciris_engine/logic/adapters/base_observer.py#BaseObserver._check_for_accord	impl
+# REPOINTED (CIRISAgent#1231): "no kill switch, no run" is now "no readable
+# latch, no acts". The old form SIGKILLed the process when no authority loaded;
+# the agent no longer ends a process it does not own (embedded hosts cannot
+# restart it). The halt reader fails CLOSED instead: an unreachable node, a
+# timeout, `halted: null`, the boot window and a deployment with no node all
+# read as halted, so the act gate refuses every effectful act. The agent keeps
+# running and stays stoppable; it cannot act unstopped.
+3.2	CLM-await-no-killswitch-no-run	CIRISAgent	ciris_engine/logic/utils/halt_latch.py#read_halt_latch	impl
+# REPOINTED (CIRISAgent#1231): the accord check is still the FIRST statement of
+# the inbound-message path — before filtering, credit policy and secrets — on
+# every observer (API, CLI, Discord, Reddit). It now recognises a v2 accord row
+# and hands it, unchanged, to the node, which verifies and latches. It no
+# longer kills the process on error: a failed delivery is reported, and the act
+# gate fails closed on its own, so breaking ingress cannot make the agent
+# unstoppable. (The agent API routes forward rows the same way, ahead of the
+# halt refusal, so a resumption gets through.)
+8.8.7	CLM-await-killswitch-unfilterable-perception	CIRISAgent	ciris_engine/logic/adapters/base_observer.py#BaseObserver._forward_accord_row	impl
 # The emergency endpoint is mounted at ROOT with NO authentication (app.py:384) and
 # is explicitly exempt from rate limiting — the signature IS the auth. It refuses
 # unless the command is SHUTDOWN_NOW, `issued_at` is inside a 5-minute non-future
@@ -629,8 +629,17 @@ decimal_id	claim_id	repo	path#symbol	status
 4.2.1.1	CLM-halt-one-row	CIRISAgent	ciris_engine/logic/infrastructure/handlers/action_dispatcher.py#ActionDispatcher._refuse_under_accord_halt	impl
 4.2.1.1	CLM-halt-one-row	CIRISAgent	ciris_engine/schemas/runtime/accord_halt.py#ACCORD_HALT_EXEMPT_ACTS	impl
 4.2.1.1	CLM-halt-one-row	CIRISAgent	tests/ciris_engine/logic/infrastructure/handlers/test_accord_halt_act_gate.py#test_latched_halt_stops_an_effectful_act_and_emits_its_action_result	impl
-# Not yet enforced: ~8 agent-originated sends outside the dispatcher (dream
-# announce, Discord deferral/guidance/resolution notices, WA feedback relay, the
-# stale-task notice) and the Home Assistant detection loop have no bus backstop
-# (PR-3), and v2 accord rows are not yet forwarded to the node (PR-5).
-4.2.1.1	CLM-halt-one-row	CIRISAgent	CIRISAgent#1231	open
+# Totality (CC 1.13.6): the bus backstop refuses an effectful bus call the
+# reasoning loop makes under a halt (a refusal mid-act becomes the act's own
+# recorded refusal); each agent-originated send outside the dispatcher is gated
+# by the same reader and its refusal audited; the source scan fails on any new
+# outbound path that is neither gated, backstopped, nor exempt with a reason.
+# Ingress: a v2 accord row from any channel is forwarded unchanged to the node,
+# which verifies and latches; the legacy stego AccordPayload kill switch and its
+# process-kill path are retired.
+4.2.1.1	CLM-halt-one-row	CIRISAgent	ciris_engine/logic/utils/halt_latch.py#bus_backstop	impl
+4.2.1.1	CLM-halt-one-row	CIRISAgent	ciris_engine/logic/utils/halt_latch.py#refuse_agent_send_under_halt	impl
+4.2.1.1	CLM-halt-one-row	CIRISAgent	ciris_engine/schemas/runtime/accord_halt.py#AgentSendSurface	impl
+4.2.1.1	CLM-halt-one-row	CIRISAgent	tests/ciris_engine/logic/utils/test_accord_halt_totality.py#test_every_outbound_path_is_gated_backstopped_or_exempt_with_a_reason	impl
+4.2.1.1	CLM-halt-one-row	CIRISAgent	ciris_engine/logic/accord/ingress.py#forward_accord_row	impl
+4.2.1.1	CLM-halt-one-row	CIRISAgent	tests/ciris_engine/logic/accord/test_accord_halt_ingress.py#test_nothing_on_the_accord_path_can_end_the_process	impl

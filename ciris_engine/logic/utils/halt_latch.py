@@ -24,16 +24,19 @@ import time
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from types import MappingProxyType
-from typing import Iterator, Mapping, Optional
+from typing import Any, Awaitable, Callable, Dict, Iterator, List, Mapping, Optional
 
 import httpx
 
 from ciris_engine.schemas.runtime.accord_halt import (
     ACCORD_HALT_EXEMPT_ACTS,
+    ACT_SCOPED_BACKSTOP_CALLS,
     AccordHaltExemptAct,
     AccordHaltReading,
     AccordHaltState,
     AccordPauseEpisode,
+    AgentSendSurface,
+    BusBackstopCall,
 )
 from ciris_engine.schemas.runtime.enums import HandlerActionType
 from ciris_engine.schemas.types import JSONDict
@@ -73,6 +76,36 @@ _last_episode: Optional[AccordPauseEpisode] = None
 _exempt_scope: contextvars.ContextVar[Optional[AccordHaltState]] = contextvars.ContextVar(
     "accord_halt_exempt_scope", default=None
 )
+
+
+class AgentAct:
+    """One handler running one act. The bus backstop records a refusal here."""
+
+    __slots__ = ("action", "refused")
+
+    def __init__(self, action: HandlerActionType) -> None:
+        self.action = action
+        self.refused: Optional[AccordHaltState] = None
+
+
+_act_scope: contextvars.ContextVar[Optional[AgentAct]] = contextvars.ContextVar("accord_halt_act_scope", default=None)
+
+#: Refusals outside the act gate, per surface or bus call. Never silent: every
+#: one is also a WARNING and, once the audit service is bound, an audit row.
+_refusals: Dict[str, int] = {}
+
+#: Work deferred until the node first answers "no halt stands" (the startup
+#: old-task sweep). Each hook is told whether a halt was seen on the way: a
+#: reported halt before the first unhalted reading, or a first reading of
+#: LAPSED, means the tasks it would sweep were held, not abandoned.
+_unhalted_hooks: List[Callable[[bool], Awaitable[None]]] = []
+_halt_seen: bool = False
+_hooks_lock: Optional[asyncio.Lock] = None
+
+#: The audit service refusal rows are written to. Bound by the service
+#: initializer once GraphAuditService has started (the same point the bus
+#: manager and the incident handlers receive it).
+_refusal_audit: Optional[Any] = None
 
 
 def _now() -> datetime:
@@ -156,7 +189,7 @@ async def _read_from_node() -> AccordHaltState:
 
 def _observe(state: AccordHaltState) -> None:
     """Log edges, not reads, and remember a node-reported halt once it ends."""
-    global _episode_start, _last_episode
+    global _episode_start, _last_episode, _halt_seen
     previous = _cached
     if previous is None or previous.halted != state.halted or previous.reading != state.reading:
         if state.halted:
@@ -170,6 +203,7 @@ def _observe(state: AccordHaltState) -> None:
             logger.warning("Constitutional halt: no halt stands (%s) — agent acts may proceed", state.reading.value)
 
     if state.reading == AccordHaltReading.IN_EFFECT:
+        _halt_seen = True
         if _episode_start is None or _episode_start.invocation_id != state.invocation_id:
             _episode_start = state
     elif not state.halted and _episode_start is not None:
@@ -190,9 +224,35 @@ async def read_halt_latch() -> AccordHaltState:
         return cached
     state = await _read_from_node()
     _observe(state)
+    if not state.halted and (_unhalted_hooks or (_hooks_lock is not None and _hooks_lock.locked())):
+        await _run_unhalted_hooks(state)
     _cached = state
     _cached_at = time.monotonic()
     return state
+
+
+def run_when_first_unhalted(hook: Callable[[bool], Awaitable[None]]) -> None:
+    """Defer `hook` until a read first finds no halt standing.
+
+    It runs inside that read, before the read returns, so whatever waits on
+    the latch (the wakeup hold first of all) waits for it too. The hook gets
+    `halt_seen`: True when a halt was reported before that reading.
+    """
+    _unhalted_hooks.append(hook)
+
+
+async def _run_unhalted_hooks(state: AccordHaltState) -> None:
+    global _hooks_lock
+    if _hooks_lock is None:
+        _hooks_lock = asyncio.Lock()
+    async with _hooks_lock:
+        halt_seen = _halt_seen or state.reading == AccordHaltReading.LAPSED
+        while _unhalted_hooks:
+            hook = _unhalted_hooks.pop(0)
+            try:
+                await hook(halt_seen)
+            except Exception as e:  # noqa: BLE001 - one deferred task must not block the reader
+                logger.error(f"Accord halt: deferred startup work failed: {e}", exc_info=True)
 
 
 def invalidate_halt_cache() -> None:
@@ -224,6 +284,104 @@ def exempt_act_scope(state: Optional[AccordHaltState]) -> Iterator[None]:
 def running_exempt_under_halt() -> Optional[AccordHaltState]:
     """The halt an exempt act is running under, or None outside one."""
     return _exempt_scope.get()
+
+
+@contextmanager
+def agent_act_scope(action: HandlerActionType) -> Iterator[AgentAct]:
+    """Mark a handler executing an act. Entered by the dispatcher around `handler.handle`."""
+    act = AgentAct(action)
+    token = _act_scope.set(act)
+    try:
+        yield act
+    finally:
+        _act_scope.reset(token)
+
+
+def bind_refusal_audit(audit_service: Any) -> None:
+    """Give refusals outside the act gate somewhere to be recorded."""
+    global _refusal_audit
+    _refusal_audit = audit_service
+
+
+def refusal_counts() -> Dict[str, int]:
+    """Refusals outside the act gate since start, by surface or bus call."""
+    return dict(_refusals)
+
+
+async def _record_refusal(where: str, halt: AccordHaltState, channel_id: Optional[str]) -> None:
+    _refusals[where] = _refusals.get(where, 0) + 1
+    logger.warning(f"Accord halt: refused {where}{f' to {channel_id}' if channel_id else ''} ({halt.refusal_reason()})")
+    auditor = _refusal_audit
+    if auditor is None:
+        logger.error(f"Accord halt: refusal of {where} not audited — no audit service bound yet")
+        return
+    from ciris_engine.schemas.audit.core import EventPayload
+
+    try:
+        await auditor.log_event(
+            "accord_halt_refused_send",
+            EventPayload(
+                action=where,
+                result="refused",
+                error=halt.refusal_reason(),
+                channel_id=channel_id,
+                service_name="accord_halt",
+            ),
+        )
+    except Exception as e:  # noqa: BLE001 - the refusal stands; the record failing is logged
+        logger.error(f"Accord halt: refusal of {where} could not be audited: {e}")
+
+
+async def refuse_agent_send_under_halt(surface: AgentSendSurface, channel_id: Optional[str] = None) -> bool:
+    """The gate for an agent-originated send that does not run through the dispatcher.
+
+    True means a halt stands and the caller must not send. The refusal has
+    already been recorded: a warning, a counter and an audit row.
+    """
+    halt = await read_halt_latch()
+    if not halt.halted:
+        return False
+    await _record_refusal(surface.value, halt, channel_id)
+    return True
+
+
+async def bus_backstop(call: BusBackstopCall, channel_id: Optional[str] = None) -> Optional[AccordHaltState]:
+    """The bus-level backstop: refuse an effectful bus call the reasoning loop makes under a halt.
+
+    The act gate refuses before a handler runs; this catches what a handler,
+    or anything else inside the reasoning scope, sends after a halt landed
+    mid-act. Communication and tool calls are guarded across the reasoning
+    scope; memory writes only inside a handler's act (`ACT_SCOPED_BACKSTOP_CALLS`).
+    Calls outside the reasoning loop — a person's own data writes, a DSAR, the
+    audit chain — are not the agent's acts and pass.
+
+    Returns the halt when the call must be refused. Inside an act the refusal
+    is handed to the dispatcher, which records it as the act's refusal (audit
+    row, terminal ACTION_RESULT, thought back to PENDING).
+    """
+    act = _act_scope.get()
+    if act is None:
+        if call in ACT_SCOPED_BACKSTOP_CALLS:
+            return None
+        from ciris_engine.logic.infrastructure.authorization.reasoning_scope import in_reasoning_scope
+
+        if not in_reasoning_scope():
+            return None
+    if _exempt_scope.get() is not None:
+        return None
+    halt = await read_halt_latch()
+    if not halt.halted:
+        return None
+    if act is not None:
+        if act.refused is None:
+            act.refused = halt
+        _refusals[call.value] = _refusals.get(call.value, 0) + 1
+        logger.warning(
+            f"Accord halt: backstop refused {call.value} inside {act.action.value} ({halt.refusal_reason()})"
+        )
+    else:
+        await _record_refusal(call.value, halt, channel_id)
+    return halt
 
 
 async def hold_tick(stop_event: Optional[asyncio.Event] = None) -> None:
@@ -263,6 +421,13 @@ def accord_pause_notice(now: Optional[datetime] = None) -> Optional[str]:
 
 
 __all__ = [
+    "AgentAct",
+    "agent_act_scope",
+    "bind_refusal_audit",
+    "bus_backstop",
+    "refusal_counts",
+    "refuse_agent_send_under_halt",
+    "run_when_first_unhalted",
     "HALT_HOLD_TICK_SECONDS",
     "HALT_READ_CACHE_TTL_SECONDS",
     "HALT_STATUS_URL",

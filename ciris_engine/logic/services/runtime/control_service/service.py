@@ -206,18 +206,17 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
         # could never succeed, describing a control that was not the one
         # protecting the system.
         #
-        # Authorities now come from the accord verifier — ONE authority source,
-        # two entry surfaces (a stego-encoded AccordPayload, and the
-        # WASignedCommand this API accepts). The two wire formats differ; the
-        # trust root must not.
+        # Authorities now come from EmergencyAuthorities (accord/authorities.py)
+        # — ONE authority source for the WASignedCommand this API accepts. (The
+        # stego AccordPayload that shared it is retired, #1231: the CC 4.2.1.1
+        # halt is verified and latched by the node.)
         #
         # REDUNDANT BY DESIGN: the substrate carries its own, separate kill
         # switch that halts the node itself. These are not competing paths —
         # this one stops the agent, the substrate's stops the node underneath
         # it. Defence in depth: either alone is sufficient to stop the system.
         #
-        # TODO(#998): migrate to trust-root-backed PQC STEGO once designed and
-        # shipped. Today's authority set is Ed25519 over the steward keys.
+        # TODO(#998): today's authority set is Ed25519 over the steward keys.
         self._kill_switch_config = KillSwitchConfig(
             enabled=True,
             trust_tree_depth=3,
@@ -711,15 +710,13 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             True if signature is valid, False otherwise
         """
         try:
-            # Authority resolved from the ACCORD VERIFIER (#998) — the same
-            # trust root the stego kill switch uses. The verifier SIGKILLs the
-            # process if it loads zero authorities, so an empty set here is not
-            # a reachable state the way the old private map's was.
+            # Authority resolved from EmergencyAuthorities (#998). An empty
+            # roster resolves no key, so every command is refused (fail closed).
             from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
-            from ciris_engine.logic.accord.verifier import AccordVerifier
+            from ciris_engine.logic.accord.authorities import EmergencyAuthorities
 
-            key_bytes = AccordVerifier().public_key_for(command.wa_id)
+            key_bytes = EmergencyAuthorities().public_key_for(command.wa_id)
             if key_bytes is None:
                 logger.error(f"WA {command.wa_id} is not a trusted accord authority")
                 return False

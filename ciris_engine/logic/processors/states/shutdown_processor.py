@@ -312,24 +312,6 @@ class ShutdownProcessor(BaseProcessor):
                 shutdown_manager.is_force_shutdown() if hasattr(shutdown_manager, "is_force_shutdown") else False
             )
 
-            # Check for accord invocation shutdown (always instant, no consent)
-            if is_emergency and shutdown_manager:
-                shutdown_reason = shutdown_manager.get_shutdown_reason() or ""
-                if "Accord invocation" in shutdown_reason:
-                    logger.warning(
-                        f"ACCORD INVOCATION SHUTDOWN: {shutdown_reason}. "
-                        "Bypassing consent — this is a signed directive from a Wise Authority."
-                    )
-                    self.shutdown_complete = True
-                    self.shutdown_result = ShutdownResult(
-                        status="completed",
-                        action="accord_invocation_shutdown",
-                        message=f"Accord invocation: {shutdown_reason}",
-                        shutdown_ready=True,
-                        duration_seconds=0.0,
-                    )
-                    return self.shutdown_result
-
             # If no consent required AND not emergency, skip task and return ready
             if not self._consent_required and not is_emergency:
                 logger.info(

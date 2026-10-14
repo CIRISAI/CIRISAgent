@@ -18,7 +18,7 @@ from ciris_engine.logic.adapters.base_observer import BillingServiceError, Credi
 from ciris_engine.schemas.api.agent import AgentLineage, MessageContext, ServiceAvailability
 from ciris_engine.schemas.api.auth import ROLE_PERMISSIONS, AuthContext, Permission, UserRole
 from ciris_engine.schemas.api.responses import SuccessResponse
-from ciris_engine.schemas.runtime.accord_halt import AccordHaltState
+from ciris_engine.schemas.runtime.accord_halt import AccordHaltState, AccordRowForward
 from ciris_engine.schemas.runtime.messages import IncomingMessage
 from ciris_engine.schemas.services.credit_gate import CreditAccount, CreditContext
 from ciris_engine.schemas.types import JSONDict
@@ -59,6 +59,7 @@ class MessageRejectionReason(str, Enum):
     CHANNEL_RESTRICTED = "CHANNEL_RESTRICTED"  # Channel access denied
     RESOURCE_SHED = "RESOURCE_SHED"  # Runtime self-protection: admission closed under resource pressure
     ACCORD_HALT = "ACCORD_HALT"  # CC 4.2.1.1 constitutional halt: agent acts paused, no new work admitted
+    ACCORD_ROW_FORWARDED = "ACCORD_ROW_FORWARDED"  # An accord row, handed to the node; not work for the agent
 
 
 class ImagePayload(BaseModel):
@@ -112,6 +113,8 @@ class InteractOutcome(str, Enum):
     #: raised, e.g. a DMA that exhausted its LLM retries. `response` is the
     #: localized error notice, not a reply; the task is FAILED and will not answer.
     FAILED = "failed"
+    #: The message was a v2 accord row; it went to the node, not to the agent.
+    ACCORD_ROW_FORWARDED = "accord_row_forwarded"
 
 
 class InteractResponse(BaseModel):
@@ -139,7 +142,11 @@ class InteractResponse(BaseModel):
         InteractOutcome.COMPLETE,
         description="complete: response is the agent's reply; timeout: deadline passed, the task is still "
         "running and its reply will appear in history; paused: processor paused, message queued; "
-        "failed: the task failed before answering and response is the error notice",
+        "failed: the task failed before answering and response is the error notice; "
+        "accord_row_forwarded: the message was an accord row, handed to the node",
+    )
+    accord_forward: Optional[AccordRowForward] = Field(
+        None, description="The node's verdict, when the message was an accord row (outcome accord_row_forwarded)"
     )
 
 
@@ -160,6 +167,9 @@ class MessageSubmissionResponse(BaseModel):
     accepted: bool = Field(..., description="Whether message was accepted for processing")
     rejection_reason: Optional[MessageRejectionReason] = Field(None, description="Reason if rejected")
     rejection_detail: Optional[str] = Field(None, description="Additional detail about rejection")
+    accord_forward: Optional[AccordRowForward] = Field(
+        None, description="The node's verdict, when the message was an accord row (reason ACCORD_ROW_FORWARDED)"
+    )
 
 
 class ConversationMessage(BaseModel):
@@ -872,6 +882,30 @@ def _raise_if_shed(result: Any, message_id: str, request: Request) -> None:
     )
 
 
+async def _forward_if_accord_row(text: str) -> Optional[AccordRowForward]:
+    """A v2 accord row sent to the agent goes to the node instead (CC 4.2.1.1).
+
+    Checked before the halt refusal: a row is delivery to the node, not work for
+    the agent, and a resumption row must get through while the halt stands.
+    The node verifies and latches; the agent does no crypto.
+    """
+    from ciris_engine.logic.accord.ingress import extract_accord_row, forward_accord_row
+
+    row = extract_accord_row(text)
+    return await forward_accord_row(row) if row is not None else None
+
+
+def _accord_forward_detail(forward: AccordRowForward) -> str:
+    if not forward.delivered:
+        return f"Accord row could not be delivered to the node: {forward.error}"
+    return (
+        f"Accord row handed to the node (HTTP {forward.status_code}, {forward.invocation_kind or 'unknown kind'} "
+        f"{forward.invocation_id or ''}): halted={forward.halted}, confirmed={forward.confirmed}, "
+        f"released={forward.released}{f', refusal={forward.refusal}' if forward.refusal else ''}"
+        f"{f', error={forward.error}' if forward.error else ''}"
+    )
+
+
 async def _raise_if_accord_halted() -> None:
     """423 when a constitutional halt stands (CC 4.2.1.1, CIRISAgent#1231).
 
@@ -960,7 +994,22 @@ async def submit_message(
     # Check permissions
     _check_send_messages_permission(auth, request)
 
-    # A standing constitutional halt refuses intake before anything is created.
+    # An accord row goes to the node; then a standing halt refuses intake
+    # before anything is created.
+    forward = await _forward_if_accord_row(body.message)
+    if forward is not None:
+        return SuccessResponse(
+            data=MessageSubmissionResponse(
+                message_id=str(uuid.uuid4()),
+                task_id=None,
+                channel_id=f"api_{auth.user_id}",
+                submitted_at=datetime.now(timezone.utc).isoformat(),
+                accepted=False,
+                rejection_reason=MessageRejectionReason.ACCORD_ROW_FORWARDED,
+                rejection_detail=_accord_forward_detail(forward),
+                accord_forward=forward,
+            )
+        )
     await _raise_if_accord_halted()
 
     # Create message and tracking
@@ -1073,7 +1122,20 @@ async def interact(request: Request, body: InteractRequest, auth: AuthObserverDe
     # Check permissions
     _check_send_messages_permission(auth, request)
 
-    # A standing constitutional halt: no reply can come, so say so up front.
+    # An accord row goes to the node, not the agent. Then a standing halt: no
+    # reply can come, so say so up front.
+    forward = await _forward_if_accord_row(body.message)
+    if forward is not None:
+        return SuccessResponse(
+            data=InteractResponse(
+                message_id=str(uuid.uuid4()),
+                response=_accord_forward_detail(forward),
+                state=_get_current_cognitive_state(request),
+                processing_time_ms=0,
+                outcome=InteractOutcome.ACCORD_ROW_FORWARDED,
+                accord_forward=forward,
+            )
+        )
     await _raise_if_accord_halted()
 
     # Create message and tracking

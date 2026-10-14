@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING, Any, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ciris_engine.schemas.runtime.accord_halt import AccordRowForward
+
 if TYPE_CHECKING:
     from ciris_engine.schemas.runtime.models import ImageContent
 
@@ -43,6 +45,7 @@ class MessageHandlingStatus(str, Enum):
     CHANNEL_RESTRICTED = "CHANNEL_RESTRICTED"  # Channel access denied
     UPDATED_EXISTING_TASK = "UPDATED_EXISTING_TASK"  # Flagged existing task with new info
     RESOURCE_SHED = "RESOURCE_SHED"  # Runtime self-protection: admission closed under resource pressure
+    ACCORD_ROW_FORWARDED = "ACCORD_ROW_FORWARDED"  # A v2 accord row, handed to the node (CC 4.2.1.1); no task
 
 
 class PassiveObservationResult(BaseModel):
@@ -71,6 +74,9 @@ class MessageHandlingResult(BaseModel):
     existing_task_updated: bool = Field(default=False, description="Whether an existing task was updated")
     shed_resources: List[str] = Field(
         default_factory=list, description="Resources holding admission closed (status RESOURCE_SHED)"
+    )
+    accord_forward: Optional[AccordRowForward] = Field(
+        None, description="The node's verdict on a forwarded accord row (status ACCORD_ROW_FORWARDED)"
     )
 
     model_config = ConfigDict(defer_build=True)

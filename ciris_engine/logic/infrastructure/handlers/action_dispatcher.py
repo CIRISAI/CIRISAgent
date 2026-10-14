@@ -8,7 +8,7 @@ from ciris_engine.logic import persistence
 from ciris_engine.logic.infrastructure.authorization.reasoning_scope import reasoning_scope
 from ciris_engine.logic.processors.core.step_decorators import step_point, streaming_step
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
-from ciris_engine.logic.utils.halt_latch import exempt_act_for, exempt_act_scope, read_halt_latch
+from ciris_engine.logic.utils.halt_latch import agent_act_scope, exempt_act_for, exempt_act_scope, read_halt_latch
 from ciris_engine.protocols.services.graph.telemetry import TelemetryServiceProtocol
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.accord_halt import ACCORD_HALT_REFUSAL, AccordHaltState
@@ -398,8 +398,28 @@ class ActionDispatcher:
         # Record telemetry
         await self._record_handler_invocation(action_type, handler)
 
-        # Execute handler
-        follow_up_thought_id = await handler.handle(final_action_result, thought, dispatch_context)
+        # Execute handler, inside the act scope the bus backstop reads. A halt
+        # that lands mid-act is refused at the bus and handed back here, and the
+        # act is then recorded as refused — whatever the handler made of the
+        # failed send. A handler that raised because of it is the same refusal.
+        with agent_act_scope(action_type) as act:
+            try:
+                follow_up_thought_id = await handler.handle(final_action_result, thought, dispatch_context)
+            except Exception:
+                if act.refused is None:
+                    raise
+                follow_up_thought_id = None
+        if act.refused is not None:
+            return await self._refuse_under_accord_halt(
+                act.refused,
+                handler,
+                final_action_result,
+                thought,
+                dispatch_context,
+                action_type,
+                thought_item,
+                action_selection_result,
+            )
 
         # Calculate execution time
         execution_time_ms = (self._time_service.now() - start_time).total_seconds() * 1000.0

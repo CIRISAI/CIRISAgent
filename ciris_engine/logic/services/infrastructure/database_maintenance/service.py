@@ -21,10 +21,11 @@ from ciris_engine.logic.persistence import (
     get_thoughts_older_than,
 )
 from ciris_engine.logic.services.base_scheduled_service import BaseScheduledService
-from ciris_engine.logic.utils.halt_latch import read_halt_latch
+from ciris_engine.logic.utils.halt_latch import read_halt_latch, refuse_agent_send_under_halt, run_when_first_unhalted
 from ciris_engine.logic.utils.localization import get_preferred_language, get_string
 from ciris_engine.protocols.services.infrastructure.database_maintenance import DatabaseMaintenanceServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
+from ciris_engine.schemas.runtime.accord_halt import AgentSendSurface
 from ciris_engine.schemas.runtime.enums import ServiceType, TaskStatus, ThoughtStatus
 
 logger = logging.getLogger(__name__)
@@ -205,7 +206,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         await self._cleanup_stale_wakeup_tasks()
 
         # --- Clean up old active tasks from previous runs ---
-        await self._cleanup_old_active_tasks()
+        await self._sweep_old_active_tasks_at_startup()
 
         # --- Clean up duplicate temporal edges (v1.5.6 PostgreSQL bug) ---
         await self._cleanup_duplicate_temporal_edges()
@@ -940,6 +941,30 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         except Exception as e:
             logger.error(f"Failed to clean up old active tasks: {e}", exc_info=True)
 
+    async def _sweep_old_active_tasks_at_startup(self) -> None:
+        """The startup old-task sweep, deferred while the halt latch cannot be read clear.
+
+        CC 4.2.1.1: after a restart under a standing halt these "old" tasks are
+        the held ones, waiting to re-deliberate. The node is usually not
+        answering yet when startup cleanup runs, so read the latch: with no halt
+        standing the sweep runs now, as it always did; otherwise it waits for
+        the first reading that finds none, and is skipped if a halt was seen on
+        the way. The stale WAKEUP/shutdown sweep is not deferred — it must run
+        before a fresh wakeup (#1069) and touches only ceremony tasks.
+        """
+        if not (await read_halt_latch()).halted:
+            await self._cleanup_old_active_tasks()
+            return
+        run_when_first_unhalted(self._deferred_old_task_sweep)
+        logger.info("Old-task sweep deferred until the constitutional-halt latch reads clear")
+
+    async def _deferred_old_task_sweep(self, halt_seen: bool) -> None:
+        """The startup old-task sweep, run once the latch first reads clear."""
+        if halt_seen:
+            logger.info("Old-task sweep skipped: those tasks were held by a constitutional halt, not abandoned")
+            return
+        await self._cleanup_old_active_tasks()
+
     async def _notify_stale_task_completed(self, task: Any) -> None:
         """Send a notification to the channel that a stale task was auto-completed due to restart."""
         if not self.bus_manager:
@@ -961,6 +986,10 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
                 f"No communication service available for channel {channel_id} - "
                 "skipping stale task notification (adapter may not be initialized yet)"
             )
+            return
+
+        # CC 4.2.1.1: the notice is the agent speaking, from a maintenance loop.
+        if await refuse_agent_send_under_halt(AgentSendSurface.STALE_TASK_NOTICE, channel_id):
             return
 
         try:

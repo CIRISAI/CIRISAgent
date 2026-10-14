@@ -2,7 +2,7 @@
 Constitutional halt (CC 4.2.1.1) — the agent's typed view of the node's latch.
 
 The node owns the latch: it verifies the holder's row, writes
-``<CIRIS_HOME>/HUMANITY_ACCORD_HALT``, runs the fuse on its own clock and clears
+the latch file in ``CIRIS_HOME``, runs the fuse on its own clock and clears
 the latch on a strict-majority ``lifecycle:active``. The agent only READS it,
 through ``GET /v1/accord/halt-status`` (CIRISAgent#1231), and these are the
 shapes that read produces.
@@ -101,6 +101,71 @@ class AccordHaltExemptAct(str, Enum):
 ACCORD_HALT_EXEMPT_ACTS: FrozenSet[AccordHaltExemptAct] = frozenset(AccordHaltExemptAct)
 
 
+class AgentSendSurface(str, Enum):
+    """Agent-originated outbound paths that do not run through the act gate.
+
+    Each is gated where it sends, with the same reader, and a refusal is
+    recorded (audit row + warning), never dropped silently. The totality scan
+    (`tests/.../test_accord_halt_totality.py`) holds the list complete.
+    """
+
+    DREAM_ANNOUNCE = "dream_announce"
+    DISCORD_DEFERRAL_CHANNEL = "discord_deferral_channel"
+    WA_FEEDBACK_RELAY = "wa_feedback_relay"
+    DISCORD_GUIDANCE_RESPONSE = "discord_guidance_response"
+    DEFERRAL_RESOLUTION_NOTICE = "deferral_resolution_notice"
+    STALE_TASK_NOTICE = "stale_task_notice"
+
+
+class BusBackstopCall(str, Enum):
+    """The bus entry points the halt backstop guards (CC 4.2.1.1)."""
+
+    COMMUNICATION_SEND = "communication.send_message"
+    COMMUNICATION_SEND_SYNC = "communication.send_message_sync"
+    TOOL_EXECUTE = "tool.execute_tool"
+    MEMORY_MEMORIZE = "memory.memorize"
+    MEMORY_FORGET = "memory.forget"
+    MEMORY_CREATE_EDGE = "memory.create_edge"
+    WISE_FETCH_GUIDANCE = "wise.fetch_guidance"
+    WISE_REQUEST_GUIDANCE = "wise.request_guidance"
+
+
+#: Memory writes are guarded only while a handler is running the act: the audit
+#: chain and telemetry write through the same bus inside the reasoning scope,
+#: and those records must keep landing (the refusal's own audit row among them).
+ACT_SCOPED_BACKSTOP_CALLS: FrozenSet[BusBackstopCall] = frozenset(
+    {BusBackstopCall.MEMORY_MEMORIZE, BusBackstopCall.MEMORY_FORGET, BusBackstopCall.MEMORY_CREATE_EDGE}
+)
+
+
+#: The CEG relay-envelope schema tag and the kind the node's
+#: `POST /v1/accord/message` parses (CIRISVerify `ceg_outbox::SCHEMA`,
+#: `accord_genesis::ACCORD_INVOCATION_KIND`).
+CEG_SIGNED_OBJECT_SCHEMA = "ciris.ceg.signed-object.v1"
+ACCORD_INVOCATION_KIND = "accord_invocation"
+
+
+class AccordRowForward(BaseModel):
+    """What the node said about an accord row the agent forwarded to it.
+
+    The agent does no crypto: it hands the row over byte for byte and reports
+    the node's verdict. Only the node verifies, latches, confirms or releases.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    delivered: bool = Field(..., description="The node answered (any status); False when it could not be reached")
+    status_code: Optional[int] = Field(None, description="The node's HTTP status")
+    accepted: Optional[bool] = Field(None, description="The node accepted the row as authentic")
+    invocation_kind: Optional[str] = Field(None, description="constitutional / notify / drill / lifecycle:*")
+    invocation_id: Optional[str] = Field(None, description="The row's invocation_id, per the node")
+    halted: Optional[bool] = Field(None, description="The row latched a halt")
+    confirmed: Optional[bool] = Field(None, description="The row confirmed the standing halt")
+    released: Optional[bool] = Field(None, description="The row released the standing halt")
+    refusal: Optional[str] = Field(None, description="Why a quorum-complete row did nothing, per the node")
+    error: Optional[str] = Field(None, description="Transport error or the node's error detail")
+
+
 class AccordPauseEpisode(BaseModel):
     """One halt the node reported and then stopped reporting.
 
@@ -123,5 +188,11 @@ __all__ = [
     "AccordHaltReading",
     "AccordHaltState",
     "AccordPauseEpisode",
+    "AccordRowForward",
+    "ACCORD_INVOCATION_KIND",
+    "CEG_SIGNED_OBJECT_SCHEMA",
+    "ACT_SCOPED_BACKSTOP_CALLS",
+    "AgentSendSurface",
+    "BusBackstopCall",
     "UNHALTED_READINGS",
 ]

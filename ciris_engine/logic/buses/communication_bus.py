@@ -13,9 +13,11 @@ if TYPE_CHECKING:
     from ciris_engine.logic.registries.base import ServiceRegistry
 
 from ciris_engine.logic.registries.base import Priority
+from ciris_engine.logic.utils.halt_latch import bus_backstop
 from ciris_engine.protocols.services import CommunicationService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.infrastructure.base import BusMetrics
+from ciris_engine.schemas.runtime.accord_halt import BusBackstopCall
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.messages import FetchedMessage
 
@@ -158,6 +160,9 @@ class CommunicationBus(BaseBus[CommunicationService]):
 
         This is async and returns immediately after queuing.
         """
+        # CC 4.2.1.1 backstop: the reasoning loop does not speak under a halt.
+        if await bus_backstop(BusBackstopCall.COMMUNICATION_SEND, channel_id) is not None:
+            return False
         message = SendMessageRequest(
             id=str(uuid.uuid4()),
             handler_name=handler_name,
@@ -183,6 +188,9 @@ class CommunicationBus(BaseBus[CommunicationService]):
         Routes based on channel_id prefix for cross-adapter communication.
         If channel_id is None, uses the highest priority adapter's home channel.
         """
+        # CC 4.2.1.1 backstop: the reasoning loop does not speak under a halt.
+        if await bus_backstop(BusBackstopCall.COMMUNICATION_SEND_SYNC, channel_id) is not None:
+            return False
         service = None
         resolved_channel_id = channel_id
 

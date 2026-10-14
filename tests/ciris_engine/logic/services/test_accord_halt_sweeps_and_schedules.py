@@ -107,3 +107,84 @@ async def test_missed_recurring_schedules_coalesce_to_one_fire(latch):
     clock.t += timedelta(minutes=1)
     await scheduler._run_scheduled_task()
     assert created == ["hourly"]
+
+
+# --------------------------------------------------------------------------- #
+# Restart under a standing halt: the startup old-task sweep waits for the latch
+# --------------------------------------------------------------------------- #
+
+UNREACHABLE = _state(True, AccordHaltReading.NODE_UNREACHABLE)
+
+
+@pytest.mark.asyncio
+async def test_startup_sweep_runs_inline_when_no_halt_stands(latch):
+    latch.state = NOT_HALTED
+    svc = _maintenance()
+    await svc._sweep_old_active_tasks_at_startup()
+    svc._cleanup_old_active_tasks.assert_awaited_once()
+    assert halt_latch._unhalted_hooks == []
+
+
+@pytest.mark.asyncio
+async def test_startup_sweep_waits_for_the_boot_window_and_then_runs(latch):
+    """Node not answering yet: deferred; the first clear reading runs it, before that read returns."""
+    latch.state = UNREACHABLE
+    svc = _maintenance()
+    await svc._sweep_old_active_tasks_at_startup()
+    svc._cleanup_old_active_tasks.assert_not_awaited()
+
+    latch.state = NOT_HALTED
+    assert (await halt_latch.read_halt_latch()).halted is False
+    svc._cleanup_old_active_tasks.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("via", ["held_then_released", "lapsed_while_down"])
+async def test_held_tasks_survive_a_restart_under_the_halt(latch, via):
+    latch.state = UNREACHABLE
+    svc = _maintenance()
+    await svc._sweep_old_active_tasks_at_startup()
+
+    if via == "held_then_released":
+        latch.state = HALTED
+        await halt_latch.read_halt_latch()  # the restarted agent finds the halt standing
+        latch.state = NOT_HALTED
+    else:
+        latch.state = _state(False, AccordHaltReading.LAPSED, "inv-sweep")
+    await halt_latch.read_halt_latch()
+
+    svc._cleanup_old_active_tasks.assert_not_awaited()  # they were held, not abandoned
+    assert halt_latch._unhalted_hooks == []  # and the deferral is spent
+
+
+@pytest.mark.asyncio
+async def test_startup_cleanup_uses_the_deferring_sweep(monkeypatch, latch):
+    """perform_startup_cleanup routes the old-task sweep through the halt-aware path."""
+    from ciris_engine.logic.services.infrastructure.database_maintenance import service as maint
+
+    for name in (
+        "get_tasks_by_status",
+        "get_thoughts_by_status",
+        "get_thoughts_older_than",
+    ):
+        monkeypatch.setattr(maint, name, lambda *a, **k: [])
+    svc = _maintenance()
+    svc.time_service = Mock(now=Mock(return_value=datetime.now(timezone.utc)))
+    svc.archive_dir = Mock()
+    svc.archive_older_than_hours = 24
+    svc._cleanup_runs = 0
+    for step in (
+        "_reclaim_orphaned_processing_thoughts",
+        "_cleanup_invalid_thoughts",
+        "_cleanup_runtime_config",
+        "_dedupe_adapter_configs",
+        "_cleanup_non_persistent_adapters",
+        "_check_legacy_covenant_config",
+        "_cleanup_duplicate_temporal_edges",
+    ):
+        setattr(svc, step, AsyncMock())
+    latch.state = UNREACHABLE
+    await svc.perform_startup_cleanup()
+    svc._cleanup_stale_wakeup_tasks.assert_awaited_once()  # #1069: ceremony sweep is never deferred
+    svc._cleanup_old_active_tasks.assert_not_awaited()
+    assert len(halt_latch._unhalted_hooks) == 1

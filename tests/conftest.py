@@ -781,6 +781,11 @@ def _stub_accord_halt_latch(request, monkeypatch):
     monkeypatch.setattr(halt_latch, "_cached_at", 0.0)
     monkeypatch.setattr(halt_latch, "_episode_start", None)
     monkeypatch.setattr(halt_latch, "_last_episode", None)
+    monkeypatch.setattr(halt_latch, "_refusals", {})
+    monkeypatch.setattr(halt_latch, "_refusal_audit", None)
+    monkeypatch.setattr(halt_latch, "_unhalted_hooks", [])
+    monkeypatch.setattr(halt_latch, "_halt_seen", False)
+    monkeypatch.setattr(halt_latch, "_hooks_lock", None)
     if request.node.get_closest_marker("real_halt_latch"):
         return
     from datetime import datetime, timezone

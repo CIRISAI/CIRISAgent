@@ -95,11 +95,11 @@ async def get_kill_switch_status(
     # being rejected. A status surface that cannot report its own failure is
     # worse than no status surface.
     #
-    # Authorities now come from the accord verifier — the same trust root the
-    # stego kill switch verifies against.
-    from ciris_engine.logic.accord.verifier import AccordVerifier
+    # Authorities now come from EmergencyAuthorities (accord/authorities.py),
+    # the one trust root for the signed emergency command.
+    from ciris_engine.logic.accord.authorities import EmergencyAuthorities
 
-    verifier = AccordVerifier()
+    verifier = EmergencyAuthorities()
     authorities = verifier.list_authorities()
 
     status: JSONDict = {
@@ -110,7 +110,7 @@ async def get_kill_switch_status(
         "trust_root": "accord-verifier",
         "signature_scheme": "ed25519",
         # LEGACY marker on the wire, not only in the source. TODO(#998):
-        # trust-root-backed PQC STEGO once designed and shipped.
+        # trust-root-backed PQC once designed and shipped.
         "legacy": True,
         # Redundant by design: the substrate carries its own kill switch that
         # halts the node itself. Stopping the agent and stopping the node are

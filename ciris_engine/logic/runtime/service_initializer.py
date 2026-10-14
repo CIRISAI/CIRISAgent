@@ -1788,6 +1788,11 @@ This directory contains critical cryptographic keys for the CIRIS system.
         updated_handlers = inject_graph_audit_service_to_handlers(self.audit_service)
         logger.info(f"Injected graph audit service into {updated_handlers} incident capture handler(s)")
 
+        # Refusals the constitutional halt makes outside the act gate are audited here.
+        from ciris_engine.logic.utils.halt_latch import bind_refusal_audit
+
+        bind_refusal_audit(self.audit_service)
+
         # Audit sink manager removed - GraphAuditService handles its own lifecycle
         logger.info("GraphAuditService handles its own retention and cleanup")
 

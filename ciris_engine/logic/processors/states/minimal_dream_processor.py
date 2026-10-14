@@ -23,7 +23,7 @@ from ciris_engine.logic.config import ConfigAccessor
 from ciris_engine.logic.processors.core.base_processor import BaseProcessor
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem, ThoughtContent
 from ciris_engine.logic.utils.context_utils import build_dispatch_context
-from ciris_engine.logic.utils.halt_latch import hold_tick, read_halt_latch
+from ciris_engine.logic.utils.halt_latch import hold_tick, read_halt_latch, refuse_agent_send_under_halt
 from ciris_engine.schemas.actions import PonderParams
 from ciris_engine.schemas.conscience.core import EpistemicData
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
@@ -31,6 +31,7 @@ from ciris_engine.schemas.processors.base import ProcessorServices
 from ciris_engine.schemas.processors.core import ConscienceApplicationResult
 from ciris_engine.schemas.processors.results import DreamResult
 from ciris_engine.schemas.processors.states import AgentState
+from ciris_engine.schemas.runtime.accord_halt import AgentSendSurface
 from ciris_engine.schemas.runtime.enums import HandlerActionType, TaskStatus, ThoughtStatus, ThoughtType
 from ciris_engine.schemas.runtime.models import Task, TaskContext, Thought
 
@@ -447,6 +448,10 @@ class MinimalDreamProcessor(BaseProcessor):
     async def _announce(self, message: str) -> None:
         """Announce to startup channel if available."""
         if not self.startup_channel_id:
+            return
+
+        # CC 4.2.1.1: the announcement is the agent speaking, outside the act gate.
+        if await refuse_agent_send_under_halt(AgentSendSurface.DREAM_ANNOUNCE, self.startup_channel_id):
             return
 
         try:

@@ -227,9 +227,12 @@ it is reached. The parenthesised steps are **internal sub-steps that emit no row
 | `deletions_executed` | the `secrets_destroyed` row, which is reached only after every pending deletion has run, plus a tombstone by digest per executed deletion (§8.2) |
 | `assembled`, `verified`, `sealed` | the `handed_over` row, which carries the manifest digest and the seal mode. Reaching `handed_over` attests that the record was assembled, verified and sealed; a verify failure stops the workflow before any row |
 
-A cancel is allowed only between `decided` and `frozen`. No registered state
-carries it, so today it is an agent audit entry under the decider's name. Whether the
-CC should register a `cancelled` state is a question for CIRISConstitution#168.
+**Cancel.** There is no `cancelled` state. A planned retirement is cancelled by the
+decider `withdraws`-ing the `retirement:decided:v1` row (CC 2.4.1.1: taking back a
+declaration because circumstances changed). The withdraws is admissible only while
+no `retirement:frozen:v1` row exists for that `retirement_id`; after the freeze it is
+refused. The wire act is the withdraws. The agent audit entry under the decider's
+name stays as its local echo (E-29).
 
 Every transition is idempotent and resumable. State is held twice: an
 IDENTITY-scope node `retirement_record/<id>` and a file marker `<home>/RETIRED`.
@@ -602,7 +605,7 @@ All schemas Pydantic, no `Dict[str, Any]`. Routes marked † are served after RE
 |---|---|---|
 | `POST /v1/system/retirement` | WA standing (ROOT/AUTHORITY) on this agent | Create a `RetirementOrder`; 202 with `retirement_id` and `preserve_until` |
 | `GET /v1/system/retirement` | steward | Phase, agent response, manifest digest, preserve request, operator response |
-| `POST /v1/system/retirement/{id}/confirm` · `/cancel` | steward | Confirm over an objection (5b); cancel only before FROZEN |
+| `POST /v1/system/retirement/{id}/confirm` · `/cancel` | steward | Confirm over an objection (5b). Cancel emits the decider's `withdraws` of the `decided` row; refused once a `frozen` row exists |
 | `GET /v1/system/retirement/{id}/manifest` | steward / WA | Digests and dispositions only |
 | `POST /v1/retirement/{id}/access` † | data subject | DSAR access: a deferral to the steward, then a subject-scoped release |
 | `POST /v1/retirement/{id}/operator-response` † | operator (signed) | accepted / declined plus a statement |
@@ -632,11 +635,16 @@ families) as `CLM-retirement-rows`. These are the only names the workflow emits.
 | `takedown_notice:court_order:v1` + tombstone by digest | existing families | the order-to-destroy path. There is no `lawful_order:destroy` |
 | `hard_case:{kind}` | the harness or the custodian | kinds `legal_hold_set \| legal_hold_lifted \| legal_hold_violation_attempt` |
 
-**Prerequisite before any emission:** vendor the CC namespace registry
-(`manifests/namespace_registry.json`) into this repo at a CIRISConstitution tag that
-carries these families, and check its `registry_sha256`. The newest tag today is
-`v1.0-rc7`, which predates `7740dca`, so an rc8 tag (or later) is needed first. No
-emitting PR (P2, P4, P6–P9) merges before the registry is vendored.
+**Prerequisite before any emission: vendor the CC registry.**
+- **Development.** Vendor `manifests/namespace_registry.json` from CIRISConstitution
+  at commit `8f80685`. Check `registry_sha256` against the file's own contents, not
+  against a tag name. At `8f80685` it is `99d4d338…` (unchanged since `7740dca`).
+- **Canonical.** Re-vendor at the rc8 tag once it exists. The newest tag today is
+  `v1.0-rc7`, which predates these families.
+- **The gate.** Nothing is emitted to the canonical before the tag, and no emitting
+  PR (P2, P4, P6–P9) merges before then.
+- **rc8 has no date.** It is held on two things outside the CC repo: ciris-server
+  0.5.225 with the act-gate reader in place, and Edge's AV cut.
 
 ---
 
@@ -704,6 +712,7 @@ Each runs on a fixture where `runs_for_others()` is true.
 | E-26 | TEMPORARY: no TEMPORARY content in the package; counted under `temporary_stream`; their notice carries the deletion line |
 | E-27 | Content-free audit (P0): sentinel SPEAK and TOOL strings appear nowhere in the audit store; re-adding the raw `context.parameters` dump fails; a registry of audit call sites catches a new content-passing caller |
 | E-28 | Custodian key: listed in `retirement:retired:v1`; custody rows are admitted because that current row names the key, with no delegation row and no term; it cannot unwrap the seal; rows signed by the retired agent key or by a key the `retired` row does not list are refused; a `delegates_to` for custody must fail the test |
+| E-29 | Cancel: before `frozen`, the decider's `withdraws` of `retirement:decided:v1` is admitted and the workflow stops; after a `frozen` row exists for that `retirement_id`, the withdraws is refused and the workflow continues; a withdraws by anyone but the decider is refused; a stub that admits a withdraws after `frozen` must fail the test |
 
 **QA runner:** a new `retirement` module (mock LLM) drives AT-1 to AT-3, E-1, E-4
 and E-6 over HTTP, and E-27 joins the existing `audit` module. The AT results are
@@ -717,7 +726,7 @@ the evidence rows for `CLM-humane-ending`.
 |---|---|---|---|---|
 | **P0** content-free audit | every `log_action` / `log_event` caller; parameters restricted to ids, hashes, decisions; call-site registry | S-M (~400) | E-27 | none; ships now |
 | **P1** stop the bleeding | `runs_for_others()`; reset and wipe 409 on held agents; WA-standing gate; opt-in export on personal; drop the self-erasing audit write; make the wipe reach `<home>/identity/` or say it does not (#1261) | S (~350) | E-13, AT-1 neg. 1 | none; ships now |
-| **P2** order, state machine, authz, boot guard, custodian | schemas; shared-task claim; create / get / confirm / cancel; ShutdownProcessor composition; double marker; embedded-safe freeze; `retirement:{state}:v1` rows; custodian mint, listed in the `retired` row; chain closure | M-L (~1100) | E-3–E-5, E-8, E-18, E-25, E-28 | vendored CC registry (§13.1); the forced-shutdown fix; #1231 |
+| **P2** order, state machine, authz, boot guard, custodian | schemas; shared-task claim; create / get / confirm / cancel; ShutdownProcessor composition; double marker; embedded-safe freeze; `retirement:{state}:v1` rows; custodian mint, listed in the `retired` row; chain closure | M-L (~1100) | E-3–E-5, E-8, E-18, E-25, E-28, E-29 | vendored CC registry (§13.1); the forced-shutdown fix; #1231 |
 | **P3** retention hold | one flag across every eraser; registry test | S-M (~400) | E-11 | D2a later |
 | **P4** deletions, secrets, keys | the deletions_executed sub-step (incl. TEMPORARY); the SECRETS_DESTROYED state; keys retired in place | M (~650) | E-14, E-20, E-21, E-26 | D3 (interim: local row plus refusal) |
 | **P5** assemble and verify | SQLite backup, file copy, manifest with `subject_ref`, audit proofs, verify gate | M-L (~1000) | E-1, E-12 | D1 for PG (interim: paged export) |
@@ -760,7 +769,7 @@ managed agents and for mobile.
 ## 16. Decision log
 
 All rulings are Eric's, given as direct answers on **2026-10-14**. The CC text they
-build on landed on CIRISConstitution rc8 at `f5cea2d`; the row families (25, 26) at `7740dca`.
+build on landed on CIRISConstitution rc8 at `f5cea2d`; the row families (25, 26) at `7740dca`; the cancel rule (27) at `8f80685`.
 
 | # | Question | Decision | Where |
 |---|---|---|---|
@@ -795,6 +804,7 @@ build on landed on CIRISConstitution rc8 at `f5cea2d`; the row families (25, 26)
 | 24 | `reset-account` / `wipe-signing-key` | Route through the workflow or refuse on held agents; WA-standing gate | §12, E-13 |
 | 25 | CC row families | **Yes** to the CC's proposal, landed on CIRISConstitution rc8 at `7740dca`: five families (`retirement:{state}:v1`, `preserve_request:v1`, `preserve_response:v1`, `archive_release:{basis}:v1`, `lawful_order:release:v1`); destroy-by-order is `takedown_notice:court_order:v1` plus the tombstone; no record tombstone family; three `legal_hold` `hard_case` kinds | §5, §6.3, §8, §13.1 |
 | 26 | Custodian standing | Listed in `retirement:retired:v1`, not delegated; no term; no seal key; re-affirmation, if wanted, is a revised `preserve_response:v1` (`CLM-custodian-listed-not-delegated`) | §7, E-28 |
+| 27 | Cancelling a planned retirement | No `cancelled` state: the decider `withdraws` the `retirement:decided:v1` row (CC 2.4.1.1), admissible only while no `frozen` row exists for that `retirement_id`; the agent audit entry is the local echo (CIRISConstitution rc8 `8f80685`) | §5, §13, E-29 |
 
 No questions remain open. The remaining dependencies are the upstream asks (§15.1),
 each with an interim, and the two confirmed defects in §2 (#1261, CIRISManager#27).

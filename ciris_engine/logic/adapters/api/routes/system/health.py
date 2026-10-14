@@ -890,8 +890,16 @@ async def get_system_health(
     # agent's address so it needs only one.
     node_fold_state = collect_node_fold_state()
 
+    # The same read the act gate makes. A standing halt is not ill health — the
+    # node keeps serving and every read endpoint answers — so `status` is left
+    # alone and the halt is reported as its own fact.
+    from ciris_engine.logic.utils.halt_latch import read_halt_latch
+
+    accord_halt = await read_halt_latch()
+
     response = SystemHealthResponse(
         status=status,
+        accord_halt=accord_halt,
         # We are the brain. Say so — never make a client infer it.
         role="agent",
         version=CIRIS_VERSION,

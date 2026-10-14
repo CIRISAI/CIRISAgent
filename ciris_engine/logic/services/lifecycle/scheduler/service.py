@@ -16,6 +16,7 @@ from typing import Any, Dict, FrozenSet, List, Optional
 
 from ciris_engine.logic.persistence import add_thought
 from ciris_engine.logic.services.base_scheduled_service import BaseScheduledService
+from ciris_engine.logic.utils.halt_latch import read_halt_latch
 from ciris_engine.protocols.services import ServiceProtocol as TaskSchedulerServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.runtime.enums import ServiceType, TaskStatus, ThoughtStatus, ThoughtType
@@ -226,6 +227,13 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
 
     async def _run_scheduled_task(self) -> None:
         """Check for due tasks and trigger them."""
+        # CC 4.2.1.1: under a standing constitutional halt nothing fires. A due
+        # task stays due, so on resume each fires ONCE however many of its times
+        # passed: a cron task re-bases on its single trigger (`last_triggered_at`),
+        # which is what coalesces the missed fires.
+        if (await read_halt_latch()).halted:
+            return
+
         # Check for due tasks
         now = self._time_service.now() if self._time_service else datetime.now(timezone.utc)
         due_tasks = self._get_due_tasks(now)

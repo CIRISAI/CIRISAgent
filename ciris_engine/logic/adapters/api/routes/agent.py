@@ -18,6 +18,7 @@ from ciris_engine.logic.adapters.base_observer import BillingServiceError, Credi
 from ciris_engine.schemas.api.agent import AgentLineage, MessageContext, ServiceAvailability
 from ciris_engine.schemas.api.auth import ROLE_PERMISSIONS, AuthContext, Permission, UserRole
 from ciris_engine.schemas.api.responses import SuccessResponse
+from ciris_engine.schemas.runtime.accord_halt import AccordHaltState
 from ciris_engine.schemas.runtime.messages import IncomingMessage
 from ciris_engine.schemas.services.credit_gate import CreditAccount, CreditContext
 from ciris_engine.schemas.types import JSONDict
@@ -57,6 +58,7 @@ class MessageRejectionReason(str, Enum):
     RATE_LIMITED = "RATE_LIMITED"  # Rate limit exceeded
     CHANNEL_RESTRICTED = "CHANNEL_RESTRICTED"  # Channel access denied
     RESOURCE_SHED = "RESOURCE_SHED"  # Runtime self-protection: admission closed under resource pressure
+    ACCORD_HALT = "ACCORD_HALT"  # CC 4.2.1.1 constitutional halt: agent acts paused, no new work admitted
 
 
 class ImagePayload(BaseModel):
@@ -206,6 +208,9 @@ class AgentStatus(BaseModel):
     services_active: int = Field(..., description="Number of active services")
     memory_usage_mb: float = Field(..., description="Current memory usage in MB")
     multi_provider_services: Optional[JSONDict] = Field(None, description="Services with provider counts")
+    accord_halt: Optional[AccordHaltState] = Field(
+        None, description="The constitutional-halt latch as the agent's act gate last read it (CC 4.2.1.1)"
+    )
 
 
 class AgentIdentity(BaseModel):
@@ -867,6 +872,34 @@ def _raise_if_shed(result: Any, message_id: str, request: Request) -> None:
     )
 
 
+async def _raise_if_accord_halted() -> None:
+    """423 when a constitutional halt stands (CC 4.2.1.1, CIRISAgent#1231).
+
+    Checked FIRST, before SHED: a halted agent answers with its halt, not with a
+    resource condition. No Retry-After — the halt is not a resource condition,
+    and `lapses_at`, when the node reports one, is the honest bound. The error
+    token is the node's own, so a client sees one name for one fact.
+    """
+    from ciris_engine.logic.utils.halt_latch import read_halt_latch
+    from ciris_engine.schemas.runtime.accord_halt import ACCORD_HALT_REFUSAL
+
+    halt = await read_halt_latch()
+    if not halt.halted:
+        return
+    raise HTTPException(
+        status_code=423,
+        detail={
+            "error": ACCORD_HALT_REFUSAL,
+            "reason": MessageRejectionReason.ACCORD_HALT.value,
+            "message": (
+                "The agent's acts are paused under a constitutional halt. Nothing was admitted; "
+                "the halt ends when the holders release it or its fuse lapses."
+            ),
+            "halt": halt.model_dump(mode="json"),
+        },
+    )
+
+
 def _cleanup_interaction_tracking(message_id: str, request: Optional[Request] = None) -> None:
     """Clean up interaction tracking for given message ID.
 
@@ -926,6 +959,9 @@ async def submit_message(
 
     # Check permissions
     _check_send_messages_permission(auth, request)
+
+    # A standing constitutional halt refuses intake before anything is created.
+    await _raise_if_accord_halted()
 
     # Create message and tracking
     message_id, channel_id, msg = await _create_interaction_message(auth, body, request)
@@ -1036,6 +1072,9 @@ async def interact(request: Request, body: InteractRequest, auth: AuthObserverDe
     """
     # Check permissions
     _check_send_messages_permission(auth, request)
+
+    # A standing constitutional halt: no reply can come, so say so up front.
+    await _raise_if_accord_halted()
 
     # Create message and tracking
     message_id, channel_id, msg = await _create_interaction_message(auth, body, request)
@@ -1630,6 +1669,8 @@ async def _build_agent_status(
     # Get version information
     version, codename, code_hash = _get_version_info()
 
+    from ciris_engine.logic.utils.halt_latch import read_halt_latch
+
     return AgentStatus(
         agent_id=agent_id,
         name=agent_name,
@@ -1644,6 +1685,7 @@ async def _build_agent_status(
         services_active=services_active,
         memory_usage_mb=memory_usage_mb,
         multi_provider_services=multi_provider_services,
+        accord_halt=await read_halt_latch(),
     )
 
 

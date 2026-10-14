@@ -23,6 +23,7 @@ from ciris_engine.logic.config import ConfigAccessor
 from ciris_engine.logic.processors.core.base_processor import BaseProcessor
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem, ThoughtContent
 from ciris_engine.logic.utils.context_utils import build_dispatch_context
+from ciris_engine.logic.utils.halt_latch import hold_tick, read_halt_latch
 from ciris_engine.schemas.actions import PonderParams
 from ciris_engine.schemas.conscience.core import EpistemicData
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
@@ -499,6 +500,12 @@ class MinimalDreamProcessor(BaseProcessor):
                 if elapsed >= duration:
                     logger.info(f"[DREAM] Duration reached ({elapsed:.0f}s >= {duration}s)")
                     break
+
+                # CC 4.2.1.1: the dream loop runs on its own task, outside the main
+                # round hold, so it holds itself. No dream thought advances.
+                if (await read_halt_latch()).halted:
+                    await hold_tick(self._stop_event)
+                    continue
 
                 # Process one round
                 _ = await self.process(round_number)

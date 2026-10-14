@@ -590,6 +590,11 @@ def pytest_configure(config):
         "real_attestation: opt out of the autouse stub that no-ops "
         "AuthenticationService.run_startup_attestation / _attestation_refresh_loop",
     )
+    config.addinivalue_line(
+        "markers",
+        "real_halt_latch: opt out of the autouse stub that answers the constitutional-halt "
+        "reader with 'no halt stands' (the test drives halt_latch itself)",
+    )
 
 
 # =============================================================================
@@ -755,6 +760,37 @@ def _stub_authentication_service_attestation(request, monkeypatch):
 
     monkeypatch.setattr(AuthenticationService, "run_startup_attestation", _stub_run_startup_attestation)
     monkeypatch.setattr(AuthenticationService, "_attestation_refresh_loop", _stub_attestation_refresh_loop)
+
+
+@pytest.fixture(autouse=True)
+def _stub_accord_halt_latch(request, monkeypatch):
+    """Answer the constitutional-halt reader with "no halt stands".
+
+    The reader fails closed (CIRISAgent#1231): with CIRIS_NODE_FOLD=false, as set
+    above, every read is HALTED, so without this stub no dispatch, round or
+    interact in the suite would run. It also keeps every test off :4243, which on
+    a developer machine is a real node.
+
+    The stub replaces only the node read; the cache, edge tracking and every
+    caller run for real. Tests that drive the latch opt out with
+    `@pytest.mark.real_halt_latch` and patch `halt_latch._read_from_node` themselves.
+    """
+    from ciris_engine.logic.utils import halt_latch
+
+    monkeypatch.setattr(halt_latch, "_cached", None)
+    monkeypatch.setattr(halt_latch, "_cached_at", 0.0)
+    monkeypatch.setattr(halt_latch, "_episode_start", None)
+    monkeypatch.setattr(halt_latch, "_last_episode", None)
+    if request.node.get_closest_marker("real_halt_latch"):
+        return
+    from datetime import datetime, timezone
+
+    from ciris_engine.schemas.runtime.accord_halt import AccordHaltReading, AccordHaltState
+
+    async def _not_halted() -> AccordHaltState:
+        return AccordHaltState(halted=False, reading=AccordHaltReading.NOT_HALTED, read_at=datetime.now(timezone.utc))
+
+    monkeypatch.setattr(halt_latch, "_read_from_node", _not_halted)
 
 
 @pytest.fixture(autouse=True)

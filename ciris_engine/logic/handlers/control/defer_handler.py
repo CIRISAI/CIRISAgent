@@ -6,6 +6,7 @@ from ciris_engine.logic import persistence
 from ciris_engine.logic.infrastructure.authorization.tool_approval import pending_tool_from_deferral_context
 from ciris_engine.logic.infrastructure.handlers.base_handler import BaseActionHandler
 from ciris_engine.logic.infrastructure.handlers.shared_helpers import parse_iso_timestamp
+from ciris_engine.logic.utils.halt_latch import running_exempt_under_halt
 from ciris_engine.logic.utils.localization import get_preferred_language, get_string
 from ciris_engine.schemas.actions import DeferParams
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
@@ -276,6 +277,12 @@ class DeferHandler(BaseActionHandler):
         self.logger.info(f"Marked parent task {parent_task_id} as DEFERRED due to child thought deferral.")
 
         if not task or not task.channel_id:
+            return
+
+        # Under a standing constitutional halt only the deferral WRITE is exempt
+        # (CC 4.2.1.1). The channel notice is the agent speaking, and is not.
+        if running_exempt_under_halt() is not None:
+            self.logger.info(f"Accord halt: deferral recorded; channel notice to {task.channel_id} withheld")
             return
 
         # Localize the defer notification. Task.preferred_language is the

@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 from ciris_engine.logic.runtime.adapter_manager import RuntimeAdapterManager
 from ciris_engine.logic.services.base_service import BaseService
+from ciris_engine.logic.utils.halt_latch import read_halt_latch
 from ciris_engine.protocols.services import RuntimeControlService as RuntimeControlServiceProtocol
 from ciris_engine.protocols.services import TimeServiceProtocol
 from ciris_engine.schemas.adapters.tools import ToolInfo, ToolParameterSchema
@@ -265,6 +266,24 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             error=_ERROR_AGENT_PROCESSOR_NOT_AVAILABLE,
         )
 
+    async def _refused_under_accord_halt(self, operation: str) -> Optional[ProcessorControlResponse]:
+        """Refuse an operator step past a standing constitutional halt (CC 4.2.1.1).
+
+        The halt is not an operator pause: no oversight or administrative tier
+        may resume it or step past it. Only the node's latch ends it.
+        """
+        halt = await read_halt_latch()
+        if not halt.halted:
+            return None
+        await self._record_event("processor_control", operation, success=False, error=halt.refusal_reason())
+        return ProcessorControlResponse(
+            success=False,
+            processor_name="agent",
+            operation=operation,
+            new_status=self._processor_status,
+            error=halt.refusal_reason(),
+        )
+
     async def _initialize(self) -> None:
         """Initialize the runtime control service."""
         try:
@@ -283,6 +302,10 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             agent_processor = self._get_agent_processor()
             if agent_processor is None:
                 return self._processor_not_available_response("single_step")
+
+            halt_refusal = await self._refused_under_accord_halt("single_step")
+            if halt_refusal is not None:
+                return halt_refusal
 
             # Ensure processor is paused
             if not agent_processor.is_paused():
@@ -422,6 +445,10 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             agent_processor = self._get_agent_processor()
             if agent_processor is None:
                 return self._processor_not_available_response("resume")
+
+            halt_refusal = await self._refused_under_accord_halt("resume")
+            if halt_refusal is not None:
+                return halt_refusal
 
             # Resuming normal processing must ALWAYS exit single-step mode —
             # unconditionally, before the resume call, regardless of whether

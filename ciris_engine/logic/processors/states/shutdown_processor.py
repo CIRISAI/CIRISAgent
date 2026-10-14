@@ -25,6 +25,7 @@ from ciris_engine.logic.processors.core.base_processor import BaseProcessor
 from ciris_engine.logic.processors.core.thought_processor import ThoughtProcessor
 from ciris_engine.logic.processors.support.shutdown_condition_evaluator import ShutdownConditionEvaluator
 from ciris_engine.logic.processors.support.thought_manager import ThoughtManager
+from ciris_engine.logic.utils.halt_latch import read_halt_latch
 from ciris_engine.logic.utils.shutdown_manager import get_shutdown_manager
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.config.cognitive_state_behaviors import CognitiveStateBehaviors
@@ -276,6 +277,23 @@ class ShutdownProcessor(BaseProcessor):
         logger.info(f"Shutdown processor: round {round_number}")
 
         try:
+            # CC 4.2.1.1: under a standing constitutional halt no one asks. The
+            # closing dialogue is an effectful act the halt does not exempt, and
+            # the pause is not a retirement, so the shutdown proceeds without it.
+            halt = await read_halt_latch()
+            if halt.halted:
+                logger.warning(f"Shutdown under a constitutional halt: no closing dialogue ({halt.refusal_reason()})")
+                self.shutdown_complete = True
+                self.shutdown_result = ShutdownResult(
+                    status="completed",
+                    action="shutdown_accepted",
+                    message="Shutdown under a standing constitutional halt; no closing dialogue",
+                    reason=halt.refusal_reason(),
+                    shutdown_ready=True,
+                    duration_seconds=0.0,
+                )
+                return self.shutdown_result
+
             # Evaluate consent requirement once per shutdown session
             if not self._consent_evaluated:
                 shutdown_context = ProcessorContext(origin="shutdown")
@@ -357,9 +375,7 @@ class ShutdownProcessor(BaseProcessor):
             # narrowing assert this replaces sat inside a try that catches Exception,
             # so a failure would have been swallowed as an ordinary error (Sonar
             # python:S5779) -- and asserts vanish entirely under `python -O`.
-            current_task = persistence.get_task_by_id(
-                current_task.task_id, current_task.agent_occurrence_id
-            )
+            current_task = persistence.get_task_by_id(current_task.task_id, current_task.agent_occurrence_id)
             if not current_task:
                 logger.error("Current task is None after fetching")
                 return ShutdownResult(status="error", message="Task not found", errors=1, duration_seconds=0.0)

@@ -21,6 +21,7 @@ from ciris_engine.logic.persistence import (
     get_thoughts_older_than,
 )
 from ciris_engine.logic.services.base_scheduled_service import BaseScheduledService
+from ciris_engine.logic.utils.halt_latch import read_halt_latch
 from ciris_engine.logic.utils.localization import get_preferred_language, get_string
 from ciris_engine.protocols.services.infrastructure.database_maintenance import DatabaseMaintenanceServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
@@ -86,6 +87,17 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         # stay in this service — they're business logic over agent
         # tables, not generic DB ops.
         await self._invoke_persist_maintenance()
+
+        # CC 4.2.1.1: under a standing constitutional halt the agent's tasks and
+        # thoughts are frozen, not stale. Both sweeps below are age-based (5
+        # minutes) and would complete or delete every held task — and the stale
+        # notice they send is the agent speaking. Skip them; they run again on
+        # the next cycle after the halt ends.
+        halt = await read_halt_latch()
+        if halt.halted:
+            logger.info(f"Stale-task sweeps skipped: tasks are held by a constitutional halt ({halt.refusal_reason()})")
+            logger.info("Periodic maintenance tasks completed.")
+            return
 
         # Clean up stale wakeup/shutdown tasks from dead occurrences
         # This is critical for multi-occurrence deployments where an occurrence

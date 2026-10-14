@@ -615,3 +615,22 @@ decimal_id	claim_id	repo	path#symbol	status
 # while carrying the same manifest. Without it a manifest edited in place left
 # two dumps indistinguishable from the artifacts alone.
 4.2.2	CLM-await-manifest-content-identity	CIRISAgent	ciris_engine/logic/utils/research_overrides.py#compute_manifest_digest	impl
+# CC 4.2.1.1 constitutional halt, agent side (CIRISAgent#1231). ONE reader of the
+# node's latch (GET /v1/accord/halt-status; fail closed; honours only the node's
+# `lapsed`; never writes or clears the latch). The act gate reads it per
+# effectful act, immediately before handler.handle, and a refused act is
+# RECORDED: a signed audit row plus a terminal ACTION_RESULT carrying the halt's
+# invocation_id (CC 1.13.6 totality). The thought returns to PENDING, never
+# FAILED, and re-deliberates on resume. One frozen exemption list: the deferral
+# write and the Retirement Standard harness steps. The witness test asserts the
+# act is stopped AND its ACTION_RESULT emitted. Graduates at CC re-pin 17.
+4.2.1.1	CLM-halt-one-row	CIRISAgent	ciris_engine/logic/utils/halt_latch.py#read_halt_latch	impl
+4.2.1.1	CLM-halt-one-row	CIRISAgent	ciris_engine/logic/infrastructure/handlers/action_dispatcher.py#ActionDispatcher._dispatch_inner	impl
+4.2.1.1	CLM-halt-one-row	CIRISAgent	ciris_engine/logic/infrastructure/handlers/action_dispatcher.py#ActionDispatcher._refuse_under_accord_halt	impl
+4.2.1.1	CLM-halt-one-row	CIRISAgent	ciris_engine/schemas/runtime/accord_halt.py#ACCORD_HALT_EXEMPT_ACTS	impl
+4.2.1.1	CLM-halt-one-row	CIRISAgent	tests/ciris_engine/logic/infrastructure/handlers/test_accord_halt_act_gate.py#test_latched_halt_stops_an_effectful_act_and_emits_its_action_result	impl
+# Not yet enforced: ~8 agent-originated sends outside the dispatcher (dream
+# announce, Discord deferral/guidance/resolution notices, WA feedback relay, the
+# stale-task notice) and the Home Assistant detection loop have no bus backstop
+# (PR-3), and v2 accord rows are not yet forwarded to the node (PR-5).
+4.2.1.1	CLM-halt-one-row	CIRISAgent	CIRISAgent#1231	open

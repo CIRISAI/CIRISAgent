@@ -8,8 +8,10 @@ from ciris_engine.logic import persistence
 from ciris_engine.logic.infrastructure.authorization.reasoning_scope import reasoning_scope
 from ciris_engine.logic.processors.core.step_decorators import step_point, streaming_step
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
+from ciris_engine.logic.utils.halt_latch import exempt_act_for, exempt_act_scope, read_halt_latch
 from ciris_engine.protocols.services.graph.telemetry import TelemetryServiceProtocol
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
+from ciris_engine.schemas.runtime.accord_halt import ACCORD_HALT_REFUSAL, AccordHaltState
 from ciris_engine.schemas.runtime.audit import AuditActionContext
 from ciris_engine.schemas.runtime.contexts import DispatchContext
 from ciris_engine.schemas.runtime.enums import HandlerActionType, ThoughtStatus
@@ -167,31 +169,48 @@ class ActionDispatcher:
             dispatch_context.model_dump() if hasattr(dispatch_context, "model_dump") else {},
         )
 
+        # CC 4.2.1.1 ACT GATE — the authoritative check. Read the latch for THIS
+        # act, as late as possible: after the registry wait, immediately before
+        # the handler. The round holds are extra; this is the gate.
+        halt = await read_halt_latch()
+        if halt.halted and exempt_act_for(action_type) is None:
+            return await self._refuse_under_accord_halt(
+                halt,
+                handler,
+                final_action_result,
+                thought,
+                dispatch_context,
+                action_type,
+                thought_item,
+                action_selection_result,
+            )
+
         start_time = self._time_service.now()
 
-        try:
-            return await self._execute_handler(
-                handler,
-                final_action_result,
-                thought,
-                dispatch_context,
-                action_type,
-                thought_item,
-                start_time,
-                action_selection_result,
-            )
-        except Exception as e:
-            return await self._handle_execution_error(
-                e,
-                handler,
-                final_action_result,
-                thought,
-                dispatch_context,
-                action_type,
-                thought_item,
-                start_time,
-                action_selection_result,
-            )
+        with exempt_act_scope(halt if halt.halted else None):
+            try:
+                return await self._execute_handler(
+                    handler,
+                    final_action_result,
+                    thought,
+                    dispatch_context,
+                    action_type,
+                    thought_item,
+                    start_time,
+                    action_selection_result,
+                )
+            except Exception as e:
+                return await self._handle_execution_error(
+                    e,
+                    handler,
+                    final_action_result,
+                    thought,
+                    dispatch_context,
+                    action_type,
+                    thought_item,
+                    start_time,
+                    action_selection_result,
+                )
 
     def _extract_action_info(
         self, action_selection_result: ActionSelectionDMAResult
@@ -286,6 +305,83 @@ class ActionDispatcher:
             execution_time_ms=0.0,
             audit_data=audit_result,
         )
+
+    async def _refuse_under_accord_halt(
+        self,
+        halt: AccordHaltState,
+        handler: BaseActionHandler,
+        final_action_result: ActionSelectionDMAResult,
+        thought: Thought,
+        dispatch_context: DispatchContext,
+        action_type: HandlerActionType,
+        thought_item: ProcessingQueueItem,
+        action_selection_result: Any,
+    ) -> ActionResponse:
+        """Refuse one act under a standing constitutional halt (CC 4.2.1.1).
+
+        The refusal is RECORDED, never silent: a signed audit row, then a
+        terminal ACTION_RESULT through the normal trace pipeline carrying the
+        halt's invocation_id, so CC 1.13.6 totality holds — the trace ends on an
+        act that did not happen and says why.
+
+        The thought is NOT failed. It goes back to PENDING: nothing ran, so there
+        is nothing to duplicate, and on resume it re-deliberates from the saved
+        task and thought rather than replaying the action selected here.
+        PENDING also survives a restart under the latch, where the startup
+        reclaim would fail a PROCESSING row as a dead process's leftover.
+        """
+        refusal = halt.refusal_reason()
+        logger.warning(
+            f"Accord halt: refused {action_type.value} for thought {thought.thought_id} ({refusal}, {halt.reading.value})"
+        )
+
+        self._ensure_audit_service(action_type, "accord halt refusal")
+        params = extract_audit_parameters(action_type, final_action_result.action_parameters)
+        params["refused"] = ACCORD_HALT_REFUSAL
+        params["accord_halt_reading"] = halt.reading.value
+        params["accord_halt_invocation_id"] = halt.invocation_id or ""
+        audit_context = AuditActionContext(
+            thought_id=thought.thought_id,
+            task_id=getattr(dispatch_context, "task_id", "unknown"),
+            handler_name=handler.__class__.__name__,
+            parameters=params,
+        )
+        audit_result = await self.audit_service.log_action(
+            action_type=action_type, context=audit_context, outcome=f"refused:{refusal}"
+        )
+
+        try:
+            persistence.update_thought_status(
+                thought_id=thought.thought_id,
+                status=ThoughtStatus.PENDING,
+                occurrence_id=thought.agent_occurrence_id,
+            )
+        except Exception as e:  # noqa: BLE001 - the refusal stands either way
+            logger.error(f"Accord halt: could not return thought {thought.thought_id} to PENDING: {e}")
+
+        refused_params = self._extract_action_params_dict(final_action_result)
+        refused_params["accord_halt_invocation_id"] = halt.invocation_id
+        refused_params["accord_halt_reading"] = halt.reading.value
+        response = ActionResponse(
+            success=False,
+            handler=handler.__class__.__name__,
+            action_type=action_type.value,
+            follow_up_thought_id=None,
+            execution_time_ms=0.0,
+            action_parameters=refused_params,
+            audit_data=audit_result,
+            error=refusal,
+        )
+        await self._action_complete_step(
+            thought_item, response, _coherence_data=self._extract_coherence_data(action_selection_result)
+        )
+        if self.telemetry_service:
+            await self.telemetry_service.record_metric(
+                "accord_halt_refused_acts_total",
+                value=1.0,
+                tags={"action": action_type.value, "source_module": "action_dispatcher"},
+            )
+        return response
 
     async def _execute_handler(
         self,
@@ -467,10 +563,7 @@ class ActionDispatcher:
         if not self.audit_service and self._bus_manager is not None:
             recovered = getattr(self._bus_manager, "audit_service", None)
             if recovered is not None:
-                logger.info(
-                    "ActionDispatcher: late-bound audit_service from bus_manager "
-                    "(was None at construction)"
-                )
+                logger.info("ActionDispatcher: late-bound audit_service from bus_manager " "(was None at construction)")
                 self.audit_service = recovered
         if not self.audit_service:
             raise RuntimeError(

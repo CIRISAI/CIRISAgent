@@ -336,3 +336,45 @@ def test_1_3_book_viii_is_clean_english_pending_reweave() -> None:
     en = _read(EN_13)
     body = en[en.index("## Introduction: Why Death Deserves Doctrine") : en.index("End of Book VIII")]
     assert body in book8
+
+
+# ---------------------------------------------------------------------------
+# 4. The 1.3 insertions are clean English, marked for the panel re-weave
+# ---------------------------------------------------------------------------
+
+INSERTION_BEGIN = "// 1.3 INSERTION — CLEAN ENGLISH, PENDING RE-WEAVE (CIRISAgent#1252)"
+INSERTION_END = "// END 1.3 INSERTION"
+
+#: Steward ruling: no agent-composed non-English in 1.3. Every new passage is
+#: clean English inside a marker, so the multi-model panel chooses its
+#: languages later. These counts pin the list given in the PR body.
+EXPECTED_MARKERS = {"poly": 12, "comp": 5}
+
+
+def _insertion_blocks(text: str) -> List[str]:
+    blocks: List[str] = []
+    lines = text.split("\n")
+    i = 0
+    while i < len(lines):
+        if lines[i] == INSERTION_BEGIN:
+            j = lines.index(INSERTION_END, i + 1)
+            assert INSERTION_BEGIN not in lines[i + 1 : j], "nested 1.3 insertion marker"
+            blocks.append("\n".join(lines[i + 1 : j]))
+            i = j
+        i += 1
+    return blocks
+
+
+@pytest.mark.parametrize("name", sorted(EXPECTED_MARKERS))
+def test_1_3_insertions_are_marked_clean_english(name: str) -> None:
+    text = _read(FILES_13[name])
+    blocks = _insertion_blocks(text)
+    assert len(blocks) == EXPECTED_MARKERS[name] == text.count(INSERTION_BEGIN) == text.count(INSERTION_END)
+    for block in blocks:
+        assert _scripts(block) <= {"LATIN"}, f"non-Latin script in a 1.3 insertion: {block[:120]}"
+
+
+def test_marker_check_bites() -> None:
+    """Negative control: a block holding a non-English fragment is caught."""
+    bad = f"{INSERTION_BEGIN}\nCare is not standing · 关怀不是地位\n{INSERTION_END}"
+    assert _scripts(_insertion_blocks(bad)[0]) - {"LATIN"}

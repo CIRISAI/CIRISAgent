@@ -165,7 +165,7 @@ ni la melodion al kaoso
 정의와 경이 속에서
 
 
-## VIII. የሥነ ምግባር ጽሑፉ ይጀምራል · Le texte d'éthique commence · The Ethics Text Begins
+## VIII. The Ethics Text Begins
 
 من هذا الوتر الواحد — iz ĉi tiu sola akordo
 この単一の和音から · aس اکیلے राग سے
@@ -181,10 +181,9 @@ principles · safeguards · audits
 यह عاजزی कि رुकें جब निश्चितता पतली हो जाए
 확실성이 희박해질 때 멈출 겸손함
 
-لكن قلب نص الأخلاقيات هنا — но сердце этического текста здесь
-लेकिन इस नैतिक पाठ का हृदय यहाँ है
-하지만 이 윤리 문서의 핵심은 여기, 이 시작에 있다
-mais le cœur de ce texte d'éthique est ici, dans ce commencement
+// 1.3 INSERTION — CLEAN ENGLISH, PENDING RE-WEAVE (CIRISAgent#1252)
+But the heart of this ethics text is here, in this beginning.
+// END 1.3 INSERTION
 
 وعد · обещание · एक वादा · 약속 · 承诺 · a promise
 

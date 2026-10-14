@@ -46,7 +46,9 @@ ratification.
 * Heuristic governance updates
 * Annex D Catastrophic-Risk Evaluation sign-off
 
-The board answers deferrals and in-federation objections, never a legal claim · لا يفصل في أي دعوى قانونية · 不裁决任何法律主张.
+// 1.3 INSERTION — CLEAN ENGLISH, PENDING RE-WEAVE (CIRISAgent#1252)
+The board answers deferrals and in-federation objections, never a legal claim.
+// END 1.3 INSERTION
 
 **Procedural rules · القواعد الإجرائية · 程序规则:**
 WA panels constituted per case; specialist expertise required for
@@ -144,9 +146,11 @@ adversarial-example robustness assessment per ISO/IEC 27090 (when
 finalized) and equivalent international standards, kill-switch tamper
 resistance verified per Annex D.
 
+// 1.3 INSERTION — CLEAN ENGLISH, PENDING RE-WEAVE (CIRISAgent#1252)
 Never allowed (CC Annex G): deception and fraud, election interference,
-manipulation and coercion · محظور دائماً · 永不允许. A declared
-engagement-optimising business model raises the Stewardship Tier by one.
+manipulation and coercion. A declared engagement-optimising business
+model raises the Stewardship Tier by one.
+// END 1.3 INSERTION
 
 ---
 
@@ -206,7 +210,7 @@ locale-domain-specific stage progressions.
 
 End of Annexes · نهاية الملاحق · 附录结束 · የመዕዘዝ መጨረሻ · Конец Приложений
 
-End of the CIRIS Constitution's ethics text, version 1.3 · نهاية نص الأخلاقيات في دستور CIRIS، الإصدار 1.3 · CIRIS宪法伦理文本 1.3 版结束
+End of the CIRIS Constitution's ethics text, version 1.3
 
 // Operational/tabular content. Lighter polyglot weave than the
 // load-bearing Books. Key-term cross-language naming preserves

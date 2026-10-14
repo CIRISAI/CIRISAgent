@@ -23,6 +23,9 @@ E13='--version 1.3 --stem constitution_ethics --tm-version 1.2b --tm-stem accord
 python3 localization/accord_localize.py $E13 --segments                    # plan + run size
 python3 localization/accord_localize.py $E13 --check                       # what is missing
 python3 localization/accord_localize.py $E13 --units section0 --lane translate --dry-run
+# + website / client / agent-UI strings as terminology anchors (never values); CI checks these out pinned
+python3 localization/accord_localize.py $E13 --extra-tm ~/ciris-website --extra-tm ~/CIRISClient --extra-tm . \
+    --units section0 --lane translate --dry-run
 python3 localization/localize.py --check                                     # UI/prompt bundle (LOCALIZE_TARGET=ui)
 ```
 

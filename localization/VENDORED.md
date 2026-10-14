@@ -59,7 +59,7 @@ moves. They are not drift-checked.
 
 | Here | Derived from | What changed |
 |---|---|---|
-| `.github/workflows/i18n-lane.yml` | same path | No CIRISServer `.emitters` checkout and no client bundle mirrors (the agent has neither). Adds a `target` input (`accord` / `ui`) and Accord inputs. The client's strict gate is replaced by this check plus `accord_localize.py --verify` (Accord) or `tools/dev/check_localization_sync.py` (UI). The vendoring digest is checked, never re-recorded. Inputs reach the shell through env, via `localization/run_lane.sh`. |
+| `.github/workflows/i18n-lane.yml` | same path | No CIRISServer `.emitters` checkout and no client bundle mirrors (the agent has neither). Adds a `target` input (`accord` / `ui`) and Accord inputs. The client's strict gate is replaced by this check plus `accord_localize.py --verify` (Accord) or `tools/dev/check_localization_sync.py` (UI). The vendoring digest is checked, never re-recorded. Inputs reach the shell through env, via `localization/run_lane.sh`. An `extra_tm` input (default on, Accord only) adds read-only checkouts of CIRISAI/ciris-website and CIRISAI/CIRISClient, each pinned to its default branch's commit, as `--extra-tm` anchor corpora; the SHAs go into the step summary and the commit message. |
 | `.github/workflows/i18n-{translate,evaluate,repair}.yml` | same paths | Same `workflow_dispatch` callers, same `i18n-write-<ref>` one-writer concurrency group. They add the agent inputs, and `accord_units` defaults to one unit (`section0`). |
 | `tools/dev/check_localize_vendoring.py` | `packaging/check_vendoring.py` | Same per-file-digest pattern, applied to this record instead of a `client/` tree digest. |
 
@@ -89,6 +89,10 @@ attribute that the vendored functions look up at call time.
   it from the translation memory, overrides the prompts, anchors, glossary
   row, structural rules and per-unit selection, runs the lanes, and writes
   complete locales back to `ciris_engine/data/localized/accord_<v>_<lang>.txt`.
+  With `--extra-tm DIR` it also reads the website's, the client's and the
+  agent UI's translated strings as extra terminology anchors (ranked after
+  the accord TM, bounded per key and per request, never written as values).
+  That is a replacement `anchors_for` hook, not an edit to `localize.py`.
 - `localization/run_lane.sh` is the workflow entry point.
 
 ## Re-vendoring

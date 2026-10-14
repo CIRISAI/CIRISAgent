@@ -395,6 +395,15 @@
             "null"
           ],
           "maxLength": 500
+        },
+        "attempt_index": {
+          "description": "Stamped into every component's data by ciris-lens-core at seal time (0 = first attempt of this event type for the thought); in the signed bytes. The agent never emits it.",
+          "x-ciris-kind": "integer",
+          "level": "generic",
+          "type": [
+            "integer",
+            "null"
+          ]
         }
       }
     },
@@ -406,6 +415,7 @@
       ],
       "propertyNames": {
         "enum": [
+          "attempt_index",
           "requires_human_input",
           "round_number",
           "task_priority",
@@ -423,6 +433,7 @@
       ],
       "propertyNames": {
         "enum": [
+          "attempt_index",
           "channel_id",
           "parent_thought_id",
           "requires_human_input",
@@ -444,6 +455,7 @@
       ],
       "propertyNames": {
         "enum": [
+          "attempt_index",
           "channel_id",
           "initial_context",
           "parent_thought_id",
@@ -767,6 +779,15 @@
           "x-ciris-kind": "json",
           "level": "full_traces",
           "$ref": "#/definitions/BoundedJson"
+        },
+        "attempt_index": {
+          "description": "Stamped into every component's data by ciris-lens-core at seal time (0 = first attempt of this event type for the thought); in the signed bytes. The agent never emits it.",
+          "x-ciris-kind": "integer",
+          "level": "generic",
+          "type": [
+            "integer",
+            "null"
+          ]
         }
       }
     },
@@ -779,6 +800,7 @@
       "propertyNames": {
         "enum": [
           "agent_name",
+          "attempt_index",
           "attestation_context",
           "attestation_level",
           "attestation_status",
@@ -808,6 +830,7 @@
           "active_services",
           "agent_name",
           "agent_version",
+          "attempt_index",
           "attestation_context",
           "attestation_level",
           "attestation_status",
@@ -846,6 +869,7 @@
           "active_services",
           "agent_name",
           "agent_version",
+          "attempt_index",
           "attestation_context",
           "attestation_level",
           "attestation_status",
@@ -1549,6 +1573,15 @@
           "x-ciris-kind": "json",
           "level": "full_traces",
           "$ref": "#/definitions/BoundedJson"
+        },
+        "attempt_index": {
+          "description": "Stamped into every component's data by ciris-lens-core at seal time (0 = first attempt of this event type for the thought); in the signed bytes. The agent never emits it.",
+          "x-ciris-kind": "integer",
+          "level": "generic",
+          "type": [
+            "integer",
+            "null"
+          ]
         }
       }
     },
@@ -1560,6 +1593,7 @@
       ],
       "propertyNames": {
         "enum": [
+          "attempt_index",
           "csdma",
           "csdma_plausibility_score",
           "dsdma",
@@ -1614,6 +1648,7 @@
       ],
       "propertyNames": {
         "enum": [
+          "attempt_index",
           "csdma",
           "csdma_plausibility_score",
           "dsdma",
@@ -1709,6 +1744,7 @@
       ],
       "propertyNames": {
         "enum": [
+          "attempt_index",
           "combined_analysis",
           "csdma",
           "csdma_plausibility_score",
@@ -2283,6 +2319,15 @@
             "null"
           ],
           "maxLength": 65536
+        },
+        "attempt_index": {
+          "description": "Stamped into every component's data by ciris-lens-core at seal time (0 = first attempt of this event type for the thought); in the signed bytes. The agent never emits it.",
+          "x-ciris-kind": "integer",
+          "level": "generic",
+          "type": [
+            "integer",
+            "null"
+          ]
         }
       }
     },
@@ -2294,6 +2339,7 @@
       ],
       "propertyNames": {
         "enum": [
+          "attempt_index",
           "correlation_risk",
           "effective_source_count",
           "fragility_flag",
@@ -2317,6 +2363,7 @@
       ],
       "propertyNames": {
         "enum": [
+          "attempt_index",
           "collapse_margin",
           "collapse_rate",
           "common_cause_flags",
@@ -2374,6 +2421,7 @@
       ],
       "propertyNames": {
         "enum": [
+          "attempt_index",
           "collapse_margin",
           "collapse_rate",
           "common_cause_flags",
@@ -2519,6 +2567,15 @@
             "null"
           ],
           "maxLength": 1000
+        },
+        "attempt_index": {
+          "description": "Stamped into every component's data by ciris-lens-core at seal time (0 = first attempt of this event type for the thought); in the signed bytes. The agent never emits it.",
+          "x-ciris-kind": "integer",
+          "level": "generic",
+          "type": [
+            "integer",
+            "null"
+          ]
         }
       }
     },
@@ -2530,6 +2587,7 @@
       ],
       "propertyNames": {
         "enum": [
+          "attempt_index",
           "is_recursive",
           "selected_action",
           "selection_confidence"
@@ -2545,6 +2603,7 @@
       "propertyNames": {
         "enum": [
           "alternatives_considered",
+          "attempt_index",
           "evaluation_time_ms",
           "is_recursive",
           "selected_action",
@@ -2564,6 +2623,7 @@
           "action_rationale",
           "alternatives_considered",
           "aspdma_prompt",
+          "attempt_index",
           "evaluation_time_ms",
           "is_recursive",
           "raw_llm_response",
@@ -2668,6 +2728,15 @@
             "null"
           ],
           "maxLength": 65536
+        },
+        "attempt_index": {
+          "description": "Stamped into every component's data by ciris-lens-core at seal time (0 = first attempt of this event type for the thought); in the signed bytes. The agent never emits it.",
+          "x-ciris-kind": "integer",
+          "level": "generic",
+          "type": [
+            "integer",
+            "null"
+          ]
         }
       }
     },
@@ -2679,6 +2748,7 @@
       ],
       "propertyNames": {
         "enum": [
+          "attempt_index",
           "final_action",
           "final_tool_name",
           "original_tool_name"
@@ -2693,6 +2763,7 @@
       ],
       "propertyNames": {
         "enum": [
+          "attempt_index",
           "final_action",
           "final_tool_name",
           "gotchas_acknowledged",
@@ -2710,6 +2781,7 @@
       "propertyNames": {
         "enum": [
           "aspdma_rationale",
+          "attempt_index",
           "final_action",
           "final_parameters",
           "final_tool_name",
@@ -2933,6 +3005,15 @@
             "null"
           ],
           "maxLength": 65536
+        },
+        "attempt_index": {
+          "description": "Stamped into every component's data by ciris-lens-core at seal time (0 = first attempt of this event type for the thought); in the signed bytes. The agent never emits it.",
+          "x-ciris-kind": "integer",
+          "level": "generic",
+          "type": [
+            "integer",
+            "null"
+          ]
         }
       }
     },
@@ -2944,6 +3025,7 @@
       ],
       "propertyNames": {
         "enum": [
+          "attempt_index",
           "final_action",
           "original_action",
           "verb",
@@ -2975,6 +3057,7 @@
       ],
       "propertyNames": {
         "enum": [
+          "attempt_index",
           "final_action",
           "original_action",
           "verb",
@@ -3010,6 +3093,7 @@
       ],
       "propertyNames": {
         "enum": [
+          "attempt_index",
           "final_action",
           "final_reasoning",
           "original_action",
@@ -3329,6 +3413,15 @@
             "null"
           ],
           "maxLength": 65536
+        },
+        "attempt_index": {
+          "description": "Stamped into every component's data by ciris-lens-core at seal time (0 = first attempt of this event type for the thought); in the signed bytes. The agent never emits it.",
+          "x-ciris-kind": "integer",
+          "level": "generic",
+          "type": [
+            "integer",
+            "null"
+          ]
         }
       }
     },
@@ -3341,6 +3434,7 @@
       "propertyNames": {
         "enum": [
           "action_was_overridden",
+          "attempt_index",
           "coherence_level",
           "coherence_passed",
           "coherence_score",
@@ -3372,6 +3466,7 @@
       "propertyNames": {
         "enum": [
           "action_was_overridden",
+          "attempt_index",
           "coherence_level",
           "coherence_passed",
           "coherence_reason",
@@ -3411,6 +3506,7 @@
       "propertyNames": {
         "enum": [
           "action_was_overridden",
+          "attempt_index",
           "coherence_level",
           "coherence_passed",
           "coherence_reason",
@@ -3659,6 +3755,15 @@
             "null"
           ],
           "maxLength": 500
+        },
+        "attempt_index": {
+          "description": "Stamped into every component's data by ciris-lens-core at seal time (0 = first attempt of this event type for the thought); in the signed bytes. The agent never emits it.",
+          "x-ciris-kind": "integer",
+          "level": "generic",
+          "type": [
+            "integer",
+            "null"
+          ]
         }
       }
     },
@@ -3671,6 +3776,7 @@
       "propertyNames": {
         "enum": [
           "action_executed",
+          "attempt_index",
           "audit_entry_hash",
           "audit_sequence_number",
           "carbon_grams",
@@ -3698,6 +3804,7 @@
         "enum": [
           "action_executed",
           "api_bases_used",
+          "attempt_index",
           "audit_entry_hash",
           "audit_entry_id",
           "audit_sequence_number",
@@ -3731,6 +3838,7 @@
           "action_executed",
           "action_parameters",
           "api_bases_used",
+          "attempt_index",
           "audit_entry_hash",
           "audit_entry_id",
           "audit_sequence_number",
@@ -3939,6 +4047,15 @@
             "null"
           ],
           "maxLength": 65536
+        },
+        "attempt_index": {
+          "description": "Stamped into every component's data by ciris-lens-core at seal time (0 = first attempt of this event type for the thought); in the signed bytes. The agent never emits it.",
+          "x-ciris-kind": "integer",
+          "level": "generic",
+          "type": [
+            "integer",
+            "null"
+          ]
         }
       }
     },
@@ -3951,6 +4068,7 @@
       "propertyNames": {
         "enum": [
           "attempt_count",
+          "attempt_index",
           "completion_bytes",
           "completion_tokens",
           "cost_usd",
@@ -3978,6 +4096,7 @@
       "propertyNames": {
         "enum": [
           "attempt_count",
+          "attempt_index",
           "base_url",
           "completion_bytes",
           "completion_tokens",
@@ -4007,6 +4126,7 @@
       "propertyNames": {
         "enum": [
           "attempt_count",
+          "attempt_index",
           "base_url",
           "completion_bytes",
           "completion_tokens",
@@ -4051,6 +4171,15 @@
             "null"
           ],
           "maxLength": 500
+        },
+        "attempt_index": {
+          "description": "Stamped into every component's data by ciris-lens-core at seal time (0 = first attempt of this event type for the thought); in the signed bytes. The agent never emits it.",
+          "x-ciris-kind": "integer",
+          "level": "generic",
+          "type": [
+            "integer",
+            "null"
+          ]
         }
       }
     },
@@ -4062,6 +4191,7 @@
       ],
       "propertyNames": {
         "enum": [
+          "attempt_index",
           "defer_until"
         ]
       }
@@ -4074,6 +4204,7 @@
       ],
       "propertyNames": {
         "enum": [
+          "attempt_index",
           "defer_until",
           "reason"
         ]
@@ -4087,6 +4218,7 @@
       ],
       "propertyNames": {
         "enum": [
+          "attempt_index",
           "defer_until",
           "reason"
         ]
@@ -4111,6 +4243,15 @@
           "x-ciris-kind": "json",
           "level": "full_traces",
           "$ref": "#/definitions/BoundedJson"
+        },
+        "attempt_index": {
+          "description": "Stamped into every component's data by ciris-lens-core at seal time (0 = first attempt of this event type for the thought); in the signed bytes. The agent never emits it.",
+          "x-ciris-kind": "integer",
+          "level": "generic",
+          "type": [
+            "integer",
+            "null"
+          ]
         }
       }
     },
@@ -4122,6 +4263,7 @@
       ],
       "propertyNames": {
         "enum": [
+          "attempt_index",
           "event_type"
         ]
       }
@@ -4134,6 +4276,7 @@
       ],
       "propertyNames": {
         "enum": [
+          "attempt_index",
           "event_type"
         ]
       }
@@ -4146,6 +4289,7 @@
       ],
       "propertyNames": {
         "enum": [
+          "attempt_index",
           "event_type",
           "raw_data"
         ]

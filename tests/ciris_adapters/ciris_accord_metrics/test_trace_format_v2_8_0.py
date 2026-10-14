@@ -597,3 +597,23 @@ def test_the_description_forbids_inferring_run_kind_from_2_7_deployment_type() -
     text = DOC["description"]
     assert "Under v2.7.0 the run-kind marker overrode deployment_type" in text
     assert "must not infer run_kind from deployment_type on 2.7.x rows" in text
+
+
+# ---------------------------------------------------------------------------
+# 6. The SEALED shape: lens-core stamps data.attempt_index into every component
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("level", LEVELS, ids=lambda lv: lv.value)
+def test_a_sealed_trace_with_attempt_index_validates(level: TraceLevel) -> None:
+    """ciris-lens-core (capture/partial.rs data_with_attempt_index) injects attempt_index into
+    every component's data before signing. The closed EventData objects must admit it, or the
+    admitter would refuse every sealed trace."""
+    trace = _trace(level, enforce=True)
+    for i, component in enumerate(trace["components"]):
+        component["data"]["attempt_index"] = i % 2
+    errors = sorted(_validator().iter_errors(trace), key=str)
+    assert errors == [], [e.message[:200] for e in errors]
+    # Negative control: it is an integer, not free text.
+    trace["components"][0]["data"]["attempt_index"] = "first"
+    assert list(_validator().iter_errors(trace))

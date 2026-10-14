@@ -49,6 +49,11 @@ translations (localization/CLAUDE.md). Nothing here writes a per-locale
 
 Usage (every localize.py flag passes through)::
 
+    # 1.3 is the renamed corpus: constitution_ethics_1.3_<lang>.txt, with the
+    # shipped accord_1.2b_<lang>.txt as translation memory (--stem / --tm-stem).
+    E13='--version 1.3 --stem constitution_ethics --tm-version 1.2b --tm-stem accord'
+    python3 localization/accord_localize.py $E13 --segments
+    python3 localization/accord_localize.py $E13 --seed-exact-tm --units section0 --lane translate --dry-run
     python3 localization/accord_localize.py --version 1.3 --segments
     python3 localization/accord_localize.py --version 1.3 --check
     python3 localization/accord_localize.py --version 1.3 --units section0 --lane translate --dry-run
@@ -103,14 +108,32 @@ READ_ONLY_FLAGS = ("--check", "--dry-run", "--glossary-report")
 #: Glossary rows dropped for accord runs (see the module docstring, point 5).
 ACCORD_GLOSSARY_DROP = ("ACCORD",)
 
+#: The document families this adapter may read and write, by filename stem
+#: (``<stem>_<version>_<lang>.txt``). A CLOSED list: the stem arrives from a
+#: workflow input, and anything not named here could be a path.
+#: ``constitution_ethics`` is the Accord's successor (1.3 onward); ``accord`` is
+#: every shipped edition up to 1.2b, and the translation memory for 1.3.
+STEMS: Dict[str, Tuple[str, str]] = {
+    # stem: (prose name for prompts, short name for the provenance label)
+    "accord": ("the CIRIS Accord", "Accord"),
+    "constitution_ethics": (
+        "the CIRIS Constitution's ethics text (the successor of the Accord)",
+        "Constitution ethics text",
+    ),
+}
+DEFAULT_STEM = "accord"
+
 #: Written into every reassembled locale file, after the provenance preamble.
 LABEL = (
-    "// Machine translation of the English Accord {version} -- status: draft / "
+    "// Machine translation of the English {name} {version} -- status: draft / "
     "review_status: machine_reviewed (vendored CIRISClient localize pipeline; MQM-reviewed "
     "by a model of a different family; not native-reviewed)."
 )
 
 _TOKEN = re.compile(r"[A-Za-z][A-Za-z0-9']+")
+#: ``{key: (english, shipped translation)}`` -- one locale's translation memory.
+TM = Dict[str, Tuple[str, str]]
+
 _STOP = {"the", "a", "an", "and", "or", "to", "of", "is", "in", "for", "this", "that"}
 
 
@@ -125,11 +148,17 @@ def check_version(version: str) -> str:
     return version
 
 
-def accord_path(localized: Path, version: str, lang: str) -> Path:
+def check_stem(stem: str) -> str:
+    if stem not in STEMS:
+        raise SystemExit(f"[refuse] {stem!r} is not a document stem this adapter knows: {sorted(STEMS)}")
+    return stem
+
+
+def accord_path(localized: Path, version: str, lang: str, stem: str = DEFAULT_STEM) -> Path:
     """The per-locale file the loader reads. Never a polyglot artifact."""
     if not re.fullmatch(r"[a-z]{2,3}", lang):
         raise SystemExit(f"[refuse] {lang!r} is not a locale code")
-    path = localized / f"accord_{check_version(version)}_{lang}.txt"
+    path = localized / f"{check_stem(stem)}_{check_version(version)}_{lang}.txt"
     if "POLYGLOT" in path.name or path.parent != localized:
         raise SystemExit(f"[refuse] {path} is not a per-locale accord path")
     return path
@@ -192,28 +221,38 @@ def locale_meta(localized: Path, lang: str) -> Dict[str, Any]:
     return meta
 
 
-def label_locale(text: str, version: str) -> str:
+def label_locale(text: str, version: str, stem: str = DEFAULT_STEM) -> str:
     """Insert the provenance label after the leading ``//`` preamble block."""
     lines = text.split("\n")
     i = 0
     while i < len(lines) and lines[i].startswith("// ") and not lines[i].startswith(seg.MARKER):
         i += 1
-    lines.insert(i, LABEL.format(version=version))
+    lines.insert(i, LABEL.format(name=STEMS[check_stem(stem)][1], version=version))
     return "\n".join(lines)
 
 
 class Stage:
     """The staged key bundle for one accord version."""
 
-    def __init__(self, version: str, *, stage_dir: Optional[Path] = None, localized: Path = LOCALIZED) -> None:
+    def __init__(
+        self,
+        version: str,
+        *,
+        stage_dir: Optional[Path] = None,
+        localized: Path = LOCALIZED,
+        stem: str = DEFAULT_STEM,
+    ) -> None:
         self.version = check_version(version)
+        self.stem = check_stem(stem)
         self.localized = localized
-        self.dir = stage_dir or (STAGE_ROOT / version)
-        source = accord_path(localized, version, "en")
+        self.dir = stage_dir or default_stage_dir(version, stem)
+        #: Exact-English translation-memory matches to seed as values (opt-in).
+        self.seed_tm: Dict[str, TM] = {}
+        source = accord_path(localized, version, "en", stem)
         if not source.is_file():
             raise SystemExit(
                 f"[refuse] no English source at {source}. The pipeline translates FROM "
-                f"the English accord; land it first (CIRISAgent#1252)."
+                f"the English source; land it first (CIRISAgent#1252 / #1256 for constitution_ethics 1.3)."
             )
         self.source_text = source.read_text(encoding="utf-8")
         self.doc = seg.parse(self.source_text)
@@ -226,7 +265,7 @@ class Stage:
 
     def render(self, lang: str, values: Dict[str, str]) -> str:
         """The file a complete locale is written as."""
-        return label_locale(seg.reassemble(self.doc, values), self.version)
+        return label_locale(seg.reassemble(self.doc, values), self.version, self.stem)
 
     # -- building ------------------------------------------------------------
 
@@ -292,11 +331,24 @@ class Stage:
             # form: it is dropped, so the diff-driven lane retranslates it.
             dropped = sum(1 for k in values if k not in kept)
             return kept, {"stale_dropped": dropped, "moved": moved}
-        shipped = accord_path(self.localized, self.version, lang)
+        shipped = accord_path(self.localized, self.version, lang, self.stem)
         if shipped.is_file():
             aligned, skipped = seg.align(self.doc, seg.parse(shipped.read_text(encoding="utf-8")))
             kept = self._clean(lang, aligned)
             return kept, {"sections_unaligned": len(skipped), "guard_rejected": len(aligned) - len(kept)}
+        tm = self.seed_tm.get(lang)
+        if tm:
+            # OPT-IN (--seed-exact-tm): an English line that is byte-identical to
+            # a line of the previous edition takes that edition's shipped
+            # translation as its value -- the corpus users already read -- instead
+            # of a fresh draft. Only unambiguous matches, and only lines the
+            # accord guard accepts; everything else is left to the lanes.
+            by_text: Dict[str, Set[str]] = {}
+            for english, shipped_text in tm.values():
+                by_text.setdefault(english, set()).add(shipped_text)
+            exact = {k: next(iter(by_text[t])) for k, t in self.en.items() if len(by_text.get(t, ())) == 1}
+            kept = self._clean(lang, exact)
+            return kept, {"seeded_exact_from_tm": len(kept)}
         return {}, {}
 
     # -- after a run -----------------------------------------------------------
@@ -322,7 +374,7 @@ class Stage:
                 result[lang] = f"partial {len(have)}/{len(self.en)}"
                 continue
             if write_files:
-                target = accord_path(self.localized, self.version, lang)
+                target = accord_path(self.localized, self.version, lang, self.stem)
                 target.write_text(self.render(lang, have), encoding="utf-8")
                 result[lang] = f"complete -> {target.name}"
             else:
@@ -346,7 +398,7 @@ class Stage:
                     continue
                 for why in seg.passage_problems(slot, text, lang):
                     problems.append(f"{lang}: {key}: {why}")
-            shipped = accord_path(self.localized, self.version, lang)
+            shipped = accord_path(self.localized, self.version, lang, self.stem)
             if all(values.get(k, "").strip() for k in self.en) and shipped.is_file():
                 if shipped.read_text(encoding="utf-8") != self.render(lang, values):
                     problems.append(f"{lang}: {shipped.name} differs from its reassembled bundle")
@@ -362,17 +414,21 @@ class Stage:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-TM = Dict[str, Tuple[str, str]]
+def default_stage_dir(version: str, stem: str = DEFAULT_STEM) -> Path:
+    """``localization/accord/<version>`` for the Accord (unchanged), else
+    ``localization/accord/<stem>_<version>``."""
+    check_version(version)
+    return STAGE_ROOT / (version if check_stem(stem) == DEFAULT_STEM else f"{stem}_{version}")
 
 
-def build_tm(localized: Path, tm_version: str, lang: str) -> TM:
+def build_tm(localized: Path, tm_version: str, lang: str, tm_stem: str = DEFAULT_STEM) -> TM:
     """``{key: (english, shipped translation)}`` from the previous accord.
 
     Lines the accord guard would reject (left in English, wrong script, a
     dropped CC reference) are not memory: an anchor teaches by example.
     """
-    en_path = accord_path(localized, tm_version, "en")
-    lo_path = accord_path(localized, tm_version, lang)
+    en_path = accord_path(localized, tm_version, "en", tm_stem)
+    lo_path = accord_path(localized, tm_version, lang, tm_stem)
     if not en_path.is_file() or not lo_path.is_file():
         return {}
     en_doc = seg.parse(en_path.read_text(encoding="utf-8"))
@@ -413,7 +469,16 @@ def make_anchors(tms: Dict[str, TM]) -> Callable[..., List[Tuple[str, str, str]]
             picked.append((key, english, shipped))
             seen.add(key)
 
-        # 1. The previous translation of THIS line, where it still is one.
+        # 0. The previous edition's translation of this EXACT English line,
+        #    wherever it sat. 1.2b -> 1.3 inserts lines, which shifts keys within
+        #    a section; the text, not the key, is what identifies the line.
+        by_text: Dict[str, List[str]] = {}
+        for tm_key, (english, _) in tm.items():
+            by_text.setdefault(english, []).append(tm_key)
+        for key in needed:
+            for tm_key in by_text.get(str(en_flat.get(key, "")), [])[:1]:
+                take(tm_key)
+        # 1. The previous translation of THIS key, where it still is one.
         for key in needed:
             if key in tm and _similarity(tm[key][0], str(en_flat.get(key, ""))) >= SAME_KEY_MIN_SIMILARITY:
                 take(key)
@@ -473,7 +538,7 @@ _ACCORD_RULES = """- These lines are the CIRIS Accord: a governance covenant the
   a new rendering, and a reviewer must not report the anchors' rendering."""
 
 
-def accord_prompts(L: ModuleType) -> Dict[str, str]:
+def accord_prompts(L: ModuleType, stem: str = DEFAULT_STEM) -> Dict[str, str]:
     rules: str = L.GUIDE_RULES
     placeholder: str = L._PLACEHOLDER_RULE
     translate = (
@@ -542,7 +607,12 @@ def accord_prompts(L: ModuleType) -> Dict[str, str]:
         "- The CANONICAL TERMINOLOGY block wins every terminology dispute.\n\n"
         "THE DEFECTS YOU ARE MOST LIKELY CORRECTING. Each has been a real finding here:\n" + rules
     )
-    return {"SYSTEM_TRANSLATE": translate, "SYSTEM_REVIEW": review, "SYSTEM_REPAIR": repair}
+    doc = STEMS[check_stem(stem)][0]
+    out = {"SYSTEM_TRANSLATE": translate, "SYSTEM_REVIEW": review, "SYSTEM_REPAIR": repair}
+    if doc != STEMS[DEFAULT_STEM][0]:
+        out = {k: v.replace("the CIRIS Accord", doc).replace("CIRIS Accord translations", f"translations of {doc}")
+               for k, v in out.items()}  # fmt: skip
+    return out
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -570,7 +640,7 @@ def import_localize(stage_dir: Path) -> ModuleType:
 
 def install(L: ModuleType, stage: Stage, tms: Dict[str, TM]) -> None:
     """Point the vendored module's hooks at the accord."""
-    for name, text in accord_prompts(L).items():
+    for name, text in accord_prompts(L, stage.stem).items():
         setattr(L, name, text)
     setattr(L, "anchors_for", make_anchors(tms))
 
@@ -683,6 +753,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0] if __doc__ else None)
     ap.add_argument("--version", default=os.environ.get("ACCORD_VERSION", DEFAULT_TM_VERSION))
     ap.add_argument("--tm-version", default=DEFAULT_TM_VERSION, help="previous accord used as translation memory")
+    ap.add_argument("--stem", default=DEFAULT_STEM, help=f"target filename stem, one of {sorted(STEMS)}")
+    ap.add_argument("--tm-stem", default=DEFAULT_STEM, help="filename stem of the translation-memory edition")
+    ap.add_argument(
+        "--seed-exact-tm",
+        action="store_true",
+        help="seed lines whose English is unchanged from the TM edition with its shipped translation",
+    )
     ap.add_argument("--units", default="", help="space-separated units to run (default: all, one at a time)")
     ap.add_argument("--stage-dir", type=Path, default=None, help=argparse.SUPPRESS)
     ap.add_argument("--localized-dir", type=Path, default=LOCALIZED, help=argparse.SUPPRESS)
@@ -697,14 +774,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     # stages into a throwaway copy of the committed stage.
     read_only = args.segments or args.verify or any(f in rest for f in READ_ONLY_FLAGS)
     scratch: Optional[tempfile.TemporaryDirectory[str]] = None
-    stage_dir = args.stage_dir or (STAGE_ROOT / check_version(args.version))
+    check_stem(args.stem)
+    check_stem(args.tm_stem)
+    stage_dir = args.stage_dir or default_stage_dir(args.version, args.stem)
     if read_only and not args.verify:
         scratch = tempfile.TemporaryDirectory(prefix="accord-stage-")
         if stage_dir.is_dir():
             shutil.copytree(stage_dir, scratch.name, dirs_exist_ok=True)
         stage_dir = Path(scratch.name)
     try:
-        return _main(args, rest, Stage(args.version, stage_dir=stage_dir, localized=args.localized_dir))
+        stage = Stage(args.version, stage_dir=stage_dir, localized=args.localized_dir, stem=args.stem)
+        return _main(args, rest, stage)
     finally:
         if scratch is not None:
             scratch.cleanup()
@@ -727,13 +807,15 @@ def _main(args: argparse.Namespace, rest: List[str], stage: Stage) -> int:
     if unknown:
         raise SystemExit(f"[refuse] unknown unit(s) {unknown}; this accord has {list(units)}")
 
+    tms = {lang: build_tm(stage.localized, args.tm_version, lang, args.tm_stem) for lang in stage.languages}
+    if args.seed_exact_tm:
+        stage.seed_tm = tms
     stats = stage.build()
     for lang, s in sorted(stats.items()):
         extra = ", ".join(f"{k}={v}" for k, v in s.items() if k not in ("present", "total") and v)
         print(f"[stage] {lang}: {s['present']}/{s['total']}" + (f" ({extra})" if extra else ""))
 
     L = import_localize(stage.dir)
-    tms = {lang: build_tm(stage.localized, args.tm_version, lang) for lang in stage.languages}
     install(L, stage, tms)
 
     passthrough = list(rest)

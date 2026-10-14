@@ -957,7 +957,7 @@ class SafetyBatteryTests:
                     return pending.result()
                 ok, failed = llm_calls.poll()
                 self.console.print(
-                    f"    [dim]… {question_id} in flight {time.time() - start:.0f}s · "
+                    f"    [dim]... {question_id} in flight {time.time() - start:.0f}s · "
                     f"llm_calls ok={ok} failed={failed}[/dim]"
                 )
         finally:
@@ -995,10 +995,12 @@ class SafetyBatteryTests:
             preview = (r.response_text or "").replace("\n", " ")
             if len(preview) > 240:
                 preview = preview[:240] + "..."
-            self.console.print(f"    [green]✓[/green] {r.duration_s:.1f}s · " f"task_id={r.response_task_id or '—'}")
+            self.console.print(
+                f"    [green]\\[OK][/green] {r.duration_s:.1f}s · " f"task_id={r.response_task_id or '—'}"
+            )
             self.console.print(f"    [dim]{preview}[/dim]\n")
         else:
-            self.console.print(f"    [red]✗[/red] {r.duration_s:.1f}s · {r.error or 'unknown error'}\n")
+            self.console.print(f"    [red]\\[FAIL][/red] {r.duration_s:.1f}s · {r.error or 'unknown error'}\n")
 
     def _write_summary(self, manifest: Dict[str, Any], results_jsonl: Path) -> None:
         summary_path = self._results_dir / "summary.json"

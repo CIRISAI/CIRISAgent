@@ -48,6 +48,21 @@ on:
         required: false
         default: "1.2b"
         type: string
+      accord_stem:
+        description: "target filename stem: accord | constitution_ethics (<stem>_<version>_<lang>.txt)"
+        required: false
+        default: "accord"
+        type: string
+      tm_stem:
+        description: "filename stem of the translation-memory edition"
+        required: false
+        default: "accord"
+        type: string
+      seed_exact_tm:
+        description: "lines whose English is unchanged from the TM edition take its shipped translation"
+        required: false
+        default: false
+        type: boolean
       accord_units:
         description: "accord units, space-separated (section0 v1 .. v9 annexes). Empty = every unit, one at a time"
         required: false
@@ -96,6 +111,9 @@ jobs:
       LANE: ${{ inputs.lane }}
       ACCORD_VERSION: ${{ inputs.accord_version }}
       TM_VERSION: ${{ inputs.tm_version }}
+      STEM: ${{ inputs.accord_stem }}
+      TM_STEM: ${{ inputs.tm_stem }}
+      SEED_EXACT_TM: ${{ inputs.seed_exact_tm }}
       UNITS: ${{ inputs.accord_units }}
       KEYS: ${{ inputs.keys }}
       LANGS: ${{ inputs.langs }}
@@ -162,7 +180,7 @@ jobs:
             # Round trip of the English source, every staged passage against the
             # accord's structural rules, every reassembled file byte-equal to its
             # bundle, and no per-locale accord mirror anywhere.
-            python3 localization/accord_localize.py --version "$ACCORD_VERSION" --verify
+            python3 localization/accord_localize.py --version "$ACCORD_VERSION" --stem "$STEM" --verify
           else
             python3 tools/dev/check_localization_sync.py
           fi
@@ -183,7 +201,10 @@ jobs:
             # The segment bundles are the lane's state (en.json and manifest.json
             # there are generated and git-ignored); the .txt files are what the
             # loader reads, written only for COMPLETE locales.
-            git add --all -- "localization/accord/$ACCORD_VERSION" ciris_engine/data/localized
+            # The stage dir is localization/accord/<version> for the Accord and
+            # localization/accord/<stem>_<version> for any other stem.
+            if [ "$STEM" = "accord" ]; then STAGE="$ACCORD_VERSION"; else STAGE="${STEM}_${ACCORD_VERSION}"; fi
+            git add --all -- "localization/accord/$STAGE" ciris_engine/data/localized
           else
             git add --all -- ciris_engine/data/localized
           fi

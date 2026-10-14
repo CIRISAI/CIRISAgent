@@ -95,6 +95,7 @@ REPO_ROOT = HERE.parent
 sys.path.insert(0, str(HERE))
 
 import accord_segments as seg  # noqa: E402
+import lane_backoff  # noqa: E402
 
 LOCALIZED = REPO_ROOT / "ciris_engine" / "data" / "localized"
 STAGE_ROOT = HERE / "accord"
@@ -1037,6 +1038,9 @@ def import_localize(stage_dir: Path) -> ModuleType:
 
 def install(L: ModuleType, stage: Stage, tms: Dict[str, TM]) -> None:
     """Point the vendored module's hooks at the accord."""
+    # Concurrent lane shards share one provider key: wait out 402/429/5xx in
+    # place instead of letting the vendored code read them as a dead rung.
+    lane_backoff.install(L)
     for name, text in accord_prompts(L, stage.stem).items():
         if stage.extra_tm:
             text += _EXTRA_RULE_REVIEW if name == "SYSTEM_REVIEW" else _EXTRA_RULE

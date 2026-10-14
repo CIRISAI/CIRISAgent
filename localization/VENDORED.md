@@ -59,8 +59,8 @@ moves. They are not drift-checked.
 
 | Here | Derived from | What changed |
 |---|---|---|
-| `.github/workflows/i18n-lane.yml` | same path | No CIRISServer `.emitters` checkout and no client bundle mirrors (the agent has neither). Adds a `target` input (`accord` / `ui`) and Accord inputs. The client's strict gate is replaced by this check plus `accord_localize.py --verify` (Accord) or `tools/dev/check_localization_sync.py` (UI). The vendoring digest is checked, never re-recorded. Inputs reach the shell through env, via `localization/run_lane.sh`. An `extra_tm` input (default on, Accord only) adds read-only checkouts of CIRISAI/ciris-website and CIRISAI/CIRISClient, each pinned to its default branch's commit, as `--extra-tm` anchor corpora; the SHAs go into the step summary and the commit message. |
-| `.github/workflows/i18n-{translate,evaluate,repair}.yml` | same paths | Same `workflow_dispatch` callers, same `i18n-write-<ref>` one-writer concurrency group. They add the agent inputs, and `accord_units` defaults to one unit (`section0`). |
+| `.github/workflows/i18n-lane.yml` | same path | No CIRISServer `.emitters` checkout and no client bundle mirrors (the agent has neither). Adds a `target` input (`accord` / `ui`) and Accord inputs. The client's strict gate is replaced by this check plus `accord_localize.py --verify` (Accord) or `tools/dev/check_localization_sync.py` (UI). The vendoring digest is checked, never re-recorded. Inputs reach the shell through env, via `localization/run_lane.sh`. **Sharded** (agent-only): a `plan` job (whole-run dry-run, so `--max-keys` still bounds the run, plus the locale assignment), a `shard` matrix (`shards` input, default 7 = 4 locales each, `fail-fast: false`, read-only token, never commits), and one `collect` job that refuses foreign locale files, gates the combined tree, merges the reports and commits once. The commit additionally waits for the gate to pass. An `extra_tm` input (default on, Accord only) adds read-only checkouts of CIRISAI/ciris-website and CIRISAI/CIRISClient as `--extra-tm` anchor corpora: `plan` resolves each default branch's commit ONCE and every shard checks out exactly those SHAs (plan outputs); the SHAs go into the step summary and, via `collect`, the commit message. |
+| `.github/workflows/i18n-{translate,evaluate,repair}.yml` | same paths | Same `workflow_dispatch` callers, same `i18n-write-<ref>` one-writer concurrency group. They add the agent inputs, and `accord_units` defaults to one unit (`section0`). They also take `shards`. |
 | `tools/dev/check_localize_vendoring.py` | `packaging/check_vendoring.py` | Same per-file-digest pattern, applied to this record instead of a `client/` tree digest. |
 
 Not vendored: `packaging/check_vendoring.py` itself (it hashes a `client/`
@@ -94,6 +94,26 @@ attribute that the vendored functions look up at call time.
   the accord TM, bounded per key and per request, never written as values).
   That is a replacement `anchors_for` hook, not an edit to `localize.py`.
 - `localization/run_lane.sh` is the workflow entry point.
+- `localization/lane_shards.py` is the shard bookkeeping the lane's `plan`,
+  `shard` and `collect` jobs share: the deterministic round-robin assignment
+  over the manifest's 28 locales, the closed list of files each locale owns,
+  `pack` (a shard uploads only its own locale files, its report, log and exit
+  status) and `collect` (recompute the assignment; refuse a shard WHOLE if its
+  artifact holds a file outside its locales, a symlink, or a report entry for
+  another locale; copy the rest; merge the MQM reports; sum the spend parsed
+  from each shard's `Spend.report` lines into `_lane.spend`).
+- `localization/lane_backoff.py` wraps the vendored `localize.call_model`
+  (module attribute, looked up at call time) with retry-in-place on
+  402/408/429/5xx/529, exponential backoff with jitter, honouring
+  `Retry-After`. Concurrent shards share one OpenRouter key, and OpenRouter
+  pre-authorizes `max_tokens x price` per call, so 402 and 429 appear under
+  parallel load. Unwrapped, the vendored code reads any exception as a dead
+  rung: it escalates, marks the key unreviewed, or fails it closed. A 402 gets
+  3 attempts, others 6 (`LOCALIZE_BACKOFF_*`). Anything else is re-raised
+  unchanged, so escalation and fail-closed behave exactly as upstream.
+  `accord_localize.install` installs it. For `TARGET=ui`, `run_lane.sh` runs
+  `lane_backoff.py`, which is `localize.py`'s own CLI with the wrapper
+  installed.
 
 ## Re-vendoring
 

@@ -171,23 +171,49 @@ class TraceRunKind(str, Enum):
     drives a REAL model, and its rows were indistinguishable from real traffic.
     The kind is set EXPLICITLY by the harness (``CIRIS_TRACE_RUN_KIND``), never
     inferred from channel names. Only ``MOCK`` blocks remote export; ``QA`` and
-    ``BATTERY`` traces may ship but are marked.
+    ``BATTERY`` traces may ship but are marked. ``PROD_PERSONAL`` and
+    ``PROD_MANAGED`` label a production run's deployment; ``PRODUCTION`` stays
+    valid (see :func:`wire_run_kind`).
 
-    It rides the existing ``deployment_type`` string of the signed
-    ``deployment_profile`` / ``correlation_metadata`` blocks: a VALUE change,
-    not a wire-shape change, visible to the canonical at every trace level,
-    which can refuse ``mock`` at admission (CIRISPersist#1040).
+    Under trace_format v2.7.0 a non-production kind rides the existing
+    ``deployment_type`` string of the signed ``deployment_profile`` /
+    ``correlation_metadata`` blocks (CIRISPersist#1040). Under v2.8.0 it is the
+    signed member ``deployment_profile.run_kind`` (CIRISAgent#1249, CC 3.1.5).
     """
 
     PRODUCTION = "production"
+    #: A production run on a personal install (trace_format v2.8.0 only).
+    PROD_PERSONAL = "prod-personal"
+    #: A production run on a CIRISManager-managed deployment (v2.8.0 only).
+    PROD_MANAGED = "prod-managed"
     QA = "qa"
     BATTERY = "battery"
     MOCK = "mock"
 
+    @property
+    def is_production(self) -> bool:
+        """``production``, ``prod-personal`` and ``prod-managed`` are all production runs.
+
+        Admission treats the three alike; only the label differs. Under
+        trace_format v2.7.0 every production kind leaves ``deployment_type``
+        untouched, so those bytes do not change.
+        """
+        return self in _PRODUCTION_KINDS
+
+
+_PRODUCTION_KINDS = frozenset({TraceRunKind.PRODUCTION, TraceRunKind.PROD_PERSONAL, TraceRunKind.PROD_MANAGED})
+_PRODUCTION_VALUES = frozenset(k.value for k in _PRODUCTION_KINDS)
 
 #: Harnesses set this. Values: ``qa`` | ``battery`` | ``production`` (default).
+#: An operator may also declare ``prod-personal`` or ``prod-managed`` here.
 RUN_KIND_ENV_VAR = "CIRIS_TRACE_RUN_KIND"
+#: CIRISManager sets ``CIRIS_MANAGED=true`` on every agent it deploys
+#: (``compose_generator.py``). It is the ONLY managed signal the run kind reads:
+#: ``path_resolution.is_managed()`` also counts Docker mounts, so it calls a
+#: personal ``install.sh`` Docker install managed.
+MANAGED_ENV_VAR = "CIRIS_MANAGED"
 _run_kind_warned = False
+_override_warned = False
 
 
 #: Android system property the mobile harness sets with ``adb shell setprop``.
@@ -248,26 +274,72 @@ def trace_run_kind() -> TraceRunKind:
     if is_mock_llm_active():
         return TraceRunKind.MOCK
     raw = _declared_run_kind().strip().lower()
-    if not raw or raw == TraceRunKind.PRODUCTION.value:
+    if not raw:
         return TraceRunKind.PRODUCTION
+    if raw in _PRODUCTION_VALUES:
+        return TraceRunKind(raw)
     if raw in (TraceRunKind.QA.value, TraceRunKind.BATTERY.value):
         return TraceRunKind(raw)
     if not _run_kind_warned:
         _run_kind_warned = True
         logger.warning(
-            "[RUN-KIND] %s=%r is not one of qa|battery|production (mock comes only from the mock LLM); "
-            "marking traces 'qa' so a synthetic run is never read as production.",
+            "[RUN-KIND] %s=%r is not one of qa|battery|production|prod-personal|prod-managed "
+            "(mock comes only from the mock LLM); marking traces 'qa' so a synthetic run is never "
+            "read as production.",
             RUN_KIND_ENV_VAR,
             raw,
         )
     return TraceRunKind.QA
 
 
+def _managed_deployment() -> bool:
+    """True when CIRISManager deployed this agent (``CIRIS_MANAGED`` truthy)."""
+    return os.environ.get(MANAGED_ENV_VAR, "").strip().lower() in TRUTHY
+
+
+def wire_run_kind(operator_override: Optional[str] = None) -> TraceRunKind:
+    """The run kind trace_format v2.8.0 signs into ``deployment_profile.run_kind``.
+
+    Precedence, highest first:
+
+    1. the mock LLM (``mock``, cannot be overridden);
+    2. a harness declaration (``qa`` / ``battery`` via ``CIRIS_TRACE_RUN_KIND``);
+    3. the operator override (adapter config ``run_kind``): any value except
+       ``mock``; an unknown value fails toward ``qa`` with a WARNING;
+    4. an explicit production declaration in ``CIRIS_TRACE_RUN_KIND``
+       (``production``, ``prod-personal`` or ``prod-managed``) is kept as is;
+    5. undeclared: ``prod-managed`` when ``CIRIS_MANAGED`` is truthy,
+       otherwise ``prod-personal``.
+
+    A harness can never be relabelled production by config: steps 1-2 run first.
+    """
+    global _override_warned
+    kind = trace_run_kind()
+    if not kind.is_production:
+        return kind
+    override = (operator_override or "").strip().lower()
+    if override:
+        if override in _PRODUCTION_VALUES or override in (TraceRunKind.QA.value, TraceRunKind.BATTERY.value):
+            return TraceRunKind(override)
+        if not _override_warned:
+            _override_warned = True
+            logger.warning(
+                "[RUN-KIND] config run_kind=%r is not one of production|prod-personal|prod-managed|qa|battery; "
+                "marking traces 'qa' so a mislabelled run is never read as production.",
+                override,
+            )
+        return TraceRunKind.QA
+    if _declared_run_kind().strip():
+        return kind
+    return TraceRunKind.PROD_MANAGED if _managed_deployment() else TraceRunKind.PROD_PERSONAL
+
+
 def _reset_for_tests() -> None:
     """Clear the latch and the log-once set. Tests only; production never calls it."""
-    global _latched_source, _run_kind_warned, _android_prop_cache
+    global _latched_source, _run_kind_warned, _android_prop_cache, _override_warned
     with _lock:
         _latched_source = None
         _refusals_logged.clear()
     _run_kind_warned = False
+    _override_warned = False
     _android_prop_cache = None

@@ -119,7 +119,9 @@ class AccordMetricsAdapter(Service):
             logger.info(f"   Consent timestamp: {adapter_config['consent_timestamp']}")
 
         if not self._consent_given:
-            logger.info("Consent not yet granted — capture runs; seals are consent_blocked at the substrate until the CEG grant exists")
+            logger.info(
+                "Consent not yet granted — capture runs; seals are consent_blocked at the substrate until the CEG grant exists"
+            )
             logger.warning("   Set CIRIS_ACCORD_METRICS_CONSENT=true or complete setup wizard")
         else:
             logger.info(f"[OK] CONSENT GIVEN - traces WILL be captured and sent")
@@ -132,7 +134,9 @@ class AccordMetricsAdapter(Service):
         # Set agent ID if available from runtime
         # Try agent_identity first (new pattern), then fall back to direct agent_id (legacy/mocks)
         if runtime and hasattr(runtime, "agent_identity") and runtime.agent_identity:
-            self.metrics_service.set_agent_id(runtime.agent_identity.agent_id)
+            self.metrics_service.set_agent_id(
+                runtime.agent_identity.agent_id, identity_hash=getattr(runtime.agent_identity, "identity_hash", None)
+            )
         elif runtime and hasattr(runtime, "agent_id") and runtime.agent_id:
             # Legacy fallback for mocks and lightweight runtimes
             self.metrics_service.set_agent_id(runtime.agent_id)
@@ -190,7 +194,10 @@ class AccordMetricsAdapter(Service):
         # Set agent ID now that identity should be initialized
         # (runtime.agent_identity is None during __init__ bootstrap)
         if self.runtime and hasattr(self.runtime, "agent_identity") and self.runtime.agent_identity:
-            self.metrics_service.set_agent_id(self.runtime.agent_identity.agent_id)
+            self.metrics_service.set_agent_id(
+                self.runtime.agent_identity.agent_id,
+                identity_hash=getattr(self.runtime.agent_identity, "identity_hash", None),
+            )
             logger.info(f"   Agent ID set from identity: {self.runtime.agent_identity.agent_id}")
         elif self.runtime and hasattr(self.runtime, "agent_id") and self.runtime.agent_id:
             # Legacy fallback for mocks and lightweight runtimes
@@ -218,9 +225,7 @@ class AccordMetricsAdapter(Service):
         #      upgrades the row to the directed grant.
         if not self._consent_given:
             try:
-                from ciris_engine.logic.services.governance.consent.attestation import (
-                    current_community_grant_id,
-                )
+                from ciris_engine.logic.services.governance.consent.attestation import current_community_grant_id
 
                 if current_community_grant_id():
                     self._consent_given = True
@@ -230,9 +235,7 @@ class AccordMetricsAdapter(Service):
 
         if self._consent_given:
             try:
-                from ciris_engine.logic.services.governance.consent.trace_sharing import (
-                    grant_trace_sharing,
-                )
+                from ciris_engine.logic.services.governance.consent.trace_sharing import grant_trace_sharing
                 from ciris_engine.schemas.consent.trace_sharing import TraceConsentSource
 
                 # require_opt_in=False: self._consent_given IS the resolved
@@ -257,7 +260,9 @@ class AccordMetricsAdapter(Service):
                 logger.warning(f"   consent-CEG migration failed ({type(exc).__name__}): {exc}")
             logger.info("[OK] AccordMetricsAdapter STARTED - collecting metrics")
         else:
-            logger.info("AccordMetricsAdapter started pre-consent — capture active, sharing gated at the substrate seal")
+            logger.info(
+                "AccordMetricsAdapter started pre-consent — capture active, sharing gated at the substrate seal"
+            )
 
     def _purge_legacy_consent_sources(self) -> None:
         """Delete the legacy consent artifacts once the CEG grant is confirmed.

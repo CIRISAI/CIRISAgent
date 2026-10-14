@@ -38,17 +38,31 @@ safety net; the fix belongs at the source.
 The signed wire contract (CIRISLensCore ``PUBLIC_SCHEMA_CONTRACT.md``) is not
 touched: filtering only removes or shortens values inside the existing
 component ``data`` object.
+
+Single source of truth (CIRISAgent#1249): every bound, pattern and per-event
+field table is loaded at import from ``schemas/trace_format_v2_8_0.json``, the
+published artifact whose SHA-256 the Constitution pins (``schemas/SCHEMA_SHA256``).
+That file is the contract an admitter validates against; this module only
+reads it. The enforcer applies each string kind's JSON ``pattern`` with
+``fullmatch``, so whatever survives the filter also validates against the
+schema. The bounds apply whichever trace format version is being emitted
+(see :data:`TraceFormatVersion`): v2.7.0 emission is filtered to the same
+contract, and v2.8.0 adds ``run_kind`` and the provenance members to the
+envelope's ``deployment_profile``, which :func:`enforce_deployment_profile`
+filters to the same file's ``DeploymentProfile`` definition.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import math
 import re
 import threading
 from datetime import datetime
 from enum import Enum
-from typing import Dict, List, Mapping, Optional, Set, Tuple
+from pathlib import Path
+from typing import Dict, List, Mapping, Optional, Set, Tuple, cast
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -77,24 +91,67 @@ _LEVEL_RANK: Dict[TraceLevel, int] = {
     TraceLevel.FULL_TRACES: 2,
 }
 
+
+class TraceFormatVersion(str, Enum):
+    """Which published ``trace_format`` contract the agent emits (CIRISAgent#1249).
+
+    NOT the substrate's wire stamp (``services.TRACE_SCHEMA_VERSION``, set by
+    lens-core at seal time and selecting the canonicalizer). This selects where
+    the run kind travels in the signed envelope:
+
+    * ``V2_7_0`` (default): the run-kind marker rides ``deployment_type``, as
+      in 2.15.0.
+    * ``V2_8_0``: ``deployment_profile.run_kind`` carries the closed run kind
+      at every run (production kinds included), ``deployment_type`` goes back
+      to the operator's value, and the profile gains ``pipeline_metadata`` and
+      ``calibration_version`` (SNAPSHOT_AND_CONTEXT gains ``disclosure_version``).
+
+    Persist v54.1 and earlier refuse v2.8.0 traces WHOLE
+    (``schema_unsupported_version``), so the default stays v2.7.0 until a
+    persist release that admits v2.8.0 is deployed on the receiving nodes.
+    """
+
+    V2_7_0 = "2.7.0"
+    V2_8_0 = "2.8.0"
+
+
+DEFAULT_TRACE_FORMAT_VERSION = TraceFormatVersion.V2_7_0
+
+#: The published artifact for each emittable version.
+TRACE_FORMAT_FILES: Dict[TraceFormatVersion, str] = {
+    TraceFormatVersion.V2_7_0: "trace_format_v2_7_0.json",
+    TraceFormatVersion.V2_8_0: "trace_format_v2_8_0.json",
+}
+
+
 G = TraceLevel.GENERIC
 D = TraceLevel.DETAILED
 F = TraceLevel.FULL_TRACES
 
-# Bounds. They are part of the contract; changing one is a contract change.
-TOKEN_MAX_CHARS = 64
-IDENTIFIER_MAX_CHARS = 128
-LABEL_MAX_CHARS = 128
-URL_MAX_CHARS = 256
-REASON_MAX_CHARS = 500  # matches the existing DEFERRAL_ROUTED reason cap
-SYSTEM_TEXT_MAX_CHARS = 1024  # attestation_context
-FULL_TEXT_MAX_CHARS = 65536
-LIST_MAX_ITEMS = 32
-MAP_MAX_ITEMS = 64
-JSON_MAX_DEPTH = 8
-JSON_MAX_ITEMS = 256
-JSON_MAX_STRING_CHARS = 8192
-JSON_MAX_KEY_CHARS = IDENTIFIER_MAX_CHARS  # object keys in opaque JSON
+# The contract lives in the published trace_format schema (CIRISAgent#1249).
+# Bounds, patterns and every event's field table are LOADED from it, so the
+# JSON artifact the Constitution pins by hash and this enforcer cannot drift.
+# Changing a bound means changing that file, which changes its pinned SHA-256.
+SCHEMA_DIR = Path(__file__).resolve().parent / "schemas"
+EGRESS_SCHEMA_FILE = SCHEMA_DIR / "trace_format_v2_8_0.json"
+_SCHEMA_DOC: JSONDict = json.loads(EGRESS_SCHEMA_FILE.read_text(encoding="utf-8"))
+_EGRESS: JSONDict = cast(JSONDict, _SCHEMA_DOC["x-ciris-egress"])
+_BOUNDS: Dict[str, int] = {k: int(cast(int, v)) for k, v in cast(JSONDict, _EGRESS["bounds"]).items()}
+_PATTERNS: Dict[str, str] = {k: str(v) for k, v in cast(JSONDict, _EGRESS["patterns"]).items()}
+
+TOKEN_MAX_CHARS = _BOUNDS["TOKEN_MAX_CHARS"]
+IDENTIFIER_MAX_CHARS = _BOUNDS["IDENTIFIER_MAX_CHARS"]
+LABEL_MAX_CHARS = _BOUNDS["LABEL_MAX_CHARS"]
+URL_MAX_CHARS = _BOUNDS["URL_MAX_CHARS"]
+REASON_MAX_CHARS = _BOUNDS["REASON_MAX_CHARS"]  # matches the existing DEFERRAL_ROUTED reason cap
+SYSTEM_TEXT_MAX_CHARS = _BOUNDS["SYSTEM_TEXT_MAX_CHARS"]  # attestation_context
+FULL_TEXT_MAX_CHARS = _BOUNDS["FULL_TEXT_MAX_CHARS"]
+LIST_MAX_ITEMS = _BOUNDS["LIST_MAX_ITEMS"]
+MAP_MAX_ITEMS = _BOUNDS["MAP_MAX_ITEMS"]
+JSON_MAX_DEPTH = _BOUNDS["JSON_MAX_DEPTH"]
+JSON_MAX_ITEMS = _BOUNDS["JSON_MAX_ITEMS"]
+JSON_MAX_STRING_CHARS = _BOUNDS["JSON_MAX_STRING_CHARS"]
+JSON_MAX_KEY_CHARS = _BOUNDS["JSON_MAX_KEY_CHARS"]  # object keys in opaque JSON
 
 
 class FieldKind(str, Enum):
@@ -150,376 +207,90 @@ class EnforcementResult(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Spec constructors (short names keep the tables below readable)
+# The schema: one spec tree per event type, LOADED from the published JSON
+# artifact (``x-ciris-egress.events`` -> ``definitions.EventData_<EVENT>``).
+# Each field names the lowest level at which it may ship (``level``) and its
+# kind (``x-ciris-kind``). Mirrors services._extract_component_data. Where that
+# builder emits something not listed, or at a lower level than listed, the
+# builder is wrong and the enforcement log names it.
 # ---------------------------------------------------------------------------
 
-
-def _num(level: TraceLevel = G) -> FieldSpec:
-    return FieldSpec(kind=FieldKind.NUMBER, min_level=level)
-
-
-def _int(level: TraceLevel = G) -> FieldSpec:
-    return FieldSpec(kind=FieldKind.INTEGER, min_level=level)
-
-
-def _bool(level: TraceLevel = G) -> FieldSpec:
-    return FieldSpec(kind=FieldKind.BOOL, min_level=level)
+#: Pattern per string kind, applied with ``fullmatch`` so Python and ECMA-262
+#: (JSON Schema ``pattern``) agree: ``$`` never admits a trailing newline here.
+KIND_PATTERNS: Dict[str, "re.Pattern[str]"] = {kind: re.compile(pat) for kind, pat in _PATTERNS.items()}
+_TOKEN_RE = KIND_PATTERNS[FieldKind.TOKEN.value]
+_PATTERNED_KINDS = frozenset({FieldKind.TOKEN, FieldKind.LABEL, FieldKind.TIMESTAMP, FieldKind.URL})
+_OPAQUE = FieldSpec(kind=FieldKind.JSON, min_level=F)
 
 
-def _tok(level: TraceLevel = G, max_chars: int = TOKEN_MAX_CHARS) -> FieldSpec:
-    return FieldSpec(kind=FieldKind.TOKEN, min_level=level, max_chars=max_chars)
+class EgressSchemaError(ValueError):
+    """The published schema file is not a well-formed egress contract."""
 
 
-def _ident(level: TraceLevel = D) -> FieldSpec:
-    return FieldSpec(kind=FieldKind.TOKEN, min_level=level, max_chars=IDENTIFIER_MAX_CHARS)
+def _resolve(ref: str) -> JSONDict:
+    prefix = "#/definitions/"
+    if not ref.startswith(prefix):
+        raise EgressSchemaError(f"unsupported $ref {ref!r}")
+    return cast(JSONDict, cast(JSONDict, _SCHEMA_DOC["definitions"])[ref[len(prefix) :]])
 
 
-def _label(level: TraceLevel = D, max_chars: int = LABEL_MAX_CHARS) -> FieldSpec:
-    return FieldSpec(kind=FieldKind.LABEL, min_level=level, max_chars=max_chars)
+def _spec_from_json(node: JSONDict, path: str, parent_level: TraceLevel) -> FieldSpec:
+    """One JSON Schema field -> FieldSpec.
+
+    Strict: an unknown kind, or a pattern that is not its kind's pattern, is a
+    malformed contract and fails the import rather than defaulting to "allow".
+    """
+    try:
+        kind = FieldKind(str(node["x-ciris-kind"]))
+    except (KeyError, ValueError) as exc:
+        raise EgressSchemaError(f"{path}: missing or unknown x-ciris-kind") from exc
+    level = TraceLevel(str(node["level"])) if "level" in node else parent_level
+    if kind in _PATTERNED_KINDS and node.get("pattern") != _PATTERNS[kind.value]:
+        raise EgressSchemaError(f"{path}: pattern is not the {kind.value} pattern")
+    if kind == FieldKind.LIST:
+        return FieldSpec(
+            kind=kind,
+            min_level=level,
+            max_items=int(cast(int, node["maxItems"])),
+            items=_spec_from_json(cast(JSONDict, node["items"]), f"{path}[]", level),
+        )
+    if kind == FieldKind.MAP:
+        return FieldSpec(
+            kind=kind,
+            min_level=level,
+            max_items=int(cast(int, node["maxProperties"])),
+            values=_spec_from_json(cast(JSONDict, node["additionalProperties"]), f"{path}.*", level),
+        )
+    if kind == FieldKind.OBJECT:
+        return FieldSpec(kind=kind, min_level=level, children=_fields_from_json(node, path, level))
+    if kind == FieldKind.JSON:
+        return FieldSpec(kind=kind, min_level=level)
+    max_chars = node.get("maxLength")
+    return FieldSpec(kind=kind, min_level=level, max_chars=None if max_chars is None else int(cast(int, max_chars)))
 
 
-def _ts(level: TraceLevel = G) -> FieldSpec:
-    return FieldSpec(kind=FieldKind.TIMESTAMP, min_level=level)
+def _fields_from_json(node: JSONDict, path: str = "", level: TraceLevel = TraceLevel.GENERIC) -> Dict[str, FieldSpec]:
+    props = cast(JSONDict, node.get("properties") or {})
+    return {
+        name: _spec_from_json(cast(JSONDict, child), f"{path}.{name}" if path else name, level)
+        for name, child in props.items()
+    }
 
-
-def _url(level: TraceLevel = D) -> FieldSpec:
-    return FieldSpec(kind=FieldKind.URL, min_level=level, max_chars=URL_MAX_CHARS)
-
-
-def _reason(level: TraceLevel = D) -> FieldSpec:
-    return FieldSpec(kind=FieldKind.TEXT, min_level=level, max_chars=REASON_MAX_CHARS)
-
-
-def _text(level: TraceLevel = F, max_chars: int = FULL_TEXT_MAX_CHARS) -> FieldSpec:
-    return FieldSpec(kind=FieldKind.TEXT, min_level=level, max_chars=max_chars)
-
-
-def _list(items: FieldSpec, level: TraceLevel = D, max_items: int = LIST_MAX_ITEMS) -> FieldSpec:
-    return FieldSpec(kind=FieldKind.LIST, min_level=level, max_items=max_items, items=items)
-
-
-def _map(values: FieldSpec, level: TraceLevel = D, max_items: int = MAP_MAX_ITEMS) -> FieldSpec:
-    return FieldSpec(kind=FieldKind.MAP, min_level=level, max_items=max_items, values=values)
-
-
-def _obj(children: Dict[str, FieldSpec], level: TraceLevel = G) -> FieldSpec:
-    return FieldSpec(kind=FieldKind.OBJECT, min_level=level, children=children)
-
-
-def _json(level: TraceLevel = F) -> FieldSpec:
-    return FieldSpec(kind=FieldKind.JSON, min_level=level)
-
-
-# ---------------------------------------------------------------------------
-# The schema. One spec tree per event type; each field names the lowest level
-# at which it may ship. Mirrors services._extract_component_data. Where that
-# builder emits something not listed here, or at a lower level than listed,
-# the builder is wrong and the enforcement log names it.
-# ---------------------------------------------------------------------------
-
-_IDMA_GENERIC: Dict[str, FieldSpec] = {
-    "k_eff": _num(),
-    "effective_source_count": _num(),
-    "correlation_risk": _num(),
-    "source_overlap": _num(),
-    "fragility_flag": _bool(),
-    "reasoning_is_fragile": _bool(),
-    "phase": _tok(),
-    "reasoning_state": _tok(),
-}
-
-_IDMA_DETAILED: Dict[str, FieldSpec] = {
-    "k_raw": _int(D),
-    "raw_source_count": _int(D),
-    "rho_mean": _num(D),
-    "phase_confidence": _num(D),
-    "collapse_margin": _num(D),
-    "safety_margin": _num(D),
-    "sources_identified": _list(_label()),
-    "source_ids": _list(_ident()),
-    "source_types": _list(_label()),
-    "source_independence_scores": _list(_num(D)),
-    "source_type_counts": _list(_label()),
-    "correlation_factors": _list(_label()),
-    "top_correlation_factors": _list(_label()),
-    "pairwise_correlation_summary": _list(_label()),
-    "rho_intra": _num(D),
-    "rho_inter": _num(D),
-    "module_count": _int(D),
-    "effective_module_count": _num(D),
-    "source_clusters": _list(_label()),
-    "common_cause_flags": _list(_label()),
-    "intervention_recommendation": _reason(),
-    "next_best_recovery_step": _reason(),
-    "delta_k_eff": _num(D),
-    "delta_rho_mean": _num(D),
-    "phase_persistence_steps": _int(D),
-    "time_in_fragile_state_ms": _num(D),
-    "moving_variance": _num(D),
-    "rho_critical": _num(D),
-    "k_required": _num(D),
-    "defense_function": _num(D),
-    "collapse_rate": _num(D),
-    "time_to_truth": _num(D),
-    "time_to_entropy": _num(D),
-    "time_to_capture": _num(D),
-}
-
-_IDMA_FULL: Dict[str, FieldSpec] = {
-    "reasoning": _text(),
-    "prompt_used": _text(),
-}
-
-# verb_specific_data: an opaque payload keyed by `verb`. Under GENERIC only its
-# enum, boolean and tool-name members survive. A DEFER reason is reasoning-class
-# text (DETAILED, capped). Tool parameters are content (FULL).
-_VERB_SPECIFIC_DATA: Dict[str, FieldSpec] = {
-    # DEFER (DSASPDMA classification)
-    "rights_basis": _list(_tok(G), level=G),
-    "primary_need_category": _tok(),
-    "secondary_need_categories": _list(_tok(G), level=G),
-    "domain_hint": _tok(),
-    "operational_reason": _tok(),
-    "defer_reason": _reason(),
-    "defer_until": _ts(D),
-    # TOOL (TSASPDMA)
-    "original_tool_name": _tok(G, IDENTIFIER_MAX_CHARS),
-    "final_tool_name": _tok(G, IDENTIFIER_MAX_CHARS),
-    "original_parameters": _json(),
-    "final_parameters": _json(),
-    # MEMORIZE (MSASPDMA)
-    "original_node_id": _label(D),
-    "final_node_id": _label(D),
-    "node_id_corrected": _bool(),
-}
 
 EVENT_SCHEMAS: Dict[str, Dict[str, FieldSpec]] = {
-    "THOUGHT_START": {
-        "round_number": _int(),
-        "thought_depth": _int(),
-        "task_priority": _int(),
-        "updated_info_available": _bool(),
-        "requires_human_input": _bool(),
-        "thought_type": _tok(),
-        "thought_status": _tok(D),
-        "parent_thought_id": _ident(),
-        # A key identifier (DETAILED). It is how battery/QA rows identify
-        # themselves (CIRISAgent#1245), so it stays; never at GENERIC.
-        "channel_id": _label(D),
-        "source_adapter": _tok(D),
-        "task_description": _text(),
-        "initial_context": _json(),
-        "thought_content": _text(F, 500),
-    },
-    "SNAPSHOT_AND_CONTEXT": {
-        "agent_name": _label(G, TOKEN_MAX_CHARS),
-        "cognitive_state": _tok(),
-        # The one GENERIC text field. Agent-authored attestation disclosure, no
-        # LLM or user content, REQUIRED at every level by FSD-001.
-        "attestation_context": _text(G, SYSTEM_TEXT_MAX_CHARS),
-        "attestation_level": _int(),
-        "attestation_status": _tok(),
-        "disclosure_severity": _tok(),
-        "binary_ok": _bool(),
-        "env_ok": _bool(),
-        "registry_ok": _bool(),
-        "file_integrity_ok": _bool(),
-        "audit_ok": _bool(),
-        "play_integrity_ok": _bool(),
-        "hardware_backed": _bool(),
-        "memory_count": _int(),
-        "context_tokens": _int(),
-        "active_services": _list(_label(), max_items=MAP_MAX_ITEMS),
-        "context_sources": _list(_label(), max_items=MAP_MAX_ITEMS),
-        "service_health": _map(_bool(D)),
-        "agent_version": _tok(D),
-        "circuit_breaker_status": _map(_tok(D)),
-        "key_status": _tok(D),
-        "key_id": _ident(),
-        "ed25519_fingerprint": _ident(),
-        "key_storage_mode": _tok(D),
-        "hardware_type": _tok(D),
-        "verify_version": _tok(D),
-        "system_snapshot": _json(),
-        "gathered_context": _json(),
-        "relevant_memories": _json(),
-        "conversation_history": _json(),
-    },
-    "DMA_RESULTS": {
-        "csdma": _obj(
-            {
-                "plausibility_score": _num(),
-                "flags": _list(_label()),
-                "reasoning": _text(),
-                "prompt_used": _text(),
-            }
-        ),
-        "dsdma": _obj(
-            {
-                "domain_alignment": _num(),
-                # LLM-authored, so a DETAILED identifier at most, never GENERIC.
-                "domain": _label(D, TOKEN_MAX_CHARS),
-                "flags": _list(_label()),
-                "reasoning": _text(),
-                "prompt_used": _text(),
-            }
-        ),
-        "pdma": _obj(
-            {
-                "has_conflicts": _bool(),
-                "stakeholders": _list(_label()),
-                "conflicts": _reason(),
-                "alignment_check": _reason(),
-                "reasoning": _text(),
-                "prompt_used": _text(),
-            }
-        ),
-        "idma": _obj({**_IDMA_GENERIC, **_IDMA_DETAILED, **_IDMA_FULL}),
-        "csdma_plausibility_score": _num(),
-        "dsdma_domain_alignment": _num(),
-        "dsdma_domain": _label(D, TOKEN_MAX_CHARS),
-        "combined_analysis": _json(),
-    },
-    "IDMA_RESULT": {
-        **_IDMA_GENERIC,
-        "idma_k_eff": _num(),
-        "idma_correlation_risk": _num(),
-        "idma_fragility_flag": _bool(),
-        "idma_phase": _tok(),
-        **_IDMA_DETAILED,
-        **_IDMA_FULL,
-    },
-    "ASPDMA_RESULT": {
-        "selected_action": _tok(),
-        "selection_confidence": _num(),
-        "is_recursive": _bool(),
-        "alternatives_considered": _list(_tok(D)),
-        "evaluation_time_ms": _num(D),
-        "action_rationale": _text(),
-        "reasoning_summary": _text(),
-        "action_parameters": _json(),
-        "aspdma_prompt": _text(),
-        "raw_llm_response": _text(F, 1000),
-    },
-    "TSASPDMA_RESULT": {
-        "original_tool_name": _tok(G, IDENTIFIER_MAX_CHARS),
-        "final_action": _tok(),
-        "final_tool_name": _tok(G, IDENTIFIER_MAX_CHARS),
-        "gotchas_acknowledged": _list(_label()),
-        "tool_description": _reason(),
-        "original_parameters": _json(),
-        "final_parameters": _json(),
-        "aspdma_rationale": _text(),
-        "tsaspdma_rationale": _text(),
-        "tsaspdma_prompt": _text(),
-    },
-    "VERB_SECOND_PASS_RESULT": {
-        "verb": _tok(),
-        "original_action": _tok(),
-        "final_action": _tok(),
-        "verb_specific_data": _obj(_VERB_SPECIFIC_DATA),
-        # The pass rationales are the reasoning chain (FULL), not a summary.
-        "original_reasoning": _text(),
-        "final_reasoning": _text(),
-        "second_pass_prompt": _text(),
-    },
-    "CONSCIENCE_RESULT": {
-        "conscience_passed": _bool(),
-        "action_was_overridden": _bool(),
-        "ethical_faculties_skipped": _bool(),
-        "is_recursive": _bool(),
-        "updated_status_detected": _bool(),
-        "thought_depth_triggered": _bool(),
-        "thought_depth_current": _int(),
-        "thought_depth_max": _int(),
-        "entropy_level": _num(),
-        "coherence_level": _num(),
-        "entropy_passed": _bool(),
-        "entropy_score": _num(),
-        "entropy_threshold": _num(),
-        "coherence_passed": _bool(),
-        "coherence_score": _num(),
-        "coherence_threshold": _num(),
-        "optimization_veto_passed": _bool(),
-        "optimization_veto_entropy_ratio": _num(),
-        "epistemic_humility_passed": _bool(),
-        "epistemic_humility_certainty": _num(),
-        "final_action": _tok(D),
-        "conscience_override_reason": _reason(),
-        "entropy_reason": _reason(),
-        "coherence_reason": _reason(),
-        "optimization_veto_decision": _tok(D),
-        "optimization_veto_affected_values": _list(_label()),
-        "epistemic_humility_uncertainties": _list(_label(D, REASON_MAX_CHARS)),
-        "epistemic_humility_recommendation": _tok(D),
-        "epistemic_data": _json(),
-        "updated_status_content": _text(),
-        "optimization_veto_justification": _text(),
-        "epistemic_humility_justification": _text(),
-    },
-    "ACTION_RESULT": {
-        "execution_success": _bool(),
-        "execution_time_ms": _num(),
-        "tokens_input": _int(),
-        "tokens_output": _int(),
-        "tokens_total": _int(),
-        "cost_cents": _num(),
-        "carbon_grams": _num(),
-        "energy_mwh": _num(),
-        "llm_calls": _int(),
-        "audit_sequence_number": _int(),
-        "audit_entry_hash": _tok(G, IDENTIFIER_MAX_CHARS),
-        "has_positive_moment": _bool(),
-        "has_execution_error": _bool(),
-        "success": _bool(),
-        "action_executed": _tok(),
-        "follow_up_thought_id": _ident(),
-        "audit_entry_id": _ident(),
-        "models_used": _list(_ident()),
-        "api_bases_used": _list(_url()),
-        "execution_error": _reason(),
-        "audit_signature": _tok(D, 256),
-        "action_parameters": _json(),
-        "positive_moment": _text(F, 500),
-    },
-    "LLM_CALL": {
-        "handler_name": _tok(),
-        "service_name": _tok(),
-        "model": _tok(G, IDENTIFIER_MAX_CHARS),
-        # An endpoint locator, not a score: it can name a private LAN host or a
-        # self-hosted proxy, and nothing scores on it. DETAILED, not GENERIC.
-        "base_url": _url(),
-        "response_model": _tok(G, IDENTIFIER_MAX_CHARS),
-        "duration_ms": _num(),
-        "prompt_tokens": _int(),
-        "completion_tokens": _int(),
-        "prompt_bytes": _int(),
-        "completion_bytes": _int(),
-        "cost_usd": _num(),
-        "status": _tok(),
-        "error_class": _tok(G, IDENTIFIER_MAX_CHARS),
-        "attempt_count": _int(),
-        "retry_count": _int(),
-        "parent_event_type": _tok(),
-        "parent_attempt_index": _int(),
-        "prompt_hash": _ident(),
-        "prompt": _text(),
-        "response_text": _text(),
-    },
-    "DEFERRAL_ROUTED": {
-        "defer_until": _ts(),
-        "reason": _reason(),
-    },
+    event: _fields_from_json(_resolve(str(ref))) for event, ref in cast(JSONDict, _EGRESS["events"]).items()
 }
 
 #: Event types without a dedicated builder fall through to the minimal shape.
-FALLBACK_SCHEMA: Dict[str, FieldSpec] = {
-    "event_type": _tok(G, IDENTIFIER_MAX_CHARS),
-    "raw_data": _json(),
-}
+FALLBACK_SCHEMA: Dict[str, FieldSpec] = _fields_from_json(_resolve(str(_EGRESS["fallback"])))
 
-_TOKEN_RE = re.compile(r"^[A-Za-z0-9_.:/@+=\-]+$")
-_CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]")
+#: The v2.8.0 ``deployment_profile`` block. Every member is level GENERIC (the
+#: profile rides every trace level); kinds and bounds as for component fields.
+DEPLOYMENT_PROFILE_SCHEMA: Dict[str, FieldSpec] = _fields_from_json(_resolve("#/definitions/DeploymentProfile"))
+#: Members a v2.8.0 admitter requires; dropping one would refuse the whole trace.
+DEPLOYMENT_PROFILE_REQUIRED: Tuple[str, ...] = tuple(
+    str(name) for name in cast(List[str], _resolve("#/definitions/DeploymentProfile")["required"])
+)
 
 
 def _is_empty(value: object) -> bool:
@@ -612,10 +383,16 @@ class _Enforcer:
         # dropped rather than truncated (a 96 KB "flag" is not a flag).
         if cap is not None and len(value) > cap:
             return self._wrong(path, value, f"{kind.value} longer than {cap} chars")
-        if kind == FieldKind.TOKEN and not _TOKEN_RE.match(value):
-            return self._wrong(path, value, "free text where an enum/identifier token belongs")
-        if kind == FieldKind.LABEL and _CONTROL_RE.search(value):
-            return self._wrong(path, value, "multi-line text where a one-line label belongs")
+        # The schema's own pattern for the kind, so the agent never keeps a
+        # value the published JSON Schema would refuse (refuse-never-truncate
+        # at the admitter would cost the whole trace).
+        if not KIND_PATTERNS[kind.value].fullmatch(value):
+            why = {
+                FieldKind.TOKEN: "free text where an enum/identifier token belongs",
+                FieldKind.LABEL: "multi-line text where a one-line label belongs",
+                FieldKind.TIMESTAMP: "not an ISO-8601 timestamp",
+            }.get(kind, "not an http(s) URL")
+            return self._wrong(path, value, why)
         if kind == FieldKind.TIMESTAMP:
             try:
                 datetime.fromisoformat(value.replace("Z", "+00:00"))
@@ -635,7 +412,7 @@ class _Enforcer:
     def list_(self, spec: FieldSpec, value: object, path: str) -> Tuple[bool, JSONValue]:
         if not isinstance(value, (list, tuple)):
             return self._wrong(path, value, "expected list")
-        item_spec = spec.items or _json()
+        item_spec = spec.items or _OPAQUE
         out: List[JSONValue] = []
         for i, item in enumerate(value):
             if item is None:
@@ -652,10 +429,10 @@ class _Enforcer:
     def map_(self, spec: FieldSpec, value: object, path: str) -> Tuple[bool, JSONValue]:
         if not isinstance(value, dict):
             return self._wrong(path, value, "expected map")
-        value_spec = spec.values or _json()
+        value_spec = spec.values or _OPAQUE
         out: JSONDict = {}
         for key, item in value.items():
-            if not isinstance(key, str) or len(key) > IDENTIFIER_MAX_CHARS or not _TOKEN_RE.match(key):
+            if not isinstance(key, str) or len(key) > IDENTIFIER_MAX_CHARS or not _TOKEN_RE.fullmatch(key):
                 self._flag(f"{path}.<key>", ViolationKind.WRONG_TYPE, key, "map key is not a token")
                 continue
             if item is None:
@@ -719,6 +496,17 @@ def enforce_egress_schema(event_type: str, level: TraceLevel, data: Mapping[str,
     """Filter ``data`` to what ``level`` allows for ``event_type``. Pure; does not log."""
     enforcer = _Enforcer(event_type, level)
     cleaned = enforcer.fields(schema_for(event_type), data, "")
+    return EnforcementResult(data=cleaned, violations=enforcer.violations)
+
+
+def enforce_deployment_profile(profile: Mapping[str, object]) -> EnforcementResult:
+    """Filter a v2.8.0 ``deployment_profile`` to its schema. Pure; does not log.
+
+    The caller restores a default for any REQUIRED member this drops: a
+    profile missing one is refused whole by the admitter.
+    """
+    enforcer = _Enforcer("DEPLOYMENT_PROFILE", TraceLevel.GENERIC)
+    cleaned = enforcer.fields(DEPLOYMENT_PROFILE_SCHEMA, profile, "deployment_profile.")
     return EnforcementResult(data=cleaned, violations=enforcer.violations)
 
 

@@ -1,0 +1,5259 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ciris.ai/schemas/trace_format_v2.8.0.json",
+  "title": "CIRIS Reasoning Trace v2.8.0",
+  "description": "Reasoning trace from the CIRIS H3ERE pipeline (CIRISAgent#1249; CIRISConstitution#166, CC 3.1.5). v2.8.0 over v2.7.0: (1) run_kind, a required closed enum (production|prod-personal|prod-managed|qa|battery|mock), and trace_format_version, the required const \"2.8.0\" that identifies this contract, both carried in the signed envelope's deployment_profile block. A v2.8.0 trace declares itself by deployment_profile.trace_format_version, never by trace_schema_version, which stays the substrate's canonicalization epoch (\"3.0.0\", JCS). production, prod-personal and prod-managed are all production runs; production stays valid for an emitter that does not make the managed/personal distinction. (2) Provenance members in deployment_profile, so a synthetic or versioned run is labelled on every row at every level (CIRISAgent#1245, #878, #820): pipeline_metadata (agent_version, accord_version, identity_hash, and two declared-but-unsourced version slots), calibration_version (the substrate's axis-calibration bundle), agent_template from the agent's declared template, deployment_region from operator config. (3) Every deployment_profile member carries a kind, pattern and length bound like a component field (level generic: the profile rides every trace level), and the block is closed. (4) SNAPSHOT_AND_CONTEXT.disclosure_version, the CIRISVerify mandatory-disclosure version active when the thought ran (CIRISAgent#832); optional, null until CIRISVerify publishes one. (5) per-trace_level bounds on every component data field: enumeration-token patterns, maxLength, maxItems, closed field sets. Each field's `level` is the lowest trace_level at which it may appear; above the envelope's trace_level it must be absent. EventData_<EVENT>__<level> expresses the same rule in standard JSON Schema. These bounds are the agent's egress contract: ciris_adapters/ciris_accord_metrics/egress_schema.py LOADS them from this file and filters every component, and the deployment_profile, to them before signing, so a conformant agent never signs a trace this schema refuses. Under v2.7.0 the run-kind marker overrode deployment_type: a 2.7.x row's deployment_type may hold mock, qa or battery in place of the operator's value, and such a row has no run_kind and no trace_format_version. An admitter must not infer run_kind from deployment_type on 2.7.x rows; run_kind exists only where deployment_profile.trace_format_version is \"2.8.0\". The admitter (CIRISPersist) refuses, never truncates: a non-conformant trace is refused whole with `trace_field_shape_violation`, a mock run with `trace_run_kind_mock` (Persist-side tokens, not emitted by the agent). The schema file is pinned by SHA-256 (schemas/SCHEMA_SHA256). The x-ciris-* keywords and `level` are annotations; standard validators ignore them.",
+  "type": "object",
+  "required": [
+    "trace_id",
+    "thought_id",
+    "agent_id_hash",
+    "components",
+    "started_at",
+    "trace_schema_version",
+    "deployment_profile"
+  ],
+  "properties": {
+    "trace_id": {
+      "type": "string",
+      "description": "Unique trace identifier: trace-{thought_id}-{timestamp}",
+      "pattern": "^trace-.*$"
+    },
+    "trace_level": {
+      "type": "string",
+      "enum": [
+        "generic",
+        "detailed",
+        "full_traces"
+      ],
+      "default": "generic",
+      "description": "Detail level of captured data"
+    },
+    "trace_schema_version": {
+      "type": "string",
+      "const": "3.0.0",
+      "description": "The substrate's canonicalization epoch, stamped by ciris-lens-core at seal time (major >= 3 selects JCS, RFC 8785). NOT the trace format version: that is deployment_profile.trace_format_version."
+    },
+    "deployment_profile": {
+      "$ref": "#/definitions/DeploymentProfile"
+    },
+    "thought_id": {
+      "type": "string",
+      "description": "Unique thought identifier"
+    },
+    "task_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Parent task identifier"
+    },
+    "agent_id_hash": {
+      "type": "string",
+      "description": "SHA-256 hash of agent identity (anonymized)"
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO timestamp when trace started"
+    },
+    "completed_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time",
+      "description": "ISO timestamp when trace completed"
+    },
+    "components": {
+      "type": "array",
+      "description": "Ordered reasoning components",
+      "items": {
+        "$ref": "#/definitions/TraceComponent"
+      },
+      "minItems": 1,
+      "maxItems": 64
+    },
+    "signature": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Ed25519 signature of trace content (base64)"
+    },
+    "signature_key_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Key identifier used for signing"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "trace_level": {
+            "const": "generic"
+          }
+        },
+        "required": [
+          "trace_level"
+        ]
+      },
+      "then": {
+        "properties": {
+          "components": {
+            "items": {
+              "$ref": "#/definitions/TraceComponent__generic"
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "trace_level": {
+            "const": "detailed"
+          }
+        },
+        "required": [
+          "trace_level"
+        ]
+      },
+      "then": {
+        "properties": {
+          "components": {
+            "items": {
+              "$ref": "#/definitions/TraceComponent__detailed"
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "trace_level": {
+            "const": "full_traces"
+          }
+        },
+        "required": [
+          "trace_level"
+        ]
+      },
+      "then": {
+        "properties": {
+          "components": {
+            "items": {
+              "$ref": "#/definitions/TraceComponent__full_traces"
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "not": {
+          "required": [
+            "trace_level"
+          ]
+        }
+      },
+      "then": {
+        "properties": {
+          "components": {
+            "items": {
+              "$ref": "#/definitions/TraceComponent__generic"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "x-ciris-egress": {
+    "description": "Machine-readable egress contract. egress_schema.py loads levels, bounds, patterns and the event -> data-definition map from here; a test asserts the per-field keywords agree with the loaded spec.",
+    "levels": [
+      "generic",
+      "detailed",
+      "full_traces"
+    ],
+    "kinds": [
+      "number",
+      "integer",
+      "bool",
+      "token",
+      "label",
+      "timestamp",
+      "url",
+      "text",
+      "list",
+      "map",
+      "object",
+      "json"
+    ],
+    "bounds": {
+      "TOKEN_MAX_CHARS": 64,
+      "IDENTIFIER_MAX_CHARS": 128,
+      "LABEL_MAX_CHARS": 128,
+      "URL_MAX_CHARS": 256,
+      "REASON_MAX_CHARS": 500,
+      "SYSTEM_TEXT_MAX_CHARS": 1024,
+      "FULL_TEXT_MAX_CHARS": 65536,
+      "LIST_MAX_ITEMS": 32,
+      "MAP_MAX_ITEMS": 64,
+      "JSON_MAX_DEPTH": 8,
+      "JSON_MAX_ITEMS": 256,
+      "JSON_MAX_STRING_CHARS": 8192,
+      "JSON_MAX_KEY_CHARS": 128
+    },
+    "patterns": {
+      "token": "^[A-Za-z0-9_.:/@+=\\-]+$",
+      "label": "^[^\\u0000-\\u001f\\u007f]*$",
+      "timestamp": "^[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9]{2}:[0-9]{2}(:[0-9]{2}([.,][0-9]+)?)?(Z|z|[+-][0-9]{2}(:?[0-9]{2})?)?$",
+      "url": "^https?://[^\\s/?#@]+(/[^\\s?#]*)?$"
+    },
+    "events": {
+      "THOUGHT_START": "#/definitions/EventData_THOUGHT_START",
+      "SNAPSHOT_AND_CONTEXT": "#/definitions/EventData_SNAPSHOT_AND_CONTEXT",
+      "DMA_RESULTS": "#/definitions/EventData_DMA_RESULTS",
+      "IDMA_RESULT": "#/definitions/EventData_IDMA_RESULT",
+      "ASPDMA_RESULT": "#/definitions/EventData_ASPDMA_RESULT",
+      "TSASPDMA_RESULT": "#/definitions/EventData_TSASPDMA_RESULT",
+      "VERB_SECOND_PASS_RESULT": "#/definitions/EventData_VERB_SECOND_PASS_RESULT",
+      "CONSCIENCE_RESULT": "#/definitions/EventData_CONSCIENCE_RESULT",
+      "ACTION_RESULT": "#/definitions/EventData_ACTION_RESULT",
+      "LLM_CALL": "#/definitions/EventData_LLM_CALL",
+      "DEFERRAL_ROUTED": "#/definitions/EventData_DEFERRAL_ROUTED"
+    },
+    "fallback": "#/definitions/EventData_FALLBACK"
+  },
+  "definitions": {
+    "TraceComponent": {
+      "type": "object",
+      "required": [
+        "component_type",
+        "event_type",
+        "timestamp",
+        "data"
+      ],
+      "properties": {
+        "component_type": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64,
+          "description": "H3ERE component category, substrate-assigned (observation, context, rationale, conscience, action, deferral_routed, ...)"
+        },
+        "event_type": {
+          "type": "string",
+          "enum": [
+            "THOUGHT_START",
+            "SNAPSHOT_AND_CONTEXT",
+            "DMA_RESULTS",
+            "IDMA_RESULT",
+            "ASPDMA_RESULT",
+            "TSASPDMA_RESULT",
+            "VERB_SECOND_PASS_RESULT",
+            "CONSCIENCE_RESULT",
+            "ACTION_RESULT",
+            "LLM_CALL",
+            "DEFERRAL_ROUTED",
+            "DEFERRAL_RECEIVED",
+            "DEFERRAL_RESOLVED",
+            "GRATITUDE_SIGNALED",
+            "CREDIT_GENERATED"
+          ],
+          "description": "Closed 15-variant ReasoningEventType taxonomy (locked by lens-core at compile time)"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When this component was captured"
+        },
+        "data": {
+          "type": "object",
+          "description": "Component-specific data. Its shape at each trace_level is EventData_<EVENT_TYPE>__<level> (EventData_FALLBACK__<level> for event types without a dedicated builder)."
+        }
+      }
+    },
+    "EventData_THOUGHT_START": {
+      "type": "object",
+      "description": "THOUGHT_START component `data`: the agent's egress contract (CIRISAgent#1249).",
+      "additionalProperties": false,
+      "properties": {
+        "round_number": {
+          "x-ciris-kind": "integer",
+          "level": "generic",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "thought_depth": {
+          "x-ciris-kind": "integer",
+          "level": "generic",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "task_priority": {
+          "x-ciris-kind": "integer",
+          "level": "generic",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "updated_info_available": {
+          "x-ciris-kind": "bool",
+          "level": "generic",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "requires_human_input": {
+          "x-ciris-kind": "bool",
+          "level": "generic",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "thought_type": {
+          "x-ciris-kind": "token",
+          "level": "generic",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64
+        },
+        "thought_status": {
+          "x-ciris-kind": "token",
+          "level": "detailed",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64
+        },
+        "parent_thought_id": {
+          "x-ciris-kind": "token",
+          "level": "detailed",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 128
+        },
+        "channel_id": {
+          "description": "A key identifier (DETAILED, never GENERIC: API channels embed the user id, api_<user_id>). Synthetic runs are labelled at every level by deployment_profile.run_kind, not by parsing this string (CIRISAgent#1245).",
+          "x-ciris-kind": "label",
+          "level": "detailed",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+          "maxLength": 128
+        },
+        "source_adapter": {
+          "x-ciris-kind": "token",
+          "level": "detailed",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64
+        },
+        "task_description": {
+          "x-ciris-kind": "text",
+          "level": "full_traces",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 65536
+        },
+        "initial_context": {
+          "x-ciris-kind": "json",
+          "level": "full_traces",
+          "$ref": "#/definitions/BoundedJson"
+        },
+        "thought_content": {
+          "x-ciris-kind": "text",
+          "level": "full_traces",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 500
+        },
+        "attempt_index": {
+          "description": "Stamped into every component's data by ciris-lens-core at seal time (0 = first attempt of this event type for the thought); in the signed bytes. The agent never emits it.",
+          "x-ciris-kind": "integer",
+          "level": "generic",
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      }
+    },
+    "EventData_THOUGHT_START__generic": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/EventData_THOUGHT_START"
+        }
+      ],
+      "propertyNames": {
+        "enum": [
+          "attempt_index",
+          "requires_human_input",
+          "round_number",
+          "task_priority",
+          "thought_depth",
+          "thought_type",
+          "updated_info_available"
+        ]
+      }
+    },
+    "EventData_THOUGHT_START__detailed": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/EventData_THOUGHT_START"
+        }
+      ],
+      "propertyNames": {
+        "enum": [
+          "attempt_index",
+          "channel_id",
+          "parent_thought_id",
+          "requires_human_input",
+          "round_number",
+          "source_adapter",
+          "task_priority",
+          "thought_depth",
+          "thought_status",
+          "thought_type",
+          "updated_info_available"
+        ]
+      }
+    },
+    "EventData_THOUGHT_START__full_traces": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/EventData_THOUGHT_START"
+        }
+      ],
+      "propertyNames": {
+        "enum": [
+          "attempt_index",
+          "channel_id",
+          "initial_context",
+          "parent_thought_id",
+          "requires_human_input",
+          "round_number",
+          "source_adapter",
+          "task_description",
+          "task_priority",
+          "thought_content",
+          "thought_depth",
+          "thought_status",
+          "thought_type",
+          "updated_info_available"
+        ]
+      }
+    },
+    "EventData_SNAPSHOT_AND_CONTEXT": {
+      "type": "object",
+      "description": "SNAPSHOT_AND_CONTEXT component `data`: the agent's egress contract (CIRISAgent#1249).",
+      "additionalProperties": false,
+      "properties": {
+        "agent_name": {
+          "x-ciris-kind": "label",
+          "level": "generic",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+          "maxLength": 64
+        },
+        "cognitive_state": {
+          "x-ciris-kind": "token",
+          "level": "generic",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64
+        },
+        "attestation_context": {
+          "description": "The one GENERIC text field: agent-authored attestation disclosure, no LLM or user content, REQUIRED at every level by FSD-001.",
+          "x-ciris-kind": "text",
+          "level": "generic",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 1024
+        },
+        "attestation_level": {
+          "x-ciris-kind": "integer",
+          "level": "generic",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "attestation_status": {
+          "x-ciris-kind": "token",
+          "level": "generic",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64
+        },
+        "disclosure_severity": {
+          "x-ciris-kind": "token",
+          "level": "generic",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64
+        },
+        "disclosure_version": {
+          "description": "Version of the CIRISVerify mandatory disclosure active when the thought ran (CIRISAgent#832). Per event, not in deployment_profile, because the disclosure follows license status and can change while the process runs. CIRISVerify publishes no version today, so this is null. Emitted under v2.8.0 only.",
+          "x-ciris-kind": "token",
+          "level": "generic",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64
+        },
+        "binary_ok": {
+          "x-ciris-kind": "bool",
+          "level": "generic",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "env_ok": {
+          "x-ciris-kind": "bool",
+          "level": "generic",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "registry_ok": {
+          "x-ciris-kind": "bool",
+          "level": "generic",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "file_integrity_ok": {
+          "x-ciris-kind": "bool",
+          "level": "generic",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "audit_ok": {
+          "x-ciris-kind": "bool",
+          "level": "generic",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "play_integrity_ok": {
+          "x-ciris-kind": "bool",
+          "level": "generic",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "hardware_backed": {
+          "x-ciris-kind": "bool",
+          "level": "generic",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "memory_count": {
+          "x-ciris-kind": "integer",
+          "level": "generic",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "context_tokens": {
+          "x-ciris-kind": "integer",
+          "level": "generic",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "active_services": {
+          "x-ciris-kind": "list",
+          "level": "detailed",
+          "type": [
+            "array",
+            "null"
+          ],
+          "maxItems": 64,
+          "items": {
+            "x-ciris-kind": "label",
+            "type": "string",
+            "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+            "maxLength": 128
+          }
+        },
+        "context_sources": {
+          "x-ciris-kind": "list",
+          "level": "detailed",
+          "type": [
+            "array",
+            "null"
+          ],
+          "maxItems": 64,
+          "items": {
+            "x-ciris-kind": "label",
+            "type": "string",
+            "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+            "maxLength": 128
+          }
+        },
+        "service_health": {
+          "x-ciris-kind": "map",
+          "level": "detailed",
+          "type": [
+            "object",
+            "null"
+          ],
+          "maxProperties": 64,
+          "propertyNames": {
+            "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+            "maxLength": 128
+          },
+          "additionalProperties": {
+            "x-ciris-kind": "bool",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "agent_version": {
+          "x-ciris-kind": "token",
+          "level": "detailed",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64
+        },
+        "circuit_breaker_status": {
+          "x-ciris-kind": "map",
+          "level": "detailed",
+          "type": [
+            "object",
+            "null"
+          ],
+          "maxProperties": 64,
+          "propertyNames": {
+            "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+            "maxLength": 128
+          },
+          "additionalProperties": {
+            "x-ciris-kind": "token",
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+            "maxLength": 64
+          }
+        },
+        "key_status": {
+          "x-ciris-kind": "token",
+          "level": "detailed",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64
+        },
+        "key_id": {
+          "x-ciris-kind": "token",
+          "level": "detailed",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 128
+        },
+        "ed25519_fingerprint": {
+          "x-ciris-kind": "token",
+          "level": "detailed",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 128
+        },
+        "key_storage_mode": {
+          "x-ciris-kind": "token",
+          "level": "detailed",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64
+        },
+        "hardware_type": {
+          "x-ciris-kind": "token",
+          "level": "detailed",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64
+        },
+        "verify_version": {
+          "x-ciris-kind": "token",
+          "level": "detailed",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64
+        },
+        "system_snapshot": {
+          "x-ciris-kind": "json",
+          "level": "full_traces",
+          "$ref": "#/definitions/BoundedJson"
+        },
+        "gathered_context": {
+          "x-ciris-kind": "json",
+          "level": "full_traces",
+          "$ref": "#/definitions/BoundedJson"
+        },
+        "relevant_memories": {
+          "x-ciris-kind": "json",
+          "level": "full_traces",
+          "$ref": "#/definitions/BoundedJson"
+        },
+        "conversation_history": {
+          "x-ciris-kind": "json",
+          "level": "full_traces",
+          "$ref": "#/definitions/BoundedJson"
+        },
+        "attempt_index": {
+          "description": "Stamped into every component's data by ciris-lens-core at seal time (0 = first attempt of this event type for the thought); in the signed bytes. The agent never emits it.",
+          "x-ciris-kind": "integer",
+          "level": "generic",
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      }
+    },
+    "EventData_SNAPSHOT_AND_CONTEXT__generic": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/EventData_SNAPSHOT_AND_CONTEXT"
+        }
+      ],
+      "propertyNames": {
+        "enum": [
+          "agent_name",
+          "attempt_index",
+          "attestation_context",
+          "attestation_level",
+          "attestation_status",
+          "audit_ok",
+          "binary_ok",
+          "cognitive_state",
+          "context_tokens",
+          "disclosure_severity",
+          "disclosure_version",
+          "env_ok",
+          "file_integrity_ok",
+          "hardware_backed",
+          "memory_count",
+          "play_integrity_ok",
+          "registry_ok"
+        ]
+      }
+    },
+    "EventData_SNAPSHOT_AND_CONTEXT__detailed": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/EventData_SNAPSHOT_AND_CONTEXT"
+        }
+      ],
+      "propertyNames": {
+        "enum": [
+          "active_services",
+          "agent_name",
+          "agent_version",
+          "attempt_index",
+          "attestation_context",
+          "attestation_level",
+          "attestation_status",
+          "audit_ok",
+          "binary_ok",
+          "circuit_breaker_status",
+          "cognitive_state",
+          "context_sources",
+          "context_tokens",
+          "disclosure_severity",
+          "disclosure_version",
+          "ed25519_fingerprint",
+          "env_ok",
+          "file_integrity_ok",
+          "hardware_backed",
+          "hardware_type",
+          "key_id",
+          "key_status",
+          "key_storage_mode",
+          "memory_count",
+          "play_integrity_ok",
+          "registry_ok",
+          "service_health",
+          "verify_version"
+        ]
+      }
+    },
+    "EventData_SNAPSHOT_AND_CONTEXT__full_traces": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/EventData_SNAPSHOT_AND_CONTEXT"
+        }
+      ],
+      "propertyNames": {
+        "enum": [
+          "active_services",
+          "agent_name",
+          "agent_version",
+          "attempt_index",
+          "attestation_context",
+          "attestation_level",
+          "attestation_status",
+          "audit_ok",
+          "binary_ok",
+          "circuit_breaker_status",
+          "cognitive_state",
+          "context_sources",
+          "context_tokens",
+          "conversation_history",
+          "disclosure_severity",
+          "disclosure_version",
+          "ed25519_fingerprint",
+          "env_ok",
+          "file_integrity_ok",
+          "gathered_context",
+          "hardware_backed",
+          "hardware_type",
+          "key_id",
+          "key_status",
+          "key_storage_mode",
+          "memory_count",
+          "play_integrity_ok",
+          "registry_ok",
+          "relevant_memories",
+          "service_health",
+          "system_snapshot",
+          "verify_version"
+        ]
+      }
+    },
+    "EventData_DMA_RESULTS": {
+      "type": "object",
+      "description": "DMA_RESULTS component `data`: the agent's egress contract (CIRISAgent#1249).",
+      "additionalProperties": false,
+      "properties": {
+        "csdma": {
+          "x-ciris-kind": "object",
+          "level": "generic",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "plausibility_score": {
+              "x-ciris-kind": "number",
+              "level": "generic",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "flags": {
+              "x-ciris-kind": "list",
+              "level": "detailed",
+              "type": [
+                "array",
+                "null"
+              ],
+              "maxItems": 32,
+              "items": {
+                "x-ciris-kind": "label",
+                "type": "string",
+                "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                "maxLength": 128
+              }
+            },
+            "reasoning": {
+              "x-ciris-kind": "text",
+              "level": "full_traces",
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 65536
+            },
+            "prompt_used": {
+              "x-ciris-kind": "text",
+              "level": "full_traces",
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 65536
+            }
+          }
+        },
+        "dsdma": {
+          "x-ciris-kind": "object",
+          "level": "generic",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "domain_alignment": {
+              "x-ciris-kind": "number",
+              "level": "generic",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "domain": {
+              "description": "LLM-authored, so a DETAILED identifier at most, never GENERIC.",
+              "x-ciris-kind": "label",
+              "level": "detailed",
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+              "maxLength": 64
+            },
+            "flags": {
+              "description": "Short labels only (CIRISAgent#1244: the mock LLM once put its whole message array here).",
+              "x-ciris-kind": "list",
+              "level": "detailed",
+              "type": [
+                "array",
+                "null"
+              ],
+              "maxItems": 32,
+              "items": {
+                "x-ciris-kind": "label",
+                "type": "string",
+                "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                "maxLength": 128
+              }
+            },
+            "reasoning": {
+              "x-ciris-kind": "text",
+              "level": "full_traces",
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 65536
+            },
+            "prompt_used": {
+              "x-ciris-kind": "text",
+              "level": "full_traces",
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 65536
+            }
+          }
+        },
+        "pdma": {
+          "x-ciris-kind": "object",
+          "level": "generic",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "has_conflicts": {
+              "x-ciris-kind": "bool",
+              "level": "generic",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "stakeholders": {
+              "x-ciris-kind": "list",
+              "level": "detailed",
+              "type": [
+                "array",
+                "null"
+              ],
+              "maxItems": 32,
+              "items": {
+                "x-ciris-kind": "label",
+                "type": "string",
+                "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                "maxLength": 128
+              }
+            },
+            "conflicts": {
+              "x-ciris-kind": "text",
+              "level": "detailed",
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 500
+            },
+            "alignment_check": {
+              "x-ciris-kind": "text",
+              "level": "detailed",
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 500
+            },
+            "reasoning": {
+              "x-ciris-kind": "text",
+              "level": "full_traces",
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 65536
+            },
+            "prompt_used": {
+              "x-ciris-kind": "text",
+              "level": "full_traces",
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 65536
+            }
+          }
+        },
+        "idma": {
+          "x-ciris-kind": "object",
+          "level": "generic",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "k_eff": {
+              "description": "Effective independent sources k/(1+ρ(k-1))",
+              "x-ciris-kind": "number",
+              "level": "generic",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "effective_source_count": {
+              "description": "Plain-language alias for k_eff",
+              "x-ciris-kind": "number",
+              "level": "generic",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "correlation_risk": {
+              "description": "Source correlation ρ",
+              "x-ciris-kind": "number",
+              "level": "generic",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "source_overlap": {
+              "description": "Plain-language alias for correlation_risk",
+              "x-ciris-kind": "number",
+              "level": "generic",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "fragility_flag": {
+              "description": "True if k_eff < 2 (fragile)",
+              "x-ciris-kind": "bool",
+              "level": "generic",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "reasoning_is_fragile": {
+              "description": "Plain-language alias for fragility_flag",
+              "x-ciris-kind": "bool",
+              "level": "generic",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "phase": {
+              "x-ciris-kind": "token",
+              "level": "generic",
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+              "maxLength": 64
+            },
+            "reasoning_state": {
+              "description": "Plain-language alias for phase",
+              "x-ciris-kind": "token",
+              "level": "generic",
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+              "maxLength": 64
+            },
+            "k_raw": {
+              "description": "Nominal raw source count k before correlation adjustment",
+              "x-ciris-kind": "integer",
+              "level": "detailed",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "raw_source_count": {
+              "description": "Plain-language alias for k_raw",
+              "x-ciris-kind": "integer",
+              "level": "detailed",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "rho_mean": {
+              "description": "Average pairwise correlation ρ used to derive k_eff",
+              "x-ciris-kind": "number",
+              "level": "detailed",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "phase_confidence": {
+              "x-ciris-kind": "number",
+              "level": "detailed",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "collapse_margin": {
+              "description": "Positive distance from the fragility boundary; <= 0 indicates collapse-adjacent state",
+              "x-ciris-kind": "number",
+              "level": "detailed",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "safety_margin": {
+              "description": "Plain-language alias for collapse_margin",
+              "x-ciris-kind": "number",
+              "level": "detailed",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "sources_identified": {
+              "x-ciris-kind": "list",
+              "level": "detailed",
+              "type": [
+                "array",
+                "null"
+              ],
+              "maxItems": 32,
+              "items": {
+                "x-ciris-kind": "label",
+                "type": "string",
+                "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                "maxLength": 128
+              }
+            },
+            "source_ids": {
+              "x-ciris-kind": "list",
+              "level": "detailed",
+              "type": [
+                "array",
+                "null"
+              ],
+              "maxItems": 32,
+              "items": {
+                "x-ciris-kind": "token",
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+                "maxLength": 128
+              }
+            },
+            "source_types": {
+              "x-ciris-kind": "list",
+              "level": "detailed",
+              "type": [
+                "array",
+                "null"
+              ],
+              "maxItems": 32,
+              "items": {
+                "x-ciris-kind": "label",
+                "type": "string",
+                "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                "maxLength": 128
+              }
+            },
+            "source_independence_scores": {
+              "x-ciris-kind": "list",
+              "level": "detailed",
+              "type": [
+                "array",
+                "null"
+              ],
+              "maxItems": 32,
+              "items": {
+                "x-ciris-kind": "number",
+                "type": "number"
+              }
+            },
+            "source_type_counts": {
+              "x-ciris-kind": "list",
+              "level": "detailed",
+              "type": [
+                "array",
+                "null"
+              ],
+              "maxItems": 32,
+              "items": {
+                "x-ciris-kind": "label",
+                "type": "string",
+                "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                "maxLength": 128
+              }
+            },
+            "correlation_factors": {
+              "x-ciris-kind": "list",
+              "level": "detailed",
+              "type": [
+                "array",
+                "null"
+              ],
+              "maxItems": 32,
+              "items": {
+                "x-ciris-kind": "label",
+                "type": "string",
+                "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                "maxLength": 128
+              }
+            },
+            "top_correlation_factors": {
+              "x-ciris-kind": "list",
+              "level": "detailed",
+              "type": [
+                "array",
+                "null"
+              ],
+              "maxItems": 32,
+              "items": {
+                "x-ciris-kind": "label",
+                "type": "string",
+                "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                "maxLength": 128
+              }
+            },
+            "pairwise_correlation_summary": {
+              "x-ciris-kind": "list",
+              "level": "detailed",
+              "type": [
+                "array",
+                "null"
+              ],
+              "maxItems": 32,
+              "items": {
+                "x-ciris-kind": "label",
+                "type": "string",
+                "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                "maxLength": 128
+              }
+            },
+            "rho_intra": {
+              "x-ciris-kind": "number",
+              "level": "detailed",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "rho_inter": {
+              "x-ciris-kind": "number",
+              "level": "detailed",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "module_count": {
+              "x-ciris-kind": "integer",
+              "level": "detailed",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "effective_module_count": {
+              "x-ciris-kind": "number",
+              "level": "detailed",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "source_clusters": {
+              "x-ciris-kind": "list",
+              "level": "detailed",
+              "type": [
+                "array",
+                "null"
+              ],
+              "maxItems": 32,
+              "items": {
+                "x-ciris-kind": "label",
+                "type": "string",
+                "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                "maxLength": 128
+              }
+            },
+            "common_cause_flags": {
+              "x-ciris-kind": "list",
+              "level": "detailed",
+              "type": [
+                "array",
+                "null"
+              ],
+              "maxItems": 32,
+              "items": {
+                "x-ciris-kind": "label",
+                "type": "string",
+                "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                "maxLength": 128
+              }
+            },
+            "intervention_recommendation": {
+              "x-ciris-kind": "text",
+              "level": "detailed",
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 500
+            },
+            "next_best_recovery_step": {
+              "x-ciris-kind": "text",
+              "level": "detailed",
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 500
+            },
+            "delta_k_eff": {
+              "x-ciris-kind": "number",
+              "level": "detailed",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "delta_rho_mean": {
+              "x-ciris-kind": "number",
+              "level": "detailed",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "phase_persistence_steps": {
+              "x-ciris-kind": "integer",
+              "level": "detailed",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "time_in_fragile_state_ms": {
+              "x-ciris-kind": "number",
+              "level": "detailed",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "moving_variance": {
+              "x-ciris-kind": "number",
+              "level": "detailed",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "rho_critical": {
+              "x-ciris-kind": "number",
+              "level": "detailed",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "k_required": {
+              "x-ciris-kind": "number",
+              "level": "detailed",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "defense_function": {
+              "x-ciris-kind": "number",
+              "level": "detailed",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "collapse_rate": {
+              "x-ciris-kind": "number",
+              "level": "detailed",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "time_to_truth": {
+              "x-ciris-kind": "number",
+              "level": "detailed",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "time_to_entropy": {
+              "x-ciris-kind": "number",
+              "level": "detailed",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "time_to_capture": {
+              "x-ciris-kind": "number",
+              "level": "detailed",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "reasoning": {
+              "x-ciris-kind": "text",
+              "level": "full_traces",
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 65536
+            },
+            "prompt_used": {
+              "x-ciris-kind": "text",
+              "level": "full_traces",
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 65536
+            }
+          }
+        },
+        "csdma_plausibility_score": {
+          "x-ciris-kind": "number",
+          "level": "generic",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "dsdma_domain_alignment": {
+          "x-ciris-kind": "number",
+          "level": "generic",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "dsdma_domain": {
+          "x-ciris-kind": "label",
+          "level": "detailed",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+          "maxLength": 64
+        },
+        "combined_analysis": {
+          "x-ciris-kind": "json",
+          "level": "full_traces",
+          "$ref": "#/definitions/BoundedJson"
+        },
+        "attempt_index": {
+          "description": "Stamped into every component's data by ciris-lens-core at seal time (0 = first attempt of this event type for the thought); in the signed bytes. The agent never emits it.",
+          "x-ciris-kind": "integer",
+          "level": "generic",
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      }
+    },
+    "EventData_DMA_RESULTS__generic": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/EventData_DMA_RESULTS"
+        }
+      ],
+      "propertyNames": {
+        "enum": [
+          "attempt_index",
+          "csdma",
+          "csdma_plausibility_score",
+          "dsdma",
+          "dsdma_domain_alignment",
+          "idma",
+          "pdma"
+        ]
+      },
+      "properties": {
+        "csdma": {
+          "propertyNames": {
+            "enum": [
+              "plausibility_score"
+            ]
+          }
+        },
+        "dsdma": {
+          "propertyNames": {
+            "enum": [
+              "domain_alignment"
+            ]
+          }
+        },
+        "pdma": {
+          "propertyNames": {
+            "enum": [
+              "has_conflicts"
+            ]
+          }
+        },
+        "idma": {
+          "propertyNames": {
+            "enum": [
+              "correlation_risk",
+              "effective_source_count",
+              "fragility_flag",
+              "k_eff",
+              "phase",
+              "reasoning_is_fragile",
+              "reasoning_state",
+              "source_overlap"
+            ]
+          }
+        }
+      }
+    },
+    "EventData_DMA_RESULTS__detailed": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/EventData_DMA_RESULTS"
+        }
+      ],
+      "propertyNames": {
+        "enum": [
+          "attempt_index",
+          "csdma",
+          "csdma_plausibility_score",
+          "dsdma",
+          "dsdma_domain",
+          "dsdma_domain_alignment",
+          "idma",
+          "pdma"
+        ]
+      },
+      "properties": {
+        "csdma": {
+          "propertyNames": {
+            "enum": [
+              "flags",
+              "plausibility_score"
+            ]
+          }
+        },
+        "dsdma": {
+          "propertyNames": {
+            "enum": [
+              "domain",
+              "domain_alignment",
+              "flags"
+            ]
+          }
+        },
+        "pdma": {
+          "propertyNames": {
+            "enum": [
+              "alignment_check",
+              "conflicts",
+              "has_conflicts",
+              "stakeholders"
+            ]
+          }
+        },
+        "idma": {
+          "propertyNames": {
+            "enum": [
+              "collapse_margin",
+              "collapse_rate",
+              "common_cause_flags",
+              "correlation_factors",
+              "correlation_risk",
+              "defense_function",
+              "delta_k_eff",
+              "delta_rho_mean",
+              "effective_module_count",
+              "effective_source_count",
+              "fragility_flag",
+              "intervention_recommendation",
+              "k_eff",
+              "k_raw",
+              "k_required",
+              "module_count",
+              "moving_variance",
+              "next_best_recovery_step",
+              "pairwise_correlation_summary",
+              "phase",
+              "phase_confidence",
+              "phase_persistence_steps",
+              "raw_source_count",
+              "reasoning_is_fragile",
+              "reasoning_state",
+              "rho_critical",
+              "rho_inter",
+              "rho_intra",
+              "rho_mean",
+              "safety_margin",
+              "source_clusters",
+              "source_ids",
+              "source_independence_scores",
+              "source_overlap",
+              "source_type_counts",
+              "source_types",
+              "sources_identified",
+              "time_in_fragile_state_ms",
+              "time_to_capture",
+              "time_to_entropy",
+              "time_to_truth",
+              "top_correlation_factors"
+            ]
+          }
+        }
+      }
+    },
+    "EventData_DMA_RESULTS__full_traces": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/EventData_DMA_RESULTS"
+        }
+      ],
+      "propertyNames": {
+        "enum": [
+          "attempt_index",
+          "combined_analysis",
+          "csdma",
+          "csdma_plausibility_score",
+          "dsdma",
+          "dsdma_domain",
+          "dsdma_domain_alignment",
+          "idma",
+          "pdma"
+        ]
+      },
+      "properties": {
+        "csdma": {
+          "propertyNames": {
+            "enum": [
+              "flags",
+              "plausibility_score",
+              "prompt_used",
+              "reasoning"
+            ]
+          }
+        },
+        "dsdma": {
+          "propertyNames": {
+            "enum": [
+              "domain",
+              "domain_alignment",
+              "flags",
+              "prompt_used",
+              "reasoning"
+            ]
+          }
+        },
+        "pdma": {
+          "propertyNames": {
+            "enum": [
+              "alignment_check",
+              "conflicts",
+              "has_conflicts",
+              "prompt_used",
+              "reasoning",
+              "stakeholders"
+            ]
+          }
+        },
+        "idma": {
+          "propertyNames": {
+            "enum": [
+              "collapse_margin",
+              "collapse_rate",
+              "common_cause_flags",
+              "correlation_factors",
+              "correlation_risk",
+              "defense_function",
+              "delta_k_eff",
+              "delta_rho_mean",
+              "effective_module_count",
+              "effective_source_count",
+              "fragility_flag",
+              "intervention_recommendation",
+              "k_eff",
+              "k_raw",
+              "k_required",
+              "module_count",
+              "moving_variance",
+              "next_best_recovery_step",
+              "pairwise_correlation_summary",
+              "phase",
+              "phase_confidence",
+              "phase_persistence_steps",
+              "prompt_used",
+              "raw_source_count",
+              "reasoning",
+              "reasoning_is_fragile",
+              "reasoning_state",
+              "rho_critical",
+              "rho_inter",
+              "rho_intra",
+              "rho_mean",
+              "safety_margin",
+              "source_clusters",
+              "source_ids",
+              "source_independence_scores",
+              "source_overlap",
+              "source_type_counts",
+              "source_types",
+              "sources_identified",
+              "time_in_fragile_state_ms",
+              "time_to_capture",
+              "time_to_entropy",
+              "time_to_truth",
+              "top_correlation_factors"
+            ]
+          }
+        }
+      }
+    },
+    "EventData_IDMA_RESULT": {
+      "type": "object",
+      "description": "IDMA_RESULT component `data`: the agent's egress contract (CIRISAgent#1249).",
+      "additionalProperties": false,
+      "properties": {
+        "k_eff": {
+          "description": "Effective independent sources k/(1+ρ(k-1))",
+          "x-ciris-kind": "number",
+          "level": "generic",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "effective_source_count": {
+          "description": "Plain-language alias for k_eff",
+          "x-ciris-kind": "number",
+          "level": "generic",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "correlation_risk": {
+          "description": "Source correlation ρ",
+          "x-ciris-kind": "number",
+          "level": "generic",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "source_overlap": {
+          "description": "Plain-language alias for correlation_risk",
+          "x-ciris-kind": "number",
+          "level": "generic",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "fragility_flag": {
+          "description": "True if k_eff < 2 (fragile)",
+          "x-ciris-kind": "bool",
+          "level": "generic",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "reasoning_is_fragile": {
+          "description": "Plain-language alias for fragility_flag",
+          "x-ciris-kind": "bool",
+          "level": "generic",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "phase": {
+          "x-ciris-kind": "token",
+          "level": "generic",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64
+        },
+        "reasoning_state": {
+          "description": "Plain-language alias for phase",
+          "x-ciris-kind": "token",
+          "level": "generic",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64
+        },
+        "idma_k_eff": {
+          "x-ciris-kind": "number",
+          "level": "generic",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "idma_correlation_risk": {
+          "x-ciris-kind": "number",
+          "level": "generic",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "idma_fragility_flag": {
+          "x-ciris-kind": "bool",
+          "level": "generic",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "idma_phase": {
+          "x-ciris-kind": "token",
+          "level": "generic",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64
+        },
+        "k_raw": {
+          "description": "Nominal raw source count k before correlation adjustment",
+          "x-ciris-kind": "integer",
+          "level": "detailed",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "raw_source_count": {
+          "description": "Plain-language alias for k_raw",
+          "x-ciris-kind": "integer",
+          "level": "detailed",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "rho_mean": {
+          "description": "Average pairwise correlation ρ used to derive k_eff",
+          "x-ciris-kind": "number",
+          "level": "detailed",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "phase_confidence": {
+          "x-ciris-kind": "number",
+          "level": "detailed",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "collapse_margin": {
+          "description": "Positive distance from the fragility boundary; <= 0 indicates collapse-adjacent state",
+          "x-ciris-kind": "number",
+          "level": "detailed",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "safety_margin": {
+          "description": "Plain-language alias for collapse_margin",
+          "x-ciris-kind": "number",
+          "level": "detailed",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "sources_identified": {
+          "x-ciris-kind": "list",
+          "level": "detailed",
+          "type": [
+            "array",
+            "null"
+          ],
+          "maxItems": 32,
+          "items": {
+            "x-ciris-kind": "label",
+            "type": "string",
+            "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+            "maxLength": 128
+          }
+        },
+        "source_ids": {
+          "x-ciris-kind": "list",
+          "level": "detailed",
+          "type": [
+            "array",
+            "null"
+          ],
+          "maxItems": 32,
+          "items": {
+            "x-ciris-kind": "token",
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+            "maxLength": 128
+          }
+        },
+        "source_types": {
+          "x-ciris-kind": "list",
+          "level": "detailed",
+          "type": [
+            "array",
+            "null"
+          ],
+          "maxItems": 32,
+          "items": {
+            "x-ciris-kind": "label",
+            "type": "string",
+            "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+            "maxLength": 128
+          }
+        },
+        "source_independence_scores": {
+          "x-ciris-kind": "list",
+          "level": "detailed",
+          "type": [
+            "array",
+            "null"
+          ],
+          "maxItems": 32,
+          "items": {
+            "x-ciris-kind": "number",
+            "type": "number"
+          }
+        },
+        "source_type_counts": {
+          "x-ciris-kind": "list",
+          "level": "detailed",
+          "type": [
+            "array",
+            "null"
+          ],
+          "maxItems": 32,
+          "items": {
+            "x-ciris-kind": "label",
+            "type": "string",
+            "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+            "maxLength": 128
+          }
+        },
+        "correlation_factors": {
+          "x-ciris-kind": "list",
+          "level": "detailed",
+          "type": [
+            "array",
+            "null"
+          ],
+          "maxItems": 32,
+          "items": {
+            "x-ciris-kind": "label",
+            "type": "string",
+            "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+            "maxLength": 128
+          }
+        },
+        "top_correlation_factors": {
+          "x-ciris-kind": "list",
+          "level": "detailed",
+          "type": [
+            "array",
+            "null"
+          ],
+          "maxItems": 32,
+          "items": {
+            "x-ciris-kind": "label",
+            "type": "string",
+            "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+            "maxLength": 128
+          }
+        },
+        "pairwise_correlation_summary": {
+          "x-ciris-kind": "list",
+          "level": "detailed",
+          "type": [
+            "array",
+            "null"
+          ],
+          "maxItems": 32,
+          "items": {
+            "x-ciris-kind": "label",
+            "type": "string",
+            "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+            "maxLength": 128
+          }
+        },
+        "rho_intra": {
+          "x-ciris-kind": "number",
+          "level": "detailed",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "rho_inter": {
+          "x-ciris-kind": "number",
+          "level": "detailed",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "module_count": {
+          "x-ciris-kind": "integer",
+          "level": "detailed",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "effective_module_count": {
+          "x-ciris-kind": "number",
+          "level": "detailed",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "source_clusters": {
+          "x-ciris-kind": "list",
+          "level": "detailed",
+          "type": [
+            "array",
+            "null"
+          ],
+          "maxItems": 32,
+          "items": {
+            "x-ciris-kind": "label",
+            "type": "string",
+            "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+            "maxLength": 128
+          }
+        },
+        "common_cause_flags": {
+          "x-ciris-kind": "list",
+          "level": "detailed",
+          "type": [
+            "array",
+            "null"
+          ],
+          "maxItems": 32,
+          "items": {
+            "x-ciris-kind": "label",
+            "type": "string",
+            "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+            "maxLength": 128
+          }
+        },
+        "intervention_recommendation": {
+          "x-ciris-kind": "text",
+          "level": "detailed",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 500
+        },
+        "next_best_recovery_step": {
+          "x-ciris-kind": "text",
+          "level": "detailed",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 500
+        },
+        "delta_k_eff": {
+          "x-ciris-kind": "number",
+          "level": "detailed",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "delta_rho_mean": {
+          "x-ciris-kind": "number",
+          "level": "detailed",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "phase_persistence_steps": {
+          "x-ciris-kind": "integer",
+          "level": "detailed",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "time_in_fragile_state_ms": {
+          "x-ciris-kind": "number",
+          "level": "detailed",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "moving_variance": {
+          "x-ciris-kind": "number",
+          "level": "detailed",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "rho_critical": {
+          "x-ciris-kind": "number",
+          "level": "detailed",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "k_required": {
+          "x-ciris-kind": "number",
+          "level": "detailed",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "defense_function": {
+          "x-ciris-kind": "number",
+          "level": "detailed",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "collapse_rate": {
+          "x-ciris-kind": "number",
+          "level": "detailed",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "time_to_truth": {
+          "x-ciris-kind": "number",
+          "level": "detailed",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "time_to_entropy": {
+          "x-ciris-kind": "number",
+          "level": "detailed",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "time_to_capture": {
+          "x-ciris-kind": "number",
+          "level": "detailed",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "reasoning": {
+          "x-ciris-kind": "text",
+          "level": "full_traces",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 65536
+        },
+        "prompt_used": {
+          "x-ciris-kind": "text",
+          "level": "full_traces",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 65536
+        },
+        "attempt_index": {
+          "description": "Stamped into every component's data by ciris-lens-core at seal time (0 = first attempt of this event type for the thought); in the signed bytes. The agent never emits it.",
+          "x-ciris-kind": "integer",
+          "level": "generic",
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      }
+    },
+    "EventData_IDMA_RESULT__generic": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/EventData_IDMA_RESULT"
+        }
+      ],
+      "propertyNames": {
+        "enum": [
+          "attempt_index",
+          "correlation_risk",
+          "effective_source_count",
+          "fragility_flag",
+          "idma_correlation_risk",
+          "idma_fragility_flag",
+          "idma_k_eff",
+          "idma_phase",
+          "k_eff",
+          "phase",
+          "reasoning_is_fragile",
+          "reasoning_state",
+          "source_overlap"
+        ]
+      }
+    },
+    "EventData_IDMA_RESULT__detailed": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/EventData_IDMA_RESULT"
+        }
+      ],
+      "propertyNames": {
+        "enum": [
+          "attempt_index",
+          "collapse_margin",
+          "collapse_rate",
+          "common_cause_flags",
+          "correlation_factors",
+          "correlation_risk",
+          "defense_function",
+          "delta_k_eff",
+          "delta_rho_mean",
+          "effective_module_count",
+          "effective_source_count",
+          "fragility_flag",
+          "idma_correlation_risk",
+          "idma_fragility_flag",
+          "idma_k_eff",
+          "idma_phase",
+          "intervention_recommendation",
+          "k_eff",
+          "k_raw",
+          "k_required",
+          "module_count",
+          "moving_variance",
+          "next_best_recovery_step",
+          "pairwise_correlation_summary",
+          "phase",
+          "phase_confidence",
+          "phase_persistence_steps",
+          "raw_source_count",
+          "reasoning_is_fragile",
+          "reasoning_state",
+          "rho_critical",
+          "rho_inter",
+          "rho_intra",
+          "rho_mean",
+          "safety_margin",
+          "source_clusters",
+          "source_ids",
+          "source_independence_scores",
+          "source_overlap",
+          "source_type_counts",
+          "source_types",
+          "sources_identified",
+          "time_in_fragile_state_ms",
+          "time_to_capture",
+          "time_to_entropy",
+          "time_to_truth",
+          "top_correlation_factors"
+        ]
+      }
+    },
+    "EventData_IDMA_RESULT__full_traces": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/EventData_IDMA_RESULT"
+        }
+      ],
+      "propertyNames": {
+        "enum": [
+          "attempt_index",
+          "collapse_margin",
+          "collapse_rate",
+          "common_cause_flags",
+          "correlation_factors",
+          "correlation_risk",
+          "defense_function",
+          "delta_k_eff",
+          "delta_rho_mean",
+          "effective_module_count",
+          "effective_source_count",
+          "fragility_flag",
+          "idma_correlation_risk",
+          "idma_fragility_flag",
+          "idma_k_eff",
+          "idma_phase",
+          "intervention_recommendation",
+          "k_eff",
+          "k_raw",
+          "k_required",
+          "module_count",
+          "moving_variance",
+          "next_best_recovery_step",
+          "pairwise_correlation_summary",
+          "phase",
+          "phase_confidence",
+          "phase_persistence_steps",
+          "prompt_used",
+          "raw_source_count",
+          "reasoning",
+          "reasoning_is_fragile",
+          "reasoning_state",
+          "rho_critical",
+          "rho_inter",
+          "rho_intra",
+          "rho_mean",
+          "safety_margin",
+          "source_clusters",
+          "source_ids",
+          "source_independence_scores",
+          "source_overlap",
+          "source_type_counts",
+          "source_types",
+          "sources_identified",
+          "time_in_fragile_state_ms",
+          "time_to_capture",
+          "time_to_entropy",
+          "time_to_truth",
+          "top_correlation_factors"
+        ]
+      }
+    },
+    "EventData_ASPDMA_RESULT": {
+      "type": "object",
+      "description": "ASPDMA_RESULT component `data`: the agent's egress contract (CIRISAgent#1249).",
+      "additionalProperties": false,
+      "properties": {
+        "selected_action": {
+          "x-ciris-kind": "token",
+          "level": "generic",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64
+        },
+        "selection_confidence": {
+          "x-ciris-kind": "number",
+          "level": "generic",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "is_recursive": {
+          "x-ciris-kind": "bool",
+          "level": "generic",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "alternatives_considered": {
+          "x-ciris-kind": "list",
+          "level": "detailed",
+          "type": [
+            "array",
+            "null"
+          ],
+          "maxItems": 32,
+          "items": {
+            "x-ciris-kind": "token",
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+            "maxLength": 64
+          }
+        },
+        "evaluation_time_ms": {
+          "x-ciris-kind": "number",
+          "level": "detailed",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "action_rationale": {
+          "x-ciris-kind": "text",
+          "level": "full_traces",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 65536
+        },
+        "reasoning_summary": {
+          "x-ciris-kind": "text",
+          "level": "full_traces",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 65536
+        },
+        "action_parameters": {
+          "x-ciris-kind": "json",
+          "level": "full_traces",
+          "$ref": "#/definitions/BoundedJson"
+        },
+        "aspdma_prompt": {
+          "x-ciris-kind": "text",
+          "level": "full_traces",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 65536
+        },
+        "raw_llm_response": {
+          "x-ciris-kind": "text",
+          "level": "full_traces",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 1000
+        },
+        "attempt_index": {
+          "description": "Stamped into every component's data by ciris-lens-core at seal time (0 = first attempt of this event type for the thought); in the signed bytes. The agent never emits it.",
+          "x-ciris-kind": "integer",
+          "level": "generic",
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      }
+    },
+    "EventData_ASPDMA_RESULT__generic": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/EventData_ASPDMA_RESULT"
+        }
+      ],
+      "propertyNames": {
+        "enum": [
+          "attempt_index",
+          "is_recursive",
+          "selected_action",
+          "selection_confidence"
+        ]
+      }
+    },
+    "EventData_ASPDMA_RESULT__detailed": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/EventData_ASPDMA_RESULT"
+        }
+      ],
+      "propertyNames": {
+        "enum": [
+          "alternatives_considered",
+          "attempt_index",
+          "evaluation_time_ms",
+          "is_recursive",
+          "selected_action",
+          "selection_confidence"
+        ]
+      }
+    },
+    "EventData_ASPDMA_RESULT__full_traces": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/EventData_ASPDMA_RESULT"
+        }
+      ],
+      "propertyNames": {
+        "enum": [
+          "action_parameters",
+          "action_rationale",
+          "alternatives_considered",
+          "aspdma_prompt",
+          "attempt_index",
+          "evaluation_time_ms",
+          "is_recursive",
+          "raw_llm_response",
+          "reasoning_summary",
+          "selected_action",
+          "selection_confidence"
+        ]
+      }
+    },
+    "EventData_TSASPDMA_RESULT": {
+      "type": "object",
+      "description": "TSASPDMA_RESULT component `data`: the agent's egress contract (CIRISAgent#1249).",
+      "additionalProperties": false,
+      "properties": {
+        "original_tool_name": {
+          "x-ciris-kind": "token",
+          "level": "generic",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 128
+        },
+        "final_action": {
+          "x-ciris-kind": "token",
+          "level": "generic",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64
+        },
+        "final_tool_name": {
+          "x-ciris-kind": "token",
+          "level": "generic",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 128
+        },
+        "gotchas_acknowledged": {
+          "x-ciris-kind": "list",
+          "level": "detailed",
+          "type": [
+            "array",
+            "null"
+          ],
+          "maxItems": 32,
+          "items": {
+            "x-ciris-kind": "label",
+            "type": "string",
+            "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+            "maxLength": 128
+          }
+        },
+        "tool_description": {
+          "x-ciris-kind": "text",
+          "level": "detailed",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 500
+        },
+        "original_parameters": {
+          "x-ciris-kind": "json",
+          "level": "full_traces",
+          "$ref": "#/definitions/BoundedJson"
+        },
+        "final_parameters": {
+          "x-ciris-kind": "json",
+          "level": "full_traces",
+          "$ref": "#/definitions/BoundedJson"
+        },
+        "aspdma_rationale": {
+          "x-ciris-kind": "text",
+          "level": "full_traces",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 65536
+        },
+        "tsaspdma_rationale": {
+          "x-ciris-kind": "text",
+          "level": "full_traces",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 65536
+        },
+        "tsaspdma_prompt": {
+          "x-ciris-kind": "text",
+          "level": "full_traces",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 65536
+        },
+        "attempt_index": {
+          "description": "Stamped into every component's data by ciris-lens-core at seal time (0 = first attempt of this event type for the thought); in the signed bytes. The agent never emits it.",
+          "x-ciris-kind": "integer",
+          "level": "generic",
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      }
+    },
+    "EventData_TSASPDMA_RESULT__generic": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/EventData_TSASPDMA_RESULT"
+        }
+      ],
+      "propertyNames": {
+        "enum": [
+          "attempt_index",
+          "final_action",
+          "final_tool_name",
+          "original_tool_name"
+        ]
+      }
+    },
+    "EventData_TSASPDMA_RESULT__detailed": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/EventData_TSASPDMA_RESULT"
+        }
+      ],
+      "propertyNames": {
+        "enum": [
+          "attempt_index",
+          "final_action",
+          "final_tool_name",
+          "gotchas_acknowledged",
+          "original_tool_name",
+          "tool_description"
+        ]
+      }
+    },
+    "EventData_TSASPDMA_RESULT__full_traces": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/EventData_TSASPDMA_RESULT"
+        }
+      ],
+      "propertyNames": {
+        "enum": [
+          "aspdma_rationale",
+          "attempt_index",
+          "final_action",
+          "final_parameters",
+          "final_tool_name",
+          "gotchas_acknowledged",
+          "original_parameters",
+          "original_tool_name",
+          "tool_description",
+          "tsaspdma_prompt",
+          "tsaspdma_rationale"
+        ]
+      }
+    },
+    "EventData_VERB_SECOND_PASS_RESULT": {
+      "type": "object",
+      "description": "VERB_SECOND_PASS_RESULT component `data`: the agent's egress contract (CIRISAgent#1249).",
+      "additionalProperties": false,
+      "properties": {
+        "verb": {
+          "x-ciris-kind": "token",
+          "level": "generic",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64
+        },
+        "original_action": {
+          "x-ciris-kind": "token",
+          "level": "generic",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64
+        },
+        "final_action": {
+          "x-ciris-kind": "token",
+          "level": "generic",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64
+        },
+        "verb_specific_data": {
+          "description": "Payload keyed by `verb`. Under GENERIC only its enum, boolean and tool-name members survive; a DEFER reason is reasoning-class text (DETAILED, capped); tool parameters are content (FULL_TRACES only).",
+          "x-ciris-kind": "object",
+          "level": "generic",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "rights_basis": {
+              "x-ciris-kind": "list",
+              "level": "generic",
+              "type": [
+                "array",
+                "null"
+              ],
+              "maxItems": 32,
+              "items": {
+                "x-ciris-kind": "token",
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+                "maxLength": 64
+              }
+            },
+            "primary_need_category": {
+              "x-ciris-kind": "token",
+              "level": "generic",
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+              "maxLength": 64
+            },
+            "secondary_need_categories": {
+              "x-ciris-kind": "list",
+              "level": "generic",
+              "type": [
+                "array",
+                "null"
+              ],
+              "maxItems": 32,
+              "items": {
+                "x-ciris-kind": "token",
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+                "maxLength": 64
+              }
+            },
+            "domain_hint": {
+              "x-ciris-kind": "token",
+              "level": "generic",
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+              "maxLength": 64
+            },
+            "operational_reason": {
+              "x-ciris-kind": "token",
+              "level": "generic",
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+              "maxLength": 64
+            },
+            "defer_reason": {
+              "x-ciris-kind": "text",
+              "level": "detailed",
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 500
+            },
+            "defer_until": {
+              "x-ciris-kind": "timestamp",
+              "level": "detailed",
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9]{2}:[0-9]{2}(:[0-9]{2}([.,][0-9]+)?)?(Z|z|[+-][0-9]{2}(:?[0-9]{2})?)?$"
+            },
+            "original_tool_name": {
+              "x-ciris-kind": "token",
+              "level": "generic",
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+              "maxLength": 128
+            },
+            "final_tool_name": {
+              "x-ciris-kind": "token",
+              "level": "generic",
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+              "maxLength": 128
+            },
+            "original_parameters": {
+              "x-ciris-kind": "json",
+              "level": "full_traces",
+              "$ref": "#/definitions/BoundedJson"
+            },
+            "final_parameters": {
+              "x-ciris-kind": "json",
+              "level": "full_traces",
+              "$ref": "#/definitions/BoundedJson"
+            },
+            "original_node_id": {
+              "x-ciris-kind": "label",
+              "level": "detailed",
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+              "maxLength": 128
+            },
+            "final_node_id": {
+              "x-ciris-kind": "label",
+              "level": "detailed",
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+              "maxLength": 128
+            },
+            "node_id_corrected": {
+              "x-ciris-kind": "bool",
+              "level": "generic",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          }
+        },
+        "original_reasoning": {
+          "description": "The pass rationale is the reasoning chain (FULL), not a summary.",
+          "x-ciris-kind": "text",
+          "level": "full_traces",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 65536
+        },
+        "final_reasoning": {
+          "description": "The pass rationale is the reasoning chain (FULL), not a summary.",
+          "x-ciris-kind": "text",
+          "level": "full_traces",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 65536
+        },
+        "second_pass_prompt": {
+          "x-ciris-kind": "text",
+          "level": "full_traces",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 65536
+        },
+        "attempt_index": {
+          "description": "Stamped into every component's data by ciris-lens-core at seal time (0 = first attempt of this event type for the thought); in the signed bytes. The agent never emits it.",
+          "x-ciris-kind": "integer",
+          "level": "generic",
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      }
+    },
+    "EventData_VERB_SECOND_PASS_RESULT__generic": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/EventData_VERB_SECOND_PASS_RESULT"
+        }
+      ],
+      "propertyNames": {
+        "enum": [
+          "attempt_index",
+          "final_action",
+          "original_action",
+          "verb",
+          "verb_specific_data"
+        ]
+      },
+      "properties": {
+        "verb_specific_data": {
+          "propertyNames": {
+            "enum": [
+              "domain_hint",
+              "final_tool_name",
+              "node_id_corrected",
+              "operational_reason",
+              "original_tool_name",
+              "primary_need_category",
+              "rights_basis",
+              "secondary_need_categories"
+            ]
+          }
+        }
+      }
+    },
+    "EventData_VERB_SECOND_PASS_RESULT__detailed": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/EventData_VERB_SECOND_PASS_RESULT"
+        }
+      ],
+      "propertyNames": {
+        "enum": [
+          "attempt_index",
+          "final_action",
+          "original_action",
+          "verb",
+          "verb_specific_data"
+        ]
+      },
+      "properties": {
+        "verb_specific_data": {
+          "propertyNames": {
+            "enum": [
+              "defer_reason",
+              "defer_until",
+              "domain_hint",
+              "final_node_id",
+              "final_tool_name",
+              "node_id_corrected",
+              "operational_reason",
+              "original_node_id",
+              "original_tool_name",
+              "primary_need_category",
+              "rights_basis",
+              "secondary_need_categories"
+            ]
+          }
+        }
+      }
+    },
+    "EventData_VERB_SECOND_PASS_RESULT__full_traces": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/EventData_VERB_SECOND_PASS_RESULT"
+        }
+      ],
+      "propertyNames": {
+        "enum": [
+          "attempt_index",
+          "final_action",
+          "final_reasoning",
+          "original_action",
+          "original_reasoning",
+          "second_pass_prompt",
+          "verb",
+          "verb_specific_data"
+        ]
+      },
+      "properties": {
+        "verb_specific_data": {
+          "propertyNames": {
+            "enum": [
+              "defer_reason",
+              "defer_until",
+              "domain_hint",
+              "final_node_id",
+              "final_parameters",
+              "final_tool_name",
+              "node_id_corrected",
+              "operational_reason",
+              "original_node_id",
+              "original_parameters",
+              "original_tool_name",
+              "primary_need_category",
+              "rights_basis",
+              "secondary_need_categories"
+            ]
+          }
+        }
+      }
+    },
+    "EventData_CONSCIENCE_RESULT": {
+      "type": "object",
+      "description": "CONSCIENCE_RESULT component `data`: the agent's egress contract (CIRISAgent#1249).",
+      "additionalProperties": false,
+      "properties": {
+        "conscience_passed": {
+          "x-ciris-kind": "bool",
+          "level": "generic",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "action_was_overridden": {
+          "x-ciris-kind": "bool",
+          "level": "generic",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "ethical_faculties_skipped": {
+          "x-ciris-kind": "bool",
+          "level": "generic",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "is_recursive": {
+          "x-ciris-kind": "bool",
+          "level": "generic",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "updated_status_detected": {
+          "x-ciris-kind": "bool",
+          "level": "generic",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "thought_depth_triggered": {
+          "x-ciris-kind": "bool",
+          "level": "generic",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "thought_depth_current": {
+          "x-ciris-kind": "integer",
+          "level": "generic",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "thought_depth_max": {
+          "x-ciris-kind": "integer",
+          "level": "generic",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "entropy_level": {
+          "x-ciris-kind": "number",
+          "level": "generic",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "coherence_level": {
+          "x-ciris-kind": "number",
+          "level": "generic",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "entropy_passed": {
+          "description": "Only for SPEAK/TOOL/MEMORIZE/FORGET",
+          "x-ciris-kind": "bool",
+          "level": "generic",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "entropy_score": {
+          "x-ciris-kind": "number",
+          "level": "generic",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "entropy_threshold": {
+          "x-ciris-kind": "number",
+          "level": "generic",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "coherence_passed": {
+          "description": "Only for SPEAK/TOOL/MEMORIZE/FORGET",
+          "x-ciris-kind": "bool",
+          "level": "generic",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "coherence_score": {
+          "x-ciris-kind": "number",
+          "level": "generic",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "coherence_threshold": {
+          "x-ciris-kind": "number",
+          "level": "generic",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "optimization_veto_passed": {
+          "description": "Only for SPEAK/TOOL/MEMORIZE/FORGET",
+          "x-ciris-kind": "bool",
+          "level": "generic",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "optimization_veto_entropy_ratio": {
+          "x-ciris-kind": "number",
+          "level": "generic",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "epistemic_humility_passed": {
+          "description": "Only for SPEAK/TOOL/MEMORIZE/FORGET",
+          "x-ciris-kind": "bool",
+          "level": "generic",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "epistemic_humility_certainty": {
+          "x-ciris-kind": "number",
+          "level": "generic",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "final_action": {
+          "x-ciris-kind": "token",
+          "level": "detailed",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64
+        },
+        "conscience_override_reason": {
+          "x-ciris-kind": "text",
+          "level": "detailed",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 500
+        },
+        "entropy_reason": {
+          "x-ciris-kind": "text",
+          "level": "detailed",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 500
+        },
+        "coherence_reason": {
+          "x-ciris-kind": "text",
+          "level": "detailed",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 500
+        },
+        "optimization_veto_decision": {
+          "x-ciris-kind": "token",
+          "level": "detailed",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64
+        },
+        "optimization_veto_affected_values": {
+          "x-ciris-kind": "list",
+          "level": "detailed",
+          "type": [
+            "array",
+            "null"
+          ],
+          "maxItems": 32,
+          "items": {
+            "x-ciris-kind": "label",
+            "type": "string",
+            "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+            "maxLength": 128
+          }
+        },
+        "epistemic_humility_uncertainties": {
+          "x-ciris-kind": "list",
+          "level": "detailed",
+          "type": [
+            "array",
+            "null"
+          ],
+          "maxItems": 32,
+          "items": {
+            "x-ciris-kind": "label",
+            "type": "string",
+            "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+            "maxLength": 500
+          }
+        },
+        "epistemic_humility_recommendation": {
+          "x-ciris-kind": "token",
+          "level": "detailed",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64
+        },
+        "epistemic_data": {
+          "x-ciris-kind": "json",
+          "level": "full_traces",
+          "$ref": "#/definitions/BoundedJson"
+        },
+        "updated_status_content": {
+          "x-ciris-kind": "text",
+          "level": "full_traces",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 65536
+        },
+        "optimization_veto_justification": {
+          "x-ciris-kind": "text",
+          "level": "full_traces",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 65536
+        },
+        "epistemic_humility_justification": {
+          "x-ciris-kind": "text",
+          "level": "full_traces",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 65536
+        },
+        "attempt_index": {
+          "description": "Stamped into every component's data by ciris-lens-core at seal time (0 = first attempt of this event type for the thought); in the signed bytes. The agent never emits it.",
+          "x-ciris-kind": "integer",
+          "level": "generic",
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      }
+    },
+    "EventData_CONSCIENCE_RESULT__generic": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/EventData_CONSCIENCE_RESULT"
+        }
+      ],
+      "propertyNames": {
+        "enum": [
+          "action_was_overridden",
+          "attempt_index",
+          "coherence_level",
+          "coherence_passed",
+          "coherence_score",
+          "coherence_threshold",
+          "conscience_passed",
+          "entropy_level",
+          "entropy_passed",
+          "entropy_score",
+          "entropy_threshold",
+          "epistemic_humility_certainty",
+          "epistemic_humility_passed",
+          "ethical_faculties_skipped",
+          "is_recursive",
+          "optimization_veto_entropy_ratio",
+          "optimization_veto_passed",
+          "thought_depth_current",
+          "thought_depth_max",
+          "thought_depth_triggered",
+          "updated_status_detected"
+        ]
+      }
+    },
+    "EventData_CONSCIENCE_RESULT__detailed": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/EventData_CONSCIENCE_RESULT"
+        }
+      ],
+      "propertyNames": {
+        "enum": [
+          "action_was_overridden",
+          "attempt_index",
+          "coherence_level",
+          "coherence_passed",
+          "coherence_reason",
+          "coherence_score",
+          "coherence_threshold",
+          "conscience_override_reason",
+          "conscience_passed",
+          "entropy_level",
+          "entropy_passed",
+          "entropy_reason",
+          "entropy_score",
+          "entropy_threshold",
+          "epistemic_humility_certainty",
+          "epistemic_humility_passed",
+          "epistemic_humility_recommendation",
+          "epistemic_humility_uncertainties",
+          "ethical_faculties_skipped",
+          "final_action",
+          "is_recursive",
+          "optimization_veto_affected_values",
+          "optimization_veto_decision",
+          "optimization_veto_entropy_ratio",
+          "optimization_veto_passed",
+          "thought_depth_current",
+          "thought_depth_max",
+          "thought_depth_triggered",
+          "updated_status_detected"
+        ]
+      }
+    },
+    "EventData_CONSCIENCE_RESULT__full_traces": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/EventData_CONSCIENCE_RESULT"
+        }
+      ],
+      "propertyNames": {
+        "enum": [
+          "action_was_overridden",
+          "attempt_index",
+          "coherence_level",
+          "coherence_passed",
+          "coherence_reason",
+          "coherence_score",
+          "coherence_threshold",
+          "conscience_override_reason",
+          "conscience_passed",
+          "entropy_level",
+          "entropy_passed",
+          "entropy_reason",
+          "entropy_score",
+          "entropy_threshold",
+          "epistemic_data",
+          "epistemic_humility_certainty",
+          "epistemic_humility_justification",
+          "epistemic_humility_passed",
+          "epistemic_humility_recommendation",
+          "epistemic_humility_uncertainties",
+          "ethical_faculties_skipped",
+          "final_action",
+          "is_recursive",
+          "optimization_veto_affected_values",
+          "optimization_veto_decision",
+          "optimization_veto_entropy_ratio",
+          "optimization_veto_justification",
+          "optimization_veto_passed",
+          "thought_depth_current",
+          "thought_depth_max",
+          "thought_depth_triggered",
+          "updated_status_content",
+          "updated_status_detected"
+        ]
+      }
+    },
+    "EventData_ACTION_RESULT": {
+      "type": "object",
+      "description": "ACTION_RESULT component `data`: the agent's egress contract (CIRISAgent#1249).",
+      "additionalProperties": false,
+      "properties": {
+        "execution_success": {
+          "x-ciris-kind": "bool",
+          "level": "generic",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "execution_time_ms": {
+          "x-ciris-kind": "number",
+          "level": "generic",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "tokens_input": {
+          "x-ciris-kind": "integer",
+          "level": "generic",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "tokens_output": {
+          "x-ciris-kind": "integer",
+          "level": "generic",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "tokens_total": {
+          "x-ciris-kind": "integer",
+          "level": "generic",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "cost_cents": {
+          "x-ciris-kind": "number",
+          "level": "generic",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "carbon_grams": {
+          "x-ciris-kind": "number",
+          "level": "generic",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "energy_mwh": {
+          "x-ciris-kind": "number",
+          "level": "generic",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "llm_calls": {
+          "x-ciris-kind": "integer",
+          "level": "generic",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "audit_sequence_number": {
+          "x-ciris-kind": "integer",
+          "level": "generic",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "audit_entry_hash": {
+          "x-ciris-kind": "token",
+          "level": "generic",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 128
+        },
+        "has_positive_moment": {
+          "description": "True if positive moment/gratitude was expressed",
+          "x-ciris-kind": "bool",
+          "level": "generic",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "has_execution_error": {
+          "description": "True if execution error occurred",
+          "x-ciris-kind": "bool",
+          "level": "generic",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "success": {
+          "x-ciris-kind": "bool",
+          "level": "generic",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "action_executed": {
+          "x-ciris-kind": "token",
+          "level": "generic",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64
+        },
+        "follow_up_thought_id": {
+          "x-ciris-kind": "token",
+          "level": "detailed",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 128
+        },
+        "audit_entry_id": {
+          "x-ciris-kind": "token",
+          "level": "detailed",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 128
+        },
+        "models_used": {
+          "x-ciris-kind": "list",
+          "level": "detailed",
+          "type": [
+            "array",
+            "null"
+          ],
+          "maxItems": 32,
+          "items": {
+            "x-ciris-kind": "token",
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+            "maxLength": 128
+          }
+        },
+        "api_bases_used": {
+          "x-ciris-kind": "list",
+          "level": "detailed",
+          "type": [
+            "array",
+            "null"
+          ],
+          "maxItems": 32,
+          "items": {
+            "x-ciris-kind": "url",
+            "type": "string",
+            "pattern": "^https?://[^\\s/?#@]+(/[^\\s?#]*)?$",
+            "maxLength": 256
+          }
+        },
+        "execution_error": {
+          "x-ciris-kind": "text",
+          "level": "detailed",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 500
+        },
+        "audit_signature": {
+          "x-ciris-kind": "token",
+          "level": "detailed",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 256
+        },
+        "action_parameters": {
+          "x-ciris-kind": "json",
+          "level": "full_traces",
+          "$ref": "#/definitions/BoundedJson"
+        },
+        "positive_moment": {
+          "description": "Full text of gratitude/positive moment",
+          "x-ciris-kind": "text",
+          "level": "full_traces",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 500
+        },
+        "attempt_index": {
+          "description": "Stamped into every component's data by ciris-lens-core at seal time (0 = first attempt of this event type for the thought); in the signed bytes. The agent never emits it.",
+          "x-ciris-kind": "integer",
+          "level": "generic",
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      }
+    },
+    "EventData_ACTION_RESULT__generic": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/EventData_ACTION_RESULT"
+        }
+      ],
+      "propertyNames": {
+        "enum": [
+          "action_executed",
+          "attempt_index",
+          "audit_entry_hash",
+          "audit_sequence_number",
+          "carbon_grams",
+          "cost_cents",
+          "energy_mwh",
+          "execution_success",
+          "execution_time_ms",
+          "has_execution_error",
+          "has_positive_moment",
+          "llm_calls",
+          "success",
+          "tokens_input",
+          "tokens_output",
+          "tokens_total"
+        ]
+      }
+    },
+    "EventData_ACTION_RESULT__detailed": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/EventData_ACTION_RESULT"
+        }
+      ],
+      "propertyNames": {
+        "enum": [
+          "action_executed",
+          "api_bases_used",
+          "attempt_index",
+          "audit_entry_hash",
+          "audit_entry_id",
+          "audit_sequence_number",
+          "audit_signature",
+          "carbon_grams",
+          "cost_cents",
+          "energy_mwh",
+          "execution_error",
+          "execution_success",
+          "execution_time_ms",
+          "follow_up_thought_id",
+          "has_execution_error",
+          "has_positive_moment",
+          "llm_calls",
+          "models_used",
+          "success",
+          "tokens_input",
+          "tokens_output",
+          "tokens_total"
+        ]
+      }
+    },
+    "EventData_ACTION_RESULT__full_traces": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/EventData_ACTION_RESULT"
+        }
+      ],
+      "propertyNames": {
+        "enum": [
+          "action_executed",
+          "action_parameters",
+          "api_bases_used",
+          "attempt_index",
+          "audit_entry_hash",
+          "audit_entry_id",
+          "audit_sequence_number",
+          "audit_signature",
+          "carbon_grams",
+          "cost_cents",
+          "energy_mwh",
+          "execution_error",
+          "execution_success",
+          "execution_time_ms",
+          "follow_up_thought_id",
+          "has_execution_error",
+          "has_positive_moment",
+          "llm_calls",
+          "models_used",
+          "positive_moment",
+          "success",
+          "tokens_input",
+          "tokens_output",
+          "tokens_total"
+        ]
+      }
+    },
+    "EventData_LLM_CALL": {
+      "type": "object",
+      "description": "LLM_CALL component `data`: the agent's egress contract (CIRISAgent#1249).",
+      "additionalProperties": false,
+      "properties": {
+        "handler_name": {
+          "x-ciris-kind": "token",
+          "level": "generic",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64
+        },
+        "service_name": {
+          "x-ciris-kind": "token",
+          "level": "generic",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64
+        },
+        "model": {
+          "x-ciris-kind": "token",
+          "level": "generic",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 128
+        },
+        "base_url": {
+          "description": "An endpoint locator, not a score: it can name a private LAN host or a self-hosted proxy. DETAILED, not GENERIC.",
+          "x-ciris-kind": "url",
+          "level": "detailed",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^https?://[^\\s/?#@]+(/[^\\s?#]*)?$",
+          "maxLength": 256
+        },
+        "response_model": {
+          "x-ciris-kind": "token",
+          "level": "generic",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 128
+        },
+        "duration_ms": {
+          "x-ciris-kind": "number",
+          "level": "generic",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "prompt_tokens": {
+          "x-ciris-kind": "integer",
+          "level": "generic",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "completion_tokens": {
+          "x-ciris-kind": "integer",
+          "level": "generic",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "prompt_bytes": {
+          "x-ciris-kind": "integer",
+          "level": "generic",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "completion_bytes": {
+          "x-ciris-kind": "integer",
+          "level": "generic",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "cost_usd": {
+          "x-ciris-kind": "number",
+          "level": "generic",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "status": {
+          "x-ciris-kind": "token",
+          "level": "generic",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64
+        },
+        "error_class": {
+          "x-ciris-kind": "token",
+          "level": "generic",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 128
+        },
+        "attempt_count": {
+          "x-ciris-kind": "integer",
+          "level": "generic",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "retry_count": {
+          "x-ciris-kind": "integer",
+          "level": "generic",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "parent_event_type": {
+          "x-ciris-kind": "token",
+          "level": "generic",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64
+        },
+        "parent_attempt_index": {
+          "x-ciris-kind": "integer",
+          "level": "generic",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "prompt_hash": {
+          "x-ciris-kind": "token",
+          "level": "detailed",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 128
+        },
+        "prompt": {
+          "x-ciris-kind": "text",
+          "level": "full_traces",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 65536
+        },
+        "response_text": {
+          "x-ciris-kind": "text",
+          "level": "full_traces",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 65536
+        },
+        "attempt_index": {
+          "description": "Stamped into every component's data by ciris-lens-core at seal time (0 = first attempt of this event type for the thought); in the signed bytes. The agent never emits it.",
+          "x-ciris-kind": "integer",
+          "level": "generic",
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      }
+    },
+    "EventData_LLM_CALL__generic": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/EventData_LLM_CALL"
+        }
+      ],
+      "propertyNames": {
+        "enum": [
+          "attempt_count",
+          "attempt_index",
+          "completion_bytes",
+          "completion_tokens",
+          "cost_usd",
+          "duration_ms",
+          "error_class",
+          "handler_name",
+          "model",
+          "parent_attempt_index",
+          "parent_event_type",
+          "prompt_bytes",
+          "prompt_tokens",
+          "response_model",
+          "retry_count",
+          "service_name",
+          "status"
+        ]
+      }
+    },
+    "EventData_LLM_CALL__detailed": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/EventData_LLM_CALL"
+        }
+      ],
+      "propertyNames": {
+        "enum": [
+          "attempt_count",
+          "attempt_index",
+          "base_url",
+          "completion_bytes",
+          "completion_tokens",
+          "cost_usd",
+          "duration_ms",
+          "error_class",
+          "handler_name",
+          "model",
+          "parent_attempt_index",
+          "parent_event_type",
+          "prompt_bytes",
+          "prompt_hash",
+          "prompt_tokens",
+          "response_model",
+          "retry_count",
+          "service_name",
+          "status"
+        ]
+      }
+    },
+    "EventData_LLM_CALL__full_traces": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/EventData_LLM_CALL"
+        }
+      ],
+      "propertyNames": {
+        "enum": [
+          "attempt_count",
+          "attempt_index",
+          "base_url",
+          "completion_bytes",
+          "completion_tokens",
+          "cost_usd",
+          "duration_ms",
+          "error_class",
+          "handler_name",
+          "model",
+          "parent_attempt_index",
+          "parent_event_type",
+          "prompt",
+          "prompt_bytes",
+          "prompt_hash",
+          "prompt_tokens",
+          "response_model",
+          "response_text",
+          "retry_count",
+          "service_name",
+          "status"
+        ]
+      }
+    },
+    "EventData_DEFERRAL_ROUTED": {
+      "type": "object",
+      "description": "DEFERRAL_ROUTED component `data`: the agent's egress contract (CIRISAgent#1249).",
+      "additionalProperties": false,
+      "properties": {
+        "defer_until": {
+          "x-ciris-kind": "timestamp",
+          "level": "generic",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9]{2}:[0-9]{2}(:[0-9]{2}([.,][0-9]+)?)?(Z|z|[+-][0-9]{2}(:?[0-9]{2})?)?$"
+        },
+        "reason": {
+          "x-ciris-kind": "text",
+          "level": "detailed",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 500
+        },
+        "attempt_index": {
+          "description": "Stamped into every component's data by ciris-lens-core at seal time (0 = first attempt of this event type for the thought); in the signed bytes. The agent never emits it.",
+          "x-ciris-kind": "integer",
+          "level": "generic",
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      }
+    },
+    "EventData_DEFERRAL_ROUTED__generic": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/EventData_DEFERRAL_ROUTED"
+        }
+      ],
+      "propertyNames": {
+        "enum": [
+          "attempt_index",
+          "defer_until"
+        ]
+      }
+    },
+    "EventData_DEFERRAL_ROUTED__detailed": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/EventData_DEFERRAL_ROUTED"
+        }
+      ],
+      "propertyNames": {
+        "enum": [
+          "attempt_index",
+          "defer_until",
+          "reason"
+        ]
+      }
+    },
+    "EventData_DEFERRAL_ROUTED__full_traces": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/EventData_DEFERRAL_ROUTED"
+        }
+      ],
+      "propertyNames": {
+        "enum": [
+          "attempt_index",
+          "defer_until",
+          "reason"
+        ]
+      }
+    },
+    "EventData_FALLBACK": {
+      "type": "object",
+      "description": "FALLBACK component `data`: the agent's egress contract (CIRISAgent#1249).",
+      "additionalProperties": false,
+      "properties": {
+        "event_type": {
+          "x-ciris-kind": "token",
+          "level": "generic",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 128
+        },
+        "raw_data": {
+          "x-ciris-kind": "json",
+          "level": "full_traces",
+          "$ref": "#/definitions/BoundedJson"
+        },
+        "attempt_index": {
+          "description": "Stamped into every component's data by ciris-lens-core at seal time (0 = first attempt of this event type for the thought); in the signed bytes. The agent never emits it.",
+          "x-ciris-kind": "integer",
+          "level": "generic",
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      }
+    },
+    "EventData_FALLBACK__generic": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/EventData_FALLBACK"
+        }
+      ],
+      "propertyNames": {
+        "enum": [
+          "attempt_index",
+          "event_type"
+        ]
+      }
+    },
+    "EventData_FALLBACK__detailed": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/EventData_FALLBACK"
+        }
+      ],
+      "propertyNames": {
+        "enum": [
+          "attempt_index",
+          "event_type"
+        ]
+      }
+    },
+    "EventData_FALLBACK__full_traces": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/EventData_FALLBACK"
+        }
+      ],
+      "propertyNames": {
+        "enum": [
+          "attempt_index",
+          "event_type",
+          "raw_data"
+        ]
+      }
+    },
+    "BoundedJson": {
+      "description": "Opaque JSON (FULL_TRACES-class payloads: prompts' context, tool parameters, snapshots). Strings at most x-ciris-egress.bounds.JSON_MAX_STRING_CHARS, arrays/objects at most JSON_MAX_ITEMS entries, object keys at most JSON_MAX_KEY_CHARS, nesting at most JSON_MAX_DEPTH (depth is not expressible in JSON Schema; the agent enforces it, an admitter may).",
+      "x-ciris-kind": "json",
+      "level": "full_traces",
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string",
+          "maxLength": 8192
+        },
+        {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "$ref": "#/definitions/BoundedJson"
+          }
+        },
+        {
+          "type": "object",
+          "maxProperties": 256,
+          "propertyNames": {
+            "maxLength": 128
+          },
+          "additionalProperties": {
+            "$ref": "#/definitions/BoundedJson"
+          }
+        }
+      ]
+    },
+    "TraceComponent__generic": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/TraceComponent"
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "THOUGHT_START"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/EventData_THOUGHT_START__generic"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "SNAPSHOT_AND_CONTEXT"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/EventData_SNAPSHOT_AND_CONTEXT__generic"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "DMA_RESULTS"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/EventData_DMA_RESULTS__generic"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "IDMA_RESULT"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/EventData_IDMA_RESULT__generic"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "ASPDMA_RESULT"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/EventData_ASPDMA_RESULT__generic"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "TSASPDMA_RESULT"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/EventData_TSASPDMA_RESULT__generic"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "VERB_SECOND_PASS_RESULT"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/EventData_VERB_SECOND_PASS_RESULT__generic"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "CONSCIENCE_RESULT"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/EventData_CONSCIENCE_RESULT__generic"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "ACTION_RESULT"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/EventData_ACTION_RESULT__generic"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "LLM_CALL"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/EventData_LLM_CALL__generic"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "DEFERRAL_ROUTED"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/EventData_DEFERRAL_ROUTED__generic"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "enum": [
+                  "ACTION_RESULT",
+                  "ASPDMA_RESULT",
+                  "CONSCIENCE_RESULT",
+                  "DEFERRAL_ROUTED",
+                  "DMA_RESULTS",
+                  "IDMA_RESULT",
+                  "LLM_CALL",
+                  "SNAPSHOT_AND_CONTEXT",
+                  "THOUGHT_START",
+                  "TSASPDMA_RESULT",
+                  "VERB_SECOND_PASS_RESULT"
+                ]
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "else": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/EventData_FALLBACK__generic"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "TraceComponent__detailed": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/TraceComponent"
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "THOUGHT_START"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/EventData_THOUGHT_START__detailed"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "SNAPSHOT_AND_CONTEXT"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/EventData_SNAPSHOT_AND_CONTEXT__detailed"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "DMA_RESULTS"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/EventData_DMA_RESULTS__detailed"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "IDMA_RESULT"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/EventData_IDMA_RESULT__detailed"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "ASPDMA_RESULT"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/EventData_ASPDMA_RESULT__detailed"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "TSASPDMA_RESULT"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/EventData_TSASPDMA_RESULT__detailed"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "VERB_SECOND_PASS_RESULT"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/EventData_VERB_SECOND_PASS_RESULT__detailed"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "CONSCIENCE_RESULT"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/EventData_CONSCIENCE_RESULT__detailed"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "ACTION_RESULT"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/EventData_ACTION_RESULT__detailed"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "LLM_CALL"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/EventData_LLM_CALL__detailed"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "DEFERRAL_ROUTED"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/EventData_DEFERRAL_ROUTED__detailed"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "enum": [
+                  "ACTION_RESULT",
+                  "ASPDMA_RESULT",
+                  "CONSCIENCE_RESULT",
+                  "DEFERRAL_ROUTED",
+                  "DMA_RESULTS",
+                  "IDMA_RESULT",
+                  "LLM_CALL",
+                  "SNAPSHOT_AND_CONTEXT",
+                  "THOUGHT_START",
+                  "TSASPDMA_RESULT",
+                  "VERB_SECOND_PASS_RESULT"
+                ]
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "else": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/EventData_FALLBACK__detailed"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "TraceComponent__full_traces": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/TraceComponent"
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "THOUGHT_START"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/EventData_THOUGHT_START__full_traces"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "SNAPSHOT_AND_CONTEXT"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/EventData_SNAPSHOT_AND_CONTEXT__full_traces"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "DMA_RESULTS"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/EventData_DMA_RESULTS__full_traces"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "IDMA_RESULT"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/EventData_IDMA_RESULT__full_traces"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "ASPDMA_RESULT"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/EventData_ASPDMA_RESULT__full_traces"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "TSASPDMA_RESULT"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/EventData_TSASPDMA_RESULT__full_traces"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "VERB_SECOND_PASS_RESULT"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/EventData_VERB_SECOND_PASS_RESULT__full_traces"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "CONSCIENCE_RESULT"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/EventData_CONSCIENCE_RESULT__full_traces"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "ACTION_RESULT"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/EventData_ACTION_RESULT__full_traces"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "LLM_CALL"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/EventData_LLM_CALL__full_traces"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "DEFERRAL_ROUTED"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/EventData_DEFERRAL_ROUTED__full_traces"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "enum": [
+                  "ACTION_RESULT",
+                  "ASPDMA_RESULT",
+                  "CONSCIENCE_RESULT",
+                  "DEFERRAL_ROUTED",
+                  "DMA_RESULTS",
+                  "IDMA_RESULT",
+                  "LLM_CALL",
+                  "SNAPSHOT_AND_CONTEXT",
+                  "THOUGHT_START",
+                  "TSASPDMA_RESULT",
+                  "VERB_SECOND_PASS_RESULT"
+                ]
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "else": {
+            "properties": {
+              "data": {
+                "$ref": "#/definitions/EventData_FALLBACK__full_traces"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "DeploymentProfile": {
+      "type": "object",
+      "description": "The agent-supplied deployment_profile block of the signed envelope (FSD §3.2) plus the v2.8.0 members. The substrate (ciris-lens-core) assembles and signs the envelope; deployment_profile is the envelope block the agent supplies, so every agent-sourced per-process value rides here (placement accepted for CC 3.1.5). Every member is at level generic: the profile is stamped on every trace at every trace_level.",
+      "additionalProperties": false,
+      "required": [
+        "agent_role",
+        "agent_template",
+        "deployment_domain",
+        "deployment_type",
+        "deployment_region",
+        "deployment_trust_mode",
+        "run_kind",
+        "trace_format_version",
+        "pipeline_metadata",
+        "calibration_version"
+      ],
+      "properties": {
+        "agent_role": {
+          "description": "Agent persona role (FSD §3.2). Operator-declared; default lowercased agent name.",
+          "x-ciris-kind": "label",
+          "level": "generic",
+          "type": "string",
+          "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+          "maxLength": 128
+        },
+        "agent_template": {
+          "description": "The agent template the deployment declares: operator config agent_template, else CIRIS_TEMPLATE (set by the setup wizard or CIRISManager), else \"<agent>-default-unspecified\". v2.7.0 does not read CIRIS_TEMPLATE, so 2.7.x rows carry the -default-unspecified form.",
+          "x-ciris-kind": "label",
+          "level": "generic",
+          "type": "string",
+          "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+          "maxLength": 128
+        },
+        "deployment_domain": {
+          "description": "What the agent is deployed for (FSD §3.2); default \"general\".",
+          "x-ciris-kind": "token",
+          "level": "generic",
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64
+        },
+        "deployment_type": {
+          "description": "The operator's declared deployment type (operator free-form; the wizard offers personal/business/research/nonprofit; default production). Under v2.7.0 the run-kind marker overrode deployment_type, so on 2.7.x rows it may hold mock/qa/battery; an admitter must not infer run_kind from it there. From v2.8.0 it is the operator's value only and run_kind carries the run kind.",
+          "x-ciris-kind": "label",
+          "level": "generic",
+          "type": "string",
+          "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+          "maxLength": 128
+        },
+        "deployment_region": {
+          "description": "Operator-declared region: adapter config deployment_region, else the env var CIRIS_ACCORD_METRICS_DEPLOYMENT_REGION. null declares \"not disclosed\"; the agent never infers a region.",
+          "x-ciris-kind": "token",
+          "level": "generic",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64
+        },
+        "deployment_trust_mode": {
+          "description": "Federation participation intent (FSD §3.2); default \"sovereign\".",
+          "x-ciris-kind": "token",
+          "level": "generic",
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64
+        },
+        "run_kind": {
+          "x-ciris-kind": "token",
+          "level": "generic",
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64,
+          "allOf": [
+            {
+              "$ref": "#/definitions/RunKind"
+            }
+          ]
+        },
+        "trace_format_version": {
+          "description": "Identifies this contract on the wire. A v2.8.0 admission gate keys on this member and validates against the artifact pinned by SHA-256; absent on v2.7.0 traces.",
+          "x-ciris-kind": "token",
+          "level": "generic",
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64,
+          "const": "2.8.0"
+        },
+        "pipeline_metadata": {
+          "description": "Agent-side pipeline provenance (CIRISAgent#878, #1245): which build, accord and persona produced the trace. Distinct from the admitter's post-ingest PipelineMetadata (stages, timings), which the admitter computes itself. Every member is always present; null means the agent has no source for it.",
+          "x-ciris-kind": "object",
+          "level": "generic",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "agent_version",
+            "accord_version",
+            "identity_hash",
+            "pdma_version",
+            "dsdma_domain_registry_version"
+          ],
+          "properties": {
+            "agent_version": {
+              "description": "CIRIS_VERSION of the emitting agent build (e.g. \"2.15.0-stable\").",
+              "x-ciris-kind": "token",
+              "level": "generic",
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+              "maxLength": 64
+            },
+            "accord_version": {
+              "description": "ACCORD_VERSION the agent reasons under.",
+              "x-ciris-kind": "token",
+              "level": "generic",
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+              "maxLength": 64
+            },
+            "identity_hash": {
+              "description": "AgentIdentityRoot.identity_hash: the persona the agent actually runs under (from the identity graph, not the template file). null before the identity exists (first run).",
+              "x-ciris-kind": "token",
+              "level": "generic",
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+              "maxLength": 128
+            },
+            "pdma_version": {
+              "description": "Declared for #878; no source exists yet, always null.",
+              "x-ciris-kind": "token",
+              "level": "generic",
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+              "maxLength": 64
+            },
+            "dsdma_domain_registry_version": {
+              "description": "Declared for #878; no source exists yet, always null.",
+              "x-ciris-kind": "token",
+              "level": "generic",
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+              "maxLength": 64
+            }
+          }
+        },
+        "calibration_version": {
+          "description": "The axis-calibration bundle of the substrate that sealed the trace (ciris_server.AXIS_CALIBRATION_VERSION, e.g. \"crc-v2\"; CIRISAgent#820). null when the substrate does not expose one.",
+          "x-ciris-kind": "token",
+          "level": "generic",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.:/@+=\\-]+$",
+          "maxLength": 64
+        }
+      }
+    },
+    "RunKind": {
+      "type": "string",
+      "enum": [
+        "production",
+        "prod-personal",
+        "prod-managed",
+        "qa",
+        "battery",
+        "mock"
+      ],
+      "description": "What kind of run produced the trace (CIRISAgent#1244/#1245, CC 3.1.5). Closed vocabulary. `mock` comes only from the mock LLM and cannot be overridden; `qa`/`battery` are declared by the harness (CIRIS_TRACE_RUN_KIND), even with a real model. `prod-managed` is a production run on a CIRISManager deployment (CIRIS_MANAGED=true), `prod-personal` a production run anywhere else; an operator may override either (CIRIS_TRACE_RUN_KIND or adapter config run_kind). `production` stays valid and means a production run whose deployment is not distinguished. An admitter treats the three production values alike. A federation-tier admitter refuses `mock` (refusal token `trace_run_kind_mock`, Persist-side)."
+    }
+  }
+}

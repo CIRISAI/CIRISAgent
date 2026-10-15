@@ -138,6 +138,34 @@ upstream to CIRISClient, then be removed here on the next re-vendor.
     (`ETHICS_TEXT_RENDERINGS`). Each rendering is taken from that locale's
     accepted 1.3 output, or from the trial for the locales batch 1 withheld.
     The derivation of each rendering is in the code comment.
+  - *constitution_ethics only:* the shipped 1.2b corpus is the authority for
+    principle names (Eric's ruling, 2026-10-14). Group 1 of the 1.3 run
+    (38627954361) rejected 123 line-locale pairs. Most of the de and th
+    rejections were glossary-against-corpus conflicts: de pinned
+    `Resilience` as "Widerstandsfähigkeit" and `Non-maleficence` as
+    "Nicht-Schaden", which the 1.2b corpus never writes (it writes
+    "Resilienz" 14/14 and "Schadensvermeidung" 12/12). th pinned `Integrity`
+    and `Resilience` to words its corpus does not use for them. Every draft
+    broke either the glossary or its own anchor, and the judge could always
+    cite the other. Four tables in `accord_localize.py` fix this:
+    - `CONSTITUTION_ETHICS_GLOSSARY_FIX` corrects 30 rows in 17 locales to the
+      corpus's majority rendering. Each row has its count and source line in
+      the code comment.
+    - `CONSTITUTION_ETHICS_GLOSSARY_REMOVE` holds the rows with no 1.2b
+      majority (te `Flourishing`, de `Reasoning`). They are not sent.
+    - `english_renderings`, with the allow-lists `ENGLISH_RENDERING_KEPT*`,
+      drops every row whose rendering is its own English. The exceptions are
+      acronyms, proper names and identifiers, plus words the 1.2b corpus
+      writes the same way (de `Agent`, fr `Service`, it `Wise Authority`, …).
+      This is the ciris-website lesson: such a row canonizes leftover English.
+      fr pinned `Wise Authority` as itself, while its corpus writes
+      "Autorité Sage" (13 to 2), so that row is corrected instead.
+    - The `Ethics Check` stage label (`CONSTITUTION_ETHICS_GLOSSARY_DROP`)
+      and the Version History rows ("1.0 -> 2026-03-27", `VERSION_ROW`) are
+      dropped.
+
+    UI runs, and Accord runs of the `accord` stem, send the vendored rows
+    unchanged.
   - *every accord run:* the yo `Ethics` rendering is re-cased from the table's
     `ÌWÀ RERE` to the corpus's `ìwà rere` (`GLOSSARY_RECASE`), so it can sit
     inside a phrase.
@@ -147,7 +175,9 @@ upstream to CIRISClient, then be removed here on the next re-vendor.
 
   Upstream fix: fix `Ethics`' Context use (a UI label is not a prose term)
   and the yo casing in the glossaries, and take `drop_contained` into
-  `glossary.relevant`.
+  `glossary.relevant`. Align the principle-name rows with the shipped corpus,
+  stop parsing Version History rows as terms, and drop or justify every row
+  whose rendering is its own English.
 
 ## Re-vendoring
 

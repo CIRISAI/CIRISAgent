@@ -33,8 +33,14 @@ time; no vendored file is edited. This module:
    language's shipped edition renders it (the translation memory) instead.
    For constitution_ethics runs the pipeline-stage "Ethics" row (the UI label
    for the conscience step) is dropped too, and one row pins "ethics text"
-   (``ETHICS_TEXT_RENDERINGS``). A term that occurs only inside a longer
-   matched term is not sent (``drop_contained``).
+   (``ETHICS_TEXT_RENDERINGS``). For those runs the shipped 1.2b corpus is
+   the authority for principle names: rows that contradict it are corrected
+   to its rendering (``CONSTITUTION_ETHICS_GLOSSARY_FIX``) or, with no 1.2b
+   majority, not sent (``CONSTITUTION_ETHICS_GLOSSARY_REMOVE``), and no row
+   whose rendering is its own English is sent unless it is a proper noun or
+   identifier, or the 1.2b corpus keeps it too (``ENGLISH_RENDERING_KEPT``).
+   A term that occurs only inside a longer matched term is not sent
+   (``drop_contained``).
    The drafting rung is ``ACCORD_DRAFTER``, not the vendored Claude rung 0.
 6. Runs the lanes ONE UNIT AT A TIME, because the pipeline sends a language's
    whole selection in one request and a whole accord does not fit in one reply.
@@ -87,7 +93,7 @@ import sys
 import tempfile
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
+from typing import Any, Callable, Dict, FrozenSet, Iterable, List, Optional, Sequence, Set, Tuple
 
 HERE = Path(__file__).resolve().parent
 REPO_ROOT = HERE.parent
@@ -123,7 +129,136 @@ ACCORD_GLOSSARY_DROP = ("ACCORD",)
 #: Sent with the ethics text it made am render "ethics text" as the
 #: "conscience text" (ህሊና ጽሑፍ) in every model of the 2026-10-14 trial, which the
 #: judge passed, and made yo fail every draft for not writing the stage label.
-CONSTITUTION_ETHICS_GLOSSARY_DROP = ("ethics",)
+#: "Ethics Check" is the same UI stage label spelled out (Context column
+#: "Conscience check" / "Conscience phase" in de/es/pt). The 1.2b corpus never
+#: uses those renderings for the text's "ethics checks" (de "Ethik-Prüfungen",
+#: fr "contrôles éthiques"), and run 38627954361 rejected de and fr drafts for
+#: not writing the label (accord.v1.s07.l04).
+CONSTITUTION_ETHICS_GLOSSARY_DROP = ("ethics", "ethics check")
+
+#: A glossary's "Version History" table is parsed as terms after its header
+#: row: "1.0 -> 2026-03-27", "1.1 -> 2026-05-31". The ethics text says "1.0" and
+#: "1.1", so every locale was sent a release date as the canonical rendering of
+#: a version number. Not terminology; never sent in constitution_ethics runs.
+VERSION_ROW = re.compile(r"\d+(?:\.\d+)+")
+
+#: PRINCIPLE NAMES, corrected to the shipped 1.2b translation for
+#: constitution_ethics runs (Eric's ruling, 2026-10-14: the shipped 1.2b
+#: translation of each principle name is the authority). The glossary rows
+#: below contradicted the corpus the run's anchors come from, so a draft broke
+#: either the glossary or its anchor, and the judge could always cite the other:
+#: run 38627954361 rejected de, th, uk, fa, ta, te and ur lines on these terms
+#: (th: 11 of its 17 rejections cite Integrity or Resilience). Each value is
+#: the corpus's majority rendering, read from accord_1.2b_<lang>.txt aligned by
+#: line key to the English 1.2b; the count is aligned lines carrying it /
+#: aligned lines whose English names the term. Where the corpus is
+#: INCONSISTENT, the majority wins. A test asserts that every key is an
+#: existing glossary row and every value occurs in that locale's 1.2b file.
+#:   de  Non-maleficence  Nicht-Schaden -> Schadensvermeidung   12/12 (v1.s03.l04)
+#:   de  Resilience       Widerstandsfähigkeit -> Resilienz    14/14 (v1.s05.title)
+#:   de  Epistemic Humility  -> epistemische Demut             1/1 (v2.s05.l02)
+#:   fa  Integrity   صداقت -> درستکاری                          12/16 (v1.s04.title)
+#:   fr  Wise Authority  (rendered as its English) -> Autorité Sage   3/3; 13 raw vs 2 English
+#:   hi  Integrity   अखंडता -> सत्यनिष्ठा                        12/17 vs 4 (v1.s04.title)
+#:   hi  Epistemic Humility  ज्ञानपरक विनम्रता -> ज्ञानमीमांसीय विनम्रता  1/1
+#:   id  Resilience  Ketahanan -> Resiliensi                   12/14 (v1.s05.title)
+#:   id  Flourishing Berkembang -> kesejahteraan               10/14 vs 0
+#:   ja  Resilience  回復力 -> レジリエンス                      12/14 vs 2
+#:   ja  Epistemic Humility  認識論的謙遜 -> 認識論的謙虚さ          1/1
+#:   ko  Integrity   무결성 (0 in 1.2b) -> 성실성                 8/17; 통합성 5 (INCONSISTENT, majority)
+#:   mr  Integrity   सचोटी -> सत्यनिष्ठा                          9/17 vs 2
+#:   mr  Coherence   सुसंगतता -> सुसंगती                         11/23 vs 8 (INCONSISTENT, majority)
+#:   mr  Epistemic Humility  ज्ञानविषयक नम्रता -> ज्ञानमीमांसीय नम्रता  1/1
+#:   ru  Coherence   Когерентность -> Согласованность          16/23 vs 7 (INCONSISTENT, majority)
+#:   ta  Resilience  மீள்தன்மை -> மீள்திறன்                     10/14 vs 4 (incl. மீள்-தன்மை)
+#:   te  Coherence   సంఘటన ("incident") -> సమన్వయం             18/22 vs 0
+#:   th  Integrity   ความซื่อสัตย์ -> ความซื่อตรง                 8/17 vs 0 (v1.s04.title)
+#:   th  Resilience  ความยืดหยุ่น -> ความสามารถในการฟื้นตัว        7/14; ความคงทน 4, ความยืดหยุ่น 1 (INCONSISTENT, majority)
+#:   th  Epistemic Humility  ความถ่อมตนทางความรู้ -> ความอ่อนน้อมทางญาณวิทยา  1/1
+#:   tr  Integrity   Dürüstlük/Bütünlük -> Bütünlük            14/17; Dürüstlük 0
+#:   tr  Epistemic Humility  Bilgiye Saygı/Epistemik Alçakgönüllülük -> epistemik alçakgönüllülük  1/1
+#:   uk  Integrity   Доброчесність (0 in 1.2b) -> Цілісність    12/17
+#:   ur  Error       خرابی -> غلطی                              2/2 (v3.s05.l08, rejected in 38627954361)
+#:   ur  Epistemic Humility  علمی عاجزی -> علمی انکساری          1/1
+#:   vi  Flourishing Phát Triển Thịnh Vượng -> hưng thịnh       9/14 vs 2
+#:   vi  Epistemic Humility  Khiêm Tốn Nhận Thức -> khiêm nhường về nhận thức  1/1
+#:   zh  Integrity   正直 -> 诚信                                8/17 vs 3
+#:   zh  Coherence   连贯性 -> 一致性                             10/22 vs 8 (INCONSISTENT, majority)
+CONSTITUTION_ETHICS_GLOSSARY_FIX: Dict[str, Dict[str, str]] = {
+    "de": {
+        "Non-maleficence": "Schadensvermeidung",
+        "Resilience": "Resilienz",
+        "Epistemic Humility": "epistemische Demut",
+    },
+    "fa": {"Integrity": "درستکاری"},
+    "fr": {"Wise Authority": "Autorité Sage"},
+    "hi": {"Integrity": "सत्यनिष्ठा", "Epistemic Humility": "ज्ञानमीमांसीय विनम्रता"},
+    "id": {"Resilience": "Resiliensi", "Flourishing": "kesejahteraan"},
+    "ja": {"Resilience": "レジリエンス", "Epistemic Humility": "認識論的謙虚さ"},
+    "ko": {"Integrity": "성실성"},
+    "mr": {"Integrity": "सत्यनिष्ठा", "Coherence": "सुसंगती", "Epistemic Humility": "ज्ञानमीमांसीय नम्रता"},
+    "ru": {"Coherence": "Согласованность"},
+    "ta": {"Resilience": "மீள்திறன்"},
+    "te": {"Coherence": "సమన్వయం"},
+    "th": {
+        "Integrity": "ความซื่อตรง",
+        "Resilience": "ความสามารถในการฟื้นตัว",
+        "Epistemic Humility": "ความอ่อนน้อมทางญาณวิทยา",
+    },
+    "tr": {"Integrity": "Bütünlük", "Epistemic Humility": "epistemik alçakgönüllülük"},
+    "uk": {"Integrity": "Цілісність"},
+    "ur": {"Error": "غلطی", "Epistemic Humility": "علمی انکساری"},
+    "vi": {"Flourishing": "hưng thịnh", "Epistemic Humility": "khiêm nhường về nhận thức"},
+    "zh": {"Integrity": "诚信", "Coherence": "一致性"},
+}
+
+#: Rows not sent in constitution_ethics runs because the 1.2b corpus has no
+#: majority rendering to correct them to (never invented, never left wrong).
+#:   te  Flourishing  వర్ధిల్లు (0 in 1.2b): శ్రేయస్సు 6/13 vs వికాస- 6/13, a tie
+#:   de  Reasoning    "Reasoning" (its English): Denkprozess / Begründung /
+#:       Systemargumentation, 1 each of 3. It is also an English-rendering row.
+CONSTITUTION_ETHICS_GLOSSARY_REMOVE: Dict[str, Tuple[str, ...]] = {
+    "te": ("Flourishing",),
+    "de": ("Reasoning",),
+}
+
+#: Rows whose rendering IS its English, still sent in constitution_ethics runs.
+#: Every other such row is dropped: a glossary row that "translates" a term as
+#: itself canonizes leftover English (the ciris-website lesson), and the judge
+#: generalizes from it (run 38627954361's de judge demanded "Integrity",
+#: "Justice" and "Meta-Goal" stay English, which no de row says).
+#: Global: acronyms, product and proper names, and machine identifiers that
+#: must survive verbatim.
+ENGLISH_RENDERING_KEPT_EVERYWHERE: FrozenSet[str] = frozenset(
+    {
+        "API", "BYOK", "CIRIS", "DMA", "DSASPDMA", "IDMA", "LLM", "OAuth", "Ubuntu",
+        "domain_hint", "operational_reason", "primary_need_category", "rights_basis",
+        "secondary_need_categories",
+    }
+)  # fmt: skip
+#: Per locale: the word is also this language's word, and the 1.2b corpus
+#: writes it that way (aligned lines carrying it / lines naming the term).
+#:   de  Agent 6/6 ("Agent", "Agenten"), Online 1/1
+#:   es  Error 2/2, Local 2/2
+#:   fr  Agent 6/6, Service 2/2
+#:   it  Online 1/1, Wise Authority 3/3 (13 raw "Wise Authority" vs 1 "Autorità Sagge")
+#:   pt  Local 2/2
+#:   tr  Transfer 3/5 ("Transfer", "Transferi"; aktarım 1)
+ENGLISH_RENDERING_KEPT: Dict[str, FrozenSet[str]] = {
+    "de": frozenset({"Agent", "Online"}),
+    "es": frozenset({"Error", "Local"}),
+    "fr": frozenset({"Agent", "Service"}),
+    "it": frozenset({"Online", "Wise Authority"}),
+    "pt": frozenset({"Local"}),
+    "tr": frozenset({"Transfer"}),
+}
+
+
+def english_renderings(rows: Dict[str, str], code: str) -> List[str]:
+    """The rows of ``rows`` rendered as their own English that ``code`` may not keep."""
+    kept = ENGLISH_RENDERING_KEPT_EVERYWHERE | ENGLISH_RENDERING_KEPT.get(code, frozenset())
+    return sorted(e for e, t in rows.items() if t.strip().casefold() == e.strip().casefold() and e.strip() not in kept)
+
 
 #: The document's own name in constitution_ethics runs: one row, "ethics text".
 #: Each rendering is taken from this language's accepted 1.3 output (the
@@ -722,7 +857,18 @@ def accord_terms(rows: Dict[str, str], code: str, stem: str) -> Dict[str, str]:
         if out.get(english) == table:
             out[english] = used
     if stem == "constitution_ethics":
-        out = {e: t for e, t in out.items() if e.strip().lower() not in CONSTITUTION_ETHICS_GLOSSARY_DROP}
+        removed = {e.casefold() for e in CONSTITUTION_ETHICS_GLOSSARY_REMOVE.get(code, ())}
+        out = {
+            e: t
+            for e, t in out.items()
+            if e.strip().lower() not in CONSTITUTION_ETHICS_GLOSSARY_DROP
+            and not VERSION_ROW.fullmatch(e.strip())
+            and e.strip().casefold() not in removed
+        }
+        fixes = {e.casefold(): t for e, t in CONSTITUTION_ETHICS_GLOSSARY_FIX.get(code, {}).items()}
+        out = {e: fixes.get(e.strip().casefold(), t) for e, t in out.items()}
+        leftover = set(english_renderings(out, code))
+        out = {e: t for e, t in out.items() if e not in leftover}
         if code in ETHICS_TEXT_RENDERINGS:
             out[ETHICS_TEXT_TERM] = ETHICS_TEXT_RENDERINGS[code]
     return out

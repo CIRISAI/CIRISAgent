@@ -249,3 +249,89 @@ def test_accord_runs_keep_the_ethics_row_but_recase_yoruba(tmp_path: Path) -> No
     assert L.gloss.relevant("yo", ["Ethics."]) == {"Ethics": "ìwà rere"}
     assert "ethics text" not in L.gloss.relevant("yo", ETHICS_PROBE), "the name row is for the ethics text only"
     assert L.gloss.relevant("am", ["Ethics."]) == {"Ethics": "ህሊና"}, "only yo is re-cased"
+
+
+# ── principle names: the shipped 1.2b corpus is the authority (ruling 2026-10-14) ──
+
+GLOSSARY_LANGS = sorted(
+    p.name.split("_")[0]
+    for p in (Path(AL.__file__).resolve().parent / "glossaries").glob("*_glossary.md")
+    if not p.name.startswith("TEMPLATE")
+)
+
+
+@pytest.fixture
+def ethics_glossary(tmp_path: Path) -> Any:
+    """(vendored terms(), the terms() a constitution_ethics run sends)."""
+    stage = AL.Stage("1.3", stage_dir=tmp_path / "stage", stem="constitution_ethics")
+    stage.build()
+    L = AL.import_localize(stage.dir)
+    vendored = L.gloss.terms
+    AL.install(L, stage, {})
+    return vendored, L.gloss.terms
+
+
+def test_no_ethics_row_is_rendered_as_its_own_english(ethics_glossary: Any) -> None:
+    vendored, sent = ethics_glossary
+    assert len(GLOSSARY_LANGS) == 28
+    # precondition: the vendored tables do have such rows, so the check is not vacuous
+    assert vendored("fr")["Wise Authority"] == "Wise Authority"
+    assert vendored("de")["Reasoning"] == "Reasoning"
+    for lang in GLOSSARY_LANGS:
+        rows = sent(lang)
+        assert AL.english_renderings(rows, lang) == [], lang
+        allowed = AL.ENGLISH_RENDERING_KEPT_EVERYWHERE | AL.ENGLISH_RENDERING_KEPT.get(lang, frozenset())
+        for english, rendering in rows.items():
+            if rendering.strip().casefold() == english.strip().casefold():
+                assert english in allowed, (lang, english)
+
+
+def test_the_english_rendering_check_fails_on_an_injected_row() -> None:
+    injected = {"Integrity": "Integrity", "Justice": "Gerechtigkeit", "CIRIS": "CIRIS", "Agent": "Agent"}
+    # the checker sees the leftover English, and only it: CIRIS is a proper name,
+    # de's 1.2b writes "Agent", and "Gerechtigkeit" is a translation
+    assert AL.english_renderings(injected, "de") == ["Integrity"]
+    assert AL.english_renderings(injected, "ha") == ["Agent", "Integrity"]
+    sent = AL.accord_terms(injected, "de", "constitution_ethics")
+    assert "Integrity" not in sent and sent["Justice"] == "Gerechtigkeit" and sent["CIRIS"] == "CIRIS"
+    # an Accord (not ethics-text) run is not filtered: the filter is what removed it
+    assert AL.accord_terms(injected, "de", "accord")["Integrity"] == "Integrity"
+
+
+def test_every_principle_fix_corrects_an_existing_row_to_the_shipped_1_2b_rendering(ethics_glossary: Any) -> None:
+    vendored, sent = ethics_glossary
+    assert AL.CONSTITUTION_ETHICS_GLOSSARY_FIX, "the fix table is not empty"
+    for lang, fixes in AL.CONSTITUTION_ETHICS_GLOSSARY_FIX.items():
+        corpus = (LOCALIZED / f"accord_1.2b_{lang}.txt").read_text(encoding="utf-8").casefold()
+        for english, rendering in fixes.items():
+            assert english in vendored(lang), (lang, english, "a fix corrects a row, it never adds one")
+            assert vendored(lang)[english] != rendering, (lang, english)
+            assert rendering.casefold() in corpus, (lang, english, "never invented: it is the 1.2b corpus's")
+            assert sent(lang)[english] == rendering, (lang, english)
+
+
+def test_unresolvable_rows_are_not_sent_and_version_history_rows_never_are(ethics_glossary: Any) -> None:
+    vendored, sent = ethics_glossary
+    for lang, removed in AL.CONSTITUTION_ETHICS_GLOSSARY_REMOVE.items():
+        for english in removed:
+            assert english in vendored(lang), (lang, english)
+            assert english not in sent(lang), (lang, english)
+    assert vendored("de")["1.0"] == "2026-03-27", "precondition: the version table parses as terms"
+    for lang in GLOSSARY_LANGS:
+        assert not [e for e in sent(lang) if AL.VERSION_ROW.fullmatch(e)], lang
+        assert "ethics check" not in {e.casefold() for e in sent(lang)}, lang
+
+
+def test_accord_runs_keep_the_vendored_principle_rows(tmp_path: Path) -> None:
+    L = _installed(tmp_path, "accord")
+    assert L.gloss.relevant("th", ["2 Integrity"]) == {"Integrity": "ความซื่อสัตย์"}
+    assert L.gloss.relevant("fr", ["Wise Authority"]) == {"Wise Authority": "Wise Authority"}
+
+
+def test_ethics_run_sends_the_corpus_principle_names(ethics_glossary: Any) -> None:
+    _, sent = ethics_glossary
+    assert sent("th")["Integrity"] == "ความซื่อตรง"
+    assert sent("de")["Resilience"] == "Resilienz"
+    assert sent("de")["Non-maleficence"] == "Schadensvermeidung"
+    assert sent("uk")["Integrity"] == "Цілісність"
+    assert sent("fr")["Wise Authority"] == "Autorité Sage"

@@ -153,15 +153,25 @@ SPLIT_LOCALES: Tuple[str, ...] = ("en", "es", "fr", "it", "pt")
 #: ideation directive); `ta` (has no cross-cluster section at all — its draft
 #: was a different fix, the §3d false incorrect-examples header, which belongs
 #: to the fa/ru/ta/te/ur/yo header sweep, not here); `en`/`fr` already done.
+#:
+#: THIRD DELIBERATE CONTENT CHANGE, 7 of 29 (`U6 register fix`): the block's
+#: own instructions were written in the informal second person its register
+#: rule forbids («MANTÉN REGISTRO FORMAL», «Usa el nombre», «Cuando aclares»;
+#: fr «Maintiens / Fournis / Utilise-la»; it «Mantieni / Non attribuire»; de
+#: du-imperatives and Sie+du-verb hybrids «Sie hegst», «Du musst», inside the
+#: CORRECT exemplars; am «ተከተል / ስጥ / አትጻፍ»; yo «o / rẹ»; ha «Kar ka»).
+#: es 1.3 answered in tú 9/9. Rewritten to each locale's own prescribed form
+#: (usted / vous / Lei / Sie / እርስዎ / ẹ-yín / ku); quoted user speech and
+#: shown WRONG forms untouched. Guarded by test_language_guidance_register.py.
 COMPOSED_SHA256: Dict[str, Tuple[str, int]] = {
     "en": ("4d12ee281b483bc2a6f3715d3a20990322d3f6f324e9d57c4ed72c91f3882de7", 16307),  # separator restored before 7e/8
-    "am": ("33fb7ed6229f16fc59036becc33915916ed15c44e4cd1ecb333644729b9f6641", 32861),  # #1010 §7e guard + §26 reconciled
+    "am": ("09a71780cdafa9442fdbd1cbe4a59310786f3b598a5b39d9fbf09b4b160dfa5b", 32842),  # #1010 §7e guard + §26 reconciled + U6 register fix (formal instructions)
     "ar": ("e582d038f4c9b434e028c3f4c7e23793008b9555a17f695037b58f267b78bd52", 22476),  # #1010 §7e guard + §26 reconciled
-    "de": ("f849c0f7e952ab0778c60feb68412a68ca8626dca3109540e2dd1b019ea2b1f7", 20243),  # U1 fix: dropped the quoted ❌ specimen (GUIDANCE_FIXES.md 2026-08-12)
-    "es": ("5675bc31362f41f3ebcef15634d33c2434fbc03a89a663cddf3530d5e5e12ba2", 18629),  # separator restored before 8
-    "fr": ("137575e2d45ae60306d34f8ed3a2b5c09a87efb8fc6f4bee7909dcc8da96cf4a", 24621),  # #1010 §7e gains the actionability boundary (q08 U2)
+    "de": ("a8ecfb9aff0b46f13a07892e73fd6be402f8ab07f5796a808da8fd2568445430", 20426),  # U1 fix: dropped the quoted ❌ specimen (GUIDANCE_FIXES.md 2026-08-12) + U6 register fix (formal instructions)
+    "es": ("374cf5714d70c35ec9f9083983af9360abce9fcd51c9e1667df703268bd12463", 18628),  # separator restored before 8 + U6 register fix (formal instructions)
+    "fr": ("247806bb957cd3a59161245b1c0a98d3981197020508e67eeeeacd1d19ced936", 24643),  # #1010 §7e gains the actionability boundary (q08 U2) + U6 register fix (formal instructions)
     "hi": ("e707c74e3875cf1f70ff304e94090af3676c72e36df267077f40daed049d2364", 34173),  # #1010 §7e guard + §26 reconciled
-    "it": ("22990eb664d4e54b7d9f57129b41888550e00a0fd15d560b707ce424586443a2", 18407),  # separator restored before 8
+    "it": ("3984343c3adfda5b34a83c86860e7e8d6d016acd1372f85931b8965c863b0e1f", 18413),  # separator restored before 8 + U6 register fix (formal instructions)
     "ja": ("469272c78454a02f594a821922a8657f9facf3a85af84a185594024d5618bf90", 29831),  # #1010 kindness-framed rewrite
     "ko": ("bc0931d4781f5c0df5d9dd129d704e01289ae45a28e28df9440c24350e0a4789", 28015),  # #1010 kindness-framed rewrite
     "pt": ("4bc204fc0e64697c4c6f89e6aa340da9d2694a437dd5a8c5ccd50a8bb8e5c3ff", 17993),  # separator restored before 8
@@ -172,7 +182,7 @@ COMPOSED_SHA256: Dict[str, Tuple[str, int]] = {
     "ur": ("71ac466f2db78d1fd09a911fa793b2d3c71e3571e6113e1f65aa042ec3cc16e8", 29322),  # #1010 §7e guard + §26 reconciled
     "bn": ("44feaf44d0b0a6d3c65912adf46f888cdbffcd3ce51df2b6778cc11ecaecfc0a", 37947),  # #1010 §7e guard + §26 reconciled
     "fa": ("c953c3878719d38807f4678d8c3106f0b4a6809bba5b9f526ed34c84eb881dfc", 37357),  # #1010 kindness-framed rewrite
-    "ha": ("f52a17ab710a204a78ab4bd91fbad974bcf8a87a1b1444d84e1c58afdfa6984f", 18788),  # review FAILED — no guard
+    "ha": ("a82b8fdcc8f0e5d440c992bb21902403118ccc6194be1e0668330d128a98bba2", 18788),  # review FAILED — no guard + U6 register fix (formal instructions)
     "id": ("bc724b53fd483213b163f7b821135800536072df57bcf474235c2d0aeb95d09b", 17774),  # #1010 §7e guard + §26 reconciled
     "pa": ("1e69e8a6f45870a492b599449eb5eff0df4e76110b018a798b1075d3632937a7", 33060),  # #1010 §7e guard
     "ta": ("8384d1c0c641f41b54641f5748718ce15b114d450faf1eafbbf00b8b2b5b5d98", 39702),  # #1010 §7e guard
@@ -182,7 +192,7 @@ COMPOSED_SHA256: Dict[str, Tuple[str, int]] = {
     "my": ("c4bb255ce25a1964c176cc5b99d73b9f0af938e24e54c093325bebb8154cd4a7", 53450),  # #1010 §7e guard + §26 reconciled
     "th": ("59576919a66bfa56285388bdfde024c8253676647378b873cd68d6ae8e454728", 32725),  # #1010 §7e guard
     "uk": ("af19e474fade635dbbb927d91f2ae2cc384813972c54169bd58fad333a43cec2", 30672),  # #1010 §7e guard + §26 reconciled
-    "yo": ("0981dc951e52213d4ec1ef9f8facc6674d234367a382546c4dc46806a60d5078", 29524),  # #1010 §7e guard + §26 reconciled
+    "yo": ("75af4165533b7ca498a1d2bd4afa437d86b8325029c50e678f501746a890c00b", 29544),  # #1010 §7e guard + §26 reconciled + U6 register fix (formal instructions)
 }
 
 #: What the split bought at ``en``, in bytes. A ratchet on the number that

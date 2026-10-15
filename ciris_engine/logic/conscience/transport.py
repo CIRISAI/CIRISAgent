@@ -70,6 +70,9 @@ TRANSPORT_CATEGORIES = frozenset(
         "INTERNAL_ERROR",
         "AUTH_ERROR",
         "MODEL_NOT_AVAILABLE",
+        # No request was sent: every provider's breaker was open and the
+        # caller's deadline could not cover the wait for a probe.
+        "CIRCUIT_OPEN",
     }
 )
 
@@ -257,3 +260,52 @@ def unusable_answer_result(
         **kwargs,
     )
     return result
+
+
+#: Transport categories where a FRESH request is an independent draw that can
+#: succeed: the provider was slow, unreachable, or returned a 5xx this once.
+#: The one retry policy for DMA attempts (`run_dma_with_retries`). Everything
+#: else fails fast: AUTH_ERROR / MODEL_NOT_AVAILABLE fail identically forever,
+#: RATE_LIMIT is already waited out by the bus's cooldown loop,
+#: CONTEXT_LENGTH_EXCEEDED overflows identically on the same payload,
+#: CIRCUIT_OPEN means the bus already waited as long as the deadline allowed,
+#: and an unfunded account cannot be retried into funds.
+TRANSIENT_TRANSPORT_CATEGORIES = frozenset({"TIMEOUT", "CONNECTION_ERROR", "INTERNAL_ERROR"})
+
+#: Phrases meaning the account cannot pay. Providers return some of these as a
+#: 500, which categorises INTERNAL_ERROR, but no retry can fund the account.
+UNFUNDED_MARKERS = (
+    "insufficient credit",
+    "insufficient_quota",
+    "insufficient balance",
+    "credit balance is too low",
+    "credit limit exceeded",
+    "error code: 402",
+    "http 402",
+)
+
+
+def is_transient_transport_failure(exc: BaseException, category: Optional[str] = None) -> bool:
+    """Would a fresh request plausibly succeed? Transient transport only.
+
+    Schema-validation failures (VALIDATION_ERROR, CONTENT_FILTER) are not
+    transport and are not swept in here: the model answered and the answer
+    was unusable, which the LLM service's reask loop owns (#895).
+    """
+    cat = category or categorize_conscience_error(exc)
+    if cat not in TRANSIENT_TRANSPORT_CATEGORIES:
+        return False
+    text = str(exc).lower()
+    return not any(marker in text for marker in UNFUNDED_MARKERS)
+
+
+#: What a DMA evaluator must RAISE rather than fold into a fallback result:
+#: the model was never reached (or the bus had no provider to reach), so a
+#: fallback score would be a number nobody produced. `run_dma_with_retries`
+#: then applies the one retry policy above, and fails the DMA closed.
+SURFACED_TRANSPORT_CATEGORIES = TRANSIENT_TRANSPORT_CATEGORIES | {"CIRCUIT_OPEN"}
+
+
+def surfaces_as_transport_failure(exc: BaseException) -> bool:
+    """Should a DMA evaluator re-raise `exc` instead of returning its fallback?"""
+    return categorize_conscience_error(exc) in SURFACED_TRANSPORT_CATEGORIES

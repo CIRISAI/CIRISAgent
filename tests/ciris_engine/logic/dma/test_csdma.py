@@ -199,6 +199,61 @@ class TestCSDMAEvaluator:
         assert "defer_for_retry" in result.flags
         assert "Failed CSDMA evaluation" in result.reasoning
 
+    # --- transport errors surface; config faults keep the fallback ------------
+
+    TIMEOUT_ERR = "All LLM services failed for CSDMAEvaluator. Last error: LLM API timeout"
+
+    @pytest.mark.asyncio
+    async def test_csdma_timeout_is_raised_not_folded(
+        self, mock_service_registry, mock_prompt_loader, valid_queue_item
+    ):
+        """A provider timeout is not a 0.0-plausibility judgement: it must reach run_dma_with_retries."""
+        evaluator = CSDMAEvaluator(service_registry=mock_service_registry)
+        evaluator.call_llm_structured = AsyncMock(side_effect=RuntimeError(self.TIMEOUT_ERR))
+        with pytest.raises(RuntimeError, match="LLM API timeout"):
+            await evaluator.evaluate_thought(valid_queue_item)
+
+    @pytest.mark.asyncio
+    async def test_csdma_timeout_is_retried_by_run_dma_with_retries(
+        self, mock_service_registry, mock_prompt_loader, valid_queue_item
+    ):
+        from ciris_engine.logic.dma.dma_executor import run_dma_with_retries
+
+        evaluator = CSDMAEvaluator(service_registry=mock_service_registry)
+        good = CSDMAResult(plausibility_score=0.9, flags=[], reasoning="ok")
+        evaluator.call_llm_structured = AsyncMock(side_effect=[RuntimeError(self.TIMEOUT_ERR), (good, None)])
+
+        async def run_csdma_like(**_):
+            return await evaluator.evaluate_thought(valid_queue_item)
+
+        result = await run_dma_with_retries(run_csdma_like, retry_limit=2, timeout_seconds=30.0)
+        assert result.plausibility_score == 0.9
+        assert evaluator.call_llm_structured.call_count == 2
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "message",
+        [
+            "Error code: 401 - unauthorized",
+            "Error code: 404 - The model `qwen-x` does not exist",
+        ],
+    )
+    async def test_csdma_auth_and_model_errors_keep_the_fallback(
+        self, message, mock_service_registry, mock_prompt_loader, valid_queue_item
+    ):
+        """Config faults are not transport: no retry, the existing fallback result."""
+        from ciris_engine.logic.dma.dma_executor import run_dma_with_retries
+
+        evaluator = CSDMAEvaluator(service_registry=mock_service_registry)
+        evaluator.call_llm_structured = AsyncMock(side_effect=RuntimeError(message))
+
+        async def run_csdma_like(**_):
+            return await evaluator.evaluate_thought(valid_queue_item)
+
+        result = await run_dma_with_retries(run_csdma_like, retry_limit=2, timeout_seconds=30.0)
+        assert "LLM_Error" in result.flags
+        assert evaluator.call_llm_structured.call_count == 1
+
     @pytest.mark.asyncio
     async def test_csdma_uses_environment_context(self, mock_service_registry, mock_prompt_loader, valid_queue_item):
         """Test that CSDMA properly uses environment context from queue item."""

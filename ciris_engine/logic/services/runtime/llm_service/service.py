@@ -185,9 +185,7 @@ def build_request_extra_body(
     extra_body: Dict[str, Any] = OpenAICompatibleClient._build_reasoning_off_extras(base_url, model_name or "")
 
     if "openrouter.ai" in base_url:
-        provider_config = _build_openrouter_provider_config(
-            require_zero_data_retention=require_zero_data_retention
-        )
+        provider_config = _build_openrouter_provider_config(require_zero_data_retention=require_zero_data_retention)
         if provider_config.order or provider_config.ignore or provider_config.data_collection:
             extra_body["provider"] = provider_config.model_dump(exclude_defaults=True, exclude_none=True)
 
@@ -424,7 +422,7 @@ def _handle_instructor_retry_exception(
     # Timeout errors
     if _is_timeout_error(error_str):
         _log_instructor_error("TIMEOUT", error_context, full_error, extra="Request exceeded timeout")
-        raise TimeoutError("LLM API timeout - circuit breaker activated") from error
+        raise TimeoutError("LLM API timeout") from error
 
     # Service unavailable / 503 errors
     if _is_service_unavailable_error(error_str):
@@ -1129,6 +1127,11 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             recovery_timeout=60.0,  # Wait 60 seconds before testing recovery
             success_threshold=2,  # Close after 2 successful calls
             timeout_duration=5.0,  # 5 second API timeout
+            # Parallel DMA calls that time out together are ONE slow episode
+            # of this provider, not three failures (the 2026-10-15 drained
+            # queue: 3 concurrent timeouts + 1 retry tripped the breaker on
+            # one slow thought).
+            failure_coalesce_window_s=1.0,
         )
         self.circuit_breaker = CircuitBreaker("llm_service", circuit_config)
 
@@ -2490,7 +2493,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                 type(e).__name__,
             )
             self.circuit_breaker.record_failure()
-            raise TimeoutError("LLM API timeout - circuit breaker activated") from e
+            raise TimeoutError("LLM API timeout") from e
         _handle_instructor_retry_exception(e, error_context, self.circuit_breaker)
         raise RuntimeError(f"LLM call failed ({type(e).__name__})") from e  # pragma: no cover - handler always raises
 
@@ -2671,9 +2674,16 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         - VALIDATION_ERROR: Response didn't match schema
         - AUTH_ERROR: Authentication failed (401)
         - INTERNAL_ERROR: Provider error (500/503)
+        - CIRCUIT_OPEN: no request sent, the provider's breaker is open
         - UNKNOWN: Unrecognized error
         """
         error_str = str(error).lower()
+
+        # An open breaker sent no request: the message embeds the provider's
+        # last real error ("last: LLM API timeout"), which must not be read as
+        # a fresh timeout -- retrying into an open breaker fails identically.
+        if isinstance(error, CircuitBreakerError) or "circuit breaker open for" in error_str:
+            return "CIRCUIT_OPEN"
 
         # Check for timeout errors
         if "timeout" in error_str or "timed out" in error_str:

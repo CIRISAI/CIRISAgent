@@ -12,11 +12,13 @@ from __future__ import annotations
 import ipaddress
 import logging
 import time
-from typing import Callable, Optional
+from contextlib import contextmanager
+from contextvars import ContextVar
+from typing import Callable, Iterator, Optional
 from urllib.parse import urlparse
 
 from ciris_engine.logic.config.env_utils import get_env_var
-from ciris_engine.schemas.config.llm_budget import PROFILES, LLMBudgetProfile, ProviderClass
+from ciris_engine.schemas.config.llm_budget import PROFILES, SLOW_REMOTE_PROFILE, LLMBudgetProfile, ProviderClass
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +41,11 @@ CLOUD_HOST_MARKERS = (
     "mistral.ai",
     "fireworks.ai",
 )
+
+#: Hosted APIs that are reachable but slow to answer, served the
+#: SLOW_REMOTE profile (90s HTTP timeout) instead of REMOTE. A per-host
+#: override, not a provider class: the capacity is still elastic.
+SLOW_HOST_MARKERS = ("deepinfra.com",)
 
 #: Ports that local inference servers listen on by default (Ollama, LM Studio,
 #: llama.cpp / vLLM defaults). Used only when the host itself is ambiguous.
@@ -123,6 +130,13 @@ def resolve_budget(provider_id: Optional[str] = None, base_url: Optional[str] = 
     else:
         provider_class = classify_provider(provider_id, base_url)
     base = PROFILES[provider_class]
+    if (
+        forced not in (ProviderClass.LOCAL.value, ProviderClass.REMOTE.value)
+        and provider_class is ProviderClass.REMOTE
+        and base_url
+        and any(marker in base_url.lower() for marker in SLOW_HOST_MARKERS)
+    ):
+        base = SLOW_REMOTE_PROFILE
 
     http = _env_float("CIRIS_LLM_TIMEOUT", base.llm_http_timeout_s)
     dma_try = _env_float("CIRIS_DMA_TIMEOUT", base.dma_per_try_s)
@@ -143,11 +157,17 @@ def resolve_budget(provider_id: Optional[str] = None, base_url: Optional[str] = 
     if thought > interact:
         thought = interact
 
+    dma_attempts = _env_int("CIRIS_DMA_ATTEMPTS", base.dma_attempts)
+    # An explicit attempt count is the operator's whole answer: the deadline
+    # does not buy attempts past it.
+    dma_attempt_cap = dma_attempts if get_env_var("CIRIS_DMA_ATTEMPTS") else max(base.dma_attempt_cap, dma_attempts)
+
     return base.model_copy(
         update={
             "llm_http_timeout_s": http,
             "dma_per_try_s": dma_try,
-            "dma_attempts": _env_int("CIRIS_DMA_ATTEMPTS", base.dma_attempts),
+            "dma_attempts": dma_attempts,
+            "dma_attempt_cap": dma_attempt_cap,
             "conscience_per_try_s": consc_try,
             "conscience_attempts": _env_int("CIRIS_CONSCIENCE_ATTEMPTS", base.conscience_attempts),
             "thought_budget_s": thought,
@@ -216,3 +236,25 @@ class Deadline:
     def affords(self, seconds: float) -> bool:
         """Is there time left for an attempt that needs `seconds` to be useful?"""
         return self.remaining() >= seconds
+
+
+#: The deadline of the LLM call in flight in this task, if the stage that
+#: started it set one. The bus reads it to decide whether waiting for an open
+#: breaker's probe fits inside the caller's time (an open breaker must not
+#: manufacture an outage for a single provider), instead of inventing a wait.
+_CALL_DEADLINE: ContextVar[Optional[Deadline]] = ContextVar("ciris_llm_call_deadline", default=None)
+
+
+@contextmanager
+def llm_call_deadline(seconds: Optional[float]) -> Iterator[None]:
+    """Scope the attempt timeout a stage is about to enforce, for the LLM calls inside it."""
+    token = _CALL_DEADLINE.set(Deadline(seconds) if seconds is not None and seconds > 0 else None)
+    try:
+        yield
+    finally:
+        _CALL_DEADLINE.reset(token)
+
+
+def current_call_deadline() -> Optional[Deadline]:
+    """The enclosing stage's attempt deadline, or None when no stage set one."""
+    return _CALL_DEADLINE.get()

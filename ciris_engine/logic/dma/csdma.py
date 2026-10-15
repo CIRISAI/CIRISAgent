@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 if TYPE_CHECKING:
     from ciris_engine.schemas.dma.prompts import PromptCollection
 
+from ciris_engine.logic.conscience.transport import surfaces_as_transport_failure
 from ciris_engine.logic.formatters import (
     append_round1_accord_blocks,
     format_parent_task_chain,
@@ -233,14 +234,9 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
         Walks thought/task preferred_language → user_profile.preferred_language →
         CIRIS_PREFERRED_LANGUAGE env → "en" via :func:`get_user_language_from_context`.
         """
-        from ciris_engine.logic.utils.localization import (
-            get_preferred_language,
-            get_user_language_from_context,
-        )
+        from ciris_engine.logic.utils.localization import get_preferred_language, get_user_language_from_context
 
-        new_language = (
-            get_user_language_from_context(context) if context is not None else get_preferred_language()
-        )
+        new_language = get_user_language_from_context(context) if context is not None else get_preferred_language()
         if new_language != self._explicit_language:
             self._explicit_language = new_language
             logger.debug(f"CSDMA: Synced prompt language to {new_language}")
@@ -351,6 +347,12 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
             return csdma_eval
 
         except Exception as e:
+            if surfaces_as_transport_failure(e):
+                # The model was never reached: re-raise so run_dma_with_retries
+                # retries it like PDMA (or fails the DMA closed), instead of a
+                # 0.0-plausibility result the model never produced.
+                logger.warning(f"CSDMA transport failure for thought ID {thought_item.thought_id}: {e}")
+                raise
             logger.error(f"CSDMA evaluation failed for thought ID {thought_item.thought_id}: {e}")
             return CSDMAResult(
                 plausibility_score=0.0,

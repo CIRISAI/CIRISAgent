@@ -226,6 +226,62 @@ class TestDSDMAEvaluator:
         assert "LLM_Error_Instructor" in result.flags  # Changed because instructor mode uses different flag
         assert "Failed DSDMA evaluation" in result.reasoning
 
+    # --- transport errors surface; config faults keep the fallback ------------
+
+    @pytest.mark.asyncio
+    async def test_dsdma_timeout_is_retried_by_run_dma_with_retries(
+        self, mock_service_registry, mock_prompt_loader, valid_queue_item
+    ):
+        from ciris_engine.logic.dma.dma_executor import run_dma_with_retries
+
+        evaluator = BaseDSDMA(domain_name="legal", service_registry=mock_service_registry)
+        good = DSDMAResult(domain="legal", domain_alignment=0.8, flags=[], reasoning="ok")
+        timeout = RuntimeError("All LLM services failed for BaseDSDMA. Last error: LLM API timeout")
+        evaluator.call_llm_structured = AsyncMock(side_effect=[timeout, (good, None)])
+
+        async def run_dsdma_like(**_):
+            return await evaluator.evaluate_thought(valid_queue_item, current_context=None)
+
+        result = await run_dma_with_retries(run_dsdma_like, retry_limit=2, timeout_seconds=30.0)
+        assert result.domain_alignment == 0.8
+        assert evaluator.call_llm_structured.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_dsdma_exhausted_timeouts_fail_closed(
+        self, mock_service_registry, mock_prompt_loader, valid_queue_item
+    ):
+        """Every attempt times out -> DMAFailure, never a fabricated alignment."""
+        from ciris_engine.logic.dma.dma_executor import run_dma_with_retries
+        from ciris_engine.logic.dma.exceptions import DMAFailure
+
+        evaluator = BaseDSDMA(domain_name="legal", service_registry=mock_service_registry)
+        evaluator.call_llm_structured = AsyncMock(
+            side_effect=RuntimeError("All LLM services failed for BaseDSDMA. Last error: LLM API timeout")
+        )
+
+        async def run_dsdma_like(**_):
+            return await evaluator.evaluate_thought(valid_queue_item, current_context=None)
+
+        with pytest.raises(DMAFailure, match="failed after 2 attempts"):
+            await run_dma_with_retries(run_dsdma_like, retry_limit=2, timeout_seconds=30.0)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("message", ["Error code: 401 - unauthorized", "Error code: 404 - model not found"])
+    async def test_dsdma_auth_and_model_errors_keep_the_fallback(
+        self, message, mock_service_registry, mock_prompt_loader, valid_queue_item
+    ):
+        from ciris_engine.logic.dma.dma_executor import run_dma_with_retries
+
+        evaluator = BaseDSDMA(domain_name="legal", service_registry=mock_service_registry)
+        evaluator.call_llm_structured = AsyncMock(side_effect=RuntimeError(message))
+
+        async def run_dsdma_like(**_):
+            return await evaluator.evaluate_thought(valid_queue_item, current_context=None)
+
+        result = await run_dma_with_retries(run_dsdma_like, retry_limit=2, timeout_seconds=30.0)
+        assert "LLM_Error_Instructor" in result.flags
+        assert evaluator.call_llm_structured.call_count == 1
+
     @pytest.mark.asyncio
     async def test_dsdma_uses_domain_specific_knowledge(
         self, mock_service_registry, mock_prompt_loader, valid_queue_item
@@ -280,9 +336,7 @@ class TestDSDMAEvaluator:
         """
         evaluator = BaseDSDMA(domain_name="engineering", service_registry=mock_service_registry)
 
-        mock_llm_output = DSDMAResult(
-            domain="engineering", domain_alignment=0.5, flags=[], reasoning="Test"
-        )
+        mock_llm_output = DSDMAResult(domain="engineering", domain_alignment=0.5, flags=[], reasoning="Test")
         evaluator.call_llm_structured = AsyncMock(return_value=(mock_llm_output, None))
 
         await evaluator.evaluate_thought(valid_queue_item, current_context=None)
@@ -295,9 +349,7 @@ class TestDSDMAEvaluator:
         # all the messages assembled (accord, optional language_guidance,
         # domain prompt). Position-agnostic search avoids brittleness when
         # the injection sequence shifts.
-        all_system_content = "\n\n".join(
-            m["content"] for m in messages if m.get("role") == "system"
-        )
+        all_system_content = "\n\n".join(m["content"] for m in messages if m.get("role") == "system")
         # Fall back to all-message content if 'role' isn't tagged
         if not all_system_content:
             all_system_content = "\n\n".join(m["content"] for m in messages)
@@ -346,7 +398,8 @@ class TestDSDMAEvaluator:
 
             messages = evaluator.call_llm_structured.call_args.kwargs["messages"]
             guidance_messages = [
-                m for m in messages
+                m
+                for m in messages
                 if m["role"] == "system" and "fake-amharic-guidance-content" in str(m.get("content", ""))
             ]
             assert len(guidance_messages) == 1, (
@@ -393,9 +446,7 @@ class TestDSDMAEvaluator:
         """Test that the evaluate() method maintains backward compatibility."""
         evaluator = BaseDSDMA(domain_name="general", service_registry=mock_service_registry)
 
-        mock_llm_output = DSDMAResult(
-            domain="general", domain_alignment=0.8, flags=[], reasoning="Valid thought"
-        )
+        mock_llm_output = DSDMAResult(domain="general", domain_alignment=0.8, flags=[], reasoning="Valid thought")
         evaluator.call_llm_structured = AsyncMock(return_value=(mock_llm_output, None))
 
         # Call via evaluate() method

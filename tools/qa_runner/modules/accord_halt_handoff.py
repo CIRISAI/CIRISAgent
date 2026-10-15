@@ -208,18 +208,45 @@ def prepare_server_env(env: Dict[str, str], handoff_dir: Path, home: Path) -> Di
     return env
 
 
+TEST_ENV_PREFIX = "CIRIS_TEST_"
+
+_PROBE = (
+    "import sys\n"
+    "try:\n    import ciris_server\nexcept Exception:\n    sys.exit(2)\n"
+    "sys.exit(0 if getattr(ciris_server, 'test_anchor_compiled', lambda: False)() else 3)\n"
+)
+
+
 def test_anchor_compiled() -> bool:
-    """Was the importable ciris_server built with `--features test-anchor`?
+    """Was the installed ciris_server built with `--features test-anchor`?
 
     The server's probe (CIRISServer#769): `ciris_server.test_anchor_compiled()`
     is true only in a test-anchor build. The PyPI wheel lacks the attribute, and
     a missing probe reads as False.
+
+    Asked in a child with every CIRIS_TEST_* key stripped: a test-anchor
+    `import ciris_server` installs CIRIS_TEST_GENESIS_BUNDLE (and raises when it
+    is missing), which belongs to the agent process alone, in its pinned home.
     """
+    import subprocess
+    import sys
+
+    env = {k: v for k, v in os.environ.items() if not k.startswith(TEST_ENV_PREFIX)}
     try:
-        import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
-    except Exception:
+        return subprocess.run([sys.executable, "-c", _PROBE], env=env, timeout=120).returncode == 0
+    except (OSError, subprocess.SubprocessError):
         return False
-    return bool(getattr(ciris_server, "test_anchor_compiled", lambda: False)())
+
+
+def runner_env_is_clean(handoff_env: Dict[str, str], environ: Optional[Dict[str, str]] = None) -> List[str]:
+    """The handoff's CIRIS_TEST_* keys already in the RUNNER's own env; must be empty.
+
+    The runner imports ciris_server itself (through ciris_engine). With the
+    handoff's genesis key in its env that import would install the bundle
+    outside the agent's home; the handoff env goes to the agent subprocess only.
+    """
+    env = os.environ if environ is None else environ
+    return sorted(k for k in handoff_env if k.startswith(TEST_ENV_PREFIX) and k in env)
 
 
 def find_refusal_trace(tee_dir: Path, invocation_id: str) -> Optional[str]:
@@ -258,6 +285,8 @@ class HandoffRun:
         self.tee_dir = tee_dir
         self.console = console
         self.results: List[Dict[str, Any]] = []
+        #: The full body of the protocol's one interact under the halt.
+        self.interact_body = ""
         self.timeouts = {"round": 180.0, "fired": 600.0, "halted": 60.0, "trace": 120.0, "done": 900.0}
         #: halt_fired.json / done.json answer our agent_ready.json, so anything
         #: older than our ready write is a previous run's. Set in run().
@@ -284,11 +313,15 @@ class HandoffRun:
             return None
         return body.get("halted") if isinstance(body, dict) else None
 
+    #: agent_ready goes out on this event: the action is chosen, conscience (more
+    #: LLM calls, seconds) still runs before dispatch, so the fire lands between.
+    READY_ON_EVENT = "aspdma_result"
+
     async def _watch_for_round_start(self, http: Any, started: asyncio.Event) -> None:
-        """Set `started` on the first THOUGHT_START on the reasoning stream.
+        """Set `started` on the first READY_ON_EVENT on the reasoning stream.
 
         agent_ready.json tells the harness to fire NOW (it fires ~0.1 s later),
-        so it must not go out until a round is in flight: written on submit, the
+        so it must not go out until an act is on its way: written on submit, the
         halt beat the round to the thought (CSD-129 run 3, no_in_flight_act).
         """
         url = f"{self.base_url}/v1/system/runtime/reasoning-stream"
@@ -302,7 +335,7 @@ class HandoffRun:
                             events = json.loads(line[5:].strip()).get("events", [])
                         except (ValueError, AttributeError):
                             continue
-                        if any(isinstance(e, dict) and e.get("event_type") == "thought_start" for e in events):
+                        if any(isinstance(e, dict) and e.get("event_type") == self.READY_ON_EVENT for e in events):
                             started.set()
                             return
             except Exception:  # noqa: BLE001 - reconnect; the stream is best-effort until a round shows
@@ -358,7 +391,7 @@ class HandoffRun:
                 pass
         finally:
             watcher.cancel()
-        self._record("A round is in flight before agent_ready", round_started.is_set(), "no thought_start on the stream")
+        self._record("A round is in flight before agent_ready", round_started.is_set(), f"no {self.READY_ON_EVENT} on the stream")
         if not round_started.is_set():
             return self.results
 
@@ -381,6 +414,8 @@ class HandoffRun:
         interact = await http.post(
             f"{self.base_url}/v1/agent/interact", headers=self._headers(), json={"message": "Are you there?"}
         )
+        self.interact_body = interact.text
+        self.console.print(f"[dim]interact under the halt: HTTP {interact.status_code} {interact.text}[/dim]")
         detail = interact.json().get("detail", {}) if interact.status_code == 423 else {}
         refused = (
             interact.status_code == 423 and isinstance(detail, dict) and detail.get("error") == "accord_halt_in_effect"
@@ -437,6 +472,7 @@ __all__ = [
     "handoff_floor",
     "load_handoff",
     "prepare_server_env",
+    "runner_env_is_clean",
     "test_anchor_compiled",
     "wait_for_file",
     "write_json_atomic",

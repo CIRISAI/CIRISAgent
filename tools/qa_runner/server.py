@@ -1079,6 +1079,15 @@ class APIServerManager:
                     raise SystemExit(
                         f"accord_halt handoff: no {HANDOFF_FILE} newer than {floor} in {handoff_dir} within 300 s"
                     )
+                from .modules.accord_halt_handoff import load_handoff as _load_handoff
+                from .modules.accord_halt_handoff import runner_env_is_clean as _halt_runner_test_keys
+
+                leaked = _halt_runner_test_keys(_load_handoff(Path(handoff_dir)).env)
+                if leaked:
+                    raise SystemExit(
+                        f"accord_halt handoff: the runner's own env already carries {leaked}; the handoff's "
+                        "CIRIS_TEST_* env belongs to the agent subprocess only"
+                    )
                 _halt_handoff_env(env, Path(handoff_dir), Path(throwaway))
                 self._halt_handoff = (Path(handoff_dir), Path(throwaway))
                 os.environ[TEE_DIR_ENV] = env["CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR"]

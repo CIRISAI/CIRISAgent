@@ -68,19 +68,38 @@ def test_a_handoff_cannot_move_the_data_paths(tmp_path):
         h.prepare_server_env({}, _handoff_dir(tmp_path, {**ENV, "CIRIS_HOME": "/elsewhere"}), tmp_path / "home")
 
 
-def test_test_anchor_detection(monkeypatch):
-    import types
+def _fake_ciris_server(tmp_path: Path, body: str) -> Path:
+    pkg = tmp_path / "fake_site" / "ciris_server"
+    pkg.mkdir(parents=True)
+    (pkg / "__init__.py").write_text(body)
+    return pkg.parent
 
-    monkeypatch.setitem(__import__("sys").modules, "ciris_server", types.SimpleNamespace())  # PyPI: no probe
-    assert h.test_anchor_compiled() is False
-    monkeypatch.setitem(
-        __import__("sys").modules, "ciris_server", types.SimpleNamespace(test_anchor_compiled=lambda: False)
+
+def test_test_anchor_detection(tmp_path, monkeypatch):
+    for body, expected in (
+        ("", False),  # PyPI: no probe
+        ("test_anchor_compiled = lambda: False\n", False),
+        ("test_anchor_compiled = lambda: True\n", True),
+    ):
+        site = _fake_ciris_server(tmp_path / str(len(body)), body)
+        monkeypatch.setenv("PYTHONPATH", str(site))
+        assert h.test_anchor_compiled() is expected
+
+
+def test_the_probe_never_sees_the_handoffs_genesis_key(tmp_path, monkeypatch):
+    """A test-anchor import installs CIRIS_TEST_GENESIS_BUNDLE, and raises on a missing one."""
+    site = _fake_ciris_server(
+        tmp_path,
+        "import os\n"
+        "if os.environ.get('CIRIS_TEST_GENESIS_BUNDLE'):\n    raise RuntimeError('genesis bundle missing')\n"
+        "test_anchor_compiled = lambda: True\n",
     )
-    assert h.test_anchor_compiled() is False
-    monkeypatch.setitem(
-        __import__("sys").modules, "ciris_server", types.SimpleNamespace(test_anchor_compiled=lambda: True)
-    )
+    monkeypatch.setenv("PYTHONPATH", str(site))
+    monkeypatch.setenv("CIRIS_TEST_GENESIS_BUNDLE", str(tmp_path / "missing.json"))
     assert h.test_anchor_compiled() is True
+    handoff_env = {"CIRIS_TEST_GENESIS_BUNDLE": "/b.json", "CIRIS_TEST_TRUST_ROOT": "x", "CIRIS_DEVICE_CLASS": "d"}
+    assert h.runner_env_is_clean(handoff_env) == ["CIRIS_TEST_GENESIS_BUNDLE"]
+    assert h.runner_env_is_clean(handoff_env, {"CIRIS_HOME": "/x"}) == []
 
 
 def _write_batch(tee: Path, trace_id: str, execution_error: Any) -> None:
@@ -131,7 +150,7 @@ class FakeWorld:
         if url.endswith("/v1/system/runtime/reasoning-stream"):
             if self.rounds_start and self.messages and not self.halted:
                 self.round_started = True
-                return httpx.Response(200, content=b'data: {"events": [{"event_type": "thought_start"}]}\n\n')
+                return httpx.Response(200, content=b'data: {"events": [{"event_type": "aspdma_result"}]}\n\n')
             return httpx.Response(200, content=b": keepalive\n\n")
         if url.endswith("/v1/agent/message"):
             self.messages += 1

@@ -13,10 +13,12 @@ if TYPE_CHECKING:
 
 from dataclasses import dataclass
 
+from ciris_engine.logic.utils.halt_latch import bus_backstop
 from ciris_engine.logic.utils.jsondict_helpers import get_float, get_int, get_str
 from ciris_engine.protocols.services import MemoryService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.infrastructure.base import BusMetrics
+from ciris_engine.schemas.runtime.accord_halt import BusBackstopCall
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.memory import MemorySearchResult, TimeSeriesDataPoint
 from ciris_engine.schemas.services.graph.memory import MemorySearchFilter
@@ -95,6 +97,11 @@ class MemoryBus(BaseBus[MemoryService]):
 
         This is always synchronous as handlers need the result.
         """
+        # CC 4.2.1.1 backstop: a handler's act does not write memory under a halt.
+        halt = await bus_backstop(BusBackstopCall.MEMORY_MEMORIZE)
+        if halt is not None:
+            return MemoryOpResult[GraphNode](status=MemoryOpStatus.FAILED, reason=halt.refusal_reason(), data=None)
+
         # Note: handler_name is the SOURCE (who's calling), not the target service
         # We currently have only one memory service, so no routing is needed
         service = await self.get_service(handler_name=handler_name or "unknown", required_capabilities=["memorize"])
@@ -163,6 +170,11 @@ class MemoryBus(BaseBus[MemoryService]):
 
         This is always synchronous as handlers need the result.
         """
+        # CC 4.2.1.1 backstop: a handler's act does not erase memory under a halt.
+        halt = await bus_backstop(BusBackstopCall.MEMORY_FORGET)
+        if halt is not None:
+            return MemoryOpResult[GraphNode](status=MemoryOpStatus.FAILED, reason=halt.refusal_reason(), data=None)
+
         service = await self.get_service(handler_name=handler_name or "unknown", required_capabilities=["forget"])
 
         if not service:
@@ -388,6 +400,11 @@ class MemoryBus(BaseBus[MemoryService]):
             MemoryOpResult[GraphEdge] with the created edge in data field
         """
         from ciris_engine.schemas.services.graph_core import GraphEdge as GraphEdgeType
+
+        # CC 4.2.1.1 backstop: a handler's act does not write memory under a halt.
+        halt = await bus_backstop(BusBackstopCall.MEMORY_CREATE_EDGE)
+        if halt is not None:
+            return MemoryOpResult[GraphEdgeType](status=MemoryOpStatus.FAILED, reason=halt.refusal_reason(), data=None)
 
         service = await self.get_service(handler_name=handler_name or "unknown", required_capabilities=["create_edge"])
 

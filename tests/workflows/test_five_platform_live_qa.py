@@ -277,9 +277,9 @@ def test_the_holder_assertion_queries_where_each_platform_writes(raw: str) -> No
     tail = block[-6000:]
     assert "simctl get_app_container" in tail, "iOS store is not resolved from the simulator sandbox"
     assert "run-as" in tail, "android store is not pulled from the device"
-    assert "NOT COVERED" in raw.split("assert_one_holder_per_identity.py")[1][:600], (
-        "an unreachable store must report NOT COVERED, not a failure"
-    )
+    assert (
+        "NOT COVERED" in raw.split("assert_one_holder_per_identity.py")[1][:600]
+    ), "an unreachable store must report NOT COVERED, not a failure"
 
 
 def test_chaquopy_gets_its_python_without_hijacking_the_runner(raw: str) -> None:
@@ -359,9 +359,9 @@ def test_the_no_ai_pass_comes_first_and_is_reset_before_the_with_ai_pass() -> No
     noai = line_of("--run-without-ai")
     reset = line_of("web_ui desktop-reset")
     with_ai = line_of("$llm_args")
-    assert noai < reset < with_ai, (
-        f"the reset must separate the two passes (no-AI at {noai}, reset at {reset}, with-AI at {with_ai})"
-    )
+    assert (
+        noai < reset < with_ai
+    ), f"the reset must separate the two passes (no-AI at {noai}, reset at {reset}, with-AI at {with_ai})"
 
 
 def test_the_reset_goes_through_the_client_not_the_filesystem() -> None:
@@ -473,7 +473,7 @@ def test_simulator_crash_reports_are_collected(raw: str) -> None:
     # collected only xcodebuild's own abort (run 34283596992).
     assert "CoreSimulator/Devices" in around, "the simulator device containers are not searched"
     assert "naming the app" in around, "the count must distinguish the app's crash from a host crash"
-    assert 'if: always()' in raw[raw.rfind("- name: Collect artifacts", 0, i) : i], "collection must run on failure too"
+    assert "if: always()" in raw[raw.rfind("- name: Collect artifacts", 0, i) : i], "collection must run on failure too"
 
 
 def test_the_no_ai_login_leg_declares_the_install_it_drives(raw: str) -> None:
@@ -489,3 +489,18 @@ def test_the_no_ai_login_leg_declares_the_install_it_drives(raw: str) -> None:
     j = raw.find("$plat-login.png")
     assert j > 0
     assert "--run-without-ai" not in raw[j - 500 : j]
+
+
+def test_authored_traces_are_enforced(raw: str) -> None:
+    """authored > 0 is FATAL (exit 5 sets overall=1); delivery itself stays reported-only.
+
+    2026-10-09..14 every platform authored 0 traces and the job stayed green.
+    """
+    after = raw.split("python3 tools/dev/assert_traces_reached_canonical.py")[1]
+    invocation = after.split("trace_status=$?")[0]
+    assert "--require-authored" in invocation, "the authored rung is not requested"
+    case_block = after.split('case "$trace_status" in')[1].split("esac")[0]
+    five = case_block.split("5)")[1].split(";;")[0]
+    assert "overall=1" in five, "authored=0 does not fail the job"
+    star = case_block.split("*)")[1].split(";;")[0]
+    assert "overall=1" not in star, "delivery must stay reported-only while upstream KEX is in flight"

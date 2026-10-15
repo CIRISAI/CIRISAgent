@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field, field_serializer
 
 from ciris_engine.schemas.api.telemetry import ServiceMetrics, TimeSyncStatus
+from ciris_engine.schemas.runtime.accord_halt import AccordHaltState
 from ciris_engine.schemas.runtime.manifest import ConfigurationStep
 from ciris_engine.schemas.services.resources_core import ResourceBudget, ResourceSnapshot
 from ciris_engine.schemas.types import JSONDict
@@ -33,6 +34,15 @@ class SystemHealthResponse(BaseModel):
     """Overall system health status."""
 
     status: str = Field(..., description="Overall health status (healthy/degraded/critical)")
+    accord_halt: Optional[AccordHaltState] = Field(
+        None,
+        description=(
+            "The constitutional-halt latch as the agent's act gate last read it (CC 4.2.1.1). "
+            "`halted: true` with reading `in_effect` is a halt the node reports; `halted: true` "
+            "with any other reading means the latch could not be read and the agent fails closed. "
+            "A client renders those two differently: unknown is not a halt."
+        ),
+    )
     role: str = Field(
         "agent",
         description=(

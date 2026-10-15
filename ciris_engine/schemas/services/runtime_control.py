@@ -162,16 +162,16 @@ class ReasoningEvent(str, Enum):
     IDMA_RESULT = "idma_result"  # 3) Intuition DMA fragility check (always emitted)
     ASPDMA_RESULT = "aspdma_result"  # 4) Selected action + rationale
     TSASPDMA_RESULT = "tsaspdma_result"  # 4.5a) DEPRECATED: Tool-Specific ASPDMA legacy event
-                                         # Kept emitting alongside VERB_SECOND_PASS_RESULT during the
-                                         # transition window per FSD/TRACE_EVENT_LOG_PERSISTENCE.md §10
-                                         # phase 0 gate. Remove after lens stops reading it.
+    # Kept emitting alongside VERB_SECOND_PASS_RESULT during the
+    # transition window per FSD/TRACE_EVENT_LOG_PERSISTENCE.md §10
+    # phase 0 gate. Remove after lens stops reading it.
     VERB_SECOND_PASS_RESULT = "verb_second_pass_result"  # 4.5) Generic verb-specific second pass
-                                         # (FSD/TRACE_EVENT_LOG_PERSISTENCE.md §4). Replaces per-verb
-                                         # event types — single event with `verb` discriminator and
-                                         # verb-specific data so future verbs (MEMORIZE, OBSERVE, ...)
-                                         # adding a second pass don't multiply the schema. Currently
-                                         # fires for TOOL (replaces TSASPDMA_RESULT) and DEFER
-                                         # (closes the existing no-event asymmetry on DSASPDMA).
+    # (FSD/TRACE_EVENT_LOG_PERSISTENCE.md §4). Replaces per-verb
+    # event types — single event with `verb` discriminator and
+    # verb-specific data so future verbs (MEMORIZE, OBSERVE, ...)
+    # adding a second pass don't multiply the schema. Currently
+    # fires for TOOL (replaces TSASPDMA_RESULT) and DEFER
+    # (closes the existing no-event asymmetry on DSASPDMA).
     CONSCIENCE_RESULT = "conscience_result"  # 5) Conscience evaluation + final action
     ACTION_RESULT = "action_result"  # 6) Action execution outcome + audit trail
     LLM_CALL = "llm_call"  # *) Per-provider-call observation (every LLM invocation, success+failure)
@@ -1031,6 +1031,9 @@ class ActionResponse(BaseModel):
 
     # Audit trail data (REQUIRED) from AuditEntryResult
     audit_data: AuditEntryResult = Field(..., description="Audit entry with hash chain data (REQUIRED)")
+    # Why the act did not run, when it was refused before the handler (e.g.
+    # `accord_halt_in_effect:<invocation_id>`). Carried onto ACTION_RESULT.error.
+    error: Optional[str] = Field(None, description="Refusal or failure reason, when the act did not run")
 
 
 class RoundCompleteStepData(BaseStepData):
@@ -1202,9 +1205,7 @@ class IDMAResultEvent(BaseModel):
     )
     safety_margin: Optional[float] = Field(None, description="Plain-language alias for collapse_margin")
     sources_identified: List[str] = Field(default_factory=list, description="List of distinct sources identified")
-    source_ids: List[str] = Field(
-        default_factory=list, description="Stable or anonymized source lineage identifiers"
-    )
+    source_ids: List[str] = Field(default_factory=list, description="Stable or anonymized source lineage identifiers")
     source_types: List[str] = Field(
         default_factory=list,
         description="Source categories aligned positionally with source_ids (memory, tool, user, context, model_prior)",
@@ -1224,8 +1225,12 @@ class IDMAResultEvent(BaseModel):
     pairwise_correlation_summary: List[str] = Field(
         default_factory=list, description="Flat pairwise summaries encoded as 'source_a|source_b|corr|shared_origin'"
     )
-    rho_intra: Optional[float] = Field(None, description="Average within-cluster correlation when block structure exists")
-    rho_inter: Optional[float] = Field(None, description="Average between-cluster correlation when block structure exists")
+    rho_intra: Optional[float] = Field(
+        None, description="Average within-cluster correlation when block structure exists"
+    )
+    rho_inter: Optional[float] = Field(
+        None, description="Average between-cluster correlation when block structure exists"
+    )
     module_count: Optional[int] = Field(None, description="Count of independent source modules or clusters")
     effective_module_count: Optional[float] = Field(
         None, description="Effective independent module count after block-structure adjustment"
@@ -1357,9 +1362,7 @@ class VerbSecondPassResultEvent(BaseModel):
 
     # Verb discriminator — which verb's second pass produced this event.
     # Lower-case to match HandlerActionType enum value convention.
-    verb: str = Field(
-        ..., description="Verb whose second-pass evaluator produced this event (e.g. 'tool', 'defer')"
-    )
+    verb: str = Field(..., description="Verb whose second-pass evaluator produced this event (e.g. 'tool', 'defer')")
 
     # First-pass input — what ASPDMA originally selected
     original_action: str = Field(..., description="Action verb selected by first-pass ASPDMA")
@@ -1554,8 +1557,12 @@ class LLMCallEvent(BaseModel):
         description="Call outcome: 'ok' | 'timeout' | 'rate_limited' | 'model_not_available' | 'instructor_retry' | 'other_error'",
     )
     error_class: Optional[str] = Field(None, description="Exception class name on failure")
-    attempt_count: int = Field(1, ge=1, description="Instructor attempt count (1 = first try; 2+ = re-prompted on parse failure)")
-    retry_count: int = Field(0, ge=0, description="LLMBus retry count for this call (0 = first attempt at the bus level)")
+    attempt_count: int = Field(
+        1, ge=1, description="Instructor attempt count (1 = first try; 2+ = re-prompted on parse failure)"
+    )
+    retry_count: int = Field(
+        0, ge=0, description="LLMBus retry count for this call (0 = first attempt at the bus level)"
+    )
 
     # Optional content (gated by trace level — empty at GENERIC, hash at DETAILED, full at FULL)
     prompt_hash: Optional[str] = Field(None, description="SHA-256 of prompt text (DETAILED+ trace level)")

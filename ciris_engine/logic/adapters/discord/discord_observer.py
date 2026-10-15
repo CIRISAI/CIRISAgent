@@ -6,7 +6,9 @@ from ciris_engine.logic.adapters.base_observer import BaseObserver
 from ciris_engine.logic.adapters.discord.discord_vision_helper import DiscordVisionHelper
 from ciris_engine.logic.buses import BusManager
 from ciris_engine.logic.secrets.service import SecretsService
+from ciris_engine.logic.utils.halt_latch import refuse_agent_send_under_halt
 from ciris_engine.logic.utils.task_thought_factory import create_task, create_thought
+from ciris_engine.schemas.runtime.accord_halt import AgentSendSurface
 from ciris_engine.schemas.runtime.enums import ThoughtType
 from ciris_engine.schemas.runtime.messages import DiscordMessage
 from ciris_engine.schemas.runtime.models import TaskContext
@@ -74,6 +76,11 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
 
         if not self.deferral_channel_id:
             logger.warning("No deferral channel configured")
+            return
+
+        # CC 4.2.1.1: replying in the deferral channel is the agent speaking. The
+        # WA's decision itself is recorded before this; only the reply is held.
+        if await refuse_agent_send_under_halt(AgentSendSurface.DISCORD_DEFERRAL_CHANNEL, self.deferral_channel_id):
             return
 
         try:
@@ -510,9 +517,7 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
                     # Reactivate the original task
                     original_task = persistence.get_task_by_id(original_thought.source_task_id)
                     if original_task and self.time_service and self.agent_id:
-                        persistence.update_task_status(
-                            original_task.task_id, TaskStatus.ACTIVE, self.agent_id
-                        )
+                        persistence.update_task_status(original_task.task_id, TaskStatus.ACTIVE, self.agent_id)
                         logger.info(f"Reactivated task {original_task.task_id} due to guidance")
 
                         # Extract deferral reason from the original thought's final_action

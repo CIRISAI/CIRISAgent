@@ -6,7 +6,9 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 import discord
 from discord import ui
 
+from ciris_engine.logic.utils.halt_latch import refuse_agent_send_under_halt
 from ciris_engine.logic.utils.jsondict_helpers import get_list, get_str
+from ciris_engine.schemas.runtime.accord_halt import AgentSendSurface
 from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
@@ -376,19 +378,24 @@ class DeferralHelperView(ui.View):
         self.thought_id = thought_id
         self.context = context or {}
 
+    async def _respond(self, interaction: discord.Interaction, content: str) -> None:
+        """The one place these buttons answer. The agent answering in the UI is
+        held under a constitutional halt (CC 4.2.1.1); the WA's own APPROVE /
+        REJECT reply is a human message and is still taken and recorded."""
+        channel_id = str(getattr(interaction, "channel_id", "") or "") or None
+        if await refuse_agent_send_under_halt(AgentSendSurface.DISCORD_GUIDANCE_RESPONSE, channel_id):
+            return
+        await interaction.response.send_message(content, ephemeral=True)
+
     @ui.button(label="Approve", style=discord.ButtonStyle.success, emoji="✅")
     async def approve_button(self, interaction: discord.Interaction, button: ui.Button[Any]) -> None:
         """Provide template response for approval."""
-        await interaction.response.send_message(
-            f"To approve this deferral, reply with:\n```\nAPPROVE {self.thought_id}\n```", ephemeral=True
-        )
+        await self._respond(interaction, f"To approve this deferral, reply with:\n```\nAPPROVE {self.thought_id}\n```")
 
     @ui.button(label="Reject", style=discord.ButtonStyle.danger, emoji="❌")
     async def reject_button(self, interaction: discord.Interaction, button: ui.Button[Any]) -> None:
         """Provide template response for rejection."""
-        await interaction.response.send_message(
-            f"To reject this deferral, reply with:\n```\nREJECT {self.thought_id}\n```", ephemeral=True
-        )
+        await self._respond(interaction, f"To reject this deferral, reply with:\n```\nREJECT {self.thought_id}\n```")
 
     @ui.button(label="Request Info", style=discord.ButtonStyle.secondary, emoji="❓")
     async def info_button(self, interaction: discord.Interaction, button: ui.Button[Any]) -> None:
@@ -451,7 +458,7 @@ class DeferralHelperView(ui.View):
             # Truncate to fit Discord's message limit
             full_message = full_message[:1997] + "..."
 
-        await interaction.response.send_message(full_message, ephemeral=True)
+        await self._respond(interaction, full_message)
 
     def _truncate_text(self, text: str, max_length: int) -> str:
         """Truncate text to a maximum length with ellipsis."""

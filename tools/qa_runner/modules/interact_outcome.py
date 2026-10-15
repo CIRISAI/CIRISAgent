@@ -7,7 +7,7 @@ localized "still processing" placeholder. A check that grades
 matches the English placeholder misses it for every non-English agent.
 
 Servers from #1186 on say which it was in `outcome` (`complete` / `timeout` /
-`paused`) and name the still-running task in `task_id`. For servers that
+`paused`, and from #1264 `failed`) and name the task in `task_id`. For servers that
 predate the field, the fallback is: no `task_id` AND the text is the
 placeholder in any of the agent's locales — loaded from the same localized
 string tables the server renders it from, never hardcoded.
@@ -36,6 +36,7 @@ class InteractNonReply(str, Enum):
 
     TIMEOUT = "interact timeout"
     PAUSED = "interact paused"
+    FAILED = "interact failed"
 
 
 @lru_cache(maxsize=1)
@@ -77,6 +78,8 @@ def interact_non_reply(data: Mapping[str, Any]) -> Optional[InteractNonReply]:
             return InteractNonReply.TIMEOUT
         if outcome == "paused":
             return InteractNonReply.PAUSED
+        if outcome == "failed":
+            return InteractNonReply.FAILED
         return None
     # Pre-#1186 server: no outcome field. A timed-out interaction could not
     # name its task, so a missing task_id plus placeholder text is the tell.

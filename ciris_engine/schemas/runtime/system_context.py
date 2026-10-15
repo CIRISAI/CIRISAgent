@@ -124,6 +124,11 @@ class SystemSnapshot(BaseModel):
         default_factory=list, description="CRITICAL resource alerts that require immediate attention"
     )
 
+    # Constitutional halt (CC 4.2.1.1): informational only, after a resume.
+    accord_pause_notice: Optional[str] = Field(
+        None, description="One informational line after a constitutional halt ended. Asks for no action."
+    )
+
     # User profiles (used by context builder)
     user_profiles: List["UserProfile"] = Field(default_factory=list, description="User profile information")
 

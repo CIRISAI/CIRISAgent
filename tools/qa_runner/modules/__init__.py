@@ -3,7 +3,6 @@ QA test modules for different components.
 """
 
 from .accord_metrics_tests import AccordMetricsTests
-from .accord_tests import AccordTestModule
 from .adapter_autoload_tests import AdapterAutoloadTests
 from .adapter_availability_tests import AdapterAvailabilityTests
 from .adapter_config_tests import AdapterConfigTests
@@ -14,8 +13,8 @@ from .billing_tests import BillingTests
 from .cognitive_state_api_tests import CognitiveStateAPITests
 from .consent_tests import ConsentTests
 from .context_enrichment_tests import ContextEnrichmentTests
-from .degraded_mode_tests import DegradedModeTests
 from .deferral_taxonomy_tests import DeferralTaxonomyTests
+from .degraded_mode_tests import DegradedModeTests
 from .dream_live_tests import DreamLiveTests
 from .dsar_multi_source_tests import DSARMultiSourceTests
 from .dsar_tests import DSARTests
@@ -48,7 +47,6 @@ __all__ = [
     "CognitiveStateAPITests",
     "ContextEnrichmentTests",
     "AccordMetricsTests",
-    "AccordTestModule",
     "DreamLiveTests",
     "HandlerTestModule",
     "HomeAssistantAgenticTests",

@@ -29,6 +29,11 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+#: The debug app, its CIRIS_HOME-relative PIN (CIRIS_HOME = <data dir>/files/ciris), the node port.
+ANDROID_DEBUG_PACKAGE = "ai.ciris.mobile.debug"
+ANDROID_CLAIM_PIN_PATH = "files/ciris/claim_pin"
+NODE_PORT = 4243
+
 try:
     import httpx
 except ImportError:
@@ -76,7 +81,11 @@ class FirstTimeLicensedAgentTester:
         poll_timeout: int = 300,
         poll_interval: int = 5,
         verbose: bool = False,
+        device_serial: Optional[str] = None,
+        package: str = ANDROID_DEBUG_PACKAGE,
     ):
+        self.device_serial = device_serial
+        self.package = package
         self.base_url = base_url.rstrip("/")
         self.portal_url = portal_url
         self.llm_provider = llm_provider
@@ -317,8 +326,76 @@ class FirstTimeLicensedAgentTester:
         except Exception as e:
             return StepResult("poll_auth", TestStatus.ERROR, time.time() - start, f"Poll error: {e}")
 
+    def read_device_claim_pin(
+        self, dest: Path, timeout_s: float = 120.0, poll_s: float = 2.0
+    ) -> "tuple[Optional[str], str]":
+        """A local dir holding the app's claim_pin, read off the device with run-as. Never a log.
+
+        The app's CIRIS_HOME is `files/ciris` in its data dir; the node writes
+        the PIN there during compose, so this waits for it. Also forwards the
+        node read-API (host 4243 -> device 4243): claim-remote is a node route.
+        (None, reason) when either cannot be done: the caller fails closed.
+        """
+        from .adb_helper import ADBHelper
+
+        try:
+            adb = ADBHelper(device_serial=self.device_serial)
+        except Exception as e:  # noqa: BLE001 - no adb is a reason, not a crash
+            return None, f"adb unavailable: {e}"
+        if not adb.forward_port(NODE_PORT, NODE_PORT):
+            return None, f"adb forward tcp:{NODE_PORT} failed: the node read-API is not reachable from the host"
+        deadline = time.monotonic() + timeout_s
+        while True:
+            result = adb._run_adb(["exec-out", "run-as", self.package, "cat", ANDROID_CLAIM_PIN_PATH])
+            pin = (result.stdout or "").strip() if result.returncode == 0 else ""
+            if pin and "No such file" not in pin and "not debuggable" not in pin:
+                (dest / "claim_pin").write_text(pin + "\n")
+                return str(dest), ""
+            reason = (result.stderr or result.stdout or "no claim_pin yet").strip()[:200]
+            if time.monotonic() >= deadline:
+                return None, f"run-as {self.package} cat {ANDROID_CLAIM_PIN_PATH}: {reason}"
+            time.sleep(poll_s)
+
+    def step_claim_node(self) -> StepResult:
+        """Step 6a: claim the node with its PIN before setup, as the wizard does. Fail closed."""
+        import asyncio
+        import tempfile
+
+        start = time.time()
+        pin_dir = Path(tempfile.mkdtemp(prefix="ciris-android-claim-"))
+        try:
+            home, why = self.read_device_claim_pin(pin_dir)
+            if home is None:
+                return StepResult(
+                    "claim_node", TestStatus.FAILED, time.time() - start, f"cannot read the claim PIN: {why}"
+                )
+            from tools.qa_runner.node_claim import claim_like_the_wizard
+
+            async def claim() -> Any:
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    return await claim_like_the_wizard(
+                        client,
+                        self.base_url,
+                        [home],
+                        self.admin_username,
+                        self.admin_password,
+                        pin_timeout_s=5.0,
+                        node_url=f"http://localhost:{NODE_PORT}",
+                    )
+
+            outcome = asyncio.run(claim())
+        finally:
+            import shutil
+
+            shutil.rmtree(pin_dir, ignore_errors=True)
+        if not outcome.ok:
+            return StepResult(
+                "claim_node", TestStatus.FAILED, time.time() - start, f"claim ({outcome.step}): {outcome.detail}"
+            )
+        return StepResult("claim_node", TestStatus.PASSED, time.time() - start, f"node claimed by {self.admin_username}")
+
     def step_complete_setup(self) -> StepResult:
-        """Step 6: POST /v1/setup/complete with provisioned + LLM config."""
+        """Step 6: claim the node, then POST /v1/setup/complete with provisioned + LLM config."""
         start = time.time()
 
         if not self.llm_api_key:
@@ -327,6 +404,13 @@ class FirstTimeLicensedAgentTester:
                 TestStatus.SKIPPED,
                 time.time() - start,
                 "No LLM API key provided (--llm-key or --llm-key-file)",
+            )
+
+        # Every node is always claimed: no claim, no setup.
+        claimed = self.step_claim_node()
+        if claimed.status != TestStatus.PASSED:
+            return StepResult(
+                "complete_setup", TestStatus.FAILED, time.time() - start, f"setup not attempted: {claimed.message}"
             )
 
         prov = self._provisioned
@@ -527,6 +611,8 @@ def run_first_time_licensed_agent(
     poll_interval: int = 5,
     output_dir: str = "mobile_qa_reports",
     verbose: bool = False,
+    device_serial: Optional[str] = None,
+    package: str = ANDROID_DEBUG_PACKAGE,
 ) -> int:
     """Run the full first-time licensed agent E2E test suite. Returns 0/1."""
 
@@ -552,6 +638,8 @@ def run_first_time_licensed_agent(
         poll_timeout=poll_timeout,
         poll_interval=poll_interval,
         verbose=verbose,
+        device_serial=device_serial,
+        package=package,
     )
 
     results: List[StepResult] = []

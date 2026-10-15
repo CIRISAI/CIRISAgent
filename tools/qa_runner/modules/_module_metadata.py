@@ -52,6 +52,7 @@ Adding a new module with CI requirements:
      ``_REGISTRY`` below.
   3. The runner picks the rest up automatically.
 """
+
 from __future__ import annotations
 
 import importlib
@@ -59,7 +60,6 @@ from dataclasses import dataclass, field
 from typing import Any, Dict
 
 from ..config import QAModule
-
 
 # (QAModule → import path → class name). Lazy-imported when get_metadata
 # is called; avoids dragging every test module into CLI parse time.
@@ -72,6 +72,7 @@ _REGISTRY: Dict[QAModule, tuple] = {
     # mesh_repro declares REQUIRES_CIRIS_SERVER=False — the traceflow harness
     # runs its own two-node compose stack; no agent API server involved.
     QAModule.MESH_REPRO: ("tools.qa_runner.modules.mesh_repro_tests", "MeshReproTests"),
+    QAModule.ACCORD_HALT: ("tools.qa_runner.modules.accord_halt_tests", "AccordHaltTests"),
 }
 
 
@@ -132,7 +133,5 @@ def merge_server_env(modules: list) -> Dict[str, str]:
     # the actual merged values.
     merged.setdefault("__conflicts__", "")
     if conflicts:
-        merged["__conflicts__"] = ";".join(
-            f"{k}={','.join(map(str, vs))}" for k, vs in conflicts.items()
-        )
+        merged["__conflicts__"] = ";".join(f"{k}={','.join(map(str, vs))}" for k, vs in conflicts.items())
     return merged

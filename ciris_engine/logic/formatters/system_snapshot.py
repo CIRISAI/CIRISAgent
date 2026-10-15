@@ -134,6 +134,13 @@ def format_system_snapshot(system_snapshot: SystemSnapshot, language: Optional[s
         lines.append(f"🚨🚨🚨 {alerts_end} 🚨🚨🚨")
         lines.append("")  # Empty line for emphasis
 
+    # Constitutional halt that has ended: one informational line, no action asked
+    # (CC 4.2.1.1). Never under the CRITICAL banner — it is not an alert.
+    pause_notice = getattr(system_snapshot, "accord_pause_notice", None)
+    if pause_notice:
+        lines.append(pause_notice)
+        lines.append("")
+
     # System counts if available
     if hasattr(system_snapshot, "system_counts") and system_snapshot.system_counts:
         counts = system_snapshot.system_counts

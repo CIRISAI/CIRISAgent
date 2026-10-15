@@ -25,6 +25,7 @@ import aiohttp
 # Type for generic async request handler
 T = TypeVar("T")
 
+from ciris_engine.logic.utils.halt_latch import hold_tick, read_halt_latch
 from ciris_engine.schemas.services.core import ServiceCapabilities
 
 from .schemas import (
@@ -1548,6 +1549,13 @@ class HAIntegrationService:
 
         try:
             while True:
+                # CC 4.2.1.1: the loop fires Home Assistant events on its own
+                # schedule, outside the act gate, so it holds itself under a halt.
+                # The baseline frame is dropped so motion is not measured across it.
+                if (await read_halt_latch()).halted:
+                    previous_frame = None
+                    await hold_tick()
+                    continue
                 try:
                     cap = cv2.VideoCapture(url)
                     if not cap.isOpened():

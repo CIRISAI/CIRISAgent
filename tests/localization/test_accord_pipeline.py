@@ -235,7 +235,8 @@ def test_translate_lane_reassembles_a_file_the_real_loader_loads(
     # one provenance label line that says what this file is.
     en_struct = [p for p in en.pieces if isinstance(p, str)]
     lo_struct = [p for p in seg.parse(loaded).pieces if isinstance(p, str)]
-    label = AL.LABEL.format(version="1.2b")
+    label = AL.LABEL.format(name="Accord", version="1.2b")
+    assert label.startswith("// Machine translation of the English Accord 1.2b -- "), "default label unchanged"
     assert label in lo_struct and "review_status: machine_reviewed" in label
     lo_struct.remove(label)
     assert lo_struct == en_struct

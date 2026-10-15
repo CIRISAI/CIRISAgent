@@ -15,7 +15,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 
 def format_size(size: float) -> str:
@@ -130,11 +130,11 @@ async def get_auth_token(base_url: str, retries: int = 30) -> str:
     return ""
 
 
-async def complete_setup(base_url: str, port: int) -> bool:
+async def complete_setup(base_url: str, port: int, homes: Optional[List[Optional[str]]] = None, since: Optional[float] = None) -> bool:
     """Complete first-run setup for benchmark environments."""
     import httpx
 
-    payload = {
+    payload: Dict[str, Any] = {
         "llm_provider": "openai",
         "llm_api_key": "test-key-for-benchmark",
         "llm_model": "gpt-4",
@@ -145,6 +145,22 @@ async def complete_setup(base_url: str, port: int) -> bool:
         "admin_password": "qa_test_password_12345",
         "agent_port": port,
     }
+
+    # Every node is always claimed: claim with the node's PIN first, as the
+    # wizard does (tools/qa_runner/node_claim.py), or setup is not attempted.
+    project_root = Path(__file__).parent.parent
+    if str(project_root) not in sys.path:
+        sys.path.insert(0, str(project_root))  # run as a script: tools/ is on the path, the repo is not
+    from tools.qa_runner.node_claim import claim_like_the_wizard
+
+    homes = homes or [os.environ.get("CIRIS_HOME"), str(project_root), os.path.expanduser("~/ciris")]
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        claim = await claim_like_the_wizard(
+            client, base_url, homes, str(payload["admin_username"]), str(payload["admin_password"]), since=since
+        )
+    if not claim.ok:
+        print(f"  Node claim ({claim.step}) failed, setup not attempted: {claim.detail}")
+        return False
 
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -416,6 +432,7 @@ def main(
         str(port),
     ]
 
+    launched_at = time.time()
     process = subprocess.Popen(
         cmd,
         stdout=subprocess.DEVNULL,
@@ -450,7 +467,7 @@ def main(
     token = asyncio.run(get_auth_token(base_url))
     if not token:
         print("  No auth token yet, attempting first-run setup...")
-        setup_ok = asyncio.run(complete_setup(base_url, port))
+        setup_ok = asyncio.run(complete_setup(base_url, port, since=launched_at))
         if setup_ok:
             print("  Setup completed; retrying authentication...")
             token = asyncio.run(get_auth_token(base_url))

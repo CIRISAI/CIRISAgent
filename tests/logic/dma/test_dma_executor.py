@@ -95,7 +95,8 @@ def ethical_evaluator(service_registry):
         return_value=EthicalDMAResult(
             action=HandlerActionType.SPEAK,
             rationale="Stakeholders: user, system. Test ethical reasoning Ethical alignment confirmed with high confidence (0.9). All principles satisfied.",
-            weight_alignment_score=0.85, ethical_alignment_score=0.85,
+            weight_alignment_score=0.85,
+            ethical_alignment_score=0.85,
         )
     )
     return evaluator
@@ -171,7 +172,8 @@ class TestDMARetryLogic:
             nonlocal call_count
             call_count += 1
             if call_count < 2:
-                raise ValueError("Temporary failure")
+                # A transient transport failure: the one category DMAs retry.
+                raise RuntimeError("All LLM services failed for test. Last error: LLM API timeout")
             return "success after retry"
 
         result = await run_dma_with_retries(
@@ -270,10 +272,11 @@ class TestActionSelectionPDMA:
         enhanced_inputs = EnhancedDMAInputs(
             original_thought=processing_queue_item,
             ethical_pdma_result=EthicalDMAResult(
-            action=HandlerActionType.SPEAK,
-            rationale="Stakeholders: user, system. Ethical approval Ethical alignment confirmed. All principles satisfied.",
-            weight_alignment_score=0.85, ethical_alignment_score=0.85,
-        ),
+                action=HandlerActionType.SPEAK,
+                rationale="Stakeholders: user, system. Ethical approval Ethical alignment confirmed. All principles satisfied.",
+                weight_alignment_score=0.85,
+                ethical_alignment_score=0.85,
+            ),
             csdma_result=CSDMAResult(
                 plausibility_score=0.85,
                 flags=[],
@@ -315,10 +318,11 @@ class TestActionSelectionPDMA:
         enhanced_inputs = EnhancedDMAInputs(
             original_thought=processing_queue_item,
             ethical_pdma_result=EthicalDMAResult(
-            action=HandlerActionType.SPEAK,
-            rationale="Stakeholders: user, system. Approved Basic ethical approval.",
-            weight_alignment_score=0.85, ethical_alignment_score=0.85,
-        ),
+                action=HandlerActionType.SPEAK,
+                rationale="Stakeholders: user, system. Approved Basic ethical approval.",
+                weight_alignment_score=0.85,
+                ethical_alignment_score=0.85,
+            ),
             csdma_result=CSDMAResult(
                 plausibility_score=0.8,
                 flags=[],
@@ -354,12 +358,13 @@ class TestDMAIntegration:
         """Test retry wrapper with actual PDMA function."""
         # Make evaluator fail once then succeed
         ethical_evaluator.evaluate.side_effect = [
-            Exception("Temporary failure"),
+            Exception("Connection error: temporary failure reaching the provider (timed out)"),
             EthicalDMAResult(
-            action=HandlerActionType.SPEAK,
-            rationale="Stakeholders: user, system. Success after retry Basic ethical approval.",
-            weight_alignment_score=0.85, ethical_alignment_score=0.85,
-        ),
+                action=HandlerActionType.SPEAK,
+                rationale="Stakeholders: user, system. Success after retry Basic ethical approval.",
+                weight_alignment_score=0.85,
+                ethical_alignment_score=0.85,
+            ),
         ]
 
         with patch("ciris_engine.logic.dma.dma_executor.persistence"):

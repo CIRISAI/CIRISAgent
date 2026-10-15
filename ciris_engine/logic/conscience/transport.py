@@ -70,6 +70,9 @@ TRANSPORT_CATEGORIES = frozenset(
         "INTERNAL_ERROR",
         "AUTH_ERROR",
         "MODEL_NOT_AVAILABLE",
+        # No request was sent: every provider's breaker was open and the
+        # caller's deadline could not cover the wait for a probe.
+        "CIRCUIT_OPEN",
     }
 )
 
@@ -121,6 +124,24 @@ _UNFUNDED_MARKERS = (
 )
 
 
+def is_transient_transport_failure(exc: BaseException, category: Optional[str] = None) -> bool:
+    """Would a fresh request plausibly succeed? Transient transport only.
+
+    THE transport retry predicate, shared by the conscience facility
+    (`is_retryable_by_facility`) and the DMA retry loop
+    (`run_dma_with_retries`): TIMEOUT / CONNECTION_ERROR / INTERNAL_ERROR,
+    unless the account is unfunded. CIRCUIT_OPEN is deliberately not here: the
+    bus already waited as long as the caller's deadline allowed, so a retry
+    would hit the same open breaker (it stays in TRANSPORT_CATEGORIES, so a
+    shard that meets it is still reported as not run, fail-closed).
+    """
+    cat = category or categorize_conscience_error(exc)
+    if cat not in FACILITY_RETRY_TRANSPORT_CATEGORIES:
+        return False
+    text = str(exc).lower()
+    return not any(marker in text for marker in _UNFUNDED_MARKERS)
+
+
 def is_retryable_by_facility(exc: BaseException, category: Optional[str] = None) -> bool:
     """Should the conscience facility spend another attempt on this failure?
 
@@ -131,10 +152,7 @@ def is_retryable_by_facility(exc: BaseException, category: Optional[str] = None)
     cat = category or categorize_conscience_error(exc)
     if cat in FACILITY_RETRY_LLM_FAULT_CATEGORIES:
         return True
-    if cat in FACILITY_RETRY_TRANSPORT_CATEGORIES:
-        text = str(exc).lower()
-        return not any(marker in text for marker in _UNFUNDED_MARKERS)
-    return False
+    return is_transient_transport_failure(exc, cat)
 
 
 def categorize_conscience_error(exc: BaseException) -> str:
@@ -257,3 +275,16 @@ def unusable_answer_result(
         **kwargs,
     )
     return result
+
+
+#: What a DMA evaluator must RAISE rather than fold into a fallback result:
+#: the model was never reached (or the bus had no provider to reach), so a
+#: fallback score would be a number nobody produced. `run_dma_with_retries`
+#: then applies the shared retry predicate (`is_transient_transport_failure`)
+#: and fails the DMA closed.
+SURFACED_TRANSPORT_CATEGORIES = FACILITY_RETRY_TRANSPORT_CATEGORIES | {"CIRCUIT_OPEN"}
+
+
+def surfaces_as_transport_failure(exc: BaseException) -> bool:
+    """Should a DMA evaluator re-raise `exc` instead of returning its fallback?"""
+    return categorize_conscience_error(exc) in SURFACED_TRANSPORT_CATEGORIES

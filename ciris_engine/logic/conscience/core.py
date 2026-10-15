@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 
 from ciris_engine.constants import DEFAULT_OPENAI_MODEL_NAME
 from ciris_engine.logic import persistence
-from ciris_engine.logic.config.llm_budget import MIN_USEFUL_ATTEMPT_S, Deadline, attempt_timeout
+from ciris_engine.logic.config.llm_budget import MIN_USEFUL_ATTEMPT_S, Deadline, attempt_timeout, llm_call_deadline
 from ciris_engine.logic.registries.base import ServiceRegistry
 from ciris_engine.logic.utils.constants import get_accord_text
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
@@ -307,7 +307,8 @@ class _BaseConscience(ConscienceInterface):
             attempts_made = attempt
             t0 = time.monotonic()
             try:
-                result = await asyncio.wait_for(sink.llm.call_llm_structured(**kwargs), timeout=timeout)
+                with llm_call_deadline(timeout):
+                    result = await asyncio.wait_for(sink.llm.call_llm_structured(**kwargs), timeout=timeout)
                 if attempt > 1:
                     logger.info(
                         "[CONSCIENCE] %s: answered on attempt %d after %.1fs", name, attempt, time.monotonic() - t0

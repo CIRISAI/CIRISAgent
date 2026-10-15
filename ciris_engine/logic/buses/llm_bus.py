@@ -22,12 +22,19 @@ if TYPE_CHECKING:
     from ciris_engine.schemas.services.llm import LLMMessage
 
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 
 from pydantic import BaseModel
 
-from ciris_engine.logic.registries.circuit_breaker import CircuitBreaker, CircuitBreakerConfig, CircuitState
+from ciris_engine.logic.config.llm_budget import MIN_USEFUL_ATTEMPT_S, current_call_deadline
+from ciris_engine.logic.registries.circuit_breaker import (
+    CircuitBreaker,
+    CircuitBreakerConfig,
+    CircuitState,
+    ProviderCircuitOpenError,
+    breaker_call_scope,
+)
 from ciris_engine.protocols.services import LLMService
 from ciris_engine.protocols.services.graph.telemetry import TelemetryServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
@@ -40,6 +47,16 @@ from ciris_engine.schemas.services.capabilities import LLMCapabilities
 from .base_bus import BaseBus, BusMessage
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class _ProviderPass:
+    """What one pass over the providers produced (internal to call_llm_structured)."""
+
+    result: Optional[Tuple[BaseModel, ResourceUsage]] = None
+    tried_any: bool = False
+    breaker_skipped: List[Tuple[str, Any]] = field(default_factory=list)
+    last_error: Optional[Exception] = None
 
 
 def _classify_error(exc: BaseException) -> str:
@@ -302,6 +319,10 @@ class LLMBus(BaseBus[LLMService]):
         # Service metrics and circuit breakers
         self.service_metrics: dict[str, ServiceMetrics] = defaultdict(ServiceMetrics)
         self.circuit_breakers: dict[str, CircuitBreaker] = {}
+        # The last error each provider actually RETURNED. A breaker skip sends
+        # no request, so it has no error of its own; this is what the skip
+        # reports instead of "Last error: None".
+        self._last_provider_error: dict[str, Exception] = {}
 
         # Track services that have had full error logs to reduce log verbosity
         self._services_with_full_error_logged: set[str] = set()
@@ -679,7 +700,7 @@ class LLMBus(BaseBus[LLMService]):
 
         # Handle exhausted retries
         if retry_count >= max_retries:
-            logger.warning(f"Exhausted {max_retries} retries on {service_name}")
+            logger.warning(f"Exhausted {max_retries} attempt(s) on {service_name}")
             return "break", False, rate_limit_retry_count, rate_limit_start_time
 
         # General error - log and continue
@@ -737,8 +758,14 @@ class LLMBus(BaseBus[LLMService]):
         service_last_error: Exception,
         last_was_rate_limit: bool,
         max_retries: int,
+        started_at: Optional[float] = None,
     ) -> None:
-        """Record service failure and log appropriately."""
+        """Record service failure and log appropriately.
+
+        `started_at` is the failed call's wall-clock start: calls to one
+        provider that started together are one breaker failure, not N.
+        """
+        self._last_provider_error[service_name] = service_last_error
         if last_was_rate_limit:
             logger.warning(f"LLM service {service_name} exhausted rate limit retries (NOT counting as CB failure)")
             # Set global cooldown so subsequent requests don't immediately hit rate limit again
@@ -750,11 +777,12 @@ class LLMBus(BaseBus[LLMService]):
             self._set_rate_limit_cooldown(service_name, effective_cooldown)
             return
 
-        self._record_failure(service_name)
+        self._record_failure(service_name, started_at=started_at)
 
         if service_name not in self._services_with_full_error_logged:
             logger.error(
-                f"LLM service {service_name} failed after {max_retries} retries: {service_last_error}", exc_info=True
+                f"LLM service {service_name} failed after {max_retries} attempt(s): {service_last_error}",
+                exc_info=True,
             )
             self._services_with_full_error_logged.add(service_name)
         else:
@@ -986,10 +1014,121 @@ class LLMBus(BaseBus[LLMService]):
 
         priority_groups = self._group_by_priority(services)
         last_error: Optional[Exception] = None
-        # Reduced from 3 to 1 to enable fast failover to secondary provider
-        # Each service still has internal retries, but bus moves to next priority quickly
+        # One attempt per provider, so the bus moves to the next priority
+        # quickly; the enclosing stage's per-try is the retry layer (#1186).
         max_retries_per_service = 1
 
+        while True:
+            outcome = await self._try_priority_groups(
+                priority_groups,
+                normalized_messages,
+                response_model,
+                max_tokens,
+                temperature,
+                thought_id,
+                task_id,
+                handler_name,
+                start_time,
+                max_retries_per_service,
+            )
+            if outcome.result is not None:
+                return outcome.result
+            if outcome.last_error is not None:
+                last_error = outcome.last_error
+            breaker_skipped = outcome.breaker_skipped
+            if outcome.tried_any or not breaker_skipped:
+                break
+            # Every provider for this request was skipped on an open breaker:
+            # there is no alternative to fail over to. Wait for the earliest
+            # half-open probe if the caller's deadline covers it; otherwise
+            # say so with the provider's real last error.
+            if not await self._wait_for_breaker_probe(breaker_skipped, handler_name):
+                raise self._circuit_open_error(breaker_skipped)
+
+        # All services failed
+        task = asyncio.create_task(
+            error_emitter.emit_llm_failure(
+                error_summary=str(last_error)[:100] if last_error else "Unknown error",
+                retry_count=max_retries_per_service,
+                max_retries=max_retries_per_service,
+            )
+        )
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+        # THE HIGHEST-LEVERAGE STRING IN THE LOG (CIRISAgent#1073).
+        #
+        # `last_error` embedded the full <failed_attempts> envelope, and FOUR
+        # downstream sites re-print this message verbatim — csdma, dsdma_base,
+        # dma_orchestrator and work_processor — so one un-flattened string became
+        # 217 physical lines. Collapsing it here fixes all four at once.
+        _last = " ".join(str(last_error).split())[:300]
+        raise RuntimeError(f"All LLM services failed for {handler_name}. Last error: {_last}")
+
+    def _service_side_breaker(self, service: Any) -> Optional[CircuitBreaker]:
+        """The provider's own breaker (the LLM service keeps one), when it exposes a real one."""
+        cb = getattr(service, "circuit_breaker", None)
+        return cb if isinstance(cb, CircuitBreaker) else None
+
+    def _breaker_wait_s(self, service_name: str, service: Any) -> float:
+        """Seconds until both the bus's and the provider's breaker let a probe through."""
+        waits = [0.0]
+        bus_cb = self.circuit_breakers.get(service_name)
+        if bus_cb is not None:
+            waits.append(bus_cb.seconds_until_half_open())
+        svc_cb = self._service_side_breaker(service)
+        if svc_cb is not None:
+            waits.append(svc_cb.seconds_until_half_open())
+        return max(waits)
+
+    async def _wait_for_breaker_probe(self, skipped: List[Tuple[str, Any]], handler_name: str) -> bool:
+        """Wait out the shortest breaker recovery if the caller's deadline affords it.
+
+        Returns False (no wait) when no stage set a deadline, or when the
+        deadline cannot cover the wait plus a useful attempt -- the caller
+        then gets the categorized ProviderCircuitOpenError.
+        """
+        # Never a zero-length spin: each round spends at least 0.1s of the
+        # deadline, so the loop in call_llm_structured is bounded by it.
+        wait_s = max(0.1, min(self._breaker_wait_s(name, svc) for name, svc in skipped))
+        deadline = current_call_deadline()
+        if deadline is None or not deadline.affords(wait_s + MIN_USEFUL_ATTEMPT_S):
+            return False
+        logger.warning(
+            f"Circuit breaker OPEN for every provider of {handler_name}; no alternative provider, "
+            f"waiting {wait_s:.1f}s for the recovery probe ({deadline.remaining():.1f}s left on the deadline)"
+        )
+        await asyncio.sleep(wait_s)
+        return True
+
+    def _circuit_open_error(self, skipped: List[Tuple[str, Any]]) -> ProviderCircuitOpenError:
+        """The categorized error for "every provider skipped on an open breaker"."""
+        name, service = min(skipped, key=lambda item: self._breaker_wait_s(item[0], item[1]))
+        bus_cb = self.circuit_breakers.get(name)
+        svc_cb = self._service_side_breaker(service)
+        failures = max(cb.failure_count for cb in (bus_cb, svc_cb) if cb is not None) if (bus_cb or svc_cb) else 0
+        last: Optional[BaseException] = self._last_provider_error.get(name)
+        if last is None:
+            svc_last = getattr(service, "last_error", None)
+            last = svc_last if isinstance(svc_last, BaseException) else None
+        return ProviderCircuitOpenError(name, failures, last, self._breaker_wait_s(name, service))
+
+    async def _try_priority_groups(
+        self,
+        priority_groups: dict[int, List[object]],
+        normalized_messages: List[JSONDict],
+        response_model: Type[BaseModel],
+        max_tokens: int,
+        temperature: float,
+        thought_id: Optional[str],
+        task_id: Optional[str],
+        handler_name: str,
+        start_time: float,
+        max_retries_per_service: int,
+    ) -> "_ProviderPass":
+        """One pass over the providers in priority order (failover unchanged)."""
+        last_error: Optional[Exception] = None
+        tried_any = False
+        breaker_skipped: List[Tuple[str, Any]] = []
         for priority, service_group in sorted(priority_groups.items()):
             # Walk through every service in this priority group before falling
             # through to the next priority. With replica deployments (two
@@ -1011,8 +1150,14 @@ class LLMBus(BaseBus[LLMService]):
                     continue
                 tried.add(service_name)
 
-                if not self._check_circuit_breaker(service_name):
+                svc_cb = self._service_side_breaker(selected_service)
+                if not self._check_circuit_breaker(service_name) or (svc_cb is not None and not svc_cb.is_available()):
+                    # Either breaker open: the call would send no request.
+                    # Skipping it here (instead of letting the provider raise
+                    # CircuitBreakerError) keeps a fail-fast from being
+                    # counted as one more provider failure.
                     logger.warning(f"Circuit breaker OPEN for {service_name}, skipping")
+                    breaker_skipped.append((service_name, selected_service))
                     remaining = [s for s in remaining if self._get_service_name(s) != service_name]
                     continue
 
@@ -1026,52 +1171,39 @@ class LLMBus(BaseBus[LLMService]):
                 # around saturated replicas even before their semaphore has
                 # been acquired.
                 self._in_flight[service_name] += 1
+                tried_any = True
                 try:
-                    result = await self._try_service(
-                        selected_service,
-                        service_name,
-                        normalized_messages,
-                        response_model,
-                        max_tokens,
-                        temperature,
-                        thought_id,
-                        task_id,
-                        handler_name,
-                        start_time,
-                        max_retries_per_service,
-                    )
+                    with breaker_call_scope() as call_started_at:
+                        result = await self._try_service(
+                            selected_service,
+                            service_name,
+                            normalized_messages,
+                            response_model,
+                            max_tokens,
+                            temperature,
+                            thought_id,
+                            task_id,
+                            handler_name,
+                            start_time,
+                            max_retries_per_service,
+                        )
                 finally:
                     self._in_flight[service_name] = max(0, self._in_flight[service_name] - 1)
 
                 if result[0] is not None and result[1] is not None:  # Success
-                    return result[0], result[1]
+                    return _ProviderPass(result=(result[0], result[1]))
 
                 # Service failed — record and try the next sibling in this
                 # priority group (if any) before falling through to the next
                 # priority tier.
                 if result[2] is not None:
                     last_error = result[2]
-                    self._record_service_failure(service_name, result[2], result[3], max_retries_per_service)
+                    self._record_service_failure(
+                        service_name, result[2], result[3], max_retries_per_service, started_at=call_started_at
+                    )
                 remaining = [s for s in remaining if self._get_service_name(s) != service_name]
 
-        # All services failed
-        task = asyncio.create_task(
-            error_emitter.emit_llm_failure(
-                error_summary=str(last_error)[:100] if last_error else "Unknown error",
-                retry_count=max_retries_per_service,
-                max_retries=max_retries_per_service,
-            )
-        )
-        self._background_tasks.add(task)
-        task.add_done_callback(self._background_tasks.discard)
-        # THE HIGHEST-LEVERAGE STRING IN THE LOG (CIRISAgent#1073).
-        #
-        # `last_error` embedded the full <failed_attempts> envelope, and FOUR
-        # downstream sites re-print this message verbatim — csdma, dsdma_base,
-        # dma_orchestrator and work_processor — so one un-flattened string became
-        # 217 physical lines. Collapsing it here fixes all four at once.
-        _last = " ".join(str(last_error).split())[:300]
-        raise RuntimeError(f"All LLM services failed for {handler_name}. Last error: {_last}")
+        return _ProviderPass(tried_any=tried_any, breaker_skipped=breaker_skipped, last_error=last_error)
 
     # Note: This method is not in the protocol but kept for internal use
     async def _generate_structured_sync(
@@ -1258,6 +1390,9 @@ class LLMBus(BaseBus[LLMService]):
                 recovery_timeout=get_float(self.circuit_breaker_config, "recovery_timeout", 60.0),
                 success_threshold=get_int(self.circuit_breaker_config, "half_open_max_calls", 3),
                 timeout_duration=get_float(self.circuit_breaker_config, "timeout_duration", 30.0),
+                # Concurrent failures of one provider (parallel DMA timeouts
+                # from the same slow moment) are one breaker failure.
+                failure_coalesce_window_s=get_float(self.circuit_breaker_config, "failure_coalesce_window_s", 1.0),
             )
             self.circuit_breakers[service_name] = CircuitBreaker(name=service_name, config=config)
 
@@ -1309,7 +1444,7 @@ class LLMBus(BaseBus[LLMService]):
             del self._rate_limited_until[service_name]
             logger.info(f"Rate limit cooldown cleared for {service_name} after successful call")
 
-    def _record_failure(self, service_name: str) -> None:
+    def _record_failure(self, service_name: str, started_at: Optional[float] = None) -> None:
         """Record failed call metrics"""
         metrics = self.service_metrics[service_name]
         metrics.total_requests += 1
@@ -1320,7 +1455,7 @@ class LLMBus(BaseBus[LLMService]):
         if service_name in self.circuit_breakers:
             cb = self.circuit_breakers[service_name]
             was_closed = cb.state == CircuitState.CLOSED
-            cb.record_failure()
+            cb.record_failure(started_at=started_at)
             # Emit error if circuit just opened
             if was_closed and cb.state == CircuitState.OPEN:
                 task = asyncio.create_task(error_emitter.emit_circuit_breaker_open(service_name))

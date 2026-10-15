@@ -10,7 +10,7 @@ from typing import Any, Awaitable, Callable, Coroutine, Dict, List, Optional, Tu
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.config import ConfigAccessor
-from ciris_engine.logic.config.llm_budget import Deadline, active_budget, attempt_timeout
+from ciris_engine.logic.config.llm_budget import Deadline, active_budget, attempt_timeout, llm_call_deadline
 from ciris_engine.logic.dma.exceptions import DMAFailure
 from ciris_engine.logic.handlers.control.ponder_handler import PonderHandler
 from ciris_engine.logic.infrastructure.authorization.envelope_reader import resolve_envelope_for_task_id
@@ -79,7 +79,8 @@ async def _within_thought_deadline(thought_item: Any, call: Coroutine[Any, Any, 
     if per_try is None:
         call.close()
         raise TimeoutError("second-pass DMA: LLM API timeout -- the thought deadline cannot afford an attempt")
-    return await asyncio.wait_for(call, timeout=per_try)
+    with llm_call_deadline(per_try):
+        return await asyncio.wait_for(call, timeout=per_try)
 
 
 class ThoughtProcessor(

@@ -42,7 +42,13 @@ class LLMBudgetProfile(BaseModel):
     provider_class: ProviderClass
     llm_http_timeout_s: float = Field(..., gt=0, description="One HTTP request to the model")
     dma_per_try_s: float = Field(..., gt=0, description="One attempt of one DMA")
-    dma_attempts: int = Field(..., ge=1, le=5)
+    dma_attempts: int = Field(..., ge=1, le=5, description="DMA attempts every thought gets")
+    dma_attempt_cap: int = Field(
+        ...,
+        ge=1,
+        le=5,
+        description="Most DMA attempts a thought may spend while its deadline still affords one (>= dma_attempts)",
+    )
     conscience_per_try_s: float = Field(..., gt=0, description="One attempt of one conscience shard")
     conscience_attempts: int = Field(..., ge=1, le=5)
     thought_budget_s: float = Field(
@@ -61,6 +67,8 @@ class LLMBudgetProfile(BaseModel):
             raise ValueError(
                 f"llm_http_timeout_s ({self.llm_http_timeout_s}) exceeds dma_per_try_s ({self.dma_per_try_s})"
             )
+        if self.dma_attempt_cap < self.dma_attempts:
+            raise ValueError(f"dma_attempt_cap ({self.dma_attempt_cap}) is below dma_attempts ({self.dma_attempts})")
         if self.thought_budget_s > self.interact_deadline_s:
             raise ValueError(
                 f"thought_budget_s ({self.thought_budget_s}) exceeds interact_deadline_s "
@@ -76,6 +84,7 @@ REMOTE_PROFILE = LLMBudgetProfile(
     llm_http_timeout_s=45.0,
     dma_per_try_s=90.0,
     dma_attempts=2,
+    dma_attempt_cap=3,
     conscience_per_try_s=45.0,
     conscience_attempts=4,
     thought_budget_s=190.0,
@@ -89,10 +98,29 @@ LOCAL_PROFILE = LLMBudgetProfile(
     llm_http_timeout_s=240.0,
     dma_per_try_s=300.0,
     dma_attempts=1,
+    dma_attempt_cap=1,  # one slot: a retry queues behind the call it abandoned
     conscience_per_try_s=240.0,
     conscience_attempts=1,
     thought_budget_s=890.0,
     interact_deadline_s=900.0,
+)
+
+#: A hosted API that is reachable but slow to answer: DeepInfra's
+#: Qwen3.6-35B-A3B measured 16-68s per structured call (2026-10-15), so the
+#: REMOTE 45s HTTP timeout cut off honest answers, and three parallel DMA
+#: timeouts on one slow thought tripped the breaker. Same shape as REMOTE
+#: (elastic capacity, retries are independent draws), longer tries. Applied
+#: by host (`SLOW_HOST_MARKERS` in logic/config/llm_budget.py), never by class.
+SLOW_REMOTE_PROFILE = LLMBudgetProfile(
+    provider_class=ProviderClass.REMOTE,
+    llm_http_timeout_s=90.0,
+    dma_per_try_s=120.0,
+    dma_attempts=2,
+    dma_attempt_cap=3,
+    conscience_per_try_s=90.0,
+    conscience_attempts=2,
+    thought_budget_s=290.0,
+    interact_deadline_s=295.0,
 )
 
 PROFILES = {ProviderClass.REMOTE: REMOTE_PROFILE, ProviderClass.LOCAL: LOCAL_PROFILE}

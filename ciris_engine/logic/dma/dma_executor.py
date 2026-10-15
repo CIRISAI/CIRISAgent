@@ -38,7 +38,14 @@ else:
 
 
 from ciris_engine.logic import persistence
-from ciris_engine.logic.config.llm_budget import MIN_USEFUL_ATTEMPT_S, Deadline, active_budget, attempt_timeout
+from ciris_engine.logic.config.llm_budget import (
+    MIN_USEFUL_ATTEMPT_S,
+    Deadline,
+    active_budget,
+    attempt_timeout,
+    llm_call_deadline,
+)
+from ciris_engine.logic.conscience.transport import categorize_conscience_error, is_transient_transport_failure
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.processors.support.thought_escalation import escalate_dma_failure
 from ciris_engine.schemas.dma.faculty import EnhancedDMAInputs
@@ -83,6 +90,30 @@ logger = logging.getLogger(__name__)
 #: with less than ~10s left is mostly a request we will cancel. When the
 #: per-try itself is shorter (tests, an operator override) the per-try is the
 #: floor instead.
+
+
+#: Answered-but-unusable model output. A schema-invalid reply is stochastic
+#: noise, not a property of the request, so a re-draw (same deadline, same
+#: attempt cap) often succeeds. Not #895's grammar work: just another draw.
+_SCHEMA_REDRAW_CATEGORIES = frozenset({"VALIDATION_ERROR"})
+
+
+def _is_schema_redraw(exc: BaseException, category: str) -> bool:
+    """Is this a schema-validation failure of the model's reply (worth a re-draw)?
+
+    The categorizer checks model-not-available and context overflow first, so
+    a 404 or an over-long prompt never lands here. An exception it could not
+    name is still a re-draw when its type says the reply failed validation.
+    """
+    if category in _SCHEMA_REDRAW_CATEGORIES:
+        return True
+    if category != "UNKNOWN":
+        return False
+    from pydantic import ValidationError
+
+    return isinstance(exc, ValidationError) or type(exc).__name__ == "InstructorRetryException"
+
+
 async def run_dma_with_retries(
     run_fn: Callable[..., Awaitable[Any]],
     *args: Any,
@@ -99,26 +130,46 @@ async def run_dma_with_retries(
     CIRIS_DMA_TIMEOUT / CIRIS_DMA_ATTEMPTS still override through it). With a
     thought `deadline`, each try is clamped to what is left of it and no try
     starts once the remainder is below a useful attempt.
+
+    Attempts follow the deadline: with one, a thought keeps trying while the
+    deadline still affords a useful attempt, up to the profile's
+    `dma_attempt_cap` (never fewer than `retry_limit`). Without one, exactly
+    `retry_limit` attempts, as before.
+
+    ONE retry policy for every DMA: a timeout, connection error or 5xx is an
+    independent draw and gets another attempt, and so does schema-invalid
+    model output (stochastic noise: a re-draw often parses). Anything else
+    (auth, model not available, context overflow, an unfunded account, rate
+    limit, an open breaker, an unrecognised error) fails fast -- a fresh
+    request would fail the same way. Either way an exhausted DMA raises
+    DMAFailure: nothing here ever fails open.
     """
-    if retry_limit is None or timeout_seconds is None:
-        budget = active_budget()
-        retry_limit = budget.dma_attempts if retry_limit is None else retry_limit
-        timeout_seconds = budget.dma_per_try_s if timeout_seconds is None else timeout_seconds
+    budget = active_budget()
+    if retry_limit is None:
+        retry_limit = budget.dma_attempts
+    if timeout_seconds is None:
+        timeout_seconds = budget.dma_per_try_s
+    max_attempts = max(retry_limit, budget.dma_attempt_cap) if deadline is not None else retry_limit
     attempt = 0
     last_error: Optional[Exception] = None
-    while attempt < retry_limit:
+    while attempt < max_attempts:
         this_try_s = attempt_timeout(timeout_seconds, deadline)
         if this_try_s is None:
             remaining = deadline.remaining() if deadline is not None else 0.0
+            if attempt >= retry_limit and last_error is not None:
+                # A deadline-bought extra attempt that no longer fits: the
+                # failure to report is the real one we already have.
+                break
             logger.error(
                 "DMA %s: thought deadline has %.1fs left, too little for attempt %s/%s -- giving up",
                 run_fn.__name__,
                 remaining,
                 attempt + 1,
-                retry_limit,
+                max_attempts,
             )
             last_error = TimeoutError(
-                f"thought deadline exhausted ({remaining:.1f}s left) before attempt {attempt + 1}/{retry_limit}"
+                f"thought deadline exhausted ({remaining:.1f}s left) before attempt {attempt + 1}/{max_attempts}"
+                + (f"; last error: {last_error}" if last_error is not None else "")
             )
             break
         try:
@@ -126,7 +177,10 @@ async def run_dma_with_retries(
                 # Pass time_service if the function expects it
                 if time_service and "time_service" not in kwargs:
                     kwargs["time_service"] = time_service
-                return await run_fn(*args, **kwargs)
+                # The bus reads this to decide whether waiting out an open
+                # breaker's recovery fits inside this attempt.
+                with llm_call_deadline(this_try_s):
+                    return await run_fn(*args, **kwargs)
         except TimeoutError as e:
             last_error = e
             attempt += 1
@@ -134,14 +188,25 @@ async def run_dma_with_retries(
         except Exception as e:  # noqa: BLE001
             last_error = e
             attempt += 1
+            category = categorize_conscience_error(e)
+            retryable = is_transient_transport_failure(e, category) or _is_schema_redraw(e, category)
+            # Ensure we never log empty error messages
+            error_msg = str(e).replace("\n", " ").strip()
+            if not error_msg:
+                error_msg = f"<{type(e).__name__} with no message>"
+            if not retryable:
+                logger.warning(
+                    "DMA %s attempt %s failed (%s, not retried): %s",
+                    run_fn.__name__,
+                    attempt,
+                    category,
+                    error_msg[:200],
+                )
+                break
             # Only log full details on first failure
             if attempt == 1:
-                # Ensure we never log empty error messages
-                error_msg = str(e).replace("\n", " ").strip()
-                if not error_msg:
-                    error_msg = f"<{type(e).__name__} with no message>"
-                logger.warning("DMA %s attempt %s failed: %s", run_fn.__name__, attempt, error_msg[:200])
-            elif attempt == retry_limit:
+                logger.warning("DMA %s attempt %s failed (%s): %s", run_fn.__name__, attempt, category, error_msg[:200])
+            elif attempt == max_attempts:
                 logger.warning(
                     "DMA %s final attempt %s failed (same error repeated %s times)",
                     run_fn.__name__,
@@ -150,7 +215,7 @@ async def run_dma_with_retries(
                 )
 
             # Add small delay between retries to reduce log spam
-            if attempt < retry_limit:
+            if attempt < max_attempts:
                 await asyncio.sleep(0.1)  # 100ms delay
 
     thought_arg = next(

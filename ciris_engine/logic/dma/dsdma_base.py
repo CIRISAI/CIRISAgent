@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Mapping, Optional, Union, cast
 
 from pydantic import BaseModel, Field
 
+from ciris_engine.logic.conscience.transport import surfaces_as_transport_failure
 from ciris_engine.logic.formatters import (
     append_round1_accord_blocks,
     format_core_identity_block,
@@ -130,14 +131,9 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
         Accepts both an object with ``.system_snapshot`` and a raw snapshot
         (dict or dataclass) — the helper auto-unwraps either form.
         """
-        from ciris_engine.logic.utils.localization import (
-            get_preferred_language,
-            get_user_language_from_context,
-        )
+        from ciris_engine.logic.utils.localization import get_preferred_language, get_user_language_from_context
 
-        new_language = (
-            get_user_language_from_context(context) if context is not None else get_preferred_language()
-        )
+        new_language = get_user_language_from_context(context) if context is not None else get_preferred_language()
         if new_language != self._explicit_language:
             self._explicit_language = new_language
             logger.debug(f"DSDMA: Synced prompt language to {new_language}")
@@ -388,9 +384,14 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
             )
             return result
         except Exception as e:
-            logger.error(
-                f"DSDMA {self.domain_name} evaluation failed for thought ID {thought_item.thought_id}: {e}"
-            )
+            if surfaces_as_transport_failure(e):
+                # Never reached the model: re-raise for run_dma_with_retries
+                # (same policy as PDMA) rather than invent a 0.0 alignment.
+                logger.warning(
+                    f"DSDMA {self.domain_name} transport failure for thought ID {thought_item.thought_id}: {e}"
+                )
+                raise
+            logger.error(f"DSDMA {self.domain_name} evaluation failed for thought ID {thought_item.thought_id}: {e}")
             return DSDMAResult(
                 domain=self.domain_name,
                 domain_alignment=0.0,

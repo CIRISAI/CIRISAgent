@@ -98,9 +98,46 @@ async def wait_for_claim_pin(
         await asyncio.sleep(poll_s)
 
 
-async def mint_federation_id(client: httpx.AsyncClient, base_url: str, label: str) -> Tuple[bool, Dict[str, Any], str]:
+#: How long the node may take to start answering after its PIN appears. The PIN
+#: is written during compose; the read-API on :4243 binds after it, and the
+#: brain's proxy answers 502/503 in between (Staged QA on #1276).
+NODE_READY_TIMEOUT_S = 60.0
+
+#: A node still booting, never a refusal. A 4xx is the node's answer: never retried.
+_BOOT_WINDOW_STATUSES = frozenset({502, 503})
+_BOOT_WINDOW_ERRORS = (httpx.ConnectError, httpx.ReadError, httpx.RemoteProtocolError, httpx.TimeoutException)
+
+
+async def request_through_boot_window(
+    client: httpx.AsyncClient, method: str, url: str, ready_timeout_s: float = NODE_READY_TIMEOUT_S, **kwargs: Any
+) -> httpx.Response:
+    """One request, retried with backoff while the node is still coming up.
+
+    Retries 502/503 and connection-level failures until `ready_timeout_s`, then
+    returns the last response (or raises the last error): the caller fails
+    closed on it. Any other status, 4xx included, returns at once.
+    """
+    deadline = time.monotonic() + ready_timeout_s
+    delay = 0.5
+    while True:
+        try:
+            response = await client.request(method, url, **kwargs)
+            if response.status_code not in _BOOT_WINDOW_STATUSES or time.monotonic() >= deadline:
+                return response
+        except _BOOT_WINDOW_ERRORS:
+            if time.monotonic() >= deadline:
+                raise
+        await asyncio.sleep(min(delay, max(0.0, deadline - time.monotonic())))
+        delay = min(delay * 2, 4.0)
+
+
+async def mint_federation_id(
+    client: httpx.AsyncClient, base_url: str, label: str, ready_timeout_s: float = NODE_READY_TIMEOUT_S
+) -> Tuple[bool, Dict[str, Any], str]:
     """Wizard step 1: the owner's federation ID, through the brain (which proxies it to the node)."""
-    response = await client.post(f"{base_url}/v1/self/identity", json={"label": label}, timeout=60.0)
+    response = await request_through_boot_window(
+        client, "POST", f"{base_url}/v1/self/identity", ready_timeout_s, json={"label": label}, timeout=60.0
+    )
     if response.status_code != 200:
         return False, {}, f"Status code: {response.status_code}: {response.text[:300]}"
     data = response.json()
@@ -114,12 +151,17 @@ async def claim_node(
     owner_username: str,
     owner_password: str,
     node_url: str = DEFAULT_NODE_URL,
+    ready_timeout_s: float = NODE_READY_TIMEOUT_S,
 ) -> ClaimOutcome:
     """Wizard step 2: claim-remote with the node's own NodeCode and its PIN."""
     # The node's own NodeCode (served on the federation surface, proxied by the brain).
-    r = await client.get(f"{base_url}/v1/federation/node-code", timeout=30.0)
+    r = await request_through_boot_window(
+        client, "GET", f"{base_url}/v1/federation/node-code", ready_timeout_s, timeout=30.0
+    )
     if r.status_code != 200:
-        r = await client.get(f"{node_url}/v1/federation/node-code", timeout=30.0)
+        r = await request_through_boot_window(
+            client, "GET", f"{node_url}/v1/federation/node-code", ready_timeout_s, timeout=30.0
+        )
     r.raise_for_status()
     body = r.json()
     payload = body.get("data", body) if isinstance(body, dict) else {}
@@ -138,7 +180,9 @@ async def claim_node(
     }
     # claim-remote is a NODE route; the brain's own /v1/setup router shadows
     # the prefix, so it is posted to the node directly.
-    response = await client.post(f"{node_url}/v1/setup/claim-remote", json=claim, timeout=120.0)
+    response = await request_through_boot_window(
+        client, "POST", f"{node_url}/v1/setup/claim-remote", ready_timeout_s, json=claim, timeout=120.0
+    )
     if response.status_code != 200:
         return ClaimOutcome(
             False, "claim", f"Status code: {response.status_code}: {response.text[:400]}", node_code_prefix=node_code[:24]
@@ -165,6 +209,7 @@ async def claim_like_the_wizard(
     pin_timeout_s: float = 120.0,
     since: Optional[float] = None,
     node_url: str = DEFAULT_NODE_URL,
+    ready_timeout_s: float = NODE_READY_TIMEOUT_S,
 ) -> ClaimOutcome:
     """Wizard steps 1 and 2, in order, fail closed. Call BEFORE /v1/setup/complete."""
     homes = list(homes)
@@ -178,10 +223,10 @@ async def claim_like_the_wizard(
             f"that already has an owner, or setup completed before the claim) or wrote it elsewhere; looked in: {looked}",
         )
     try:
-        minted, data, error = await mint_federation_id(client, base_url, owner_username)
+        minted, data, error = await mint_federation_id(client, base_url, owner_username, ready_timeout_s)
         if not minted:
             return ClaimOutcome(False, "mint", error, pin_file=pin_file)
-        outcome = await claim_node(client, base_url, pin, owner_username, owner_password, node_url)
+        outcome = await claim_node(client, base_url, pin, owner_username, owner_password, node_url, ready_timeout_s)
     except Exception as exc:  # noqa: BLE001 - a failed claim is a failure, never an unowned node
         return ClaimOutcome(False, "claim", f"{type(exc).__name__}: {exc}", pin_file=pin_file)
     outcome.pin_file = pin_file
@@ -197,5 +242,6 @@ __all__ = [
     "claim_node",
     "find_claim_pin",
     "mint_federation_id",
+    "request_through_boot_window",
     "wait_for_claim_pin",
 ]

@@ -23,7 +23,9 @@ NODE = "http://127.0.0.1:4243"
 class FakeAgent:
     """The brain and its node: records every call, in order."""
 
-    def __init__(self, claim_status: int = 200) -> None:
+    def __init__(self, claim_status: int = 200, booting_502s: int = 0, identity_status: int = 200) -> None:
+        self.booting_502s = booting_502s  # identity answers 502 this many times: the node is still binding
+        self.identity_status = identity_status
         self.calls: List[str] = []
         self.claim_body: Any = None
         self.claim_status = claim_status
@@ -32,6 +34,11 @@ class FakeAgent:
         url = str(request.url)
         self.calls.append(f"{request.method} {url}")
         if url == f"{BRAIN}/v1/self/identity":
+            if self.booting_502s:
+                self.booting_502s -= 1
+                return httpx.Response(502, json={"detail": "The folded node did not answer POST /v1/self/identity."})
+            if self.identity_status != 200:
+                return httpx.Response(self.identity_status, json={"error": "refused"})
             return httpx.Response(200, json={"key_id": "fed-qa", "hardware_type": "software", "fedcode": "FC"})
         if url == f"{BRAIN}/v1/federation/node-code":
             return httpx.Response(200, json={"data": {"node_code": "NODECODE-123"}})
@@ -89,6 +96,34 @@ async def test_a_refused_claim_is_a_failure(tmp_path):
     (tmp_path / node_claim.CLAIM_PIN_FILE).write_text('{"pin": "QCKE-AY69"}')
     outcome = await _claim(tmp_path, FakeAgent(claim_status=403), pin_timeout_s=1)
     assert not outcome.ok and "403" in outcome.detail
+
+
+@pytest.mark.asyncio
+async def test_the_node_boot_window_is_waited_out(tmp_path):
+    """Staged QA on #1276: the PIN appears before :4243 answers; the proxy 502s in between."""
+    (tmp_path / node_claim.CLAIM_PIN_FILE).write_text("Q4YC-AZQA")
+    agent = FakeAgent(booting_502s=3)
+    outcome = await _claim(tmp_path, agent, pin_timeout_s=1, ready_timeout_s=10)
+    assert outcome.ok
+    assert agent.calls.count(f"POST {BRAIN}/v1/self/identity") == 4
+
+
+@pytest.mark.asyncio
+async def test_a_node_that_never_answers_still_fails_closed(tmp_path):
+    (tmp_path / node_claim.CLAIM_PIN_FILE).write_text("Q4YC-AZQA")
+    agent = FakeAgent(booting_502s=10_000)
+    outcome = await _claim(tmp_path, agent, pin_timeout_s=1, ready_timeout_s=1.5)
+    assert not outcome.ok and outcome.step == "mint" and "502" in outcome.detail
+    assert f"POST {NODE}/v1/setup/claim-remote" not in agent.calls
+
+
+@pytest.mark.asyncio
+async def test_a_4xx_is_the_nodes_answer_and_never_retried(tmp_path):
+    (tmp_path / node_claim.CLAIM_PIN_FILE).write_text("Q4YC-AZQA")
+    agent = FakeAgent(identity_status=403)
+    outcome = await _claim(tmp_path, agent, pin_timeout_s=1, ready_timeout_s=10)
+    assert not outcome.ok and "403" in outcome.detail
+    assert agent.calls.count(f"POST {BRAIN}/v1/self/identity") == 1
 
 
 def _manager(tmp_path: Path) -> APIServerManager:

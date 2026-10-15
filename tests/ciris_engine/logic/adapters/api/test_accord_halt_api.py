@@ -120,6 +120,33 @@ def test_a_cached_no_halt_reading_never_admits_a_message(latch, api_app, on_mess
     on_message.assert_not_awaited()
 
 
+def test_an_interact_admitted_just_before_a_halt_is_answered_423_not_left_to_time_out(
+    latch, api_app, on_message
+):
+    """Admitted, then the node latches: its thought is held, so say so now, not after the timeout."""
+    import time
+
+    latch.state = NOT_HALTED
+    api_app.state.api_config = Mock(interaction_timeout=30.0)
+
+    async def admit_then_latch(msg):
+        api_app.state.message_task_map = {msg.message_id: "task-held"}  # what the adapter records
+        latch.state = HALTED  # the halt lands while the interact waits for its reply
+        return Mock(status=MessageHandlingStatus.TASK_CREATED, task_id="task-held")
+
+    on_message.side_effect = admit_then_latch
+    started = time.monotonic()
+    response = TestClient(api_app).post("/agent/interact", json={"message": "Are you there?"})
+    elapsed = time.monotonic() - started
+
+    assert response.status_code == 423
+    detail = response.json()["detail"]
+    assert detail["error"] == "accord_halt_in_effect" and detail["halt"]["invocation_id"] == "inv-api"
+    assert "admitted just before" in detail["message"] and detail["held_task_id"] == "task-held"
+    assert elapsed < 5.0, f"answered after {elapsed:.1f}s; the interact waited out its timeout"
+    on_message.assert_awaited_once()
+
+
 def test_fail_closed_reading_also_refuses(latch, api_app):
     latch.state = _state(True, AccordHaltReading.NO_NODE)
     response = TestClient(api_app).post("/agent/interact", json={"message": "hello"})

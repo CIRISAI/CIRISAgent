@@ -915,7 +915,6 @@ async def _raise_if_accord_halted() -> None:
     token is the node's own, so a client sees one name for one fact.
     """
     from ciris_engine.logic.utils.halt_latch import read_halt_latch
-    from ciris_engine.schemas.runtime.accord_halt import ACCORD_HALT_REFUSAL
 
     # Fresh: admitting a message is a decision, not a poll. A cached "no halt"
     # admitted CSD-129 run 4's interact 0.9 s after the node latched, and it
@@ -923,18 +922,61 @@ async def _raise_if_accord_halted() -> None:
     halt = await read_halt_latch(fresh=True)
     if not halt.halted:
         return
-    raise HTTPException(
-        status_code=423,
-        detail={
-            "error": ACCORD_HALT_REFUSAL,
-            "reason": MessageRejectionReason.ACCORD_HALT.value,
-            "message": (
-                "The agent's acts are paused under a constitutional halt. Nothing was admitted; "
-                "the halt ends when the holders release it or its fuse lapses."
-            ),
-            "halt": halt.model_dump(mode="json"),
-        },
-    )
+    raise _accord_halt_refusal(halt)
+
+
+def _accord_halt_refusal(halt: Any, held_task_id: Optional[str] = None, admitted: bool = False) -> HTTPException:
+    """The 423 a halt answers with. `admitted`: the message got in just before the halt and is held."""
+    from ciris_engine.schemas.runtime.accord_halt import ACCORD_HALT_REFUSAL
+
+    if not admitted:
+        message = (
+            "The agent's acts are paused under a constitutional halt. Nothing was admitted; "
+            "the halt ends when the holders release it or its fuse lapses."
+        )
+    else:
+        message = (
+            "The agent's acts are paused under a constitutional halt. This message was admitted just "
+            "before it; its task is held, not dropped, and no reply can come until the halt ends."
+        )
+    detail: Dict[str, Any] = {
+        "error": ACCORD_HALT_REFUSAL,
+        "reason": MessageRejectionReason.ACCORD_HALT.value,
+        "message": message,
+        "halt": halt.model_dump(mode="json"),
+    }
+    if held_task_id is not None:
+        detail["held_task_id"] = held_task_id
+    return HTTPException(status_code=423, detail=detail)
+
+
+#: How often a waiting interact looks for a halt that landed after admission.
+INTERACT_HALT_POLL_SECONDS = 0.5
+
+
+async def _wait_for_reply_or_halt(event: asyncio.Event, timeout: float) -> Optional[Any]:
+    """Wait for the agent's reply; the halt that lands meanwhile, if one does.
+
+    A message admitted just before a halt has its thought held: no reply can
+    come, so the caller is told now (423) instead of after the whole timeout.
+    Raises asyncio.TimeoutError like `wait_for` when neither happens.
+    """
+    from ciris_engine.logic.utils.halt_latch import read_halt_latch
+
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    while True:
+        remaining = deadline - loop.time()
+        if remaining <= 0:
+            raise asyncio.TimeoutError
+        try:
+            await asyncio.wait_for(event.wait(), timeout=min(INTERACT_HALT_POLL_SECONDS, remaining))
+            return None
+        except asyncio.TimeoutError:
+            pass
+        halt = await read_halt_latch()
+        if halt.halted:
+            return halt
 
 
 def _cleanup_interaction_tracking(message_id: str, request: Optional[Request] = None) -> None:
@@ -1202,7 +1244,14 @@ async def interact(request: Request, body: InteractRequest, auth: AuthObserverDe
     timeout = _get_interaction_timeout(request)
 
     try:
-        await asyncio.wait_for(event.wait(), timeout=timeout)
+        halt = await _wait_for_reply_or_halt(event, timeout)
+        if halt is not None:
+            try:
+                held_task_id = _task_id_for_interaction(message_id, request)
+            except Exception:  # noqa: BLE001 - naming the held task is a courtesy; the 423 is the answer
+                held_task_id = None
+            _cleanup_interaction_tracking(message_id, request)
+            raise _accord_halt_refusal(halt, held_task_id, admitted=True)
 
         # Get response
         import os

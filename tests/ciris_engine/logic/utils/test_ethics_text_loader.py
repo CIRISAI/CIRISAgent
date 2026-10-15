@@ -203,11 +203,6 @@ def test_tampered_1_2b_control_file_is_refused(monkeypatch: pytest.MonkeyPatch, 
         constants.get_accord_text("compressed")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="the translate lane has not completed every locale yet (#1253). When this XPASSes, "
-    "re-pin (tools/dev/regen_accord_pins.py), have the root WA re-sign the manifest, and delete this marker.",
-)
 def test_every_locale_ships_a_1_3_file() -> None:
     missing = [lang for lang in LOCALES if not (LOCALIZED / f"constitution_ethics_1.3_{lang}.txt").is_file()]
     assert not missing, f"no constitution_ethics_1.3 file for {missing}"

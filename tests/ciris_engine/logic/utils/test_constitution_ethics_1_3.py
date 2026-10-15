@@ -227,7 +227,7 @@ BOOK_MARKERS: List[Tuple[str, str]] = [
     ("Book V", r"^## परिचय: अद्भुत Horizon"),
     ("Book VI", r"^## मुख्यद्वार / Introduction"),
     ("Book VII", r"^## Introduction - عتبة القوة"),
-    ("Book VIII", r"^(ACCORD 1\.2b - BOOK VI: SUNSET DOCTRINE|BOOK VIII: DIGNIFIED SUNSET)"),
+    ("Book VIII", r"^(ACCORD 1\.2b - BOOK VI: SUNSET DOCTRINE|BOOK VIII: RETIREMENT)"),
     ("Book IX", r"^## Book IX — Status"),
     ("Annexes", r"^## Annexes · "),
 ]

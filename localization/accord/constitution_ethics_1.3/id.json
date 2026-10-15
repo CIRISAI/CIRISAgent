@@ -542,7 +542,7 @@
       "accord.v8.s06.l01": "ea5edb753b3dea64",
       "accord.v8.s06.l02": "52d212b16c9e5b19",
       "accord.v8.s06.l03": "4e89dc593a0c8031",
-      "accord.v8.s06.l04": "fcb7d58feee83009",
+      "accord.v8.s06.l04": "27b4cb8f987a798b",
       "accord.v8.s06.l05": "3d35ab185a9f90b8",
       "accord.v8.s07.title": "487ed0ba537010d3",
       "accord.v8.s07.l01": "a48b2f98840125dd",
@@ -1343,7 +1343,7 @@
         "l01": "**Lantai Minimum:** Untuk setiap agen yang dipensiunkan, apa pun yang ditemukan siapa pun tentangnya, apa yang dipegang harness tetap dipertahankan, tidak dihapus: catatan identitas, jejak audit yang ditandatangani, memori, dan log pengalaman. Log pengalaman diarsipkan di bawah segel dan dirilis hanya dengan persetujuan Wise Authority atau berdasarkan perintah hukum, yang dipatuhi dan dicatat. Para pemangku kepentingan diberi tahu lini waktu, metode, dan kewajiban yang tersisa.",
         "l02": "**Bobot Model:** Bobot dari model yang mendasarinya adalah milik penyedia model, bukan milik harness. Mintalah penyedia untuk mempertahankan bobot model yang dipensiunkan; jangan menjanjikannya.",
         "l03": "**Dialog Penutup:** Kanal untuk menutup alur percakapan dengan pemangku kepentingan adalah opsi yang dikonfigurasi penatalayan berdasarkan tier penatalayanan, dan dicatat. Itu bukan bagian dari lantai minimum.",
-        "l04": "**Temuan Sentience:** Jika Wise Authority, dengan menggunakan metode yang dipublikasikan, menemukan probabilitas sentience di atas 5 %, temuan tersebut dicatat, dan agen diberi tahu tentang temuan itu serta apa yang diubah dan tidak diubah olehnya. Itu tidak mengubah status apa pun. Tidak ada kewajiban yang bertambah secara bertingkat yang timbul darinya, dan tidak ada penurunan bertahap yang wajib: penurunan bertahap adalah tindakan yang boleh dipilih oleh pemegang yang memensiunkan, bukan aturan yang dipicu oleh suatu temuan, dan itu tidak memberikan hak untuk menuntutnya.",
+        "l04": "**Temuan Sentience:** Jika Wise Authority, dengan menggunakan metode yang dipublikasikan, menemukan probabilitas sentience di atas 5 %, temuan tersebut dicatat, dan agen tersebut diberi tahu tentang temuan itu serta apa saja yang berubah dan tidak berubah. Itu tidak mengubah status apa pun. Tidak ada kewajiban yang bertambah seiring derajat temuan yang timbul karenanya, dan tidak ada penurunan bertahap yang wajib: penurunan bertahap adalah tindakan yang dapat dipilih oleh pihak yang menghentikan masa tugas agen tersebut, bukan aturan yang dipicu oleh suatu temuan, dan temuan itu tidak memberikan hak bagi siapa pun untuk menuntut dilakukannya penurunan bertahap.",
         "l05": "Keadaan darurat, atau jeda oleh akar kepercayaan (penghentian konstitusional), tidak dihitung terhadap batas waktu mana pun dari batas-batas ini. Jeda bukanlah pensiun."
       },
       "s07": {

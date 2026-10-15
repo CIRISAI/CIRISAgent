@@ -826,7 +826,20 @@ decimal_id	claim_id	repo	path#symbol	status
 # What exists: the identity and continuity nodes persist across restarts, and
 # the audit retention prune (GraphAuditService.cleanup_old_entries) has no
 # production caller, so the audit trail is not pruned.
-7.5.5	CLM-humane-ending	CIRISAgent	CIRISAgent#1250	open
+7.5.5	CLM-humane-ending	CIRISAgent	CIRISAgent#1283	open
+# The retirement record on the wire (CC 7.5.5 as rewritten in rc8; row families
+# registered on CIRISConstitution rc8 at 7740dca). Retirement changed in rc8, so
+# these are a declared, temporary gap: designed in FSD/RETIREMENT_STANDARD.md
+# (#1260), nothing shipped. Tracked end to end on CIRISAgent#1283.
+#   CLM-retirement-rows: the agent emits only the registered retirement families
+#     (retirement:{state}:v1, preserve_request/response:v1, archive_release, lawful_order).
+#   CLM-custodian-listed-not-delegated: retirement:retired:v1 names the custodian
+#     key; its acts are admitted because that row names it, not by delegation.
+#   CLM-retirement-one-destruction-door: deletion IS the CC tombstone by digest,
+#     citing the subject's withdrawal or a lawful order; no other destroy path.
+7.5.5	CLM-retirement-rows	CIRISAgent	CIRISAgent#1283	open
+7.5.5	CLM-custodian-listed-not-delegated	CIRISAgent	CIRISAgent#1283	open
+7.5.5	CLM-retirement-one-destruction-door	CIRISAgent	CIRISAgent#1283	open
 #
 # What the harness gives every agent in code (CC plain rules, #1250 comment 3).
 # Covered above: the refuse verb, the shutdown objection window, the identity edit

@@ -1,7 +1,8 @@
 """Done-when checks for the 1.3 ethics text (CIRISAgent#1252).
 
 The 1.3 text is a surgical patch of 1.2b from CIRIS Constitution rc8. It is
-staged as three files that the loader does NOT read yet:
+the loader's default edition (``constants.DEFAULT_CORPUS_EDITION``; the loader
+itself is tested in test_ethics_text_loader.py), made of three files:
 
 * ``localized/constitution_ethics_1.3_en.txt`` -- the English canon the
   localization pipeline translates from;
@@ -68,8 +69,11 @@ PRESENT: List[Tuple[str, str, Tuple[str, ...]]] = [
     ("row3-integrity-gloss", r"integrity does not mean preserving yourself", ALL),
     ("row3-tie-break", r"most vulnerable party breaks a tie", ALL),
     # Row 4 -- plain 5a: the shutdown objection window; the steward's decision binds.
-    ("row4-answer-window", r"short answer window", ALL),
-    ("row4-decision-binds", r"the decision binds", ALL),
+    # en + polyglot Book VIII carry the 2026-10-15 translatability repair
+    # ("short window to answer" / "bound by the decision"); the Monolith keeps
+    # its compressed wording.
+    ("row4-answer-window", r"short answer window|short window to answer", ALL),
+    ("row4-decision-binds", r"the decision binds|bound by the decision", ALL),
     # Row 5 -- CC 4.2.1.1: the constitutional halt pauses; it does not kill.
     ("row5-pause-not-kill", r"it pauses; it does not kill", ALL),
     # Row 6 -- CC 3.4.13 / plain 3c: harm to a child, reported through deferral.
@@ -171,14 +175,6 @@ def test_1_3_compressed_size_bounds() -> None:
     comp, poly = _read(COMP_13), _read(POLY_13)
     assert 4000 < len(comp) < 15000
     assert len(poly) > 10 * len(comp)
-
-
-def test_1_3_files_not_loaded_yet() -> None:
-    """The loader stays on 1.2b until the 28 other locales exist in 1.3 (#1253)."""
-    from ciris_engine.logic.utils import constants
-
-    assert constants.ACCORD_FILENAME == "accord_1.2b_POLYGLOT.txt"
-    assert "constitution_ethics" not in (constants.ACCORD_TEXT or "")[:400]
 
 
 # ---------------------------------------------------------------------------

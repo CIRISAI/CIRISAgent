@@ -268,7 +268,7 @@ class TestAccordModeIntegration:
 
 
 class TestAccordIntegrityHashes:
-    """Pin every ACCORD_EXPECTED_HASHES entry to the actual SHA-256 of the
+    """Pin every ETHICS_TEXT_EXPECTED_HASHES entry to the actual SHA-256 of the
     file on disk.
 
     Drift between this constant and the file content is a real production
@@ -311,17 +311,17 @@ class TestAccordIntegrityHashes:
         return hashlib.sha256(path.read_bytes()).hexdigest()
 
     def test_all_localized_accord_hashes_match(self):
-        """Every entry in ACCORD_EXPECTED_HASHES must match its file's actual SHA-256.
+        """Every entry in ETHICS_TEXT_EXPECTED_HASHES must match its file's actual SHA-256.
 
         This test guards against the failure mode where a translator edit lands
         but the manifest in constants.py is not updated, causing the integrity
         check to fail at runtime and the conscience to interpret it as tampering.
         """
-        from ciris_engine.logic.utils.constants import ACCORD_EXPECTED_HASHES
+        from ciris_engine.logic.utils.constants import ETHICS_TEXT_EXPECTED_HASHES
 
         mismatches = []
         missing = []
-        for filename, expected_hash in ACCORD_EXPECTED_HASHES.items():
+        for filename, expected_hash in ETHICS_TEXT_EXPECTED_HASHES.items():
             path = self._find_accord_file(filename)
             if path is None:
                 missing.append(filename)
@@ -334,14 +334,14 @@ class TestAccordIntegrityHashes:
         if missing:
             pytest.fail(
                 f"{len(missing)} ACCORD file(s) missing on disk but pinned in "
-                f"ACCORD_EXPECTED_HASHES: {missing}. Either ship the file or "
+                f"ETHICS_TEXT_EXPECTED_HASHES: {missing}. Either ship the file or "
                 f"remove the hash entry."
             )
         if mismatches:
             lines = [
                 f"{len(mismatches)} ACCORD file hash(es) drifted from manifest. "
                 f"This will trigger the conscience tampering-storm bug.",
-                "Update ciris_engine/logic/utils/constants.py:ACCORD_EXPECTED_HASHES with:",
+                "Update ciris_engine/logic/utils/constants.py:ETHICS_TEXT_EXPECTED_HASHES with:",
             ]
             for filename, expected, actual in mismatches:
                 lines.append(f'    "{filename}": "{actual}",  # was {expected[:12]}...')
@@ -389,15 +389,15 @@ class TestAccordIntegrityHashes:
 
     def test_polyglot_files_pinned(self):
         """The POLYGLOT ACCORD files (used in production via DMA prompts) must
-        be pinned in ACCORD_EXPECTED_HASHES so any edit triggers a hash check
+        be pinned in ETHICS_TEXT_EXPECTED_HASHES so any edit triggers a hash check
         rather than silently propagating.
         """
-        from ciris_engine.logic.utils.constants import ACCORD_EXPECTED_HASHES
+        from ciris_engine.logic.utils.constants import ETHICS_TEXT_EXPECTED_HASHES
 
         required = {"accord_1.2b_POLYGLOT.txt", "accord_1.2b_POLYGLOT_compressed.txt"}
-        missing_pins = required - set(ACCORD_EXPECTED_HASHES.keys())
+        missing_pins = required - set(ETHICS_TEXT_EXPECTED_HASHES.keys())
         assert not missing_pins, (
-            f"POLYGLOT ACCORD file(s) not pinned in ACCORD_EXPECTED_HASHES: "
+            f"POLYGLOT ACCORD file(s) not pinned in ETHICS_TEXT_EXPECTED_HASHES: "
             f"{missing_pins}. These are the production-default ACCORDs and "
             f"must be hash-checked."
         )
@@ -411,7 +411,7 @@ class TestAccordIntegrityHashes:
         import json
         from pathlib import Path
 
-        from ciris_engine.logic.utils.constants import ACCORD_EXPECTED_HASHES
+        from ciris_engine.logic.utils.constants import ETHICS_TEXT_EXPECTED_HASHES
 
         repo_root = Path(__file__).resolve().parents[4]
         manifest = json.loads((repo_root / "ciris_engine" / "data" / "localized" / "manifest.json").read_text())
@@ -425,7 +425,7 @@ class TestAccordIntegrityHashes:
 
         pinned_locales = {
             name.removeprefix("accord_1.2b_").removesuffix(".txt")
-            for name in ACCORD_EXPECTED_HASHES
+            for name in ETHICS_TEXT_EXPECTED_HASHES
             if name.startswith("accord_1.2b_")
             and name
             not in {
@@ -436,6 +436,6 @@ class TestAccordIntegrityHashes:
         missing_pins = locales - pinned_locales
         assert not missing_pins, (
             f"Locales declared in localization/manifest.json but NOT in "
-            f"ACCORD_EXPECTED_HASHES: {sorted(missing_pins)}. Every shipped "
+            f"ETHICS_TEXT_EXPECTED_HASHES: {sorted(missing_pins)}. Every shipped "
             f"locale's ACCORD must be hash-pinned."
         )

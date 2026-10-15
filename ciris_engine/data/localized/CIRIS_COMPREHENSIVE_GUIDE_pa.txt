@@ -188,7 +188,7 @@ CIRIS 29 ਭਾਸ਼ਾਵਾਂ ਦਾ ਐਂਡ-ਟੂ-ਐਂਡ ਸਮਰਥ
 
 ਕੀ ਸਥਾਨੀਕ੍ਰਿਤ ਹੁੰਦਾ ਹੈ:
 
-- **ਇਕਰਾਰਨਾਮਾ** — ਪ੍ਰਤੀ ਲੋਕੇਲ `accord_1.2b_{lang}.txt`; ਪੌਲੀਗਲੌਟ ਇਕਰਾਰਨਾਮਾ (`accord_1.2b_POLYGLOT.txt`) ਲੋਕੇਲ ਦੀ ਪਰਵਾਹ ਕੀਤੇ ਬਿਨਾਂ ਕ੍ਰਾਸ-ਪਰੰਪਰਾਗਤ ਆਧਾਰ ਵਜੋਂ ਯੂਨੀਵਰਸਲ ਤੌਰ 'ਤੇ ਲੋਡ ਕੀਤਾ ਜਾਂਦਾ ਹੈ
+- **ਇਕਰਾਰਨਾਮਾ** — ਪ੍ਰਤੀ ਲੋਕੇਲ `constitution_ethics_1.3_{lang}.txt`; ਪੌਲੀਗਲੌਟ ਇਕਰਾਰਨਾਮਾ (`constitution_ethics_1.3_POLYGLOT.txt`) ਲੋਕੇਲ ਦੀ ਪਰਵਾਹ ਕੀਤੇ ਬਿਨਾਂ ਕ੍ਰਾਸ-ਪਰੰਪਰਾਗਤ ਆਧਾਰ ਵਜੋਂ ਯੂਨੀਵਰਸਲ ਤੌਰ 'ਤੇ ਲੋਡ ਕੀਤਾ ਜਾਂਦਾ ਹੈ
 - **ਇਹ ਵਿਆਪਕ ਗਾਈਡ** — `CIRIS_COMPREHENSIVE_GUIDE_{lang}.txt`
 - **DMA ਪ੍ਰੌਂਪਟ** — PDMA, CSDMA, DSDMA, IDMA, ASPDMA, TSASPDMA ਸਾਰਿਆਂ ਕੋਲ `ciris_engine/logic/dma/prompts/localized/{lang}/*.yml` ਅਧੀਨ ਪ੍ਰਤੀ-ਲੋਕੇਲ ਪ੍ਰੌਂਪਟ ਟੈਂਪਲੇਟ ਹਨ
 - **ਜ਼ਮੀਰ ਪ੍ਰੌਂਪਟ** — entropy, coherence, optimization-veto, ਅਤੇ epistemic-humility ਸਾਰਿਆਂ ਕੋਲ ਪ੍ਰਤੀ-ਲੋਕੇਲ ਰੂਪ ਹਨ

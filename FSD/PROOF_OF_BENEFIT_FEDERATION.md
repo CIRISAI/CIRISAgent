@@ -551,7 +551,7 @@ The Accord is the canonical text this FSD operationalizes. Citations herein:
 - Order-Maximisation Veto (Book II) implementation: `ciris_engine/logic/conscience/core.py` (`optimization_veto_conscience`); schema at `ciris_engine/schemas/conscience/core.py` (`OptimizationVetoResult`)
 - LLM-bus capture path: `ciris_engine/logic/buses/llm_bus.py:_maybe_capture_call`
 - Conscience prompts (29-language polyglot): `ciris_engine/logic/conscience/prompts/`
-- ACCORD canon (88,847-char polyglot, loaded into every conscience evaluation): `ciris_engine/data/accord_1.2b_POLYGLOT.txt` (see `ciris_engine/logic/utils/constants.py:42` — `ACCORD_FILENAME`)
+- ACCORD canon (88,847-char polyglot, loaded into every conscience evaluation): `ciris_engine/data/accord_1.2b_POLYGLOT.txt` (see `ciris_engine/logic/utils/constants.py:42` — `ETHICS_TEXT_FILENAME`)
 - v3 conscience methodology: `FSD/CONSCIENCE_V3.md` (deployed)
 - v4 recursive II with prompt perturbation: `FSD/CONSCIENCE_V3.md §10` (specified, deferred to v4 — referenced by §2.5)
 - DMA bounce methodology: `FSD/DMA_BOUNCE.md` (composes with §2.5 secondary-model bounce)

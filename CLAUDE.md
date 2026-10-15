@@ -270,7 +270,7 @@ Source of truth: `localization/manifest.json`. To add or remove a language, upda
 
 ### Key Files
 - **UI Strings**: `localization/{lang}.json` - Mobile/API UI strings
-- **ACCORD**: `ciris_engine/data/localized/accord_1.2b_{lang}.txt`
+- **Ethics text** (accord slot): `ciris_engine/data/localized/constitution_ethics_1.3_{lang}.txt` (1.2b `accord_1.2b_{lang}.txt` kept as the research control arm)
 - **Guides**: `ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_{lang}.txt`
 - **DMA Prompts**: `ciris_engine/logic/dma/prompts/localized/{lang}/*.yml`
 

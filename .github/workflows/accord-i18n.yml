@@ -28,6 +28,8 @@ on:
     paths:
       - "ciris_engine/data/localized/accord_1.2b_*.txt"
       - "ciris_engine/data/accord_1.2b_POLYGLOT*.txt"
+      - "ciris_engine/data/localized/constitution_ethics_1.3_*.txt"
+      - "ciris_engine/data/constitution_ethics_1.3_POLYGLOT*.txt"
       - "ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE*.txt"
       - "seed/accord_manifest.*"
       - "ciris_engine/logic/utils/constants.py"

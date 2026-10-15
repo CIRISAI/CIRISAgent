@@ -1,6 +1,6 @@
 """Rebuild seed/accord_manifest.json from disk and re-sign it with the root key.
 
-WHAT THE MANIFEST IS FOR. `ACCORD_EXPECTED_HASHES` in constants.py is a
+WHAT THE MANIFEST IS FOR. `ETHICS_TEXT_EXPECTED_HASHES` in constants.py is a
 fail-safe against a file changing under us; the manifest is the *signed*
 record of what those hashes were when a Wise Authority last vouched for
 them. A hash pin an attacker can edit is a pin an attacker can move, so the
@@ -44,12 +44,13 @@ SIG = MANIFEST.with_suffix(".sig")
 
 def manifest_files() -> dict[str, Path]:
     """Everything the agent loads as canon, in a stable order."""
-    files: dict[str, Path] = {
-        "accord_1.2b_POLYGLOT.txt": DATA / "accord_1.2b_POLYGLOT.txt",
-        "accord_1.2b_POLYGLOT_compressed.txt": DATA / "accord_1.2b_POLYGLOT_compressed.txt",
-    }
-    for p in sorted(LOCALIZED.glob("accord_1.2b_*.txt")):
-        files[p.name] = p
+    # Every edition in constants.CORPUS_EDITIONS -- the served 1.3 and the 1.2b
+    # research control -- by the same source read the pin tool uses.
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    # A sibling script, not a package module: resolvable only via the sys.path entry above.
+    from regen_accord_pins import pinned_files  # type: ignore[import-not-found]
+
+    files: dict[str, Path] = dict(pinned_files((ROOT / "ciris_engine/logic/utils/constants.py").read_text("utf-8")))
     for name in ("CIRIS_COMPREHENSIVE_GUIDE.txt", "CIRIS_COMPREHENSIVE_GUIDE_MOBILE.txt"):
         p = LOCALIZED / name
         if p.exists():
@@ -63,11 +64,9 @@ def manifest_files() -> dict[str, Path]:
 def build() -> bytes:
     prev = json.loads(MANIFEST.read_text(encoding="utf-8")) if MANIFEST.exists() else {}
     doc = {
-        "version": prev.get("version", "1.2b"),
-        "files": {
-            name: {"sha256": hashlib.sha256(p.read_bytes()).hexdigest()}
-            for name, p in manifest_files().items()
-        },
+        # The served edition (constants.DEFAULT_CORPUS_EDITION).
+        "version": "1.3",
+        "files": {name: {"sha256": hashlib.sha256(p.read_bytes()).hexdigest()} for name, p in manifest_files().items()},
         "signed_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "signer": prev.get("signer", "wa-ROOT-00"),
     }
@@ -80,8 +79,13 @@ def check() -> int:
         return 1
     doc = json.loads(MANIFEST.read_text(encoding="utf-8"))
     bad = []
+    on_disk = manifest_files()
+    # Coverage, not just consistency: a served file the manifest does not name
+    # is a file nobody has vouched for (the 1.3 edition until its first re-sign).
+    for name in sorted(set(on_disk) - set(doc["files"])):
+        bad.append(f"{name}: on disk and pinned, but not named by the manifest")
     for name, rec in doc["files"].items():
-        p = manifest_files().get(name)
+        p = on_disk.get(name)
         if p is None:
             bad.append(f"{name}: named by the manifest but not on disk")
         elif hashlib.sha256(p.read_bytes()).hexdigest() != rec["sha256"]:

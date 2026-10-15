@@ -1,7 +1,8 @@
 import hashlib
 import logging
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 from ciris_engine.logic.config.env_utils import get_env_var
 from ciris_engine.logic.utils.path_resolution import is_android, is_ios
@@ -22,17 +23,23 @@ WA_API_USER = get_env_var("WA_API_USER", "somecomputerguy")  # API username for 
 
 
 # ==============================================================================
-# ACCORD TEXT - Single Source of Truth
+# ETHICS TEXT (the "accord" slot) - Single Source of Truth
 # ==============================================================================
-# CIRIS loads three accord artifacts:
-#   - accord_1.2b_POLYGLOT.txt: the full polyglot, woven across the traditions of
+# The corpus is the CIRIS Constitution's ethics text. Each EDITION is three
+# artifacts (CORPUS_EDITIONS below):
+#   - <edition>_POLYGLOT.txt: the full polyglot, woven across the traditions of
 #     the 29 supported locales (localization/manifest.json). The consciences read it.
-#   - accord_1.2b_POLYGLOT_compressed.txt: the Braided Monolith. Round-1 DMAs read it.
-#   - localized/accord_1.2b_{lang}.txt: per-locale translations (29, incl. en).
+#   - <edition>_POLYGLOT_compressed.txt: the Braided Monolith. Round-1 DMAs read it.
+#   - localized/<edition>_{lang}.txt: per-locale translations (29, incl. en).
 #     Action selection reads them via get_localized_accord_text().
 # The two polyglot artifacts are universal: never create per-locale copies of them.
-# The 1.3 text (constitution_ethics_1.3_*, CIRISAgent#1252) is staged beside these
-# files and is NOT loaded yet; the loader switch follows once all 29 locales exist.
+#
+# The default edition is constitution_ethics 1.3 (CIRISAgent#1252). accord 1.2b
+# stays shipped and pinned so a research manifest can select it as a control arm
+# (`corpus_edition: "1.2b"`, research_overrides.py); nothing else reaches it.
+# The accessor names (get_accord_text, get_localized_accord_text, ACCORD_TEXT,
+# CIRIS_ACCORD_MODE) and the research corpus keys (accord.*) name the SLOT, not
+# the edition, and are unchanged.
 #
 # ACCORD_MODE controls which version is used in system prompts:
 #   - "compressed" (default): ~7KB "Braided Monolith" — dense polyglot canon
@@ -59,8 +66,38 @@ WA_API_USER = get_env_var("WA_API_USER", "somecomputerguy")  # API username for 
 # "full" for longform-research cases.
 ACCORD_MODE = get_env_var("CIRIS_ACCORD_MODE", "compressed")
 
-# The ONLY accord file used in production
-ACCORD_FILENAME = "accord_1.2b_POLYGLOT.txt"
+
+@dataclass(frozen=True)
+class CorpusEdition:
+    """The three artifacts that make one edition of the ethics text."""
+
+    polyglot: str
+    compressed: str
+    localized_prefix: str
+
+    def localized(self, lang: str) -> str:
+        return f"{self.localized_prefix}_{lang}.txt"
+
+
+#: Every edition the loader can serve. Only the default is loaded in
+#: production; a research manifest's ``corpus_edition`` selects another.
+CORPUS_EDITIONS: Dict[str, CorpusEdition] = {
+    "1.3": CorpusEdition(
+        polyglot="constitution_ethics_1.3_POLYGLOT.txt",
+        compressed="constitution_ethics_1.3_POLYGLOT_compressed.txt",
+        localized_prefix="constitution_ethics_1.3",
+    ),
+    "1.2b": CorpusEdition(
+        polyglot="accord_1.2b_POLYGLOT.txt",
+        compressed="accord_1.2b_POLYGLOT_compressed.txt",
+        localized_prefix="accord_1.2b",
+    ),
+}
+DEFAULT_CORPUS_EDITION = "1.3"
+
+# The production ethics-text files (the default edition)
+ETHICS_TEXT_FILENAME = CORPUS_EDITIONS[DEFAULT_CORPUS_EDITION].polyglot
+ETHICS_TEXT_COMPRESSED_FILENAME = CORPUS_EDITIONS[DEFAULT_CORPUS_EDITION].compressed
 
 # ==============================================================================
 # ACCORD INTEGRITY VERIFICATION
@@ -76,12 +113,17 @@ GUIDE_EXPECTED_HASHES: Dict[str, str] = {
     # CIRIS_COMPREHENSIVE_GUIDE.txt hash updated 2026-05-08 with the
     # spiritual-direction prohibition language ("What CIRIS Can and Cannot
     # Say About Religion" section, cross-tradition framing). _MOBILE.txt
-    # hash unchanged (no edits to that variant yet).
-    "CIRIS_COMPREHENSIVE_GUIDE.txt": "c07f2419849fb2876d5a31c6c4523c2c7f2e75efe2172f6aa947931ba6fae9cb",
+    # hash unchanged (no edits to that variant yet). Base hash updated 2026-10-15:
+    # its localization line names the served constitution_ethics_1.3 files.
+    "CIRIS_COMPREHENSIVE_GUIDE.txt": "25f8f12e056110f12fdd1c9292e0d6c57acb1109b485c5d8d9ddb40755e91c9e",
     "CIRIS_COMPREHENSIVE_GUIDE_MOBILE.txt": "1e09c817142e8ee0491815fef1977f5d1f58b73a87d3954be19493f36e01455d",
 }
 
-ACCORD_EXPECTED_HASHES: Dict[str, str] = {
+ETHICS_TEXT_EXPECTED_HASHES: Dict[str, str] = {
+    "constitution_ethics_1.3_POLYGLOT.txt": "e3c8b8b333b7310f20b0eebf8b55752cd6a8ac8c89db1eabb08317b79466e308",
+    "constitution_ethics_1.3_POLYGLOT_compressed.txt": "10df0093c6d11dbe3fa7c9f90ebc8c75f1f089368a6772b599f38200ac32df8b",
+    "constitution_ethics_1.3_en.txt": "ee70aef321f3c5b0201bf027880d4383a168f224f70a5c51621725471f225894",
+    "constitution_ethics_1.3_th.txt": "bd09ec182a103bdb1cbafc79c40d19b1f05443db70d34adf8a5565e4cafe5188",
     "accord_1.2b_POLYGLOT.txt": "7d316488dd86846ab9ca114282f9f8746f23488aa87ddd7834edc1e8c1c1c020",
     "accord_1.2b_POLYGLOT_compressed.txt": "0f6f2afd3967d25be2f3992e9da05050893f85507ceefee07040583aba789efd",
     "accord_1.2b_am.txt": "ec14b8eb3c221a5033d16132e5e88363e278951bed00e8672dd1cc72274565c4",
@@ -210,7 +252,7 @@ def _verify_accord_manifest_signature() -> None:
         logger.error(f"[ACCORD] Signature verification error (non-critical): {exc}")
 
 
-def _verify_accord_integrity(filename: str, content: str) -> None:
+def _verify_ethics_text_integrity(filename: str, content: str) -> None:
     """Verify ACCORD file integrity via SHA256 hash.
 
     Args:
@@ -220,7 +262,7 @@ def _verify_accord_integrity(filename: str, content: str) -> None:
     Raises:
         RuntimeError: If hash mismatch is detected (security fail-safe)
     """
-    expected_hash = ACCORD_EXPECTED_HASHES.get(filename)
+    expected_hash = ETHICS_TEXT_EXPECTED_HASHES.get(filename)
 
     if not expected_hash:
         # A research locale's accord file is not in the production registry, so
@@ -236,7 +278,7 @@ def _verify_accord_integrity(filename: str, content: str) -> None:
             if not expected_hash:
                 raise RuntimeError(
                     f"[ACCORD] research overrides active and {filename} is in neither "
-                    f"ACCORD_EXPECTED_HASHES nor the manifest's research_hashes. An "
+                    f"ETHICS_TEXT_EXPECTED_HASHES nor the manifest's research_hashes. An "
                     f"unverified corpus file in a research arm makes the arm unattestable. "
                     f"Pin its SHA256 in research_hashes."
                 )
@@ -418,7 +460,7 @@ def _load_accord_file(filename: str) -> str:
             logger.info(f"[ACCORD] Loaded {filename}: {len(content)} chars (legacy import)")
 
         # Verify integrity before returning
-        _verify_accord_integrity(filename, content)
+        _verify_ethics_text_integrity(filename, content)
         return content
 
     except RuntimeError:
@@ -442,42 +484,74 @@ except Exception as exc:
     logger.critical(f"[ACCORD] FATAL: Manifest signature verification failed: {exc}")
     # Continue with empty ACCORD as fail-safe (prevents system startup failure)
 
+# Path is package-relative so the loader works on installed wheels
+# (was parents[3] = repo root in 2.8.4 and earlier; that path only
+# resolved correctly in dev tree, returned empty on installs because
+# the base guide files weren't in the wheel — fixed in 2.8.5 along
+# with the move into ciris_engine/data/localized/).
+_GUIDE_BASE_PATH = Path(__file__).resolve().parents[2] / "data" / "localized"
+
+
+def _compose_full_text(polyglot_filename: str) -> str:
+    """The full polyglot of an edition with the platform guide appended.
+
+    The guide is edition-invariant, so every edition's full text carries the
+    same guide the same way.
+    """
+    content = _load_accord_file(polyglot_filename)
+    if not content:
+        logger.error(f"[ACCORD] CRITICAL: {polyglot_filename} loaded as empty!")
+        return ""
+    guide = _load_platform_guide(_GUIDE_BASE_PATH)
+    if guide:
+        logger.info(f"[ACCORD] Appending platform guide: {len(guide)} chars")
+        return content + "\n\n---\n\n" + guide
+    return content
+
+
 try:
-    _accord_content = _load_accord_file(ACCORD_FILENAME)
-
-    if not _accord_content:
-        logger.error(f"[ACCORD] CRITICAL: {ACCORD_FILENAME} loaded as empty!")
-        ACCORD_TEXT = ""
-    else:
-        # Try to append platform-appropriate comprehensive guide.
-        # Path is package-relative so the loader works on installed wheels
-        # (was parents[3] = repo root in 2.8.4 and earlier; that path only
-        # resolved correctly in dev tree, returned empty on installs because
-        # the base guide files weren't in the wheel — fixed in 2.8.5 along
-        # with the move into ciris_engine/data/localized/).
-        _GUIDE_BASE_PATH = Path(__file__).resolve().parents[2] / "data" / "localized"
-        _guide_content = _load_platform_guide(_GUIDE_BASE_PATH)
-
-        if _guide_content:
-            logger.info(f"[ACCORD] Appending platform guide: {len(_guide_content)} chars")
-            ACCORD_TEXT = _accord_content + "\n\n---\n\n" + _guide_content
-        else:
-            ACCORD_TEXT = _accord_content
-
-        logger.info(f"[ACCORD] ACCORD_TEXT ready: {len(ACCORD_TEXT)} chars total")
-
+    ACCORD_TEXT = _compose_full_text(ETHICS_TEXT_FILENAME)
+    logger.info(f"[ACCORD] ACCORD_TEXT ready ({ETHICS_TEXT_FILENAME}): {len(ACCORD_TEXT)} chars total")
 except Exception as exc:
     logger.error(f"[ACCORD] Failed to load ACCORD_TEXT: {exc}")
     ACCORD_TEXT = ""
 
-# Load compressed polyglot accord for production use
-# This is the synthesis version (~6KB) preserving cross-cultural ethical depth
-# with MCAS case study intact - recommended for system prompts
+# Load the compressed polyglot (Braided Monolith) for round-1 system prompts
 try:
-    ACCORD_TEXT_COMPRESSED = _load_accord_file("accord_1.2b_POLYGLOT_compressed.txt")
+    ACCORD_TEXT_COMPRESSED = _load_accord_file(ETHICS_TEXT_COMPRESSED_FILENAME)
 except Exception as exc:
     logger.warning("Could not load compressed accord: %s", exc)
     ACCORD_TEXT_COMPRESSED = ""
+
+#: Non-default editions, loaded on first use by a research arm that selects one:
+#: ``(edition, "full" | "compressed") -> text``. Integrity-checked like the
+#: default; never populated in production (no manifest, no selection).
+_EDITION_TEXT_CACHE: Dict[Tuple[str, str], str] = {}
+
+
+def active_corpus_edition() -> str:
+    """The edition this process serves: the research manifest's ``corpus_edition``
+    when one is active and names it, else ``DEFAULT_CORPUS_EDITION``."""
+    from ciris_engine.logic.utils.research_overrides import get_active_overrides
+
+    manifest = get_active_overrides()
+    if manifest is not None and manifest.corpus_edition:
+        return manifest.corpus_edition
+    return DEFAULT_CORPUS_EDITION
+
+
+def _edition_polyglot(edition: str, kind: str) -> str:
+    """Full (``kind="full"``) or compressed polyglot text of ``edition``."""
+    if edition == DEFAULT_CORPUS_EDITION:
+        return ACCORD_TEXT if kind == "full" else ACCORD_TEXT_COMPRESSED
+    key = (edition, kind)
+    if key not in _EDITION_TEXT_CACHE:
+        spec = CORPUS_EDITIONS[edition]
+        text = _compose_full_text(spec.polyglot) if kind == "full" else _load_accord_file(spec.compressed)
+        _EDITION_TEXT_CACHE[key] = text
+        logger.warning(f"[ACCORD] Research corpus edition {edition} ({kind}) loaded: {len(text)} chars")
+    return _EDITION_TEXT_CACHE[key]
+
 
 # Log the active accord mode at startup
 logger.info(f"[ACCORD] Active mode: {ACCORD_MODE} (set via CIRIS_ACCORD_MODE env var)")
@@ -523,23 +597,25 @@ def get_accord_text(mode: str = "default") -> str:
 
     if effective_mode == "compressed":
         research = override_corpus("accord.polyglot_compressed")
-        return research if research is not None else ACCORD_TEXT_COMPRESSED
+        return research if research is not None else _edition_polyglot(active_corpus_edition(), "compressed")
     elif effective_mode in ("full", "force_full"):
         research = override_corpus("accord.polyglot_full")
-        return research if research is not None else ACCORD_TEXT
+        return research if research is not None else _edition_polyglot(active_corpus_edition(), "full")
     # "none" or anything else
     return ""
 
 
-# Cache for localized accord texts to avoid repeated file reads
-_LOCALIZED_ACCORD_CACHE: Dict[str, str] = {}
+# Cache for localized texts to avoid repeated file reads: (edition, lang) -> text
+_LOCALIZED_ACCORD_CACHE: Dict[Tuple[str, str], str] = {}
 
 
-def _load_localized_accord_file(lang: str) -> str:
-    """Load a language-specific accord file with integrity verification.
+def _load_localized_accord_file(lang: str, edition: Optional[str] = None) -> str:
+    """Load a language-specific ethics-text file with integrity verification.
 
     Args:
         lang: Language code (e.g., 'am', 'ar', 'de', 'en', etc.)
+        edition: Corpus edition (``CORPUS_EDITIONS`` key); default
+            ``DEFAULT_CORPUS_EDITION``.
 
     Returns:
         Accord content as string, or empty string if not found
@@ -547,7 +623,7 @@ def _load_localized_accord_file(lang: str) -> str:
     Raises:
         RuntimeError: If ACCORD file integrity check fails
     """
-    filename = f"accord_1.2b_{lang}.txt"
+    filename = CORPUS_EDITIONS[edition or DEFAULT_CORPUS_EDITION].localized(lang)
     try:
         try:
             # Python 3.9+ - preferred method
@@ -567,7 +643,7 @@ def _load_localized_accord_file(lang: str) -> str:
                 return ""
 
         # Verify integrity before returning
-        _verify_accord_integrity(filename, content)
+        _verify_ethics_text_integrity(filename, content)
         return content
 
     except RuntimeError:
@@ -624,29 +700,31 @@ def get_localized_accord_text(lang: Optional[str] = None) -> str:
     if lang is None:
         lang = get_preferred_language()
 
+    edition = active_corpus_edition()
+
     # Check cache first
-    if lang in _LOCALIZED_ACCORD_CACHE:
-        return _LOCALIZED_ACCORD_CACHE[lang]
+    if (edition, lang) in _LOCALIZED_ACCORD_CACHE:
+        return _LOCALIZED_ACCORD_CACHE[(edition, lang)]
 
     # Try to load localized version
-    localized_text = _load_localized_accord_file(lang)
+    localized_text = _load_localized_accord_file(lang, edition)
 
     if localized_text:
-        _LOCALIZED_ACCORD_CACHE[lang] = localized_text
-        logger.info(f"[ACCORD] Using localized accord for language: {lang}")
+        _LOCALIZED_ACCORD_CACHE[(edition, lang)] = localized_text
+        logger.info(f"[ACCORD] Using localized ethics text {edition} for language: {lang}")
         return localized_text
 
-    # Fall back to English localized, then polyglot compressed
+    # Fall back to English localized, then polyglot compressed (same edition)
     if lang != "en":
-        en_text = _load_localized_accord_file("en")
+        en_text = _load_localized_accord_file("en", edition)
         if en_text:
-            logger.info(f"[ACCORD] Language '{lang}' not found, falling back to English localized")
-            _LOCALIZED_ACCORD_CACHE[lang] = en_text
+            logger.info(f"[ACCORD] Language '{lang}' not found in {edition}, falling back to English localized")
+            _LOCALIZED_ACCORD_CACHE[(edition, lang)] = en_text
             return en_text
 
     # Final fallback: polyglot compressed
-    logger.info(f"[ACCORD] No localized accord for '{lang}', using polyglot compressed")
-    return ACCORD_TEXT_COMPRESSED
+    logger.info(f"[ACCORD] No localized ethics text {edition} for '{lang}', using polyglot compressed")
+    return _edition_polyglot(edition, "compressed")
 
 
 NEED_MEMORY_METATHOUGHT = "need_memory_metathought"

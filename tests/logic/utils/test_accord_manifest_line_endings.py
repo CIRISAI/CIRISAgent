@@ -49,6 +49,9 @@ BYTE_EXACT = [
     "seed/accord_manifest.sig",
     "ciris_engine/data/accord_1.2b_POLYGLOT.txt",
     "ciris_engine/data/accord_1.2b_POLYGLOT_compressed.txt",
+    # The served 1.3 edition (CIRISAgent#1252); 1.2b above is the research control.
+    "ciris_engine/data/constitution_ethics_1.3_POLYGLOT.txt",
+    "ciris_engine/data/constitution_ethics_1.3_POLYGLOT_compressed.txt",
     # The guides moved to localized/*.txt in 2.8.5; the .md paths named here
     # (and in the manifest) had not existed since.
     "ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE.txt",
@@ -58,14 +61,19 @@ BYTE_EXACT = [
     # put in front of the model, and they are now in the signed manifest, so
     # they must be byte-exact too -- .gitattributes covers them by the
     # `ciris_engine/data/localized/** -text` rule.
-    str(p.relative_to(REPO)) for p in (REPO / "ciris_engine/data/localized").glob("accord_1.2b_*.txt")
+    str(p.relative_to(REPO))
+    for stem in ("accord_1.2b", "constitution_ethics_1.3")
+    for p in (REPO / "ciris_engine/data/localized").glob(f"{stem}_*.txt")
 )
 
 
 def _git_text_attr(rel: str) -> str:
     out = subprocess.run(
         ["git", "check-attr", "text", "--", rel],
-        cwd=REPO, capture_output=True, text=True, timeout=30,
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+        timeout=30,
     ).stdout.strip()
     return out.rsplit(": ", 1)[-1] if out else "?"
 
@@ -147,6 +155,9 @@ def test_shell_scripts_are_pinned_to_lf() -> None:
         if (REPO / rel).exists():
             out = subprocess.run(
                 ["git", "check-attr", "eol", "--", rel],
-                cwd=REPO, capture_output=True, text=True, timeout=30,
+                cwd=REPO,
+                capture_output=True,
+                text=True,
+                timeout=30,
             ).stdout.strip()
             assert out.endswith("lf"), f"{rel} is not pinned to LF: {out}"

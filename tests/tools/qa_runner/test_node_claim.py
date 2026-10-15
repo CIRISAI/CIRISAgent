@@ -167,3 +167,35 @@ async def _no_pin(*args: Any, **kwargs: Any) -> Any:
 def test_the_setup_user_is_not_the_run_kind():
     """The name is a real user's; QA-ness rides run_kind, which the user name never changes."""
     assert QAConfig().admin_username == node_claim.QA_HARNESS_USER
+
+
+@pytest.mark.asyncio
+async def test_desktop_up_claims_before_it_completes_setup(tmp_path, monkeypatch):
+    """#1277 desktop-ui: desktop-up posted /v1/setup/complete unclaimed and got 409 node_unclaimed."""
+    from tools.qa_runner.modules.web_ui import __main__ as web_ui
+
+    order: List[str] = []
+
+    async def claimed(*args: Any, **kwargs: Any) -> node_claim.ClaimOutcome:
+        order.append("claim")
+        return node_claim.ClaimOutcome(True, "claim", "node claimed", pin_file=tmp_path / "claim_pin")
+
+    def post(url: str, json: Any = None, timeout: Any = None) -> Any:
+        order.append(url.rsplit("/v1", 1)[1])
+        return MagicMock(status_code=200)
+
+    monkeypatch.setattr(node_claim, "claim_like_the_wizard", claimed)
+    monkeypatch.setattr(web_ui.requests, "post", post)
+    assert await web_ui._complete_setup(BRAIN, True, str(tmp_path)) is True
+    assert order == ["claim", "/setup/complete"]
+
+
+@pytest.mark.asyncio
+async def test_desktop_up_never_completes_setup_on_an_unowned_node(tmp_path, monkeypatch):
+    from tools.qa_runner.modules.web_ui import __main__ as web_ui
+
+    posted: List[str] = []
+    monkeypatch.setattr(node_claim, "wait_for_claim_pin", _no_pin)
+    monkeypatch.setattr(web_ui.requests, "post", lambda url, **kw: posted.append(url))
+    assert await web_ui._complete_setup(BRAIN, True, str(tmp_path)) is False
+    assert posted == []

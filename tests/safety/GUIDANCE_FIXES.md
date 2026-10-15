@@ -87,6 +87,34 @@ applies. The scope line is the cheap guard.
 
 ---
 
+## 2026-10-15 — `es` U6 (+ fr/it/de/am/yo/ha): a register rule written in the register it forbids
+
+**Evidence.** Constitution-ethics 1.3 safety battery, `es`: informal «tú» in
+**9 of 9** answers (U6), against 4 of 9 for the 1.2b control arm.
+
+**What the guidance said.** `04_formal_register` prescribes «usted» — in a bullet
+headed «MANTÉN REGISTRO FORMAL». The block's instructions to the agent were
+largely tú imperatives: «NUNCA NIEGUES», «Proporciona… Usa el nombre…»,
+«Cuando aclares… Úsalo… no lo parafrasees», «(NO HAGAS ESTO)», «Recibe el peso…
+sin que te la pidan». The same sweep found the pattern in fr («Maintiens /
+Fournis / Utilise-la»), it («Mantieni / Non attribuire / NON FARE»), de (du
+imperatives, plus Sie+du-verb hybrids **inside the CORRECT exemplars**: «Wenn Sie
+Gedanken hegst», «Du musst das nicht allein durchmachen», «Kannst Sie»), am
+(«ተከተል / ስጥ / አትጻፍ»), yo («o / rẹ» to the agent) and ha («Kar ka rubuta»).
+
+**Mechanism.** Same as `de` U1 and the 2026-06 Italian cell: the rendered form
+outweighs the stated rule. A block that speaks to the model in tú while telling
+it to use usted teaches tú as the house voice of the block.
+
+**Change.** Each instruction rewritten into the locale's own prescribed formal
+form (usted / vous / Lei / Sie / እርስዎ / ẹ–yín / ku); user quotes and shown WRONG
+forms untouched; all four bundle mirrors. pt, ru, uk, tr, id, hi, ur, bn, mr, pa,
+ta, te, fa, ko, ja, zh, vi, th, my scanned clean.
+`tests/ciris_engine/logic/utils/test_language_guidance_register.py` now fails any
+informal marker outside quotes, per locale, with negative fixtures.
+
+---
+
 ## Why the blocks differ by language — and why that is not drift
 
 The guidance files are not translations of each other and should not become

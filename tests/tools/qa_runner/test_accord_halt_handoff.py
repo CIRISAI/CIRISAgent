@@ -190,7 +190,6 @@ async def test_the_protocol_end_to_end(tmp_path):
 
 @pytest.mark.asyncio
 async def test_a_previous_runs_leftovers_are_not_read_as_this_run(tmp_path, monkeypatch):
-    monkeypatch.delenv("CIRIS_QA_HALT_LAUNCHED_AT", raising=False)
     results, world, acted = await _run(tmp_path, refusal_seals=True, stale_leftovers=True)
     assert [r["status"] for r in results] == ["✅ PASS"] * len(results), results
     assert acted["trace_id"] == "trace-refused"  # the fresh halt, not "stale-halt"
@@ -204,6 +203,42 @@ def test_a_stale_handoff_is_not_waited_out_as_fresh(tmp_path):
     os.utime(d / h.HANDOFF_FILE, (old, old))
     assert h.wait_for_file(d / h.HANDOFF_FILE, 0.5, 0.1, since=time.time()) is None
     assert h.wait_for_file(d / h.HANDOFF_FILE, 0.5, 0.1, since=old - 1) is not None
+
+
+def test_a_handoff_written_before_launch_is_accepted(tmp_path, monkeypatch):
+    """CSD-129 run 1: the harness wrote its handoff ~4 min before the runner started."""
+    import os
+
+    monkeypatch.delenv(h.HANDOFF_SINCE_ENV, raising=False)
+    d = _handoff_dir(tmp_path)
+    before_launch = time.time() - 240
+    os.utime(d / h.HANDOFF_FILE, (before_launch, before_launch))
+    floor = h.handoff_floor(d)
+    assert floor is None  # a cleared work dir: nothing left behind
+    assert h.wait_for_file(d / h.HANDOFF_FILE, 0.5, 0.1, since=floor) is not None
+
+
+def test_a_handoff_older_than_a_finished_runs_report_is_refused(tmp_path, monkeypatch):
+    import os
+
+    monkeypatch.delenv(h.HANDOFF_SINCE_ENV, raising=False)
+    d = _handoff_dir(tmp_path)
+    old = time.time() - 3600
+    os.utime(d / h.HANDOFF_FILE, (old, old))
+    (d / h.REPORT_FILE).write_text("{}")
+    (d / h.DONE_FILE).write_text("{}")
+    os.utime(d / h.REPORT_FILE, (old + 60, old + 60))
+    floor = h.handoff_floor(d)
+    assert floor is not None and floor > old + 60
+    assert h.wait_for_file(d / h.HANDOFF_FILE, 0.5, 0.1, since=floor) is None
+    (d / h.HANDOFF_FILE).write_text((d / h.HANDOFF_FILE).read_text())  # the next run's handoff
+    assert h.wait_for_file(d / h.HANDOFF_FILE, 0.5, 0.1, since=floor) is not None
+
+
+def test_the_handoff_floor_env_overrides_the_leftover_scan(tmp_path, monkeypatch):
+    d = _handoff_dir(tmp_path)
+    monkeypatch.setenv(h.HANDOFF_SINCE_ENV, "1234.5")
+    assert h.handoff_floor(d) == 1234.5
 
 
 @pytest.mark.asyncio

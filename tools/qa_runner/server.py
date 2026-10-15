@@ -1068,13 +1068,14 @@ class APIServerManager:
                         "node, so the harness could never see the refusal reach its canonical"
                     )
                 # Fresh only: a directory an earlier harness run left behind must
-                # not be read as this run's handoff.
-                import time as _time
+                # not be read as this run's handoff. The harness may write it
+                # before we launch, so the floor is the leftovers, not our start.
+                from .modules.accord_halt_handoff import handoff_floor as _handoff_floor
 
-                launched = float(os.environ.setdefault("CIRIS_QA_HALT_LAUNCHED_AT", str(_time.time())))
-                if _wait_for_handoff(Path(handoff_dir) / HANDOFF_FILE, timeout_s=300.0, since=launched) is None:
+                floor = _handoff_floor(Path(handoff_dir))
+                if _wait_for_handoff(Path(handoff_dir) / HANDOFF_FILE, timeout_s=300.0, since=floor) is None:
                     raise SystemExit(
-                        f"accord_halt handoff: no {HANDOFF_FILE} written in {handoff_dir} within 300 s of launch"
+                        f"accord_halt handoff: no {HANDOFF_FILE} newer than {floor} in {handoff_dir} within 300 s"
                     )
                 _halt_handoff_env(env, Path(handoff_dir), Path(throwaway))
                 os.environ[TEE_DIR_ENV] = env["CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR"]

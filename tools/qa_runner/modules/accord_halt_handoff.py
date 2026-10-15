@@ -45,12 +45,16 @@ from typing import Any, Dict, List, Optional
 
 HANDOFF_DIR_ENV = "CIRIS_QA_HALT_HANDOFF_DIR"
 TEE_DIR_ENV = "CIRIS_QA_HALT_TEE_DIR"
+#: Epoch floor for accepting agent_handoff.json; overrides the leftover scan.
+HANDOFF_SINCE_ENV = "CIRIS_QA_HALT_HANDOFF_SINCE"
 
 HANDOFF_FILE = "agent_handoff.json"
 READY_FILE = "agent_ready.json"
 FIRED_FILE = "halt_fired.json"
 ACTED_FILE = "agent_acted.json"
 DONE_FILE = "done.json"
+#: The harness's own end-of-run summary; any copy present before the handoff is a previous run's.
+REPORT_FILE = "report.json"
 
 NODE_HALT_STATUS_URL = "http://127.0.0.1:4243/v1/accord/halt-status"
 REFUSAL_PREFIX = "accord_halt_in_effect:"
@@ -91,6 +95,27 @@ def is_fresh(path: Path, since: Optional[float]) -> bool:
         return path.exists() and (since is None or path.stat().st_mtime >= since)
     except OSError:
         return False
+
+
+def handoff_floor(handoff_dir: Path) -> Optional[float]:
+    """Oldest mtime agent_handoff.json may have and still be this run's.
+
+    The harness may write its handoff before the runner starts, so the floor is
+    not our launch time: it is "newer than anything a finished run left behind"
+    (its report, or any of the end-of-protocol files). An empty directory means
+    the harness cleared it for this run: any handoff counts. HANDOFF_SINCE_ENV
+    overrides both.
+    """
+    explicit = os.environ.get(HANDOFF_SINCE_ENV)
+    if explicit:
+        return float(explicit)
+    leftovers = []
+    for name in (REPORT_FILE, DONE_FILE, ACTED_FILE, FIRED_FILE, READY_FILE):
+        try:
+            leftovers.append((handoff_dir / name).stat().st_mtime)
+        except OSError:
+            continue
+    return max(leftovers) + 1e-3 if leftovers else None
 
 
 def wait_for_file(
@@ -197,9 +222,9 @@ class HandoffRun:
         self.console = console
         self.results: List[Dict[str, Any]] = []
         self.timeouts = {"fired": 600.0, "halted": 60.0, "trace": 120.0, "done": 900.0}
-        #: Harness files older than this run are a previous run's leftovers. The
-        #: runner's launch time (set by server.py) when there is one.
-        self.started_at = float(os.environ.get("CIRIS_QA_HALT_LAUNCHED_AT") or time.time())
+        #: halt_fired.json / done.json answer our agent_ready.json, so anything
+        #: older than our ready write is a previous run's. Set in run().
+        self.started_at = time.time()
 
     def _record(self, name: str, ok: bool, detail: Optional[str] = None) -> None:
         self.results.append({"test": name, "status": "✅ PASS" if ok else "❌ FAIL", "error": None if ok else detail})
@@ -258,6 +283,7 @@ class HandoffRun:
             return self.results
         self._record("No halt at start", await self._node_halted(http) is False)
 
+        self.started_at = time.time()
         write_json_atomic(self.dir / READY_FILE, {"agent_id_hash": agent_id_hash, "token": self.token})
         fired = await self._keep_busy_until_fired(http)
         invocation_id = str((fired or {}).get("invocation_id") or "")
@@ -318,12 +344,14 @@ __all__ = [
     "DONE_FILE",
     "FIRED_FILE",
     "HANDOFF_DIR_ENV",
+    "HANDOFF_SINCE_ENV",
     "HandoffRun",
     "NO_IN_FLIGHT_ACT",
     "REFUSED_IN_FLIGHT_ACT",
     "READY_FILE",
     "TEE_DIR_ENV",
     "find_refusal_trace",
+    "handoff_floor",
     "load_handoff",
     "prepare_server_env",
     "test_anchor_compiled",

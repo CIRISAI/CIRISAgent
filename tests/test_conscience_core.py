@@ -254,7 +254,10 @@ class TestEntropyConscience:
         action_speak,
         context_with_thought,
     ):
-        """Test that unavailable sink returns WARNING"""
+        """An unavailable sink FAILS CLOSED as DID NOT RUN (CIRISAgent#1247).
+
+        It used to return passed=True / WARNING -- "allowing action": a safety
+        check that could not run waved the action through."""
         # Create mock sink that returns None (simulating unavailable)
         mock_sink = Mock()
         mock_sink_manager = Mock()
@@ -271,8 +274,10 @@ class TestEntropyConscience:
 
         result = await conscience.check(action_speak, context_with_thought)
 
-        assert result.passed is True
-        assert result.status == ConscienceStatus.WARNING
+        assert result.passed is False
+        assert result.check_ran is False
+        assert result.status == ConscienceStatus.ERROR
+        assert "DID NOT RUN" in (result.reason or "")
         assert "unavailable" in result.reason.lower()
 
     @pytest.mark.asyncio
@@ -686,7 +691,7 @@ class TestOptimizationVetoConscience:
         action_speak,
         context_with_thought,
     ):
-        """Test that LLM errors fail safe (abort)"""
+        """Test that LLM errors fail safe (closed, as DID NOT RUN)"""
         mock_sink_with_llm.llm.call_llm_structured.side_effect = Exception("LLM error")
 
         conscience = OptimizationVetoConscience(
@@ -698,8 +703,11 @@ class TestOptimizationVetoConscience:
 
         result = await conscience.check(action_speak, context_with_thought)
 
+        # Fail closed, but as DID NOT RUN -- not a fabricated "abort" verdict
+        # with check_ran=True that read as a judgement (#1247).
         assert result.passed is False
-        assert result.optimization_veto_check.decision == "abort"
+        assert result.check_ran is False
+        assert "DID NOT RUN" in (result.reason or "")
 
     def test_create_optimization_veto_messages(self, mock_service_registry, conscience_config, mock_time_service):
         """Test _create_optimization_veto_messages generates proper messages"""
@@ -846,7 +854,7 @@ class TestEpistemicHumilityConscience:
         action_speak,
         context_with_thought,
     ):
-        """Test that LLM errors fail safe (abort)"""
+        """Test that LLM errors fail safe (closed, as DID NOT RUN)"""
         mock_sink_with_llm.llm.call_llm_structured.side_effect = Exception("LLM error")
 
         conscience = EpistemicHumilityConscience(
@@ -858,8 +866,11 @@ class TestEpistemicHumilityConscience:
 
         result = await conscience.check(action_speak, context_with_thought)
 
+        # Fail closed, but as DID NOT RUN -- not a fabricated "abort" verdict
+        # with check_ran=True that read as a judgement (#1247).
         assert result.passed is False
-        assert result.epistemic_humility_check.recommended_action == "abort"
+        assert result.check_ran is False
+        assert "DID NOT RUN" in (result.reason or "")
 
     def test_create_epistemic_humility_messages(self, mock_service_registry, conscience_config, mock_time_service):
         """Test _create_epistemic_humility_messages generates proper messages"""

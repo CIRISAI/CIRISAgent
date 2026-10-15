@@ -82,6 +82,11 @@ class ServerManager:
         if not self.config.data_dir:
             self.config.data_dir = os.path.join(self.config.project_root, "data")
 
+    @property
+    def backend_home(self) -> str:
+        """The backend's CIRIS_HOME: an exported one wins over project_root (start_env's setdefault)."""
+        return os.environ.get("CIRIS_HOME") or str(self.config.project_root)
+
     def _find_project_root(self) -> str:
         """Find CIRIS project root directory."""
         # Try current working directory
@@ -292,7 +297,7 @@ class ServerManager:
             # .env THERE. The first version of this strip looked in project_root
             # and found nothing (run #34179671711: no "Stripped" line), which is
             # the wrong-file shape the per-launch-log fix had just closed.
-            effective_home = os.environ.get("CIRIS_HOME") or self.config.project_root
+            effective_home = self.backend_home
             env_path = os.path.join(effective_home, ".env")
             if os.path.exists(env_path):
                 with open(env_path, "r", encoding="utf-8", errors="replace") as f:

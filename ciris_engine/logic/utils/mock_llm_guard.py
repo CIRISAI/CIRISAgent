@@ -29,6 +29,12 @@ boot phases (edge init runs before the mock module loads):
 
 The latch can never be cleared. Once the mock has answered anything in this
 process, every later trace carries mock output.
+
+Because construction latches, the mock must be constructed ONLY on an explicit
+mock request. Adapter discovery (which instantiates services to read their
+tools) skips MOCK manifests for exactly this reason: in 2.15.0 the setup
+wizard's adapter listing built ``MockLLMService`` in live installs, latched the
+guard and refused every trace export of a real-provider runtime.
 """
 
 from __future__ import annotations

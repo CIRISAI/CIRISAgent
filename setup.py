@@ -26,7 +26,6 @@ from pathlib import Path
 
 from setuptools import find_packages, setup
 
-
 try:
     from wheel.bdist_wheel import bdist_wheel as _bdist_wheel
 except ImportError:
@@ -147,12 +146,12 @@ setup(
         "ciris_engine.data": [
             "localized/*.json",  # Backend localization files (copied from /localization/)
             "localized/*.txt",  # Localized ACCORD + comprehensive guide text files (guides
-                                # migrated from .md → .txt in 2.8.5 alongside the repo-root
-                                # and docs/ consolidation; staging script can now use a
-                                # clean .md=devnotes denylist)
+            # migrated from .md → .txt in 2.8.5 alongside the repo-root
+            # and docs/ consolidation; staging script can now use a
+            # clean .md=devnotes denylist)
             "agent_experience.txt",  # Agent self-help / introspection content (was at
-                                     # docs/agent_experience.md pre-2.8.5; CWD-relative
-                                     # reader broke on installs)
+            # docs/agent_experience.md pre-2.8.5; CWD-relative
+            # reader broke on installs)
             "geo/cities.db",  # GeoNames cities database for location typeahead
         ],
         "ciris_engine.config": [
@@ -176,15 +175,6 @@ setup(
         "ciris_engine.logic.persistence": [
             "migrations/sqlite/*.sql",  # SQLite database migrations
             "migrations/postgres/*.sql",  # PostgreSQL database migrations
-        ],
-        "ciris_engine.logic.accord": [
-            "bip39_english.txt",  # BIP39 wordlist used by accord/extractor.py
-                                   # for mnemonic generation. Load-bearing —
-                                   # extractor.py:49 reads from package dir
-                                   # via Path(__file__).parent. Wasn't shipped
-                                   # in 2.8.4 wheels (extractor fell through
-                                   # to /app/tools/security/bip39_english.txt
-                                   # which only exists in docker, breaks elsewhere).
         ],
         "ciris_engine": [
             "ciris_templates/*.yaml",  # Bundled agent identity templates

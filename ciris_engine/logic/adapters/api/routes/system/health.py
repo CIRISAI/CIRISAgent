@@ -777,6 +777,23 @@ def _edge_runtime_warnings() -> list[SystemWarning]:
     ]
 
 
+async def _node_unclaimed_warnings() -> list[SystemWarning]:
+    """The node has no owner, so the agent is held (EVERY NODE IS ALWAYS CLAIMED).
+
+    Says where the claim PIN is and which route claims the node, never the PIN.
+    """
+    try:
+        from ciris_engine.logic.utils.node_ownership import node_owned
+        from ciris_engine.schemas.runtime.node_ownership import NODE_UNCLAIMED_ERROR
+
+        ownership = await node_owned()
+    except Exception:  # noqa: BLE001 -- health must answer
+        return []
+    if not ownership.unclaimed:
+        return []
+    return [SystemWarning(code=NODE_UNCLAIMED_ERROR, message=ownership.unclaimed_message(), severity="error")]
+
+
 async def collect_system_warnings(request: Request, can_manage: bool = True) -> tuple[bool, list[SystemWarning]]:
     """Collect system-level warnings and check degraded mode.
 
@@ -795,6 +812,7 @@ async def collect_system_warnings(request: Request, can_manage: bool = True) -> 
     warnings.extend(_rejected_wakeup_warnings(request))
     warnings.extend(_claim_persistence_warnings(request))
     warnings.extend(_edge_runtime_warnings())
+    warnings.extend(await _node_unclaimed_warnings())
     return not has_working_llm, warnings
 
 
@@ -890,8 +908,16 @@ async def get_system_health(
     # agent's address so it needs only one.
     node_fold_state = collect_node_fold_state()
 
+    # The same read the act gate makes. A standing halt is not ill health — the
+    # node keeps serving and every read endpoint answers — so `status` is left
+    # alone and the halt is reported as its own fact.
+    from ciris_engine.logic.utils.halt_latch import read_halt_latch
+
+    accord_halt = await read_halt_latch()
+
     response = SystemHealthResponse(
         status=status,
+        accord_halt=accord_halt,
         # We are the brain. Say so — never make a client infer it.
         role="agent",
         version=CIRIS_VERSION,

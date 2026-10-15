@@ -7,11 +7,13 @@ import logging
 import uuid
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, cast
 
+from ciris_engine.logic.utils.halt_latch import bus_backstop
 from ciris_engine.logic.utils.jsondict_helpers import get_int, get_list, get_str
 from ciris_engine.protocols.services import ToolService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.adapters.tools import ToolExecutionResult, ToolExecutionStatus, ToolInfo
 from ciris_engine.schemas.infrastructure.base import BusMetrics
+from ciris_engine.schemas.runtime.accord_halt import BusBackstopCall
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.task_envelope import ToolInvocationSubject
 from ciris_engine.schemas.types import JSONDict
@@ -267,6 +269,18 @@ class ToolBus(BaseBus[ToolService]):
         the caller, so adapter-scoped enrichment routing is preserved exactly.
         """
         self._note_subject(tool_name, handler_name, subject)
+        # CC 4.2.1.1 backstop, here so both paths inherit it: no tool runs for
+        # the reasoning loop under a halt — the enrichment tools included.
+        halt = await bus_backstop(BusBackstopCall.TOOL_EXECUTE)
+        if halt is not None:
+            return ToolExecutionResult(
+                tool_name=tool_name,
+                status=ToolExecutionStatus.UNAUTHORIZED,
+                success=False,
+                data=None,
+                error=halt.refusal_reason(),
+                correlation_id=str(uuid.uuid4()),
+            )
         try:
             logger.debug(f"Executing tool '{tool_name}' with {type(service).__name__}")
             # Providers are async per ToolServiceProtocol, but the

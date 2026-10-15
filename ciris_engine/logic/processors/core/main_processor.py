@@ -14,6 +14,8 @@ from ciris_engine.logic.processors.core.thought_processor import ThoughtProcesso
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.services.infrastructure.resource_monitor.pressure import pressure_gate_of
 from ciris_engine.logic.utils.context_utils import build_dispatch_context
+from ciris_engine.logic.utils.halt_latch import hold_tick, read_halt_latch
+from ciris_engine.logic.utils.node_ownership import hold_until_node_owned
 from ciris_engine.logic.utils.shutdown_manager import (
     get_global_shutdown_reason,
     is_global_shutdown_requested,
@@ -282,6 +284,12 @@ class AgentProcessor:
             self._stop_event.clear()
         logger.info(f"Starting agent processing (rounds: {num_rounds or 'infinite'})")
 
+        # EVERY NODE IS ALWAYS CLAIMED: no WAKEUP or WORK on an unowned node.
+        # Held here, re-reading on a tick, until the deployer claims it.
+        if not await hold_until_node_owned(self._stop_event):
+            logger.info("Stopped while held on an unowned node; the processor never started")
+            return
+
         # Determine startup target state based on cognitive behaviors
         # When wakeup is bypassed, transition directly to WORK (partnership model)
         startup_state = self.state_manager.startup_target_state
@@ -323,6 +331,16 @@ class AgentProcessor:
                 and not (self._stop_event is not None and self._stop_event.is_set())
                 and (num_rounds is None or self.current_round_number < num_rounds)
             ):
+                # CC 4.2.1.1: a standing constitutional halt holds wakeup too.
+                # Fail closed, so this also holds the boot window until the
+                # node answers. Nothing is created or advanced while held.
+                if await self._hold_for_accord_halt(let_shutdown_through=False):
+                    if is_global_shutdown_requested():
+                        logger.info("Shutdown requested while wakeup is held by a constitutional halt; stopping")
+                        await self.state_manager.transition_to(AgentState.SHUTDOWN)
+                        return
+                    continue
+
                 logger.info(f"Wakeup round {wakeup_round}")
 
                 wakeup_result = await self.wakeup_processor.process(wakeup_round)
@@ -848,6 +866,13 @@ class AgentProcessor:
         """
         logger.debug(f"[DEBUG] resume_processing() called, current _is_paused: {self._is_paused}")
 
+        # The halt is not an operator pause and no operator tier reaches it
+        # (CC 4.2.1.1): an operator resume under a standing halt is refused.
+        halt = await read_halt_latch()
+        if halt.halted:
+            logger.warning(f"Operator resume refused: {halt.refusal_reason()}")
+            return False
+
         if not self._is_paused:
             logger.info("AgentProcessor not paused")
             logger.debug(f"[DEBUG] Returning False from resume_processing, _is_paused: {self._is_paused}")
@@ -892,6 +917,11 @@ class AgentProcessor:
 
         if not self._is_paused:
             raise RuntimeError("Cannot single-step unless processor is paused")
+
+        # Single-step would advance a thought past the round hold (CC 4.2.1.1).
+        halt = await read_halt_latch()
+        if halt.halted:
+            raise RuntimeError(f"Cannot single-step under a constitutional halt ({halt.refusal_reason()})")
 
         if not self._pipeline_controller:
             raise RuntimeError("No pipeline controller available")
@@ -980,6 +1010,36 @@ class AgentProcessor:
             # Safety fallback - wait a bit and check again
             await asyncio.sleep(0.1)
             return False
+        return True
+
+    async def _hold_for_accord_halt(self, *, let_shutdown_through: bool) -> bool:
+        """Hold one round under a standing constitutional halt (CC 4.2.1.1).
+
+        Returns True when the round is held, after one hold tick. While held no
+        thought is picked up or advanced and no DMA or LLM call is made: thoughts
+        and tasks keep their status in the database, and the next round after the
+        halt ends re-deliberates them from there.
+
+        Separate from the operator pause (`_check_pause_state`), which an operator
+        may lift; nothing here can be lifted except by the node's latch.
+
+        `let_shutdown_through`: a shutdown still proceeds under the halt — anyone
+        may turn the agent off — and the shutdown processor reads the same latch
+        and skips the closing dialogue. A requested shutdown is moved to SHUTDOWN
+        here, inside the held round, because the ordinary path would first run
+        one more round of the state it is leaving.
+        """
+        halt = await read_halt_latch()
+        if not halt.halted:
+            return False
+        if let_shutdown_through:
+            current_state = self.state_manager.get_state()
+            if current_state == AgentState.SHUTDOWN:
+                return False
+            if is_global_shutdown_requested():
+                await self._handle_shutdown_transitions(current_state)
+                return True
+        await hold_tick(self._stop_event)
         return True
 
     async def _handle_shutdown_transitions(self, current_state: AgentState) -> bool:
@@ -1206,6 +1266,11 @@ class AgentProcessor:
 
         # ACCORD COMPLIANCE: Check pause state before processing
         if not await self._check_pause_state():
+            return round_count, consecutive_errors, False
+
+        # CC 4.2.1.1: a standing constitutional halt holds the round. The round
+        # number does not advance and nothing runs.
+        if await self._hold_for_accord_halt(let_shutdown_through=True):
             return round_count, consecutive_errors, False
 
         # Update round number

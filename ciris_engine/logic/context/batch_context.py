@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.infrastructure.authorization.envelope_reader import resolve_envelope_for_task_id
+from ciris_engine.logic.utils.halt_latch import accord_pause_notice
 from ciris_engine.schemas.infrastructure.identity_variance import IdentityData
 from ciris_engine.schemas.runtime.models import Task
 from ciris_engine.schemas.runtime.system_context import ContinuitySummary, SystemSnapshot, TaskSummary, TelemetrySummary
@@ -887,6 +888,7 @@ async def build_system_snapshot_with_batch(
         service_health=batch_data.service_health,
         circuit_breaker_status=batch_data.circuit_breaker_status,
         resource_alerts=batch_data.resource_alerts,
+        accord_pause_notice=accord_pause_notice(),
         # Runtime context
         cognitive_state=cognitive_state,
         shutdown_context=batch_data.shutdown_context,

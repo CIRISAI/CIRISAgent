@@ -35,8 +35,8 @@ logger = logging.getLogger(__name__)
 # Create router without prefix - this is mounted at root level
 router = APIRouter(tags=["emergency"])
 
-# #998/#999 — this route's authority comes from the ACCORD VERIFIER, the same
-# trust root the stego kill switch and the service layer use.
+# #998/#999 — this route's authority comes from EmergencyAuthorities
+# (accord/authorities.py), the same trust root the service layer uses.
 #
 # It used to carry its own hardcoded list, commented "Root WA key from
 # ~/.ciris/wa_keys/root_wa_metadata.json". That key was
@@ -191,9 +191,9 @@ def is_authorized_key(public_key: str) -> bool:
     Returns:
         True if key is authorized
     """
-    from ciris_engine.logic.accord.verifier import AccordVerifier
+    from ciris_engine.logic.accord.authorities import EmergencyAuthorities
 
-    verifier = AccordVerifier()
+    verifier = EmergencyAuthorities()
     for authority in verifier.list_authorities():
         if verifier.public_key_for(authority["wa_id"]) == _decode_b64_key(public_key):
             return True

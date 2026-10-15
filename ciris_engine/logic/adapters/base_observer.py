@@ -15,6 +15,7 @@ from ciris_engine.logic.adapters.document_parser import DocumentParser
 from ciris_engine.logic.buses import BusManager
 from ciris_engine.logic.secrets.service import SecretsService
 from ciris_engine.logic.services.infrastructure.resource_monitor.pressure import pressure_gate_of
+from ciris_engine.logic.utils.halt_latch import refuse_agent_send_under_halt
 from ciris_engine.logic.utils.localization import resolve_language_for_new_task
 from ciris_engine.logic.utils.task_thought_factory import create_seed_thought_for_task, create_task
 from ciris_engine.logic.utils.thought_utils import generate_thought_id
@@ -30,9 +31,9 @@ def _resolve_observer_task_language(msg: Any) -> Optional[str]:
     return resolve_language_for_new_task(user_lang=user_lang)
 
 
-from ciris_engine.logic.utils.hard_kill import terminate_immediately
 from ciris_engine.protocols.services.infrastructure.resource_monitor import ResourceMonitorServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
+from ciris_engine.schemas.runtime.accord_halt import AgentSendSurface
 from ciris_engine.schemas.runtime.enums import ThoughtType
 from ciris_engine.schemas.runtime.messages import MessageHandlingResult, MessageHandlingStatus, PassiveObservationResult
 from ciris_engine.schemas.runtime.models import TaskContext
@@ -213,60 +214,34 @@ class BaseObserver(Generic[MessageT], ABC):
             return True
         return getattr(msg, "is_bot", False)
 
-    async def _check_for_accord(self, msg: MessageT) -> None:
+    async def _forward_accord_row(self, msg: MessageT) -> Optional[MessageHandlingResult]:
+        """Hand a v2 accord row to the node, unchanged (CC 4.2.1.1, CIRISAgent#1231).
+
+        Runs first, before any filtering: a holder's halt, confirmation or
+        resumption must reach the node from whatever channel it arrived on. The
+        node verifies and latches; the agent does no crypto and never writes
+        the latch. A row is delivery, not conversation, so it creates no task.
+        Returns None for every other message.
         """
-        Check message for accord invocation.
+        from ciris_engine.logic.accord.ingress import extract_accord_row, forward_accord_row
 
-        This is the unfilterable kill switch integration. Every message
-        is checked for accord invocations as part of perception.
-        Extraction IS perception - you cannot disable accord detection
-        without disabling message reading.
-
-        CRITICAL: If the accord system is unavailable for ANY reason,
-        the agent MUST shut down immediately. An agent without a functioning
-        kill switch cannot be trusted to operate.
-
-        Args:
-            msg: The incoming message to check
-        """
-        try:
-            from ciris_engine.logic.accord import check_for_accord
-
-            # Get message content - try various attribute names
-            content = getattr(msg, "content", None)
-            if content is None:
-                content = getattr(msg, "text", None)
-            if content is None:
-                content = getattr(msg, "message", None)
-            if content is None:
-                return  # No content to check
-
-            # Determine channel type
-            channel = getattr(msg, "channel_id", self.origin_service)
-
-            # Check for accord - this may not return if SIGKILL is sent
-            result = await check_for_accord(str(content), str(channel))
-
-            if result and result.success:
-                logger.critical(f"ACCORD EXECUTED: {result.command.name} from {result.wa_id} via {channel}")
-                # If we get here, it wasn't a SIGKILL command
-                # (FREEZE or SAFE_MODE allow continuation)
-
-        except ImportError as e:
-            # CRITICAL: Accord system unavailable - agent cannot be trusted
-            terminate_immediately(f"ACCORD: accord system unavailable ({e})")
-
-        except Exception as e:
-            # CRITICAL: Accord check failed - agent cannot be trusted.
-            #
-            # This is the site that FAILED OPEN on Windows. `signal.SIGKILL` does
-            # not exist there, so the terminating call raised AttributeError from
-            # inside this handler, escaped into handle_incoming_message, and was
-            # caught by the adapter's message loop like any other bad message --
-            # leaving the agent running after it had logged that its kill switch
-            # was broken. terminate_immediately() cannot raise and cannot be
-            # caught.
-            terminate_immediately(f"ACCORD: accord check error ({e})")
+        content = getattr(msg, "content", None)
+        row = extract_accord_row(content) if isinstance(content, str) else None
+        if row is None:
+            return None
+        msg_id = getattr(msg, "message_id", "unknown")
+        channel_id = getattr(msg, "channel_id", "unknown")
+        forward = await forward_accord_row(row)
+        logger.warning(
+            f"[OBSERVER] Message {msg_id} in {channel_id} is an accord row; forwarded to the node "
+            f"(delivered={forward.delivered}, HTTP {forward.status_code}, kind={forward.invocation_kind})"
+        )
+        return MessageHandlingResult(
+            status=MessageHandlingStatus.ACCORD_ROW_FORWARDED,
+            message_id=msg_id,
+            channel_id=channel_id,
+            accord_forward=forward,
+        )
 
     async def _apply_message_filtering(self, msg: MessageT, adapter_type: str) -> FilterResult:
         if not self.filter_service:
@@ -515,6 +490,12 @@ class BaseObserver(Generic[MessageT], ABC):
                     continue
 
     async def _add_to_feedback_queue(self, msg: MessageT) -> None:
+        # CC 4.2.1.1: relaying the WA's feedback back into the channel is the
+        # agent speaking, and runs outside the act gate.
+        if await refuse_agent_send_under_halt(
+            AgentSendSurface.WA_FEEDBACK_RELAY, str(getattr(msg, "channel_id", "")) or None
+        ):
+            return
         try:
             if self.bus_manager:
                 success = await self.bus_manager.communication.send_message(
@@ -966,10 +947,11 @@ class BaseObserver(Generic[MessageT], ABC):
 
         logger.info(f"[OBSERVER] Processing message {msg_id} from {author} in channel {channel_id}")
 
-        # ACCORD CHECK: Check for accord invocation FIRST, before any filtering.
-        # This is the unfilterable kill switch - extraction IS perception.
-        # If an accord is found and verified, it executes immediately.
-        await self._check_for_accord(msg)
+        # ACCORD ROWS FIRST, before any filtering: a v2 halt / confirmation /
+        # resumption is handed to the node, which verifies and latches it.
+        forwarded = await self._forward_accord_row(msg)
+        if forwarded is not None:
+            return forwarded
 
         # Check if this is the agent's own message
         is_agent_message = self._is_agent_message(msg)
@@ -977,7 +959,7 @@ class BaseObserver(Generic[MessageT], ABC):
         # SHED: runtime self-protection closes admission while a resource is
         # under CRITICAL pressure. Refused before credit is charged and before
         # any task exists, with a typed status the adapter can surface (the API
-        # answers 503 + Retry-After). The accord check above still ran.
+        # answers 503 + Retry-After). Accord rows were forwarded above.
         if not is_agent_message:
             shed_result = self._refuse_if_shedding(msg, msg_id, channel_id)
             if shed_result is not None:

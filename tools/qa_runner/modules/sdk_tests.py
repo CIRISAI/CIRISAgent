@@ -11,12 +11,12 @@ class SDKTestModule:
     """Test module for SDK operations."""
 
     @staticmethod
-    def get_sdk_tests(admin_username: str = "jeff", admin_password: str = "__DYNAMIC__") -> List[QATestCase]:
+    def get_sdk_tests(admin_username: str = "qa-harness-user", admin_password: str = "__DYNAMIC__") -> List[QATestCase]:
         """Get SDK test cases.
 
         Args:
             admin_username: The admin username to use for login tests.
-                            Defaults to "jeff" (QA runner default).
+                            Defaults to "qa-harness-user" (QA runner default).
             admin_password: The admin password to use for login tests.
                             Defaults to "__DYNAMIC__" which should be replaced
                             by the QA runner with the actual password.

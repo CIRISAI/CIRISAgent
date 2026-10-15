@@ -24,7 +24,7 @@ Development, QA, security, and operational tooling for the CIRIS platform.
 | `dev/` | Dev workflow — `bump_version.py`, `grace_precommit.py`, `generate_protocols.py`, CI check scripts |
 | `ops/` | Deployment — `deploy.sh`, `check_deployment.py`, `register_agent_build.py`, Prometheus metrics |
 | `quality/` | Code quality — `audit_dict_any_usage.py`, `analyze_orphans.py`, `validate_prod_routes.py` |
-| `security/` | Accord crypto — `accord_invoke.py` (kill switch), `accord_keygen.py`, `accord_stego.py`, WA keypair generation |
+| `security/` | WA keypair generation and signing (the legacy stego kill-switch tools are retired, #1231) |
 | `templates/` | Template manifest generation and validation |
 | `testing/` | Quick API auth test scripts (bash + python) |
 

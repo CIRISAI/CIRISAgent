@@ -104,12 +104,12 @@ Available modules:
   sdk             - SDK tests
   pause_step      - Enhanced single-step/pause debugging
   single_step_comprehensive - Complete 17-phase ACCORD single-step validation
-  accord        - Accord invocation system (kill switch) tests
   accord_metrics - Accord metrics trace capture and signing
   homeassistant_agentic - Live Home Assistant configuration and Music Assistant verification
   deferral_taxonomy - DSASPDMA taxonomy coverage and localized deferral classification
   licensed_agent  - Licensed agent device auth (RFC 8628) flow testing
   model_eval      - Model quality evaluation with tough questions (requires --live)
+  accord_halt     - CC 4.2.1.1 constitutional halt end to end against the real node (direct-latch mode in a throwaway CIRIS_HOME; needs ciris-server >= 0.5.226, else skips; not in ALL)
   mesh_repro      - CIRISServer traceflow harness as an agent QA gate (+ prod-wheel test-anchor guard; needs $CIRIS_SERVER_REPO checkout + docker, else skips)
   api_full        - All API modules
   handlers_full   - All handler modules
@@ -260,7 +260,9 @@ Available modules:
     )
 
     # Authentication
-    parser.add_argument("--username", default="jeff", help="Test username (default: jeff)")
+    parser.add_argument(
+        "--username", default="qa-harness-user", help="Setup user who claims the node (default: qa-harness-user)"
+    )
     parser.add_argument(
         "--password",
         default="__auto_detect__",

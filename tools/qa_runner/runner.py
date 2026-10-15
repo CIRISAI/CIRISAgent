@@ -560,6 +560,7 @@ class QARunner:
             QAModule.SECRETS_ENCRYPTION,
             QAModule.MEMORY_BENCHMARK,
             QAModule.MESH_REPRO,
+            QAModule.ACCORD_HALT,
         ]
         http_modules = [m for m in modules if m not in sdk_modules]
         sdk_test_modules = [m for m in modules if m in sdk_modules]
@@ -659,36 +660,6 @@ class QARunner:
                 )
             else:
                 self.console.print("[green][OK] Multi-occurrence integration test passed![/green]")
-
-        # Run ACCORD tests if requested (standalone - no server needed)
-        if QAModule.ACCORD in modules:
-            from .modules.accord_tests import AccordTestModule
-
-            self.console.print("\n" + "=" * 80)
-            self.console.print("[bold cyan] RUNNING ACCORD INVOCATION SYSTEM TESTS[/bold cyan]")
-            self.console.print("=" * 80)
-
-            accord_module = AccordTestModule()
-            accord_results = accord_module.run_all_tests()
-
-            # Store results
-            accord_passed = 0
-            accord_failed = 0
-            for result in accord_results:
-                test_key = f"accord::{result.name}"
-                self.results[test_key] = {
-                    "success": result.passed,
-                    "status": "✅ PASS" if result.passed else "❌ FAIL",
-                    "error": None if result.passed else result.message,
-                    "duration": result.duration,
-                }
-                if result.passed:
-                    accord_passed += 1
-                else:
-                    accord_failed += 1
-                    success = False
-
-            self.console.print(f"\n[cyan]Accord tests: {accord_passed} passed, {accord_failed} failed[/cyan]")
 
         # Run SDK-based tests
         if sdk_test_modules:
@@ -1716,6 +1687,7 @@ class QARunner:
             MessageIDDebugTests,
             PartnershipTests,
         )
+        from .modules.accord_halt_tests import AccordHaltTests
         from .modules.accord_metrics_tests import AccordMetricsTests
         from .modules.adapter_autoload_tests import AdapterAutoloadTests
         from .modules.adapter_availability_tests import AdapterAvailabilityTests
@@ -1803,6 +1775,7 @@ class QARunner:
             QAModule.SECRETS_ENCRYPTION: SecretsEncryptionTests,
             QAModule.MEMORY_BENCHMARK: MemoryBenchmarkTests,
             QAModule.MESH_REPRO: MeshReproTests,
+            QAModule.ACCORD_HALT: AccordHaltTests,
         }
 
         async def run_module(module: QAModule, auth_token: Optional[str] = None):

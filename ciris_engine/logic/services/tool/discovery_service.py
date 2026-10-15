@@ -350,6 +350,8 @@ class AdapterDiscoveryService:
         """Check if manifest should be skipped during auto-load.
 
         Adapters are skipped if they have:
+        - MOCK=true (a mock module is loaded ONLY on an explicit mock request:
+          ``--mock-llm``, ``CIRIS_MOCK_LLM`` or an operator load; never by discovery)
         - auto_load=False (require explicit enablement via setup wizard)
         - requires_consent=True (require user consent)
         - opt_in_required=True (require explicit opt-in)
@@ -361,6 +363,14 @@ class AdapterDiscoveryService:
             Skip reason string if should skip, None otherwise
         """
         module_name = manifest.module.name
+
+        # MOCK modules are never discovered (CIRISAgent#1244 regression, 2.15.0):
+        # discovery INSTANTIATES each service to read its tools, and constructing
+        # MockLLMService latches the mock-LLM trace guard for the whole process.
+        # A live install that merely listed adapters in the setup wizard (or ran
+        # one action-selection context build) then refused every trace export.
+        if getattr(manifest.module, "is_mock", False):
+            return f"MOCK module (loaded only on an explicit mock request): {module_name}"
 
         # Check auto_load flag (defaults to True if not specified)
         if hasattr(manifest.module, "auto_load") and not manifest.module.auto_load:
@@ -479,7 +489,18 @@ class AdapterDiscoveryService:
         deps: Dict[str, Any],
         adapter_name: str,
     ) -> Optional[Any]:
-        """Try to instantiate a service with deps, falling back to no-args."""
+        """Try to instantiate a service with deps, falling back to no-args.
+
+        Never instantiates a MOCK module: this is the one place discovery
+        constructs services, so it is the choke point for every discovery path
+        (listing, per-adapter eligibility, the action-selection installable-tools
+        cache, skill auto-load). See ``_should_skip_for_auto_load``.
+        """
+        if getattr(manifest.module, "is_mock", False):
+            self._record_enumeration_failure(
+                adapter_name, "it is a MOCK module, loaded only on an explicit mock request"
+            )
+            return None
         service_class = self.load_service_class(manifest, service_def.class_path)
         if not service_class:
             self._record_enumeration_failure(adapter_name, "its tool service class could not be imported")

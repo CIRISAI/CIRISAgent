@@ -678,6 +678,8 @@ def licensed_agent_command(args) -> int:
         poll_interval=args.interval,
         output_dir=args.output_dir,
         verbose=args.verbose,
+        device_serial=args.device,
+        package=args.package,
     )
 
 
@@ -1383,6 +1385,12 @@ Examples:
         "--api-url",
         default="http://localhost:8080",
         help="CIRIS API base URL (default: http://localhost:8080)",
+    )
+    la_parser.add_argument(
+        "--device", "-d", default=None, help="Device serial for reading the node's claim PIN (first device if omitted)"
+    )
+    la_parser.add_argument(
+        "--package", default="ai.ciris.mobile.debug", help="App package whose claim PIN is read with run-as"
     )
     la_parser.add_argument("--username", default="admin", help="Admin username to create")
     la_parser.add_argument("--password", default="qa_test_password_12345", help="Admin password to create")

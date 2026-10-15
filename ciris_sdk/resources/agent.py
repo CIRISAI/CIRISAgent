@@ -61,6 +61,8 @@ class InteractOutcome(str, Enum):
     COMPLETE = "complete"
     TIMEOUT = "timeout"
     PAUSED = "paused"
+    #: The task failed before it could answer; `response` is the error notice.
+    FAILED = "failed"
 
 
 class InteractResponse(BaseModel):
@@ -77,7 +79,8 @@ class InteractResponse(BaseModel):
     outcome: Union[InteractOutcome, str] = Field(
         InteractOutcome.COMPLETE,
         description="complete: response is the agent's reply; timeout: the server's deadline passed and "
-        "response is a placeholder; paused: processor paused, message queued",
+        "response is a placeholder; paused: processor paused, message queued; failed: the task failed "
+        "before answering and response is the error notice",
     )
 
     @property

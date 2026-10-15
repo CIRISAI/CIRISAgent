@@ -18,6 +18,7 @@ import ai.ciris.mobile.shared.config.CIRISConfig
 import ai.ciris.mobile.shared.platform.initDebugBundleExport
 import ai.ciris.mobile.shared.platform.initLocalDataWipe
 import ai.ciris.mobile.shared.platform.AppRestarter
+import ai.ciris.mobile.shared.platform.EnvFileUpdater
 import ai.ciris.mobile.shared.platform.PythonRuntime
 import ai.ciris.mobile.shared.localization.LocalizationResourceLoader
 import ai.ciris.mobile.shared.platform.initCellVizProbe
@@ -146,12 +147,13 @@ class MainActivity : ComponentActivity() {
                     startLogcatReader()
                 }
 
-                // FILE-based capture of the node's one-time ownership CLAIM PIN.
-                // The node writes its boot banner to log FILES (not the filtered
-                // logcat stream the reader above consumes), so tail those files so
-                // the PIN is latched even when logcat never carries the banner.
+                // The one-time ownership CLAIM PIN is a FILE on disk,
+                // `<CIRIS_HOME>/claim_pin`, never a log line. The shared client
+                // reads that file at claim time (PythonRuntime.readLocalClaimPin,
+                // CIRISClient#49). This only records whether the node minted one,
+                // so a first run that cannot claim is diagnosable from the log.
                 launch {
-                    tailNodeLogsForOwnership()
+                    watchClaimPinFile()
                 }
 
                 // Run network diagnostics to debug CIRISVerify connectivity
@@ -487,7 +489,7 @@ class MainActivity : ComponentActivity() {
                 }
 
                 val line = reader.readLine() ?: break
-                if (line.isNotBlank()) {
+                if (line.isNotBlank() && !isOwnershipBannerLine(line)) {
                     // Forward raw line through callback for ViewModel processing
                     // This enables slot-based UI tracking in StartupViewModel
                     PythonRuntime.forwardLogLine(line)
@@ -526,79 +528,68 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Resolve the directory the in-process ciris-server node writes its logs to.
-     * CIRIS_HOME is set by CirisVerify.setup() to `filesDir/ciris`; the node's
-     * logs (including the boot banner) live under `$CIRIS_HOME/logs`.
-     */
-    private fun resolveNodeLogsDir(): File {
-        val home = System.getenv("CIRIS_HOME")
-            ?.takeIf { it.isNotEmpty() }
-            ?.let { File(it) }
-            ?: File(filesDir, "ciris")
-        return File(home, "logs")
-    }
-
-    /**
-     * FILE-based fallback for capturing the node's one-time ownership CLAIM PIN.
+     * Record whether the node minted a one-time CLAIM PIN. Reads PRESENCE only.
      *
-     * The node emits its "OWNERSHIP UNCLAIMED" banner (carrying the one-time
-     * CLAIM PIN + NodeCode) at boot, but writes it to log FILES under
-     * `$CIRIS_HOME/logs` — NOT to the filtered logcat stream [startLogcatReader]
-     * consumes (that filter is `python.stdout/stderr` + `CIRISVerify` only). So a
-     * logcat-only capture misses the banner entirely. Here we tail the node's
-     * boot logs and feed each line through the SAME ownership parser
-     * ([PythonRuntime.scanFileLineForOwnership] → parseOwnershipBanner), so the
-     * PIN is latched from the file regardless of what logcat carried.
+     * DIRECT USER RULING: the claim PIN is a file on disk, never the log. The
+     * node writes it to `<CIRIS_HOME>/claim_pin` (0600) a few seconds after its
+     * health endpoint answers, and the shared client reads that file at claim
+     * time ([PythonRuntime.readLocalClaimPin]), resolving CIRIS_HOME through
+     * [EnvFileUpdater.getCirisHome]: the variable CirisVerify.setup() exports
+     * for the embedded runtime (`filesDir/ciris`). This watcher resolves it the
+     * same way so the two can never disagree about which file is meant.
      *
-     * Bounded + self-terminating: polls until the PIN is captured or a deadline
-     * elapses. The parser is idempotent (first match wins), so re-reading a file
-     * across polls is harmless.
+     * This shell never reads the PIN's value and never parses one out of a log.
+     * It used to tail latest.log, ciris-server.log and ciris_agent_* for the
+     * boot banner; that stopped working with CIRISAgent#1277 (agent echo
+     * removed) and CIRISServer#770 (banner value removed).
+     *
+     * An absent file at the deadline is a legitimate state, not something to
+     * wait out: a node that already has a ROOT (an upgraded install, or one
+     * already claimed) mints no PIN. Ownership then goes through owner login,
+     * and the client's claim step returns after its own bounded wait.
      */
-    private suspend fun tailNodeLogsForOwnership() = withContext(Dispatchers.IO) {
+    private suspend fun watchClaimPinFile() = withContext(Dispatchers.IO) {
         try {
-            val deadline = System.currentTimeMillis() + 120_000L
+            val deadline = System.currentTimeMillis() + CLAIM_PIN_WATCH_MS
             while (System.currentTimeMillis() < deadline) {
-                if (PythonRuntime.isClaimPinCaptured()) {
-                    Log.i(TAG, "Ownership CLAIM PIN captured — stopping node-log tail")
+                val home = EnvFileUpdater.getCirisHome()
+                if (home != null && File(home, CLAIM_PIN_FILE).isFile) {
+                    Log.i(TAG, "claim_pin file present under CIRIS_HOME: node is unclaimed and minted a one-time PIN")
                     return@withContext
-                }
-                val logsDir = resolveNodeLogsDir()
-                if (logsDir.isDirectory) {
-                    // Boot banner lands in the current/boot server logs; scan the
-                    // node's boot + rolling logs, newest first.
-                    val candidates = logsDir.listFiles { f ->
-                        f.isFile && (
-                            f.name == "latest.log" ||
-                            f.name.startsWith("ciris-server.log") ||
-                            f.name.startsWith("ciris_agent_")
-                        )
-                    }?.sortedByDescending { it.lastModified() } ?: emptyArray<File>().toList()
-
-                    for (f in candidates) {
-                        if (PythonRuntime.isClaimPinCaptured()) break
-                        try {
-                            f.bufferedReader().useLines { seq ->
-                                // Banner is early in the file; cap the scan so a
-                                // large rolling log never turns this into a hog.
-                                seq.take(20_000).forEach { line ->
-                                    if (line.isNotBlank()) {
-                                        PythonRuntime.scanFileLineForOwnership(line)
-                                    }
-                                }
-                            }
-                        } catch (e: Exception) {
-                            Log.d(TAG, "Node-log tail: read failed for ${f.name}: ${e.message}")
-                        }
-                    }
                 }
                 delay(1000)
             }
-            if (!PythonRuntime.isClaimPinCaptured()) {
-                Log.w(TAG, "Node-log ownership tail: CLAIM PIN not seen before deadline")
-            }
+            Log.i(
+                TAG,
+                "No claim_pin file under CIRIS_HOME after ${CLAIM_PIN_WATCH_MS / 1000}s: no PIN was minted " +
+                    "(the node already has a ROOT, e.g. upgraded or already claimed); ownership goes " +
+                    "through owner login, not a first-run PIN claim"
+            )
         } catch (e: Exception) {
-            Log.e(TAG, "Node-log ownership tail error: ${e.message}")
+            Log.e(TAG, "claim_pin watch error: ${e.message}")
         }
+    }
+
+    /**
+     * True for a line of the node's ownership banner: exactly the lines the
+     * shared client's banner parser (PythonRuntime.forwardLogLine ->
+     * parseOwnershipBanner) would scan for a CLAIM PIN. They are not forwarded,
+     * so Android never takes a PIN from a log, even from an older node that
+     * still prints one. The startup UI consumes SERVICE / prep / VERIFY lines,
+     * none of which carry these markers.
+     */
+    private fun isOwnershipBannerLine(line: String): Boolean =
+        OWNERSHIP_BANNER_MARKERS.any { line.contains(it, ignoreCase = true) }
+
+    private companion object {
+        /** The node's one-time claim PIN, relative to CIRIS_HOME. */
+        const val CLAIM_PIN_FILE = "claim_pin"
+
+        /** How long the presence watcher waits for the node to mint the PIN. */
+        const val CLAIM_PIN_WATCH_MS = 120_000L
+
+        /** The marker words parseOwnershipBanner treats as ownership context. */
+        val OWNERSHIP_BANNER_MARKERS = listOf("CLAIM PIN", "OWNERSHIP", "UNCLAIMED")
     }
 
     override fun onResume() {

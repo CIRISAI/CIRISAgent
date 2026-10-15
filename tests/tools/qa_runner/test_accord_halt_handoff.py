@@ -111,7 +111,10 @@ def test_find_refusal_trace(tmp_path):
 class FakeWorld:
     """The agent API, the agent's node, and the harness, wired together."""
 
-    def __init__(self, handoff_dir: Path, tee: Path, refusal_seals: bool) -> None:
+    def __init__(self, handoff_dir: Path, tee: Path, refusal_seals: bool, rounds_start: bool = True) -> None:
+        self.rounds_start = rounds_start
+        self.round_started = False
+        self.ready_after_round: Any = None
         self.dir = handoff_dir
         self.tee = tee
         self.refusal_seals = refusal_seals
@@ -125,6 +128,11 @@ class FakeWorld:
             return httpx.Response(200, json={"halted": self.halted, "lapsed": False})
         if url.endswith("/v1/system/runtime/delivery-receipt"):
             return httpx.Response(200, json={"data": {"agent_id_hash": "abcdef0123456789"}})
+        if url.endswith("/v1/system/runtime/reasoning-stream"):
+            if self.rounds_start and self.messages and not self.halted:
+                self.round_started = True
+                return httpx.Response(200, content=b'data: {"events": [{"event_type": "thought_start"}]}\n\n')
+            return httpx.Response(200, content=b": keepalive\n\n")
         if url.endswith("/v1/agent/message"):
             self.messages += 1
             if self.halted:
@@ -137,7 +145,11 @@ class FakeWorld:
         return httpx.Response(404)
 
     def harness(self) -> None:
-        ready = h.wait_for_file(self.dir / h.READY_FILE, 10.0, 0.05)
+        ready = h.wait_for_file(self.dir / h.READY_FILE, 10.0 if self.rounds_start else 2.0, 0.05)
+        if not self.rounds_start:
+            assert ready is None, "agent_ready must wait for a round"
+            return
+        self.ready_after_round = self.round_started
         assert ready and ready["agent_id_hash"] == "abcdef0123456789"
         time.sleep(0.3)
         self.halted = True  # one holder fired at the node; the in-flight act is refused and seals
@@ -150,7 +162,7 @@ class FakeWorld:
         h.write_json_atomic(self.dir / h.DONE_FILE, {"verdict": "pass" if acted.get("trace_id") else "fail"})
 
 
-async def _run(tmp_path: Path, refusal_seals: bool, stale_leftovers: bool = False):
+async def _run(tmp_path: Path, refusal_seals: bool, stale_leftovers: bool = False, rounds_start: bool = True):
     handoff_dir = _handoff_dir(tmp_path)
     if stale_leftovers:
         # What an earlier harness run leaves behind: it must not be read as this run's.
@@ -162,16 +174,17 @@ async def _run(tmp_path: Path, refusal_seals: bool, stale_leftovers: bool = Fals
             os.utime(handoff_dir / name, (old, old))
     tee = tmp_path / "home" / "tee"
     tee.mkdir(parents=True)
-    world = FakeWorld(handoff_dir, tee, refusal_seals)
+    world = FakeWorld(handoff_dir, tee, refusal_seals, rounds_start)
     harness = threading.Thread(target=world.harness, daemon=True)
     harness.start()
     run = h.HandoffRun("http://127.0.0.1:8080", "tok", handoff_dir, tee, Mock())
     run.KEEP_BUSY_EVERY_S = 0.1
-    run.timeouts = {"fired": 10.0, "halted": 5.0, "trace": 2.0, "done": 10.0}
+    run.timeouts = {"round": 1.5, "fired": 10.0, "halted": 5.0, "trace": 2.0, "done": 10.0}
     async with httpx.AsyncClient(transport=httpx.MockTransport(world.handler)) as http:
         results = await run.run(http)
     harness.join(5)
-    return results, world, json.loads((handoff_dir / h.ACTED_FILE).read_text())
+    acted_path = handoff_dir / h.ACTED_FILE
+    return results, world, json.loads(acted_path.read_text()) if acted_path.exists() else None
 
 
 @pytest.mark.asyncio
@@ -185,6 +198,7 @@ async def test_the_protocol_end_to_end(tmp_path):
         "outcome": h.REFUSED_IN_FLIGHT_ACT,
     }
     assert world.messages >= 1  # the agent was kept working until the halt
+    assert world.ready_after_round is True  # agent_ready went out only once a round was in flight
     assert len(world.interacts) == 1  # interact ONCE, after the halt
 
 
@@ -321,3 +335,12 @@ def test_a_previous_runs_agent_claimed_is_not_this_claim(tmp_path):
     old = time.time() - 600
     os.utime(d / h.CLAIMED_FILE, (old, old))
     assert h.claim_via_harness(d, home, pin_timeout_s=1, claim_timeout_s=0.5) is None
+
+
+@pytest.mark.asyncio
+async def test_agent_ready_waits_for_a_round_in_flight(tmp_path):
+    """CSD-129 run 3: ready written on submit let the halt beat the round to the thought."""
+    results, world, acted = await _run(tmp_path, refusal_seals=False, rounds_start=False)
+    assert world.messages == 1
+    assert any(r["test"] == "A round is in flight before agent_ready" and r["status"] == "❌ FAIL" for r in results)
+    assert not (tmp_path / "ciris-native-mesh-agent" / h.READY_FILE).exists() and acted is None

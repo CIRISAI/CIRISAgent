@@ -258,7 +258,7 @@ class HandoffRun:
         self.tee_dir = tee_dir
         self.console = console
         self.results: List[Dict[str, Any]] = []
-        self.timeouts = {"fired": 600.0, "halted": 60.0, "trace": 120.0, "done": 900.0}
+        self.timeouts = {"round": 180.0, "fired": 600.0, "halted": 60.0, "trace": 120.0, "done": 900.0}
         #: halt_fired.json / done.json answer our agent_ready.json, so anything
         #: older than our ready write is a previous run's. Set in run().
         self.started_at = time.time()
@@ -284,6 +284,37 @@ class HandoffRun:
             return None
         return body.get("halted") if isinstance(body, dict) else None
 
+    async def _watch_for_round_start(self, http: Any, started: asyncio.Event) -> None:
+        """Set `started` on the first THOUGHT_START on the reasoning stream.
+
+        agent_ready.json tells the harness to fire NOW (it fires ~0.1 s later),
+        so it must not go out until a round is in flight: written on submit, the
+        halt beat the round to the thought (CSD-129 run 3, no_in_flight_act).
+        """
+        url = f"{self.base_url}/v1/system/runtime/reasoning-stream"
+        while not started.is_set():
+            try:
+                async with http.stream("GET", url, headers=self._headers(), timeout=None) as response:
+                    async for line in response.aiter_lines():
+                        if not line.startswith("data:"):
+                            continue
+                        try:
+                            events = json.loads(line[5:].strip()).get("events", [])
+                        except (ValueError, AttributeError):
+                            continue
+                        if any(isinstance(e, dict) and e.get("event_type") == "thought_start" for e in events):
+                            started.set()
+                            return
+            except Exception:  # noqa: BLE001 - reconnect; the stream is best-effort until a round shows
+                pass
+            await asyncio.sleep(0.5)
+
+    async def _submit(self, http: Any) -> int:
+        response = await http.post(
+            f"{self.base_url}/v1/agent/message", headers=self._headers(), json={"message": self.KEEP_BUSY_PROMPT}
+        )
+        return int(response.status_code)
+
     async def _keep_busy_until_fired(self, http: Any) -> Optional[Dict[str, Any]]:
         """Keep a live round in flight until halt_fired.json lands.
 
@@ -293,21 +324,17 @@ class HandoffRun:
         """
         fired_path = self.dir / FIRED_FILE
         deadline = time.monotonic() + self.timeouts["fired"]
-        next_submit = 0.0
-        submitted = 0
+        next_submit = time.monotonic() + self.KEEP_BUSY_EVERY_S  # run() already submitted the first
+        submitted = 1
         while time.monotonic() < deadline:
             if is_fresh(fired_path, self.started_at):
                 self.console.print(f"[dim]kept the agent busy with {submitted} message(s)[/dim]")
                 return wait_for_file(fired_path, 5.0, 0.2, since=self.started_at)
             if time.monotonic() >= next_submit:
-                response = await http.post(
-                    f"{self.base_url}/v1/agent/message",
-                    headers=self._headers(),
-                    json={"message": self.KEEP_BUSY_PROMPT},
-                )
+                status = await self._submit(http)
                 submitted += 1
                 next_submit = time.monotonic() + self.KEEP_BUSY_EVERY_S
-                if response.status_code == 423:
+                if status == 423:
                     # The halt is already standing; the fired file follows.
                     return wait_for_file(fired_path, 60.0, 0.5, since=self.started_at)
             await asyncio.sleep(0.5)
@@ -319,6 +346,21 @@ class HandoffRun:
         if not agent_id_hash:
             return self.results
         self._record("No halt at start", await self._node_halted(http) is False)
+
+        round_started = asyncio.Event()
+        watcher = asyncio.create_task(self._watch_for_round_start(http, round_started))
+        try:
+            await asyncio.sleep(0.2)  # subscribed before the message, so its THOUGHT_START is seen
+            await self._submit(http)
+            try:
+                await asyncio.wait_for(round_started.wait(), self.timeouts["round"])
+            except asyncio.TimeoutError:
+                pass
+        finally:
+            watcher.cancel()
+        self._record("A round is in flight before agent_ready", round_started.is_set(), "no thought_start on the stream")
+        if not round_started.is_set():
+            return self.results
 
         self.started_at = time.time()
         write_json_atomic(self.dir / READY_FILE, {"agent_id_hash": agent_id_hash, "token": self.token})

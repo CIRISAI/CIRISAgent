@@ -19,7 +19,7 @@ from ciris_engine.logic.setup.wizard import create_env_file
 from ciris_engine.logic.utils.env_file import env_line
 from ciris_engine.logic.utils.node_ownership import claim_pin_file, node_owned
 from ciris_engine.schemas.api.responses import SuccessResponse
-from ciris_engine.schemas.runtime.node_ownership import CLAIM_ROUTE, NODE_UNCLAIMED_ERROR
+from ciris_engine.schemas.runtime.node_ownership import CLAIM_ROUTE, NODE_UNCLAIMED_ERROR, UPGRADE_CLAIM_ROUTES
 
 from .._common import RESPONSES_400_403_500
 from .dependencies import SetupOnlyDep
@@ -1736,6 +1736,7 @@ async def complete_setup(
                 "message": f"{NODE_UNCLAIMED_ERROR}: claim the node first. {refusal}",
                 "claim_pin_file": claim_pin_file(),
                 "claim_route": CLAIM_ROUTE,
+                "upgrade_claim_routes": list(UPGRADE_CLAIM_ROUTES),
             },
         )
     except Exception as e:

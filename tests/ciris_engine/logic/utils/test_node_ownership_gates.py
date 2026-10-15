@@ -316,6 +316,8 @@ async def test_unowned_intake_is_423_node_unclaimed(node: Node, monkeypatch: pyt
     assert exc.value.status_code == 423
     assert exc.value.detail["error"] == NODE_UNCLAIMED_ERROR
     assert exc.value.detail["claim_pin_file"].endswith("claim_pin")
+    assert exc.value.detail["upgrade_claim_routes"] == ["POST /v1/self/identity", "POST /v1/self/upgrade-owner"]
+    assert "/v1/self/upgrade-owner" in exc.value.detail["message"]
     created.assert_not_awaited()
 
 
@@ -418,8 +420,10 @@ async def test_unowned_an_act_is_refused_recorded_and_traced(
 
     handler.handle.assert_not_awaited()
     assert response.success is False
-    assert response.action_parameters["refused"] == NODE_UNCLAIMED_ERROR
-    assert audit.log_action.await_args.kwargs["outcome"] == f"refused:{NODE_UNCLAIMED_ERROR}"
+    assert response.error == f"{NODE_UNCLAIMED_ERROR}:unowned"
+    assert response.action_parameters["node_ownership_reading"] == "unowned"
+    assert audit.log_action.await_args.kwargs["outcome"] == f"refused:{NODE_UNCLAIMED_ERROR}:unowned"
+    assert audit.log_action.await_args.kwargs["context"].parameters["refused"] == NODE_UNCLAIMED_ERROR
     assert action_results == [response], "a refused act emits exactly one terminal ACTION_RESULT"
     assert thought_status == [("th-1", ThoughtStatus.PENDING)]
 
@@ -433,7 +437,7 @@ async def test_owned_the_act_runs(
     response = await dispatcher.dispatch(_speak(), _thought(), _ctx())
     handler.handle.assert_awaited_once()
     assert response.success is True
-    assert "refused" not in response.action_parameters
+    assert response.error is None
 
 
 # --------------------------------------------------------------------------- setup completion
@@ -483,6 +487,7 @@ async def test_unowned_setup_complete_is_409_and_mints_no_root(node: Node, setup
     assert exc.value.status_code == 409
     assert exc.value.detail["error"] == NODE_UNCLAIMED_ERROR
     assert exc.value.detail["message"].startswith("node_unclaimed: claim the node first")
+    assert exc.value.detail["upgrade_claim_routes"] == ["POST /v1/self/identity", "POST /v1/self/upgrade-owner"]
     setup_rig.users.assert_not_awaited()
     assert not setup_rig.config.exists(), "the refused setup is rolled back, so the next attempt is still first-run"
 
@@ -503,7 +508,9 @@ async def test_owned_setup_complete_creates_users(node: Node, setup_rig: SimpleN
 async def test_health_names_what_is_missing(node: Node) -> None:
     warnings = await health._node_unclaimed_warnings()
     assert [w.code for w in warnings] == [NODE_UNCLAIMED_ERROR]
-    assert "claim_pin" in warnings[0].message and "/v1/setup/claim-remote" in warnings[0].message
+    message = warnings[0].message
+    assert "claim_pin" in message and "/v1/setup/claim-remote" in message
+    assert message.index("/v1/self/identity") < message.index("/v1/self/upgrade-owner"), "both claim paths, in order"
     node.own()
     assert await health._node_unclaimed_warnings() == []
 

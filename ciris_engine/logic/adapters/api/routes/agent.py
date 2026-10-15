@@ -1001,6 +1001,7 @@ async def _raise_if_node_unclaimed() -> None:
             "message": ownership.unclaimed_message(),
             "claim_pin_file": ownership.claim_pin_file,
             "claim_route": ownership.claim_route,
+            "upgrade_claim_routes": ownership.upgrade_claim_routes,
             "reading": ownership.reading.value,
         },
     )

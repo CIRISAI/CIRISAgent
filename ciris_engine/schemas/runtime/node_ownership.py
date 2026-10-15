@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -21,8 +21,13 @@ NODE_UNCLAIMED_ERROR = "node_unclaimed"
 #: relative to CIRIS_HOME. The location is said out loud; the PIN never is.
 CLAIM_PIN_FILE_NAME = "claim_pin"
 
-#: The node route that claims it with that PIN (what the wizard and CIRISManager post).
+#: A FRESH node: the route that claims it with that PIN (what the wizard and CIRISManager post).
 CLAIM_ROUTE = "POST /v1/setup/claim-remote"
+
+#: An UPGRADED node that already has a ROOT: setup/root is closed and the node
+#: mints no PIN, so the existing owner, signed in, mints a federation ID and
+#: re-roots the node on a fed-ID owner-binding, in this order.
+UPGRADE_CLAIM_ROUTES = ("POST /v1/self/identity", "POST /v1/self/upgrade-owner")
 
 
 class NodeOwnershipReading(str, Enum):
@@ -51,7 +56,11 @@ class NodeOwnership(BaseModel):
     read_error: Optional[str] = Field(None, description="Why the read could not tell, when it could not")
     read_at: datetime
     claim_pin_file: str = Field(..., description="Where the node writes its claim PIN (the location, never the PIN)")
-    claim_route: str = Field(CLAIM_ROUTE, description="The node route that claims it")
+    claim_route: str = Field(CLAIM_ROUTE, description="The route that claims a fresh node with the PIN")
+    upgrade_claim_routes: List[str] = Field(
+        default_factory=lambda: list(UPGRADE_CLAIM_ROUTES),
+        description="The routes, in order, by which an upgraded node's existing ROOT owner claims it",
+    )
 
     @property
     def unclaimed(self) -> bool:
@@ -62,8 +71,10 @@ class NodeOwnership(BaseModel):
         """What is missing and how to supply it. Names the PIN file, never its contents."""
         why = f" ({self.reading.value}{f': {self.read_error}' if self.read_error else ''})"
         return (
-            f"This node has no owner{why}. An agent does not run on an unowned node: the deployer claims it "
-            f"with the one-time PIN the node wrote to {self.claim_pin_file}, via {self.claim_route}."
+            f"This node has no owner{why}. An agent does not run on an unowned node. To claim it: on a fresh "
+            f"node, the deployer uses the one-time PIN the node wrote to {self.claim_pin_file}, via "
+            f"{self.claim_route}; on an upgraded node that already has a ROOT (no PIN is minted), the existing "
+            f"owner signs in and calls {' then '.join(self.upgrade_claim_routes)}."
         )
 
 
@@ -71,6 +82,7 @@ __all__ = [
     "CLAIM_PIN_FILE_NAME",
     "CLAIM_ROUTE",
     "NODE_UNCLAIMED_ERROR",
+    "UPGRADE_CLAIM_ROUTES",
     "NodeOwnership",
     "NodeOwnershipReading",
 ]

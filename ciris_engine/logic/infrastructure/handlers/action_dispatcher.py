@@ -16,8 +16,8 @@ from ciris_engine.schemas.runtime.accord_halt import ACCORD_HALT_REFUSAL, Accord
 from ciris_engine.schemas.runtime.audit import AuditActionContext
 from ciris_engine.schemas.runtime.contexts import DispatchContext
 from ciris_engine.schemas.runtime.enums import HandlerActionType, ThoughtStatus
-from ciris_engine.schemas.runtime.node_ownership import NODE_UNCLAIMED_ERROR, NodeOwnership
 from ciris_engine.schemas.runtime.models import Thought
+from ciris_engine.schemas.runtime.node_ownership import NODE_UNCLAIMED_ERROR, NodeOwnership
 from ciris_engine.schemas.services.runtime_control import ActionResponse, StepPoint
 from ciris_engine.schemas.types import JSONDict
 

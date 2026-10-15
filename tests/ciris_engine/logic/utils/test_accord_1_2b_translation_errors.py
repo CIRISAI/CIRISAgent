@@ -43,7 +43,7 @@ def test_am_early_machine_is_early_stage_not_ancient() -> None:
 def test_corrected_files_are_still_pinned(lang: str) -> None:
     import hashlib
 
-    from ciris_engine.logic.utils.constants import ACCORD_EXPECTED_HASHES
+    from ciris_engine.logic.utils.constants import ETHICS_TEXT_EXPECTED_HASHES
 
     name = f"accord_1.2b_{lang}.txt"
-    assert ACCORD_EXPECTED_HASHES[name] == hashlib.sha256((LOCALIZED / name).read_bytes()).hexdigest()
+    assert ETHICS_TEXT_EXPECTED_HASHES[name] == hashlib.sha256((LOCALIZED / name).read_bytes()).hexdigest()

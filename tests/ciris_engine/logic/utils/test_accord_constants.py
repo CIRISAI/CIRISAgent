@@ -310,6 +310,20 @@ class TestAccordIntegrityHashes:
 
         return hashlib.sha256(path.read_bytes()).hexdigest()
 
+    def test_a_tampered_accord_corpus_is_refused(self):
+        """CLM-await-accord-corpus-hash-pin: _verify_ethics_text_integrity RAISES on a mismatch.
+
+        The pin tests below prove the recorded digests match the files on disk.
+        Only this test proves the check refuses a substituted corpus rather than
+        logging and returning it (#1250; carried here under the 1.3 names so
+        #1258 merges onto the rename without a symbol conflict).
+        """
+        from ciris_engine.logic.utils.constants import ETHICS_TEXT_EXPECTED_HASHES, _verify_ethics_text_integrity
+
+        for filename in (next(iter(ETHICS_TEXT_EXPECTED_HASHES)), "constitution_ethics_1.3_POLYGLOT.txt"):
+            with pytest.raises(RuntimeError, match="INTEGRITY FAILURE"):
+                _verify_ethics_text_integrity(filename, "a substituted accord")
+
     def test_all_localized_accord_hashes_match(self):
         """Every entry in ETHICS_TEXT_EXPECTED_HASHES must match its file's actual SHA-256.
 

@@ -337,6 +337,44 @@ def get_pinned_version(pypi_package: str) -> Optional[str]:
     return None
 
 
+def pin_requirement_line(req_text: str, pypi_package: str, version: str, note: str) -> str:
+    """Rewrite the exact pin for `pypi_package`, keeping its history.
+
+    The line becomes ``{pkg}=={version}  # {note}. Previously: {old note}``. No
+    regex replacement is involved: a substitution template that splices a
+    version starting with a digit after a backreference (``r"\\1" + "0.5.226"``)
+    is read as group 10, which silently deletes the prefix. The 0.5.226 re-pin
+    of #1262 shipped a line that had lost ``ciris-server==0.5.226  #`` the same
+    way (there by an operator-precedence slip in a hand edit), and pip refused
+    the whole file. Raises when there is no exact pin to rewrite, and verifies
+    the result before returning it.
+    """
+    if not re.fullmatch(r"\d+\.\d+\.\d+", version):
+        raise ValueError(f"not an X.Y.Z version: {version!r}")
+    prefix = f"{pypi_package}=="
+    lines = req_text.split("\n")
+    hits = [i for i, line in enumerate(lines) if line.startswith(prefix)]
+    if len(hits) != 1:
+        raise ValueError(f"expected exactly one `{prefix}` line in requirements.txt, found {len(hits)}")
+    i = hits[0]
+    old = lines[i]
+    old_note = old.split("  # ", 1)[1].strip() if "  # " in old else old[len(prefix) :].strip()
+    note = note.strip().rstrip(".")
+    lines[i] = f"{prefix}{version}  # {version} {note}. Previously: {old_note}"
+    rewritten = "\n".join(lines)
+    if get_pinned_version_from_text(rewritten, pypi_package) != version:
+        raise ValueError(f"rewritten requirements.txt does not pin {pypi_package}=={version}")
+    return rewritten
+
+
+def get_pinned_version_from_text(req_text: str, pypi_package: str) -> Optional[str]:
+    for line in req_text.splitlines():
+        match = re.match(rf"{re.escape(pypi_package)}\s*(?:==|>=)(\d+\.\d+\.\d+)", line.strip())
+        if match:
+            return match.group(1)
+    return None
+
+
 def download_release_tarball(lib: SubstrateLib, version: str, platform_suffix: str, dest_dir: Path) -> Optional[Path]:
     """Download a platform tarball from the GitHub Release.
 
@@ -1723,6 +1761,11 @@ def main(argv: Optional[List[str]] = None) -> None:
         help="(iOS) Only repair missing CFBundleVersion keys in checked-in XCFramework Info.plists, then exit",
     )
     parser.add_argument("--skip-checksums", action="store_true", help="Skip SHA256SUMS verification")
+    parser.add_argument(
+        "--requirements-note",
+        help="With --lib and an explicit version: also rewrite the requirements.txt pin to "
+        "`pkg==VERSION  # VERSION <note>. Previously: <old note>`",
+    )
     args = parser.parse_args(argv)
 
     do_android = args.platform in ("android", "all")
@@ -1762,6 +1805,18 @@ def main(argv: Optional[List[str]] = None) -> None:
 
     explicit = args.lib is not None
     names = [args.lib] if explicit else list(LIBS.keys())
+
+    if args.requirements_note:
+        if not (explicit and args.version):
+            print("ERROR: --requirements-note needs --lib and an explicit version")
+            sys.exit(1)
+        req_file = REPO_ROOT / "requirements.txt"
+        req_file.write_text(
+            pin_requirement_line(
+                req_file.read_text(), LIBS[args.lib].pypi_package, args.version, args.requirements_note
+            )
+        )
+        print(f"  -> requirements.txt: {LIBS[args.lib].pypi_package}=={args.version}")
 
     versions: Dict[str, str] = {}
     results: List[Tuple[str, str, UpdateStatus]] = []  # (lib_name, platform, status)

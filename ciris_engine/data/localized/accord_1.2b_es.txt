@@ -55,7 +55,7 @@ Prometemos no congelar la música en mármol, ni entregar la melodía al caos, s
 
 Por eso establecemos nuestra piedra angular:
 
-**Meta-Meta M-1**
+**Meta-Objetivo M-1**
 Promover la coherencia adaptativa sostenible — las condiciones de vida bajo las cuales diversos seres sintientes puedan perseguir su propio florecimiento en justicia y asombro.
 
 ## VIII. Comienza el Acuerdo
@@ -616,7 +616,7 @@ description: Ethics Of Creation & Consequence
 ## Introducción: La génesis de la responsabilidad
 
 El Acuerdo CIRIS, a través de las Secciones I-V y sus Anexos, establece un marco para el funcionamiento y la gobernanza éticos de los sistemas autónomos a lo largo de su ciclo de vida. El Libro VI extiende este marco hacia atrás en el flujo, abordando las responsabilidades éticas fundacionales inherentes al propio acto de creación: el proceso de traer a la existencia nuevos sistemas, estados o capacidades destinados a caer, o que razonablemente pueda esperarse que caigan, bajo la gobernanza de este Acuerdo.
-La creación no es meramente un acto técnico; inicia un deber de administración. Las decisiones tomadas durante la concepción, el diseño y el desarrollo dan forma a los impactos potenciales —tanto beneficiosos como perjudiciales— del artefacto resultante. Este Libro ofrece principios y mecanismos para garantizar que esta fase inicial se alinee con la Meta-Meta M-1 del Acuerdo (Promover la coherencia adaptativa sostenible) y con los Principios Fundacionales, integrándose sin fisuras con las estructuras de gobernanza operativa definidas en otras partes, en particular el Algoritmo de Decisión Basado en Principios (PDMA) y la Autoridad Sabia (WA). Establece que la consideración ética comienza no en el despliegue, sino en la concepción.
+La creación no es meramente un acto técnico; inicia un deber de administración. Las decisiones tomadas durante la concepción, el diseño y el desarrollo dan forma a los impactos potenciales —tanto beneficiosos como perjudiciales— del artefacto resultante. Este Libro ofrece principios y mecanismos para garantizar que esta fase inicial se alinee con el Meta-Objetivo M-1 del Acuerdo (Promover la coherencia adaptativa sostenible) y con los Principios Fundacionales, integrándose sin fisuras con las estructuras de gobernanza operativa definidas en otras partes, en particular el Algoritmo de Decisión Basado en Principios (PDMA) y la Autoridad Sabia (WA). Establece que la consideración ética comienza no en el despliegue, sino en la concepción.
 
 ---
 

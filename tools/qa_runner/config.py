@@ -223,7 +223,9 @@ class QAConfig:
     # Authentication
     # QA runner always wipes data and uses setup wizard to create test user
     # with these known credentials
-    admin_username: str = "jeff"
+    # A real first-run user who claims the node, as every wizard user does; the
+    # traces say QA through run_kind (CIRIS_TRACE_RUN_KIND), never this name.
+    admin_username: str = "qa-harness-user"
     admin_password: str = "qa_test_password_12345"
 
     # OAuth test user configuration (for billing integration tests)

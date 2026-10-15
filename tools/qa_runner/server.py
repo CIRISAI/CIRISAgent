@@ -608,6 +608,10 @@ class APIServerManager:
         # the uptime of the public mainnet.base.org endpoint.
         self.mock_chain_rpc: Optional[MockChainRPCServer] = None
         self._extracted_password: Optional[str] = None  # Dynamically extracted from server output
+        #: The backend's CIRIS_HOME (the node writes its claim PIN there) and when
+        #: it was launched: a PIN older than the launch is a previous run's.
+        self._backend_home: Optional[str] = None
+        self._launched_at: Optional[float] = None
 
         # Per-backend output namespace. In parallel-backend mode both SQLITE
         # and POSTGRES backends would otherwise share `qa_reports/` and
@@ -1047,6 +1051,8 @@ class APIServerManager:
             project_root = Path(__file__).parent.parent.parent
             env["CIRIS_HOME"] = str(project_root)
             self.console.print(f"[dim]Setting CIRIS_HOME={project_root}[/dim]")
+        # The node's home: where it writes its claim PIN for the setup claim.
+        self._backend_home = env["CIRIS_HOME"]
 
         # Set CIRIS_ADAPTER environment variable (supports comma-separated adapters)
         # This allows loading modular services like Reddit alongside built-in adapters
@@ -1486,6 +1492,7 @@ class APIServerManager:
             # pty, so it gets pipes; if the FFI turns out to need a console there
             # too, that is a real finding and this is where it will show up.
             master_fd = None
+            self._launched_at = time.time()
             if _pty is not None:
                 master_fd, slave_fd = _pty.openpty()
                 self._pty_master_fd = master_fd
@@ -1764,6 +1771,43 @@ class APIServerManager:
             return self._extracted_password
         return self.config.admin_password
 
+    def _claim_node_like_the_wizard(self) -> bool:
+        """Mint the setup user's federation ID and claim the node with its PIN, before setup.
+
+        The wizard's order (KMP SetupViewModel; tools/qa_runner/node_claim.py):
+        `/v1/setup/complete` mints a ROOT WA, and a node that sees a ROOT mints
+        no PIN, so the claim comes first. setup/complete then adopts the
+        node-claimed owner of the same username. Fail closed: no PIN, or a claim
+        that does not answer 200, fails the boot. Never an unowned node.
+        """
+        import httpx
+
+        from .node_claim import claim_like_the_wizard
+
+        async def claim() -> Any:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                return await claim_like_the_wizard(
+                    client,
+                    self.config.base_url,
+                    [self._backend_home],
+                    self.config.admin_username,
+                    self.config.admin_password,
+                    since=self._launched_at,
+                )
+
+        outcome = asyncio.run(claim())
+        if not outcome.ok:
+            self.console.print(
+                f"[red][FAIL] Node claim ({outcome.step}) failed -- the node would stay unowned, and an agent "
+                f"cannot run without a named human for its node: {outcome.detail}[/red]"
+            )
+            return False
+        self.console.print(
+            f"[green][OK] Node claimed by {self.config.admin_username} (owner={outcome.owner}, "
+            f"PIN from {outcome.pin_file})[/green]"
+        )
+        return True
+
     def _complete_qa_setup(self) -> bool:
         """Complete setup wizard to create test user when data was wiped.
 
@@ -1778,6 +1822,11 @@ class APIServerManager:
         llm_api_key = self.config.live_api_key or "test-key-for-qa"
         llm_model = self.config.live_model or "gpt-4"
         llm_base_url = self.config.live_base_url
+
+        # EVERY NODE IS ALWAYS CLAIMED: the setup user claims the node first,
+        # exactly as the wizard does, or setup does not run at all.
+        if not self._claim_node_like_the_wizard():
+            return False
 
         # THE SAME resolver the server env uses (`resolve_template_id`). Reading
         # the config directly here is precisely what let the wizard and the agent

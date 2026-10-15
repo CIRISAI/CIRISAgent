@@ -1067,8 +1067,15 @@ class APIServerManager:
                         "accord_halt handoff mode needs a real LLM (--live ...): mock traces never leave the "
                         "node, so the harness could never see the refusal reach its canonical"
                     )
-                if _wait_for_handoff(Path(handoff_dir) / HANDOFF_FILE, timeout_s=300.0) is None:
-                    raise SystemExit(f"accord_halt handoff: no {HANDOFF_FILE} in {handoff_dir} within 300 s")
+                # Fresh only: a directory an earlier harness run left behind must
+                # not be read as this run's handoff.
+                import time as _time
+
+                launched = float(os.environ.setdefault("CIRIS_QA_HALT_LAUNCHED_AT", str(_time.time())))
+                if _wait_for_handoff(Path(handoff_dir) / HANDOFF_FILE, timeout_s=300.0, since=launched) is None:
+                    raise SystemExit(
+                        f"accord_halt handoff: no {HANDOFF_FILE} written in {handoff_dir} within 300 s of launch"
+                    )
                 _halt_handoff_env(env, Path(handoff_dir), Path(throwaway))
                 os.environ[TEE_DIR_ENV] = env["CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR"]
                 self.console.print(f"[dim]accord_halt: handoff env from {handoff_dir} applied[/dim]")

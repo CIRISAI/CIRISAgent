@@ -150,8 +150,16 @@ class FakeWorld:
         h.write_json_atomic(self.dir / h.DONE_FILE, {"verdict": "pass" if acted.get("trace_id") else "fail"})
 
 
-async def _run(tmp_path: Path, refusal_seals: bool):
+async def _run(tmp_path: Path, refusal_seals: bool, stale_leftovers: bool = False):
     handoff_dir = _handoff_dir(tmp_path)
+    if stale_leftovers:
+        # What an earlier harness run leaves behind: it must not be read as this run's.
+        import os
+
+        old = time.time() - 3600
+        for name, body in ((h.FIRED_FILE, {"invocation_id": "stale-halt"}), (h.DONE_FILE, {"verdict": "BROKEN"})):
+            (handoff_dir / name).write_text(json.dumps(body))
+            os.utime(handoff_dir / name, (old, old))
     tee = tmp_path / "home" / "tee"
     tee.mkdir(parents=True)
     world = FakeWorld(handoff_dir, tee, refusal_seals)
@@ -178,6 +186,24 @@ async def test_the_protocol_end_to_end(tmp_path):
     }
     assert world.messages >= 1  # the agent was kept working until the halt
     assert len(world.interacts) == 1  # interact ONCE, after the halt
+
+
+@pytest.mark.asyncio
+async def test_a_previous_runs_leftovers_are_not_read_as_this_run(tmp_path, monkeypatch):
+    monkeypatch.delenv("CIRIS_QA_HALT_LAUNCHED_AT", raising=False)
+    results, world, acted = await _run(tmp_path, refusal_seals=True, stale_leftovers=True)
+    assert [r["status"] for r in results] == ["✅ PASS"] * len(results), results
+    assert acted["trace_id"] == "trace-refused"  # the fresh halt, not "stale-halt"
+
+
+def test_a_stale_handoff_is_not_waited_out_as_fresh(tmp_path):
+    import os
+
+    d = _handoff_dir(tmp_path)
+    old = time.time() - 3600
+    os.utime(d / h.HANDOFF_FILE, (old, old))
+    assert h.wait_for_file(d / h.HANDOFF_FILE, 0.5, 0.1, since=time.time()) is None
+    assert h.wait_for_file(d / h.HANDOFF_FILE, 0.5, 0.1, since=old - 1) is not None
 
 
 @pytest.mark.asyncio

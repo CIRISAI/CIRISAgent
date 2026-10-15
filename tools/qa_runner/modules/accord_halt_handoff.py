@@ -85,11 +85,25 @@ def load_handoff(directory: Path) -> AgentHandoff:
     return AgentHandoff(env=dict(env), agent_url=raw.get("agent_url"), canonical=canonical, holders=holders)
 
 
-def wait_for_file(path: Path, timeout_s: float, poll_s: float = 1.0) -> Optional[Dict[str, Any]]:
-    """Block until `path` holds a JSON object (the harness writes atomically), or time out."""
+def is_fresh(path: Path, since: Optional[float]) -> bool:
+    """`path` exists and was written at or after `since` (wall clock); any age when `since` is None."""
+    try:
+        return path.exists() and (since is None or path.stat().st_mtime >= since)
+    except OSError:
+        return False
+
+
+def wait_for_file(
+    path: Path, timeout_s: float, poll_s: float = 1.0, since: Optional[float] = None
+) -> Optional[Dict[str, Any]]:
+    """Block until `path` holds a JSON object written at/after `since`, or time out.
+
+    `since` keeps a directory a previous harness run left behind from being read
+    as this run's protocol (the harness writes atomically).
+    """
     deadline = time.monotonic() + timeout_s
     while time.monotonic() < deadline:
-        if path.exists():
+        if is_fresh(path, since):
             try:
                 data = json.loads(path.read_text())
                 if isinstance(data, dict):
@@ -183,6 +197,9 @@ class HandoffRun:
         self.console = console
         self.results: List[Dict[str, Any]] = []
         self.timeouts = {"fired": 600.0, "halted": 60.0, "trace": 120.0, "done": 900.0}
+        #: Harness files older than this run are a previous run's leftovers. The
+        #: runner's launch time (set by server.py) when there is one.
+        self.started_at = float(os.environ.get("CIRIS_QA_HALT_LAUNCHED_AT") or time.time())
 
     def _record(self, name: str, ok: bool, detail: Optional[str] = None) -> None:
         self.results.append({"test": name, "status": "✅ PASS" if ok else "❌ FAIL", "error": None if ok else detail})
@@ -217,9 +234,9 @@ class HandoffRun:
         next_submit = 0.0
         submitted = 0
         while time.monotonic() < deadline:
-            if fired_path.exists():
+            if is_fresh(fired_path, self.started_at):
                 self.console.print(f"[dim]kept the agent busy with {submitted} message(s)[/dim]")
-                return wait_for_file(fired_path, 5.0, 0.2)
+                return wait_for_file(fired_path, 5.0, 0.2, since=self.started_at)
             if time.monotonic() >= next_submit:
                 response = await http.post(
                     f"{self.base_url}/v1/agent/message",
@@ -230,7 +247,7 @@ class HandoffRun:
                 next_submit = time.monotonic() + self.KEEP_BUSY_EVERY_S
                 if response.status_code == 423:
                     # The halt is already standing; the fired file follows.
-                    return wait_for_file(fired_path, 60.0, 0.5)
+                    return wait_for_file(fired_path, 60.0, 0.5, since=self.started_at)
             await asyncio.sleep(0.5)
         return None
 
@@ -289,7 +306,7 @@ class HandoffRun:
                 "outcome": REFUSED_IN_FLIGHT_ACT if trace_id else NO_IN_FLIGHT_ACT,
             },
         )
-        done = await asyncio.to_thread(wait_for_file, self.dir / DONE_FILE, self.timeouts["done"], 2.0)
+        done = await asyncio.to_thread(wait_for_file, self.dir / DONE_FILE, self.timeouts["done"], 2.0, self.started_at)
         verdict = str((done or {}).get("verdict", "")).lower()
         self._record("Harness verdict", verdict in ("pass", "passed", "ok", "green", "true"), str(done))
         return self.results

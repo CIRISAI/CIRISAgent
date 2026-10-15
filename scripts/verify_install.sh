@@ -64,6 +64,13 @@ LLM_MODEL="llama3"
 ADMIN_USER="qa_verify_user"
 ADMIN_PASS="qa_verify_pass_12345"
 
+# The node claim before setup (every node is always claimed): where the node
+# writes its one-time PIN (<CIRIS_HOME>/claim_pin), the node read-API, and how
+# long the node may take to write the PIN and start answering.
+CLAIM_HOME=""
+NODE_URL="http://localhost:4243"
+CLAIM_WAIT=60
+
 # Colors (disabled for JSON output)
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -79,6 +86,7 @@ RESULT_version="pending"
 RESULT_setup_status="pending"
 RESULT_setup_providers="pending"
 RESULT_setup_templates="pending"
+RESULT_node_claim="pending"
 RESULT_setup_complete="pending"
 RESULT_auth="pending"
 RESULT_interaction="pending"
@@ -138,6 +146,8 @@ Options:
   --llm-model MODEL        LLM model name (default: llama3)
   --admin-user USER        Admin username for setup (default: qa_verify_user)
   --admin-pass PASS        Admin password for setup (default: qa_verify_pass_12345)
+  --ciris-home DIR         The node's CIRIS_HOME, holding claim_pin (default: \$CIRIS_HOME or ~/ciris)
+  --node-url URL           Node read-API for the claim (default: http://localhost:4243)
   --skip-auth              Skip authentication check
   --skip-interaction       Skip agent interaction check
   --json                   Output JSON format
@@ -454,7 +464,116 @@ check_setup_templates() {
     return 3
 }
 
+# One claim request, retried while the node is still coming up (000/502/503),
+# for up to CLAIM_WAIT seconds. Prints "<status> <body>"; a 4xx is the node's
+# answer and returns at once.
+claim_request() {
+    local method="$1" url="$2" data="${3:-}"
+    local waited=0 out status
+    while :; do
+        if [ "$method" = "POST" ]; then
+            out=$(curl -s -w $'\n%{http_code}' --connect-timeout 5 --max-time 120 \
+                -X POST -H "Content-Type: application/json" -d "$data" "$url" 2>/dev/null || true)
+        else
+            out=$(curl -s -w $'\n%{http_code}' --connect-timeout 5 --max-time 30 "$url" 2>/dev/null || true)
+        fi
+        status="${out##*$'\n'}"
+        case "$status" in
+            000|502|503|"") ;;
+            *) echo "$status ${out%$'\n'*}"; return 0 ;;
+        esac
+        if [ "$waited" -ge "$CLAIM_WAIT" ]; then
+            echo "${status:-000} ${out%$'\n'*}"
+            return 0
+        fi
+        sleep 2
+        waited=$((waited + 2))
+    done
+}
+
+# The wizard's order, before /v1/setup/complete: mint the setup user's
+# federation ID, then claim the node with its PIN. Setup must not run first:
+# it mints a ROOT, and a node that sees a ROOT mints no PIN. Fail closed.
+check_node_claim() {
+    log_info "Claiming the node with its PIN (the wizard's order, before setup)..."
+
+    if ! command_exists curl; then
+        RESULT_node_claim="fail"
+        log_error "The node claim needs curl; refusing to complete setup on an unowned node"
+        return 3
+    fi
+
+    local home="${CLAIM_HOME:-${CIRIS_HOME:-$HOME/ciris}}"
+    local pin_file="$home/claim_pin" pin="" waited=0
+    while [ "$waited" -le "$CLAIM_WAIT" ]; do
+        if [ -s "$pin_file" ]; then
+            pin=$(tr -d '\r\n ' < "$pin_file")
+            case "$pin" in
+                \{*) pin=$(json_get "$pin" pin) ;;
+            esac
+            [ -n "$pin" ] && break
+        fi
+        sleep 1
+        waited=$((waited + 1))
+    done
+    if [ -z "$pin" ]; then
+        RESULT_node_claim="fail"
+        log_error "No claim PIN at $pin_file: the node minted none (already owned) or its home is elsewhere (--ciris-home)"
+        return 3
+    fi
+
+    local reply status body
+    reply=$(claim_request POST "${BASE_URL}/v1/self/identity" "{\"label\": \"$ADMIN_USER\"}")
+    status="${reply%% *}"
+    if [ "$status" != "200" ]; then
+        RESULT_node_claim="fail"
+        log_error "Federation ID mint failed (status: $status); setup not attempted"
+        return 3
+    fi
+
+    reply=$(claim_request GET "${BASE_URL}/v1/federation/node-code")
+    status="${reply%% *}"
+    body="${reply#* }"
+    local node_code
+    node_code=$(json_get "$body" data.node_code)
+    [ -z "$node_code" ] && node_code=$(json_get "$body" node_code)
+    if [ "$status" != "200" ] || [ -z "$node_code" ]; then
+        RESULT_node_claim="fail"
+        log_error "No node code (status: $status); setup not attempted"
+        return 3
+    fi
+
+    local claim
+    claim=$(cat << EOF
+{
+    "node_code": "$node_code",
+    "claim_pin": "$pin",
+    "cohort_scope": "self",
+    "target_url": "$NODE_URL",
+    "owner_username": "$ADMIN_USER",
+    "owner_password": "$ADMIN_PASS"
+}
+EOF
+)
+    reply=$(claim_request POST "${NODE_URL}/v1/setup/claim-remote" "$claim")
+    status="${reply%% *}"
+    if [ "$status" != "200" ]; then
+        RESULT_node_claim="fail"
+        log_error "Node claim failed (status: $status); setup not attempted"
+        return 3
+    fi
+    RESULT_node_claim="pass"
+    log_success "Node claimed by $ADMIN_USER"
+    return 0
+}
+
 check_setup_complete() {
+    # Every node is always claimed: no claim, no setup.
+    if ! check_node_claim; then
+        RESULT_setup_complete="fail"
+        return 3
+    fi
+
     log_info "Testing setup completion..."
 
     local complete_url="${BASE_URL}/v1/setup/complete"
@@ -646,6 +765,7 @@ output_json() {
     "setup_status": "${RESULT_setup_status}",
     "setup_providers": "${RESULT_setup_providers}",
     "setup_templates": "${RESULT_setup_templates}",
+    "node_claim": "${RESULT_node_claim}",
     "setup_complete": "${RESULT_setup_complete}",
     "auth": "${RESULT_auth}",
     "interaction": "${RESULT_interaction}"
@@ -768,6 +888,14 @@ main() {
                 ;;
             --admin-pass)
                 ADMIN_PASS="$2"
+                shift 2
+                ;;
+            --ciris-home)
+                CLAIM_HOME="$2"
+                shift 2
+                ;;
+            --node-url)
+                NODE_URL="$2"
                 shift 2
                 ;;
             --skip-auth)

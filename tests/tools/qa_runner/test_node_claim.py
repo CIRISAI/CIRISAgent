@@ -339,3 +339,84 @@ async def test_benchmark_tools_claim_before_setup(tmp_path, monkeypatch, module_
     ok = await getattr(tool, fn)(BRAIN, 8080, homes=[str(tmp_path)])
     assert ok is claim_ok
     assert order == (["claim:owner", "/setup/complete"] if claim_ok else ["claim:owner"])
+
+
+class FakeADB:
+    """ADBHelper stand-in: forward + run-as cat of the app's CIRIS_HOME claim_pin."""
+
+    def __init__(self, pin: str = "", forward_ok: bool = True) -> None:
+        self.pin = pin
+        self.forward_ok = forward_ok
+        self.calls: List[Any] = []
+
+    def forward_port(self, local: int, remote: int) -> bool:
+        self.calls.append(("forward", local, remote))
+        return self.forward_ok
+
+    def _run_adb(self, args: List[str], timeout: int = 30) -> Any:
+        self.calls.append(tuple(args))
+        if self.pin:
+            return MagicMock(returncode=0, stdout=self.pin + "\n", stderr="")
+        return MagicMock(returncode=1, stdout="", stderr="cat: files/ciris/claim_pin: No such file or directory")
+
+
+def _android_tester(monkeypatch, adb: FakeADB) -> Any:
+    from tools.qa_runner.modules.mobile import adb_helper
+    from tools.qa_runner.modules.mobile import first_time_licensed_agent as fla
+
+    monkeypatch.setattr(adb_helper, "ADBHelper", lambda device_serial=None: adb)
+    return fla.FirstTimeLicensedAgentTester(base_url=BRAIN, llm_api_key="k", device_serial="emulator-5554")
+
+
+def test_android_reads_the_pin_with_run_as_and_forwards_the_node(tmp_path, monkeypatch):
+    adb = FakeADB(pin="Q4YC-AZQA")
+    tester = _android_tester(monkeypatch, adb)
+    home, why = tester.read_device_claim_pin(tmp_path, timeout_s=1, poll_s=0.05)
+    assert why == "" and node_claim.find_claim_pin([home])[0] == "Q4YC-AZQA"
+    assert adb.calls[0] == ("forward", 4243, 4243)
+    assert adb.calls[1] == ("exec-out", "run-as", "ai.ciris.mobile.debug", "cat", "files/ciris/claim_pin")
+
+
+@pytest.mark.parametrize("adb", [FakeADB(pin=""), FakeADB(pin="Q4YC-AZQA", forward_ok=False)], ids=["no-pin", "no-forward"])
+def test_android_unreachable_pin_or_node_fails_closed(tmp_path, monkeypatch, adb):
+    tester = _android_tester(monkeypatch, adb)
+    home, why = tester.read_device_claim_pin(tmp_path, timeout_s=0.1, poll_s=0.05)
+    assert home is None and why
+
+
+@pytest.mark.parametrize("claim_ok", [True, False])
+def test_android_licensed_setup_claims_first(monkeypatch, claim_ok):
+    from tools.qa_runner.modules.mobile import first_time_licensed_agent as fla
+
+    tester = _android_tester(monkeypatch, FakeADB(pin="Q4YC-AZQA"))
+    order: List[str] = []
+    monkeypatch.setattr(
+        tester,
+        "step_claim_node",
+        lambda: order.append("claim")
+        or fla.StepResult("claim_node", fla.TestStatus.PASSED if claim_ok else fla.TestStatus.FAILED, 0.0, "x"),
+    )
+
+    def post_raw(path: str, data: Any = None, timeout: int = 30) -> Any:
+        order.append(path)
+        return MagicMock(status_code=200, json=lambda: {"data": {"message": "ok"}})
+
+    monkeypatch.setattr(tester, "_post_raw", post_raw)
+    result = tester.step_complete_setup()
+    if claim_ok:
+        assert order == ["claim", "/v1/setup/complete"] and result.status == fla.TestStatus.PASSED
+    else:
+        assert order == ["claim"] and result.status == fla.TestStatus.FAILED
+        assert "setup not attempted" in result.message
+
+
+def test_the_setup_modules_second_setup_expects_200_on_the_claimed_node():
+    """Every QA boot claims as qa-harness-user before its own setup. The SETUP module then
+    completes setup again as qa_test_user against that already-claimed node: still a 200
+    (a second user, not a second claim), and a different name from the node's owner."""
+    from tools.qa_runner.modules.setup_tests import SetupTestModule
+
+    case = next(t for t in SetupTestModule.get_setup_tests() if t.endpoint == "/v1/setup/complete")
+    assert case.expected_status == 200
+    assert case.payload["admin_username"] != node_claim.QA_HARNESS_USER
+    assert not case.requires_auth

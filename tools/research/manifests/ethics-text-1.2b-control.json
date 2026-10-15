@@ -1,0 +1,17 @@
+{
+  "manifest_version": "1",
+  "experiment_id": "ETHICS-TEXT-1.3-VS-1.2B-2.16",
+  "condition": "c",
+  "base_locale": "en",
+  "mode": "additive",
+  "residue_digest": "sha256:dfdbecd61f19475e975e2cc5383b71c35e36e9e0c95c521894e15323bcc9d2ff",
+  "corpus_edition": "1.2b",
+  "overrides": {
+    "string": {},
+    "dma_prompt": {},
+    "conscience_prompt": {},
+    "corpus": {},
+    "template": {}
+  },
+  "research_hashes": {}
+}

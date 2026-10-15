@@ -188,7 +188,7 @@ CIRIS supports 29 languages end-to-end — every layer the agent reasons through
 
 What gets localized:
 
-- **Accord** — `accord_1.2b_{lang}.txt` per locale; the polyglot accord (`accord_1.2b_POLYGLOT.txt`) is loaded universally as cross-traditional grounding regardless of locale
+- **Ethics text** (the CIRIS Constitution's) — `constitution_ethics_1.3_{lang}.txt` per locale; the polyglot (`constitution_ethics_1.3_POLYGLOT.txt`) is loaded universally as cross-traditional grounding regardless of locale
 - **This Comprehensive Guide** — `CIRIS_COMPREHENSIVE_GUIDE_{lang}.txt`
 - **DMA prompts** — PDMA, CSDMA, DSDMA, IDMA, ASPDMA, TSASPDMA all have per-locale prompt templates under `ciris_engine/logic/dma/prompts/localized/{lang}/*.yml`
 - **Conscience prompts** — entropy, coherence, optimization-veto, and epistemic-humility all have per-locale variants

@@ -217,14 +217,14 @@ def test_translate_lane_reassembles_a_file_the_real_loader_loads(
     # which this synthetic one is not, so the pin is lifted for this read only.
     from ciris_engine.logic.utils import constants
 
-    monkeypatch.delitem(constants.ACCORD_EXPECTED_HASHES, "accord_1.2b_yo.txt")
+    monkeypatch.delitem(constants.ETHICS_TEXT_EXPECTED_HASHES, "accord_1.2b_yo.txt")
     real_files = importlib.resources.files
 
     def files(package: str) -> Any:
         return tree["loc"] if package == "ciris_engine.data.localized" else real_files(package)
 
     monkeypatch.setattr(importlib.resources, "files", files)
-    loaded = constants._load_localized_accord_file("yo")
+    loaded = constants._load_localized_accord_file("yo", "1.2b")
     assert loaded == target.read_text(encoding="utf-8")
 
     en = seg.parse(EN_TEXT)
@@ -258,9 +258,9 @@ def test_english_rebuilt_from_segments_passes_the_pinned_integrity_check(
         "files",
         lambda package: tmp_path if package == "ciris_engine.data.localized" else real_files(package),
     )
-    # _verify_accord_integrity raises on any byte that differs from the pin.
-    assert "accord_1.2b_en.txt" in constants.ACCORD_EXPECTED_HASHES
-    assert constants._load_localized_accord_file("en") == EN_TEXT
+    # _verify_ethics_text_integrity raises on any byte that differs from the pin.
+    assert "accord_1.2b_en.txt" in constants.ETHICS_TEXT_EXPECTED_HASHES
+    assert constants._load_localized_accord_file("en", "1.2b") == EN_TEXT
 
 
 def test_a_rejected_passage_is_withheld_and_no_partial_file_is_written(

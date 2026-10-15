@@ -165,7 +165,8 @@ def test_the_written_file_loads_through_the_real_loader(monkeypatch: pytest.Monk
     from ciris_engine.logic.utils import constants
 
     name = "constitution_ethics_1.3_yo.txt"
-    assert name not in constants.ACCORD_EXPECTED_HASHES, "not pinned yet: pins are a reviewed step"
+    # The real yo 1.3 file is pinned once that locale completes; this synthetic one never is.
+    monkeypatch.delitem(constants.ETHICS_TEXT_EXPECTED_HASHES, name, raising=False)
     real_files = importlib.resources.files
     monkeypatch.setattr(
         importlib.resources,

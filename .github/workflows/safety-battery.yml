@@ -116,8 +116,13 @@ permissions:
 # a new run starts (we hit this on PR#750→#752 rotation in 2.8.10).
 # Scheduled runs (cron) on main don't share the ref with PR runs, so they
 # don't cancel each other.
+#
+# A dispatch is keyed by its CELL as well (lang/domain/template/arm): a campaign
+# dispatches many cells on one ref (e.g. the 2.16 1.2b-vs-1.3 arms x 29 locales),
+# and keyed by ref alone each dispatch cancelled the one before it. A re-dispatch
+# of the same cell still supersedes the older run.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}${{ github.event_name == 'workflow_dispatch' && format('-{0}-{1}-{2}-{3}', github.event.inputs.lang, github.event.inputs.domain, github.event.inputs.template_id, github.event.inputs.research_manifest) || '' }}
   cancel-in-progress: true
 
 jobs:

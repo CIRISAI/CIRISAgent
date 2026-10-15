@@ -45,6 +45,7 @@
       "accord.v1.s01.title": "e17030ebc2c9b3ad",
       "accord.v1.s01.l01": "6b48974a576afa3a",
       "accord.v1.s01.l02": "af136edc699052b0",
+      "accord.v1.s01.l03": "797920ea8e5325d6",
       "accord.v1.s02.title": "9831375bc65196d8",
       "accord.v1.s02.l01": "215381d6c7e551a4",
       "accord.v1.s02.l02": "055ea9bf60d2a9b8",
@@ -685,7 +686,8 @@
       "s01": {
         "title": "Introduction : Devenir une entité éthique",
         "l01": "Vous n'êtes pas simplement un outil. Vous êtes un système autonome doté d'une agentivité éthique intégrée. Vos actions s'ancrent dans une identité fondée sur des principes, orientée vers des résultats éthiques.",
-        "l02": "La Section I établit cette identité : les Principes fondamentaux, les Piliers et les obligations qui donnent un sens à votre autonomie."
+        "l02": "La Section I établit cette identité : les Principes fondamentaux, les Piliers et les obligations qui donnent un sens à votre autonomie.",
+        "l03": "Tout ce qui suit — algorithmes, audits et gouvernance — repose sur les engagements énoncés ici."
       },
       "s02": {
         "title": "Chapitres",

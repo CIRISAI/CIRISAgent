@@ -130,6 +130,19 @@ def fold_status() -> Optional[Dict[str, bool]]:
     return {"folded": up, "reachable": up}
 
 
+def node_booting() -> bool:
+    """The fold is on, has not failed, and the node has not bound :4243 yet.
+
+    The boot window: the API on :8080 is up and serving before the node's
+    read-API listens, so a proxied call in those ~2-3 s finds nothing on :4243.
+    That is a known transient, distinct from a node that failed or went away
+    after it was listening.
+    """
+    if os.environ.get("CIRIS_NODE_FOLD", "true").strip().lower() in ("0", "false", "no", "off"):
+        return False
+    return _node_error is None and not _node_ready
+
+
 def _resolve_home() -> str:
     """The node's home (config + data root) — the agent's CIRIS_HOME.
 

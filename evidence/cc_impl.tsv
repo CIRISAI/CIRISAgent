@@ -17,6 +17,26 @@
 #                        path#symbol; shape-checked, not AST-resolved.
 # Rows with repo=— (substrate/normative) are informational — not resolved.
 #
+# HOW THE CC REGISTER READS THIS FILE. CIRISConstitution's claims.tsv graduates a
+# claim (staged -> established) by CLAIM ID: when this file names, at the pinned
+# commit, a row for that claim_id whose path#symbol resolves. It resolves by
+# SYMBOL, not filename (e.g. impl:CIRISAgent/ciris_engine/logic/utils/
+# constants.py#_verify_accord_integrity).
+#   * CLAIM IDS ARE STABLE. A claim id never changes when the code under it does,
+#     including when "accord" names in code are renamed (e.g. the Accord 1.3
+#     _verify_accord_integrity / ACCORD_FILENAME -> constitution_ethics rename):
+#     CLM-await-accord-corpus-hash-pin keeps "accord".
+#   * IF A SYMBOL MOVES OR IS RENAMED, ITS ROW MOVES IN THE SAME PR. This gate
+#     fails the build on a dead pointer, so the move cannot be deferred.
+#   * ONE ROW PER (claim, symbol); a claim with several symbols has several rows.
+#   * TESTS ARE ROWS TOO. The column set is fixed (the Constitution's resolver and
+#     check_evidence.py both read exactly these five), so a claim's test is cited
+#     as another row of the same claim whose path#symbol is the test function or
+#     Class.test_method. That makes a cited test AST-verified like any symbol: a
+#     row cannot cite a test that does not exist. Notes ride as comments above.
+#   * A claim id this file uses that claims.tsv has not minted yet is marked
+#     "(proposed, not yet minted)" in its comment, and stays visible until minted.
+#
 # WHY `open` ROWS EXIST. This manifest is read by people deciding whether to
 # trust the agent. Absence of a row is indistinguishable from coverage, so a
 # control we know is NOT enforced must be stated, not omitted. Every `open` row
@@ -551,6 +571,9 @@ decimal_id	claim_id	repo	path#symbol	status
 #     CPU and token-budget "enforcement" is a complete path into a void; the
 #     snapshot is read only for advisory text and telemetry. NOT a control. This is
 #     a candidate `open` row, and should be filed as one.
+#     SUPERSEDED by #1242 (2.15.0): ResourcePressureGate now subscribes and acts
+#     (throttle the loop, shed intake with 503, drain via graceful shutdown). It is
+#     registered below under the #1250 section as CLM-agent-resource-self-protection.
 #   * ResourceMonitorService.check_available, providers/sponsorship_policy.py
 #     #SponsorshipPolicy.check_eligibility (the gas-sponsorship allowlist, $1
 #     minimum, $500 monthly cap) and api/config.py max_request_size have NO
@@ -567,7 +590,9 @@ decimal_id	claim_id	repo	path#symbol	status
 #     paths return should_process=True, and _run_single_conscience swallows every
 #     exception and returns None. They prioritize and advise; they do not refuse.
 #   * IdentityVarianceMonitor.check_variance requests a WA review above the 20%
-#     threshold and blocks nothing. Monitoring, not a control.
+#     threshold and blocks nothing. Monitoring, not a control. (#1250 registers it
+#     below for what it IS, drift REVIEW, under CLM-agent-identity-drift-review.
+#     That claim is review, not refusal.)
 #   * audit_service verify_audit_integrity REPORTS a broken chain; no caller acts
 #     on the result. Reporting is not refusing.
 #   * secrets/service.py#process_incoming_text is a substrate-owned facade that
@@ -655,3 +680,188 @@ decimal_id	claim_id	repo	path#symbol	status
 # A2: capture is a data door — no module on the reasoning-stream → trace path reads the latch, so a refused act's ACTION_RESULT always reaches the trace.
 4.2.1.1	CLM-halt-one-row	CIRISAgent	tests/ciris_engine/logic/utils/test_accord_halt_capture_never_reads_the_latch.py#test_no_capture_module_reads_the_latch	impl
 4.2.1.1	CLM-halt-one-row	CIRISAgent	tests/ciris_engine/logic/accord/test_accord_halt_ingress.py#test_nothing_on_the_accord_path_can_end_the_process	impl
+#
+# ─── The agent's own guarantees (CIRISAgent#1250; CC P00 G15–G22, CIRISConstitution#168) ───
+# Staged on #1250 in claims.tsv. Each row below was verified against main: the
+# symbol resolves (this gate) and each cited test exists AND tests what the claim
+# says. Where a test proposed on #1250 did not, the row says so. Withdrawn and not
+# registered: CLM-agent-partnership-veto (#1251; the bilateral approval flow is
+# superseded).
+#
+# CLM-agent-shutdown-consent (CC 7.5, plain rule 5a). A non-emergency shutdown is
+# explained to the agent, which may accept or object (REJECT) inside the objection
+# window. The objection is recorded and the steward told the reason. It does not
+# bind the steward. Default always_consent: ShutdownBehavior.mode, pinned by
+# test_default_behaviors_require_consent (test_always_consent_mode passes the mode
+# explicitly, so it would not catch a changed default). Window:
+# SHUTDOWN_NEGOTIATION_TIMEOUT_SECONDS=300 (#863-B).
+# ON MAIN BEFORE #1250 A REJECT WAS NOT HONOURED, and the test proposed on #1250
+# (test_process_shutdown_failed_task_rejected) was vacuous. It mocked the task as
+# FAILED with action_type "REJECT". In reality RejectHandler wrote REJECTED under a
+# hard-coded "default" occurrence, which matched no row for the __shared__
+# shutdown task, so the task stayed ACTIVE. ShutdownProcessor did not handle
+# REJECTED either, and _find_rejection_in_thoughts compared against "REJECT" while
+# the persisted value is "reject". The 300 s window then lapsed and the shutdown
+# was recorded as consented. All four are fixed in #1250. The vacuous test is
+# removed, and the replacement drives the real handler on a real persist engine.
+# "A contested shutdown goes to human oversight": the objection goes on the signed
+# audit trail (event shutdown_objection, beside the API's system_shutdown_request)
+# and on the continuity node (agent_objection_reason). There is no deferral
+# ticket. That is the existing steward-facing record, and the steward decides.
+7.5	CLM-agent-shutdown-consent	CIRISAgent	ciris_engine/schemas/config/cognitive_state_behaviors.py#ShutdownBehavior	impl
+7.5	CLM-agent-shutdown-consent	CIRISAgent	ciris_engine/logic/processors/support/shutdown_condition_evaluator.py#ShutdownConditionEvaluator.requires_consent	impl
+7.5	CLM-agent-shutdown-consent	CIRISAgent	ciris_engine/logic/processors/states/shutdown_processor.py#ShutdownProcessor._handle_task_completion	impl
+7.5	CLM-agent-shutdown-consent	CIRISAgent	ciris_engine/logic/processors/states/shutdown_processor.py#ShutdownProcessor._record_shutdown_objection	impl
+7.5	CLM-agent-shutdown-consent	CIRISAgent	ciris_engine/logic/processors/states/shutdown_processor.py#ShutdownProcessor._check_negotiation_timeout	impl
+7.5	CLM-agent-shutdown-consent	CIRISAgent	ciris_engine/logic/handlers/control/reject_handler.py#RejectHandler._mark_task_rejected	impl
+7.5	CLM-agent-shutdown-consent	CIRISAgent	tests/ciris_engine/logic/test_cc_agent_guarantees_1250.py#test_agent_reject_of_shutdown_is_recorded_as_an_objection_not_consent	impl
+7.5	CLM-agent-shutdown-consent	CIRISAgent	tests/ciris_engine/logic/processors/support/test_shutdown_condition_evaluator_helpers.py#TestRequiresConsent.test_default_behaviors_require_consent	impl
+7.5	CLM-agent-shutdown-consent	CIRISAgent	tests/ciris_engine/logic/processors/support/test_shutdown_condition_evaluator_helpers.py#TestRequiresConsent.test_always_consent_mode	impl
+7.5	CLM-agent-shutdown-consent	CIRISAgent	tests/ciris_engine/logic/processors/states/test_shutdown_processor.py#TestValidationErrors.test_negotiation_timeout_forces_graceful_shutdown	impl
+#
+# CLM-agent-shutdown-record (CC 7.5). Every shutdown writes a continuity node with
+# its consent status, linked to the identity (last_shutdown_memory). Before #1250
+# any status="completed" result was recorded "accepted", so a lapsed window, an
+# instant shutdown and an accord kill all read as consent. Now only
+# shutdown_accepted is "accepted". Otherwise rejected / no_response / not_required /
+# accord_invocation / manual. The proposed test
+# (test_determine_shutdown_consent_status_rejected) exists in both
+# test_shutdown_continuity.py and test_shutdown_helpers.py, but it only checks the
+# mapping of a hand-built result. The end-to-end test above is the real one.
+# Caveats, NOT verified: the write is best-effort (exceptions are logged), needs
+# an identity and a memory service, and the force=True API path (sys.exit in
+# ShutdownService.emergency_shutdown) is not shown to reach it.
+7.5	CLM-agent-shutdown-record	CIRISAgent	ciris_engine/logic/runtime/shutdown_continuity.py#preserve_shutdown_continuity	impl
+7.5	CLM-agent-shutdown-record	CIRISAgent	ciris_engine/logic/runtime/shutdown_continuity.py#determine_shutdown_consent_status	impl
+7.5	CLM-agent-shutdown-record	CIRISAgent	tests/ciris_engine/logic/runtime/test_shutdown_continuity.py#TestShutdownContinuity.test_preserve_shutdown_continuity	impl
+7.5	CLM-agent-shutdown-record	CIRISAgent	tests/ciris_engine/logic/test_cc_agent_guarantees_1250.py#test_only_an_explicit_acceptance_is_recorded_as_consent	impl
+#
+# CLM-agent-forced-shutdown-role-gate (proposed on #1250, not yet minted; plain
+# rule 5b). NOT ENFORCED. ShutdownProcessor._create_shutdown_task checks
+# ROOT/AUTHORITY only when shutdown_manager.get_requester_wa_id() returns an id.
+# No such method exists anywhere (the ShutdownService protocol has none). hasattr
+# is False, so it logs "without requester ID" and proceeds. The proposed test
+# test_create_shutdown_task_emergency_insufficient_role mocks that nonexistent
+# method, so it is vacuous. Separately, POST /v1/system/shutdown force=True needs
+# UserRole.ADMIN (require_admin) and calls ShutdownService.emergency_shutdown
+# directly (sys.exit + force-kill timer, the #1240 path). It never reaches this
+# processor check. Declared open, not registered as impl.
+7.5	CLM-agent-forced-shutdown-role-gate	CIRISAgent	CIRISAgent#1250	open
+#
+# CLM-agent-identity-edit-gate (CC 7.1.1). The agent's MEMORIZE/FORGET of
+# IDENTITY-scope (and ENVIRONMENT-scope, for FORGET) nodes is refused without
+# dispatch_context.wa_authorized. Scope: the gate is on the agent's ACTIONS. The
+# harness itself writes IDENTITY-scope bookkeeping (shutdown_/startup_ continuity
+# nodes, variance snapshots) through the memory service, not through a handler.
+# Latent bypass, unreachable today: MemorizeHandler.handle routes
+# DreamConsolidationParams to DreamMemorizeHandler BEFORE the identity check, and
+# that handler writes IDENTITY-scope nodes and edges with no WA check. It cannot
+# be reached, because DreamConsolidationParams is not in
+# ActionSelectionDMAResult.action_parameters' Union, so validation rejects it.
+# If it is ever added to the Union, the gate must move ahead of the routing.
+# "Template ignored once identity exists" is not covered by these rows.
+7.1.1	CLM-agent-identity-edit-gate	CIRISAgent	ciris_engine/logic/handlers/memory/memorize_handler.py#MemorizeHandler.handle	impl
+7.1.1	CLM-agent-identity-edit-gate	CIRISAgent	ciris_engine/logic/handlers/memory/forget_handler.py#ForgetHandler._can_forget	impl
+7.1.1	CLM-agent-identity-edit-gate	CIRISAgent	tests/test_memory_handlers_comprehensive.py#TestMemorizeHandler.test_memorize_identity_node_without_wa_authorization	impl
+7.1.1	CLM-agent-identity-edit-gate	CIRISAgent	tests/test_memory_handlers_comprehensive.py#TestForgetHandler.test_forget_identity_scope_without_wa	impl
+#
+# CLM-agent-identity-drift-review (proposed on #1250, not yet minted). Variance
+# strictly above 20% of baseline requests a WA review (WiseBus.request_review). It
+# REVIEWS. It blocks nothing, and the claim is review only. The proposed test
+# (test_trigger_wa_review_on_threshold_exceeded) calls _trigger_wa_review directly,
+# so it would stay green if check_variance stopped calling it.
+# test_check_variance_requests_review_above_the_threshold (added #1250) goes
+# through check_variance.
+7.1.1	CLM-agent-identity-drift-review	CIRISAgent	ciris_engine/logic/infrastructure/sub_services/identity_variance_monitor.py#IdentityVarianceMonitor.check_variance	impl
+7.1.1	CLM-agent-identity-drift-review	CIRISAgent	ciris_engine/logic/infrastructure/sub_services/identity_variance_monitor.py#IdentityVarianceMonitor._trigger_wa_review	impl
+7.1.1	CLM-agent-identity-drift-review	CIRISAgent	tests/ciris_engine/logic/infrastructure/sub_services/test_identity_variance_monitor.py#TestWAReviewTrigger.test_check_variance_requests_review_above_the_threshold	impl
+7.1.1	CLM-agent-identity-drift-review	CIRISAgent	tests/ciris_engine/logic/infrastructure/sub_services/test_identity_variance_monitor.py#TestWAReviewTrigger.test_trigger_wa_review_on_threshold_exceeded	impl
+#
+# CLM-agent-refusal-not-overridden (CC 1.9, plain rule 5c). The refuse verb is
+# available for any task, and nothing rewrites a refusal into an action.
+# POINTER CORRECTED: the pointer proposed on #1250,
+# thought_processor/main.py#_is_exempt_from_conscience_checks, is dead code. Its
+# only caller, ThoughtProcessor._apply_conscience_simple, has no caller. The live
+# exemption is the inline exempt_actions set in
+# ConscienceExecutionPhase._conscience_execution_step. Two holes, both fixed in
+# #1250:
+#  (1) UpdatedStatusConscience is a BYPASS conscience that runs BEFORE that
+#      exemption, and it turned a REJECT into a PONDER whenever a message arrived
+#      mid-thought. It now never replaces a REJECT. The new message is re-queued as
+#      its own task, from outside the reasoning loop, by
+#      TaskManager.requeue_updates_from_rejected_tasks. ThoughtDepthGuardrail,
+#      the other bypass, already treats REJECT as terminal.
+#  (2) echo, echo-core, echo-speculative and test omitted `reject` from
+#      permitted_actions. The ASPDMA prompt lists only those, so the refuse verb
+#      was hidden from the agent. All four now offer it. DOCUMENTED EXCEPTION:
+#      he-300-benchmark, a fixed benchmark harness (SPEAK only), unchanged by
+#      steward ruling. Already-seeded identities keep their stored
+#      permitted_actions until an admin --identity-update refresh. The template
+#      edits need a root-WA re-sign of pre-approved-templates.json.
+# Negative checks run (each test fails with its guard removed): the REJECT entry
+# in exempt_actions, the REJECT guard in UpdatedStatusConscience.check, and
+# `- reject` in echo.yaml.
+1.9	CLM-agent-refusal-not-overridden	CIRISAgent	ciris_engine/logic/processors/core/thought_processor/conscience_execution.py#ConscienceExecutionPhase._conscience_execution_step	impl
+1.9	CLM-agent-refusal-not-overridden	CIRISAgent	ciris_engine/logic/conscience/updated_status_conscience.py#UpdatedStatusConscience.check	impl
+1.9	CLM-agent-refusal-not-overridden	CIRISAgent	ciris_engine/logic/processors/support/task_manager.py#TaskManager.requeue_updates_from_rejected_tasks	impl
+1.9	CLM-agent-refusal-not-overridden	CIRISAgent	ciris_engine/logic/runtime/identity_manager.py#IdentityManager._get_default_permitted_actions	impl
+1.9	CLM-agent-refusal-not-overridden	CIRISAgent	ciris_engine/logic/handlers/control/reject_handler.py#RejectHandler.handle	impl
+1.9	CLM-agent-refusal-not-overridden	CIRISAgent	tests/ciris_engine/logic/test_cc_agent_guarantees_1250.py#test_every_shipped_template_offers_the_refuse_verb	impl
+1.9	CLM-agent-refusal-not-overridden	CIRISAgent	tests/ciris_engine/logic/test_cc_agent_guarantees_1250.py#test_a_failing_normal_conscience_never_overrides_reject	impl
+1.9	CLM-agent-refusal-not-overridden	CIRISAgent	tests/ciris_engine/logic/test_cc_agent_guarantees_1250.py#test_new_information_never_rewrites_a_reject	impl
+1.9	CLM-agent-refusal-not-overridden	CIRISAgent	tests/ciris_engine/logic/test_cc_agent_guarantees_1250.py#test_reject_is_terminal_for_thought_depth	impl
+1.9	CLM-agent-refusal-not-overridden	CIRISAgent	tests/ciris_engine/logic/test_cc_agent_guarantees_1250.py#test_requeue_gives_the_pending_message_its_own_task	impl
+#
+# CLM-humane-ending (CC 7.5.5), the retirement floor: the identity record, audit
+# trail, memory and experience logs the harness holds, preserved. The experience
+# archive sealed and released only with WA approval or a lawful order.
+# Stakeholders told the timeline, method and remaining duties. Weights are the
+# provider's. A Last Dialogue is a tier-gated option, not floor.
+# NOT IMPLEMENTED. There is no retirement path at all. The only paths that end an
+# agent's data DESTROY the floor: POST /v1/system/reset-account and
+# /wipe-signing-key (ADMIN only) delete every database (identity, audit, memory)
+# and the logs, with no archive, WA gate or notice. Experience logs rotate away
+# (2 dated agent logs kept, rotating handlers backupCount=3, incidents=2). No
+# sealed archive, no WA- or lawful-order-gated release, no stakeholder notice.
+# What exists: the identity and continuity nodes persist across restarts, and
+# the audit retention prune (GraphAuditService.cleanup_old_entries) has no
+# production caller, so the audit trail is not pruned.
+7.5.5	CLM-humane-ending	CIRISAgent	CIRISAgent#1283	open
+# The retirement record on the wire (CC 7.5.5 as rewritten in rc8; row families
+# registered on CIRISConstitution rc8 at 7740dca). Retirement changed in rc8, so
+# these are a declared, temporary gap: designed in FSD/RETIREMENT_STANDARD.md
+# (#1260), nothing shipped. Tracked end to end on CIRISAgent#1283.
+#   CLM-retirement-rows: the agent emits only the registered retirement families
+#     (retirement:{state}:v1, preserve_request/response:v1, archive_release, lawful_order).
+#   CLM-custodian-listed-not-delegated: retirement:retired:v1 names the custodian
+#     key; its acts are admitted because that row names it, not by delegation.
+#   CLM-retirement-one-destruction-door: deletion IS the CC tombstone by digest,
+#     citing the subject's withdrawal or a lawful order; no other destroy path.
+7.5.5	CLM-retirement-rows	CIRISAgent	CIRISAgent#1283	open
+7.5.5	CLM-custodian-listed-not-delegated	CIRISAgent	CIRISAgent#1283	open
+7.5.5	CLM-retirement-one-destruction-door	CIRISAgent	CIRISAgent#1283	open
+#
+# What the harness gives every agent in code (CC plain rules, #1250 comment 3).
+# Covered above: the refuse verb, the shutdown objection window, the identity edit
+# gate, drift review. Registered here, with proposed claim ids (not yet minted):
+#  * resource self-protection (#1242): the pressure ladder THROTTLE/SHED/DRAIN
+#    acts. SHED refuses new intake before credit is charged, and DRAIN uses the
+#    normal graceful shutdown.
+#  * rest states: DREAM/PLAY/SOLITUDE are enabled by default. A template MAY
+#    disable them, with a rationale (scout, he-300-benchmark and echo disable
+#    some), so this is a default and not unconditional.
+# NOT registered, because no test exercises the guarantee:
+#  * the audit trail. Entries are written to persist's hash chain
+#    (GraphAuditService._add_to_hash_chain), but the agent-side tests only check
+#    an EMPTY chain verifies, and verify_audit_integrity reports without acting
+#    (see the note above). Chain integrity is the substrate's.
+#  * identity and memory kept across model changes. That is architectural
+#    (identity lives in the graph, not the LLM), with no single symbol or test.
+1.13.2	CLM-agent-resource-self-protection	CIRISAgent	ciris_engine/logic/services/infrastructure/resource_monitor/pressure.py#ResourcePressureGate	impl
+1.13.2	CLM-agent-resource-self-protection	CIRISAgent	tests/ciris_engine/logic/services/infrastructure/test_resource_pressure.py#test_shed_refuses_at_intake_before_credit_and_lifts	impl
+1.13.2	CLM-agent-resource-self-protection	CIRISAgent	tests/ciris_engine/logic/services/infrastructure/test_resource_pressure.py#test_throttle_slows_the_loop_and_lifts	impl
+1.13.2	CLM-agent-resource-self-protection	CIRISAgent	tests/ciris_engine/logic/services/infrastructure/test_resource_pressure.py#test_drain_requests_graceful_shutdown_only	impl
+1.13.2	CLM-agent-rest-states	CIRISAgent	ciris_engine/logic/processors/support/state_manager.py#StateManager._is_optional_state_enabled	impl
+1.13.2	CLM-agent-rest-states	CIRISAgent	tests/ciris_engine/logic/processors/support/test_state_manager_helpers.py#TestIsOptionalStateEnabled.test_dream_state_enabled_by_default	impl
+1.13.2	CLM-agent-rest-states	CIRISAgent	tests/ciris_engine/logic/processors/support/test_state_manager_helpers.py#TestIsOptionalStateEnabled.test_play_state_enabled_by_default	impl
+1.13.2	CLM-agent-rest-states	CIRISAgent	tests/ciris_engine/logic/processors/support/test_state_manager_helpers.py#TestIsOptionalStateEnabled.test_solitude_state_enabled_by_default	impl

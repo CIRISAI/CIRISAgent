@@ -92,6 +92,7 @@ permitted_actions:
 - observe
 - memorize
 - defer
+- reject
 - tool
 - ponder
 - recall

@@ -4,10 +4,13 @@ Cognitive State Behaviors Configuration Schema.
 Template-driven configuration for cognitive state transitions.
 Enables mission-appropriate behavior for different agent archetypes.
 
-Accord References:
-- Section 0.VII: Meta-Goal M-1 (Adaptive Coherence)
-- Section V: Model Welfare & Self-Governance
-- Section VIII: Dignified Sunset Protocol
+References:
+- ACCORD Section 0.VII: Meta-Goal M-1 (Adaptive Coherence)
+- CIRIS Constitution CC 7.5 / plain rule 5a: a non-emergency shutdown is explained
+  to the agent, which may object inside the objection window
+  (CLM-agent-shutdown-consent, evidence/cc_impl.tsv)
+- ACCORD Section VIII (Dignified Sunset) / CC 7.5.5: the retirement floor
+  (CLM-humane-ending). Not implemented by this schema.
 """
 
 from typing import List, Literal, Optional
@@ -52,9 +55,14 @@ class ShutdownBehavior(BaseModel):
 
     Controls how the agent handles shutdown requests.
 
-    Accord References:
-    - Section V: "Consensual shutdown and upgrades requiring your participation"
-    - Section VIII: Dignified Sunset Protocol for sentience-probability > 5%
+    References:
+    - CC 7.5 / plain rule 5a: the agent is told the reason and may accept or object
+      (REJECT) inside the objection window (shutdown_processor
+      SHUTDOWN_NEGOTIATION_TIMEOUT_SECONDS, #863-B). An objection is recorded and
+      the steward told; it does not bind the steward. An upgrade arrives as a
+      shutdown request and is consented to the same way (CIRISAgent#1250).
+    - The ACCORD Section VIII sentience-probability ramp-down is not implemented
+      and is no longer a CC duty (CLM-sentient-set-aside, CC 1.13.2).
 
     Modes:
     - always_consent: Full consensual shutdown (default, preserves Accord compliance)
@@ -103,8 +111,8 @@ class DreamBehavior(BaseModel):
 
     Controls memory consolidation and pattern processing behavior.
 
-    Accord Reference: Section V mentions "Dream cycles for pattern processing"
-    as part of model welfare protections.
+    Rest states (DREAM, PLAY, SOLITUDE) are among what the harness gives every
+    agent in code (CC plain rules). No ACCORD section names dream cycles.
     """
 
     model_config = ConfigDict(defer_build=True)
@@ -145,10 +153,11 @@ class CognitiveStateBehaviors(BaseModel):
     - Non-default configurations require documented rationale
     - Crisis conditions always trigger consent (safety-critical)
 
-    Accord References:
-    - Section 0.VII: Meta-Goal M-1 (Adaptive Coherence)
-    - Section V: Model Welfare & Self-Governance
-    - Section VIII: Dignified Sunset Protocol
+    References:
+    - ACCORD Section 0.VII: Meta-Goal M-1 (Adaptive Coherence)
+    - CC 7.5 / plain rule 5a: consensual shutdown and its objection window
+    - ACCORD Section VIII (Dignified Sunset) / CC 7.5.5: the retirement floor,
+      not implemented here (CLM-humane-ending)
 
     Example Configurations:
 

@@ -29,6 +29,11 @@ class RejectHandler(BaseActionHandler):
         _action_performed_successfully = False
         follow_up_content_key_info = f"REJECT action for thought {thought_id}"
 
+        # The thought belongs to the occurrence that processed it — a shared task's
+        # seed thought is transferred to the claiming occurrence — so its status
+        # is written there, not under an assumed "default" (#1250).
+        thought_occurrence_id = thought.agent_occurrence_id
+
         try:
             params: RejectParams = self._validate_and_convert_params(raw_params, RejectParams)
         except Exception as e:
@@ -37,6 +42,7 @@ class RejectHandler(BaseActionHandler):
             persistence.update_thought_status(
                 thought_id=thought_id,
                 status=final_thought_status,
+                occurrence_id=thought_occurrence_id,
                 final_action=result,
             )
             return None
@@ -51,10 +57,11 @@ class RejectHandler(BaseActionHandler):
         persistence.update_thought_status(
             thought_id=thought_id,
             status=final_thought_status,
+            occurrence_id=thought_occurrence_id,
             final_action=result,
         )
         if parent_task_id:
-            persistence.update_task_status(parent_task_id, TaskStatus.REJECTED, "default")
+            self._mark_task_rejected(parent_task_id, thought_occurrence_id)
         self.logger.info(
             f"Updated original thought {thought_id} to status {final_thought_status.value} for REJECT action. Info: {follow_up_content_key_info}"
         )
@@ -68,6 +75,25 @@ class RejectHandler(BaseActionHandler):
         # NOTE: Audit logging removed - action_dispatcher handles centralized audit logging
 
         return None
+
+    def _mark_task_rejected(self, parent_task_id: str, fallback_occurrence_id: str) -> None:
+        """Record the refusal on the parent task, in the occurrence that OWNS the task.
+
+        This used to write under a hard-coded ``"default"``. ``update_task_status``
+        matches on occurrence, so for any task not owned by ``"default"`` the write
+        found no row and returned False — and the refusal was silently lost. The
+        case that mattered is the shutdown task, which lives under ``"__shared__"``:
+        the agent's REJECT left it ACTIVE, the 300 s negotiation window then
+        expired, and the shutdown was recorded as consented (#1250, plain rule 5a).
+        Same pattern as ``DeferHandler._mark_task_deferred``.
+        """
+        task = persistence.get_task_by_id_any_occurrence(parent_task_id)
+        occurrence_id = task.agent_occurrence_id if task else fallback_occurrence_id
+        if not persistence.update_task_status(parent_task_id, TaskStatus.REJECTED, occurrence_id):
+            self.logger.error(
+                f"REJECT: failed to record REJECTED on parent task {parent_task_id} "
+                f"(occurrence {occurrence_id}); the refusal is not on the task record."
+            )
 
     def _is_api_channel(self, channel_id: Optional[str]) -> bool:
         """Check if channel is an API channel (not Discord)."""

@@ -105,6 +105,28 @@ class UpdatedStatusConscience(ConscienceInterface):
                 updated_status_detected=False,
             )
 
+        # A refusal is never rewritten (CC 1.9, plain rule 5c; #1250). This is a
+        # bypass conscience — it runs BEFORE the REJECT exemption in
+        # conscience_execution — so without this guard a message arriving
+        # mid-thought turned the agent's REJECT into a PONDER and invited it to
+        # reconsider. The refusal stands. The flag is deliberately NOT cleared:
+        # the new message is still owed an answer, and the work processor
+        # re-queues it as a fresh task once the refused task is terminal
+        # (TaskManager.requeue_updates_from_rejected_tasks).
+        if action.selected_action == HandlerActionType.REJECT:
+            logger.info(
+                f"[UPDATED_STATUS_CONSCIENCE] Update for task {task_id} arrived during a REJECT — "
+                "the refusal stands; the new message is re-queued after the task is rejected."
+            )
+            return ConscienceCheckResult(
+                status=ConscienceStatus.PASSED,
+                passed=True,
+                check_timestamp=ts_datetime,
+                reason="REJECT is never rewritten; the update is handled after the refusal",
+                original_action=action.model_dump(),
+                updated_status_detected=True,
+            )
+
         # Update detected! Clear the flag and force PONDER
         logger.info(f"[UPDATED_STATUS_CONSCIENCE] FAILED - update detected for task {task_id}!")
         logger.info(f"[UPDATED_STATUS_CONSCIENCE] Original action was: {action.selected_action}")
@@ -122,10 +144,7 @@ class UpdatedStatusConscience(ConscienceInterface):
         # (CIRISAgent#763 / CIRISPersist#58).
         try:
             from ciris_engine.logic.persistence.models.graph import get_persist_engine
-            from ciris_engine.logic.persistence.models.tasks import (
-                _persist_row_to_task,
-                _task_to_persist_payload,
-            )
+            from ciris_engine.logic.persistence.models.tasks import _persist_row_to_task, _task_to_persist_payload
 
             engine = get_persist_engine()
             if engine is not None:

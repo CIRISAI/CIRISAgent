@@ -397,6 +397,31 @@ class TestWAReviewTrigger:
         assert review_data["urgency"] == "moderate"
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(("variance", "expect_review"), [(0.25, True), (0.21, True), (0.20, False), (0.05, False)])
+    async def test_check_variance_requests_review_above_the_threshold(
+        self, variance_monitor, variance: float, expect_review: bool
+    ):
+        """CLM-agent-identity-drift-review (#1250): check_variance itself requests WA review.
+
+        The test above drives _trigger_wa_review directly, so it would stay green
+        if check_variance stopped calling it. This one goes through check_variance.
+        Strictly above 20% triggers review; exactly 20% does not.
+        Negative check: delete the `if report.requires_wa_review` call and the
+        True cases fail.
+        """
+        variance_monitor._baseline_snapshot_id = "baseline-123"
+        snap = GraphNode(id="snapshot-x", type=NodeType.IDENTITY_SNAPSHOT, scope=GraphScope.IDENTITY, attributes={})
+        variance_monitor._take_identity_snapshot = AsyncMock(return_value=snap)
+        variance_monitor._load_snapshot = AsyncMock(return_value=snap)
+        variance_monitor._calculate_variance = Mock(return_value=variance)
+        variance_monitor._store_variance_report = AsyncMock()
+
+        report = await variance_monitor.check_variance(force=True)
+
+        assert report.requires_wa_review is expect_review
+        assert variance_monitor._wa_bus.request_review.called is expect_review
+
+    @pytest.mark.asyncio
     async def test_trigger_wa_review_no_bus(self, mock_time_service):
         """Test WA review handles missing bus gracefully."""
         monitor = IdentityVarianceMonitor(time_service=mock_time_service)

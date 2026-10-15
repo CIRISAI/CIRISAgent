@@ -39,9 +39,8 @@ def _wire_persist_engine():
     import os
     import tempfile
 
-    from ciris_engine.logic.persistence._substrate import Engine, reset_engine  # type: ignore[import-untyped]
-
     import ciris_engine.logic.persistence.models.graph as _graph_mod
+    from ciris_engine.logic.persistence._substrate import Engine, reset_engine  # type: ignore[import-untyped]
     from ciris_engine.logic.persistence.models.graph import set_persist_engine
 
     with tempfile.NamedTemporaryFile(suffix="-persist.db", delete=False) as pf:
@@ -508,37 +507,14 @@ class TestShutdownProcessing:
         assert result.shutdown_ready is True
         assert shutdown_processor.shutdown_complete is True
 
-    @pytest.mark.asyncio
-    @patch("ciris_engine.logic.processors.states.shutdown_processor.persistence")
-    async def test_process_shutdown_failed_task_rejected(
-        self,
-        mock_persistence,
-        shutdown_processor,
-        sample_task,
-        sample_thought,
-    ):
-        """Test processing when task failed due to REJECT"""
-        # Setup
-        sample_task.status = TaskStatus.FAILED
-        shutdown_processor.shutdown_task = sample_task
-        mock_persistence.get_task_by_id.return_value = sample_task
-
-        # Mock final action as REJECT
-        action = Mock()
-        action.action_type = "REJECT"
-        action.action_params = {"reason": "Not ready to shutdown"}
-        sample_thought.final_action = action
-
-        mock_persistence.get_thoughts_by_task_id.return_value = [sample_thought]
-
-        # Execute
-        result = await shutdown_processor.process(round_number=1)
-
-        # Verify
-        assert isinstance(result, ShutdownResult)
-        assert result.shutdown_ready is False  # Rejected, not ready
-        assert shutdown_processor.shutdown_complete is True
-        assert shutdown_processor.shutdown_result.status == "rejected"
+    # test_process_shutdown_failed_task_rejected was removed (#1250). It mocked the
+    # task as FAILED with action_type "REJECT", a state RejectHandler never
+    # produces. RejectHandler writes REJECTED, writes it under the task's own
+    # occurrence, and the persisted action_type is "reject". It stayed green while
+    # every real refusal of a shutdown was lost. The replacement drives the real
+    # handler against a real persist engine:
+    # tests/ciris_engine/logic/test_cc_agent_guarantees_1250.py::
+    #     test_agent_reject_of_shutdown_is_recorded_as_an_objection_not_consent
 
     @pytest.mark.asyncio
     @patch("ciris_engine.logic.processors.states.shutdown_processor.get_shutdown_manager")
@@ -1058,9 +1034,7 @@ class TestValidationErrors:
         """#863-B: a shutdown task stuck non-terminal (e.g. DEFERRED) past the
         negotiation timeout forces a graceful shutdown instead of polling
         'Waiting for agent response' forever."""
-        from ciris_engine.logic.processors.states.shutdown_processor import (
-            SHUTDOWN_NEGOTIATION_TIMEOUT_SECONDS,
-        )
+        from ciris_engine.logic.processors.states.shutdown_processor import SHUTDOWN_NEGOTIATION_TIMEOUT_SECONDS
 
         mock_is_completed.return_value = False
         deferred_task = Task(
@@ -1085,9 +1059,7 @@ class TestValidationErrors:
         # Pretend negotiation began well beyond the timeout.
         start = datetime(2025, 10, 7, 12, 0, 0, tzinfo=timezone.utc)
         shutdown_processor._negotiation_started_at = start
-        mock_time_service.now.return_value = start + timedelta(
-            seconds=SHUTDOWN_NEGOTIATION_TIMEOUT_SECONDS + 5
-        )
+        mock_time_service.now.return_value = start + timedelta(seconds=SHUTDOWN_NEGOTIATION_TIMEOUT_SECONDS + 5)
 
         result = await shutdown_processor.process(round_number=999_999)
 

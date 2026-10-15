@@ -9,9 +9,14 @@ Supports cognitive_state_behaviors configuration for conditional/instant shutdow
 - conditional: Check conditions before requiring consent
 - instant: Skip consent entirely (only for low-tier agents)
 
-Accord References:
-- Section V: Model Welfare & Self-Governance (consensual shutdown)
-- Section VIII: Dignified Sunset Protocol
+Constitution references (CIRISConstitution, CC 7.5; register claims in
+evidence/cc_impl.tsv):
+- CC 7.5 / plain rule 5a: a non-emergency shutdown is explained to the agent,
+  which may accept or object (REJECT) inside the objection window
+  (SHUTDOWN_NEGOTIATION_TIMEOUT_SECONDS, #863-B). An objection is recorded and
+  the steward told the reason; it does not bind the steward (CLM-agent-shutdown-consent).
+- CC 7.5: every shutdown writes a continuity node carrying its consent status
+  (logic/runtime/shutdown_continuity.py, CLM-agent-shutdown-record).
 """
 
 import logging
@@ -33,7 +38,7 @@ from ciris_engine.schemas.processors.base import ProcessorServices
 from ciris_engine.schemas.processors.context import ProcessorContext
 from ciris_engine.schemas.processors.results import ShutdownResult
 from ciris_engine.schemas.processors.states import AgentState
-from ciris_engine.schemas.runtime.enums import TaskStatus, ThoughtStatus
+from ciris_engine.schemas.runtime.enums import HandlerActionType, TaskStatus, ThoughtStatus
 from ciris_engine.schemas.runtime.extended import ShutdownContext
 from ciris_engine.schemas.runtime.models import Task, TaskContext
 
@@ -254,10 +259,15 @@ class ShutdownProcessor(BaseProcessor):
             return self.shutdown_result or ShutdownResult(
                 status="shutdown_complete", message="system shutdown", shutdown_ready=True, duration_seconds=0.0
             )
-        elif current_task.status == TaskStatus.FAILED:
-            # Task failed - could be REJECT or error
+        elif current_task.status in (TaskStatus.REJECTED, TaskStatus.FAILED):
+            # REJECTED is what RejectHandler writes when the agent refuses the
+            # shutdown. It was not handled here, so a refusal fell through to the
+            # negotiation timeout and was recorded as consent (#1250). FAILED can
+            # still be a REJECT (older rows) or a genuine error.
             self.shutdown_complete = True
             self.shutdown_result = self._check_failure_reason(current_task)
+            if self.shutdown_result.status == "rejected":
+                await self._record_shutdown_objection(current_task, self.shutdown_result)
             return self.shutdown_result
 
         # Still processing
@@ -628,38 +638,75 @@ class ShutdownProcessor(BaseProcessor):
                 continue
 
             action = thought.final_action
-            if action.action_type == "REJECT":
+            # Persisted FinalAction.action_type is the enum VALUE ("reject").
+            # This compared against "REJECT", so a real refusal's reason was
+            # never found and the result degraded to status="error" (#1250).
+            if str(action.action_type).lower() == HandlerActionType.REJECT.value:
                 return self._extract_rejection_reason(action)
 
         return None
 
     def _check_failure_reason(self, task: Task) -> ShutdownResult:
-        """Check why the task failed - could be REJECT or actual error."""
+        """Check why the task ended unsuccessfully - REJECT (the agent objected) or an error."""
         # CRITICAL: For shared tasks, thoughts are transferred to claiming occurrence
         # Use self.agent_occurrence_id, not task.agent_occurrence_id (which is "__shared__")
         thoughts = persistence.get_thoughts_by_task_id(task.task_id, self.agent_occurrence_id)
-        if not thoughts:
+
+        # Search for rejection in thoughts
+        rejection_reason = self._find_rejection_in_thoughts(thoughts) if thoughts else None
+        if rejection_reason is None and task.status == TaskStatus.REJECTED:
+            # The task record itself says the agent refused; a missing reason must
+            # not turn that refusal into an "error".
+            rejection_reason = DEFAULT_REJECTION_REASON
+        if not rejection_reason:
+            # Task failed for other reasons
             return ShutdownResult(
                 status="error", action="shutdown_error", message="Shutdown task failed", errors=1, duration_seconds=0.0
             )
 
-        # Search for rejection in thoughts
-        rejection_reason = self._find_rejection_in_thoughts(thoughts)
-        if rejection_reason:
-            logger.warning(f"Agent REJECTED shutdown: {rejection_reason}")
-            # Human override available via emergency shutdown API with Ed25519 signature
-            return ShutdownResult(
-                status="rejected",
-                action="shutdown_rejected",
-                reason=rejection_reason,
-                message=f"Agent rejected shutdown: {rejection_reason}",
-                duration_seconds=0.0,
-            )
-
-        # Task failed for other reasons
+        logger.warning(f"Agent REJECTED shutdown: {rejection_reason}")
+        # A refusal is an OBJECTION, not a veto (plain rule 5a): it is recorded and
+        # the steward is told the reason, and the steward's decision still binds.
+        # shutdown_complete is set by the caller, so the processing loop exits.
         return ShutdownResult(
-            status="error", action="shutdown_error", message="Shutdown task failed", errors=1, duration_seconds=0.0
+            status="rejected",
+            action="shutdown_rejected",
+            reason=rejection_reason,
+            message=f"Agent rejected shutdown: {rejection_reason}",
+            duration_seconds=0.0,
         )
+
+    async def _record_shutdown_objection(self, task: Task, result: ShutdownResult) -> None:
+        """Put the agent's refusal and its reason on the steward's record (plain rule 5a).
+
+        Uses the existing signed, hash-chained audit trail — the same rail the API
+        uses to record the shutdown REQUEST (``system_shutdown_request``), so the
+        request and the agent's objection to it sit side by side. The reason also
+        lands on the shutdown continuity node (``build_shutdown_node_attributes``).
+        A failure to audit is logged, never raised: it must not turn a recorded
+        refusal into a crashed shutdown.
+        """
+        if not self.audit_service:
+            logger.error("No audit service: the agent's shutdown objection is not on the audit trail")
+            return
+        try:
+            from ciris_engine.schemas.services.graph.audit import AuditEventData
+
+            await self.audit_service.log_event(
+                "shutdown_objection",
+                AuditEventData(
+                    entity_id=task.task_id,
+                    actor="agent",
+                    outcome="rejected",
+                    severity="warning",
+                    action="shutdown_rejected",
+                    resource="system",
+                    reason=result.reason or DEFAULT_REJECTION_REASON,
+                    metadata={"task_id": task.task_id, "agent_occurrence_id": self.agent_occurrence_id},
+                ),
+            )
+        except Exception as e:  # noqa: BLE001 - recording must not break shutdown
+            logger.error(f"Failed to audit the agent's shutdown objection: {e}")
 
     async def _process_shutdown_thoughts(self) -> None:
         """

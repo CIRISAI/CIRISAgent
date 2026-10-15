@@ -4,6 +4,7 @@ internal_only: true
 role_description: 'Test Agent - Minimal agent for development and debugging purposes only. Limited to observe action for safety.'
 permitted_actions:
 - observe
+- reject
 stewardship:
   stewardship_tier: 1
   creator_intent_statement:
@@ -13,7 +14,7 @@ stewardship:
     - Not intended for production use.
     limitations_and_design_choices:
     - Designed with a fixed ethical framework (Accord 1.2b, instantiating CIRIS Constitution 1.0-rc4).
-    - Limited to observe action only.
+    - Limited to observe, plus reject (the refuse verb is available to every agent, CC 1.9 / plain rule 5c).
     - Minimal configuration for testing purposes.
     anticipated_benefits:
     - Safe testing environment for development.

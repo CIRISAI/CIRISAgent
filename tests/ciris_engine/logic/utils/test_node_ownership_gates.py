@@ -114,11 +114,10 @@ def fold_on(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _substrate(monkeypatch: pytest.MonkeyPatch, key_id: Optional[str], owner_of: Any) -> None:
-    import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
-
     from ciris_engine.logic.persistence.models import graph
+    from ciris_engine.logic.runtime import edge_runtime
 
-    monkeypatch.setattr(ciris_server, "node_identity", lambda: json.dumps({"key_id": key_id, "standing": "resolved"}))
+    monkeypatch.setattr(edge_runtime, "get_node_key_id", lambda: key_id)
     engine = None if owner_of is None else SimpleNamespace(owner_of_json=owner_of)
     monkeypatch.setattr(graph, "get_persist_engine", lambda: engine)
 
@@ -235,16 +234,15 @@ async def test_the_conftest_stub_is_lifted_by_the_marker(home: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_fold_on_without_a_node_answer_is_not_the_no_op(
+async def test_a_folded_process_that_cannot_read_its_node_holds(
     fold_on: None, home: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The no-op is keyed on the fold switch only: a folded process that cannot read its node holds."""
-    import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
+    from ciris_engine.logic.runtime import edge_runtime
 
     def unanswered() -> str:
         raise RuntimeError("no node")
 
-    monkeypatch.setattr(ciris_server, "node_identity", unanswered)
+    monkeypatch.setattr(edge_runtime, "get_node_key_id", unanswered)
     state = await node_ownership.node_owned(fresh=True)
     assert state.reading == NodeOwnershipReading.READ_ERROR and state.unclaimed
 

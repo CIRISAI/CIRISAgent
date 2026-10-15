@@ -9,9 +9,10 @@ act gate (`ActionDispatcher._dispatch_inner`), intake (`routes/agent.py`),
 setup completion (`routes/setup/complete.py`) and health all call
 `node_owned()` and nothing else.
 
-THE SOURCE is the node's own owner-binding, read in process: the node names its
-key (`ciris_server.node_identity()`), and the persist engine's single-owner
-resolver answers who owns it (`Engine.owner_of_json`, the resolver the
+THE SOURCE is the node's own owner-binding, read in process: the node key is
+the one `provision_node_identity` minted at boot (`edge_runtime.get_node_key_id()`,
+the key a claim binds: upgrade-owner answers with this same `node_key_id`), and
+the persist engine's single-owner resolver answers who owns it (`Engine.owner_of_json`, the resolver the
 substrate says consumers MUST use for "who owns this node"). The same binding
 the node checks when it refuses peering, consent and erasure on an unowned node.
 
@@ -74,15 +75,15 @@ def _state(reading: NodeOwnershipReading, **fields: Optional[str]) -> NodeOwners
 
 def _read_owner_sync() -> NodeOwnership:
     """One uncached read of the node's owner-binding. Blocking; never call on the event loop."""
-    import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
-
+    # NOT `ciris_server.node_identity()`: on the embedded fold its `key_id`
+    # stays null for the whole run (seen on 0.5.226), which would hold an owned
+    # agent forever.
     from ciris_engine.logic.persistence.models.graph import get_persist_engine
+    from ciris_engine.logic.runtime.edge_runtime import get_node_key_id
 
-    identity = json.loads(ciris_server.node_identity())
-    node_key_id = identity.get("key_id") if isinstance(identity, dict) else None
+    node_key_id = get_node_key_id()
     if not node_key_id:
-        return _state(NodeOwnershipReading.NO_NODE_KEY, read_error="the node has not named its key yet")
-    node_key_id = str(node_key_id)
+        return _state(NodeOwnershipReading.NO_NODE_KEY, read_error="the node key is not provisioned yet")
     engine = get_persist_engine()
     owner_of_json = getattr(engine, "owner_of_json", None)
     if owner_of_json is None:

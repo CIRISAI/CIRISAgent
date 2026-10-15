@@ -52,6 +52,12 @@ time; no vendored file is edited. This module:
    values, the format ``_load_localized_accord_file`` loads -- with a provenance
    line stating ``status: draft / review_status: machine_reviewed``. A partial
    locale is never written as a file: the only filler would be English.
+8. EXTRA TRANSLATION MEMORY (``--extra-tm DIR``, repeatable): the translated
+   strings of the CIRIS website (``src/i18n/{dictionaries,chrome}``), the
+   CIRISClient apps and the agent's own UI bundle become extra TERMINOLOGY
+   anchors, after the accord TM's and on their own bound (``EXTRA_*``), ranked
+   website > client > agent UI. They are never values: only the accord TM seeds.
+   Without the flag, every request is byte-identical to what it was before.
 
 Never touched: the polyglot accords (``accord_*_POLYGLOT*.txt``) and
 ``ciris_engine/data/localized/polyglot/``. Those load universally and are not
@@ -65,6 +71,8 @@ Usage (every localize.py flag passes through)::
     E13='--version 1.3 --stem constitution_ethics --tm-version 1.2b --tm-stem accord'
     python3 localization/accord_localize.py $E13 --segments
     python3 localization/accord_localize.py $E13 --seed-exact-tm --units section0 --lane translate --dry-run
+    python3 localization/accord_localize.py $E13 --extra-tm ~/ciris-website --extra-tm ~/CIRISClient \
+        --extra-tm . --units section0 --lane translate --dry-run
     python3 localization/accord_localize.py --version 1.3 --segments
     python3 localization/accord_localize.py --version 1.3 --check
     python3 localization/accord_localize.py --version 1.3 --units section0 --lane translate --dry-run
@@ -86,20 +94,23 @@ import argparse
 import fnmatch
 import importlib
 import json
+import math
 import os
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Callable, Dict, FrozenSet, Iterable, List, Optional, Sequence, Set, Tuple
+from typing import Any, Callable, Dict, FrozenSet, Iterable, List, NamedTuple, Optional, Sequence, Set, Tuple
 
 HERE = Path(__file__).resolve().parent
 REPO_ROOT = HERE.parent
 sys.path.insert(0, str(HERE))
 
 import accord_segments as seg  # noqa: E402
+import lane_backoff  # noqa: E402
 
 LOCALIZED = REPO_ROOT / "ciris_engine" / "data" / "localized"
 STAGE_ROOT = HERE / "accord"
@@ -524,6 +535,10 @@ class Stage:
         self.dir = stage_dir or default_stage_dir(version, stem)
         #: Exact-English translation-memory matches to seed as values (opt-in).
         self.seed_tm: Dict[str, TM] = {}
+        #: --extra-tm corpora (website, client, agent UI): ANCHORS ONLY. Nothing
+        #: in Stage reads this to seed or write a value; install() hands it to
+        #: anchors_for.
+        self.extra_tm: Dict[str, List[ExtraAnchor]] = {}
         source = accord_path(localized, version, "en", stem)
         if not source.is_file():
             raise SystemExit(
@@ -726,9 +741,28 @@ def _similarity(a: str, b: str) -> float:
     return len(ta & tb) / len(ta | tb)
 
 
-def make_anchors(tms: Dict[str, TM]) -> Callable[..., List[Tuple[str, str, str]]]:
-    """An ``anchors_for`` with localize.py's signature, over the accord TM."""
+def make_anchors(
+    tms: Dict[str, TM], extra: Optional[Dict[str, List["ExtraAnchor"]]] = None
+) -> Callable[..., List[Tuple[str, str, str]]]:
+    """An ``anchors_for`` with localize.py's signature, over the accord TM.
 
+    ``extra`` (``--extra-tm``) adds terminology anchors from the website and app
+    corpora AFTER the accord TM's, on their own budget, so the accord TM's
+    anchors are exactly what they are without it.
+    """
+    if not extra:
+        return _accord_anchors(tms)
+    accord = _accord_anchors(tms)
+
+    def anchors_for(
+        lang: str, needed: Sequence[str], en_flat: Dict[str, Any], *, limit: int = ACCORD_ANCHOR_LIMIT
+    ) -> List[Tuple[str, str, str]]:
+        return accord(lang, needed, en_flat, limit=limit) + extra_anchors(extra.get(lang, []), needed, en_flat)
+
+    return anchors_for
+
+
+def _accord_anchors(tms: Dict[str, TM]) -> Callable[..., List[Tuple[str, str, str]]]:
     def anchors_for(
         lang: str, needed: Sequence[str], en_flat: Dict[str, Any], *, limit: int = ACCORD_ANCHOR_LIMIT
     ) -> List[Tuple[str, str, str]]:
@@ -794,7 +828,371 @@ def make_anchors(tms: Dict[str, TM]) -> Callable[..., List[Tuple[str, str, str]]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Prompts: Accord wording, the guide's rules carried over
+# Extra translation memory: the website and app corpora (--extra-tm), anchors only
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Users read CIRIS in three more places than the Accord: the website, the apps,
+# and the agent's own interface. Each has its own machine-translated, MQM-judged
+# corpus. Anchors from them keep a shared term reading the same way everywhere.
+#
+# They are ANCHORS, never values: nothing here reaches Stage.seed_tm, a bundle
+# or a written file. Only the accord TM seeds (--seed-exact-tm).
+
+
+class ExtraAnchor(NamedTuple):
+    """One (English, translation) pair from an extra corpus, as an anchor."""
+
+    rank: int  # 1 website, 2 client, 3 agent UI (the accord TM is 0)
+    key: str  # "<source>:<flat key>", so the prompt says where it came from
+    english: str
+    text: str
+    tokens: FrozenSet[str]
+
+
+#: ``(source name, rank, bundle dirs relative to the corpus root)``. A root is
+#: recognised by these layouts, and anything else is refused. The client's
+#: androidApp / iosApp / desktopApp bundles are byte-identical mirrors of the
+#: shared one, so only the shared one is read.
+EXTRA_LAYOUTS: Tuple[Tuple[str, int, Tuple[str, ...]], ...] = (
+    ("website", 1, ("src/i18n/dictionaries", "src/i18n/chrome")),
+    ("client", 2, ("client/shared/src/desktopMain/resources/localization",)),
+    ("agent-ui", 3, ("ciris_engine/data/localized",)),
+)
+
+#: Bounds, per request (one request = one language x one unit). Per KEY of the
+#: unit at most EXTRA_PER_KEY anchors, round-robin across keys; per request at
+#: most EXTRA_ANCHOR_LIMIT anchors and EXTRA_MAX_BLOCK_CHARS characters. These
+#: are UI strings: an anchor longer than EXTRA_MAX_ANCHOR_CHARS is a paragraph,
+#: not a term.
+EXTRA_PER_KEY = 2
+EXTRA_ANCHOR_LIMIT = 24
+EXTRA_MAX_BLOCK_CHARS = 3000
+EXTRA_MAX_ANCHOR_CHARS = 120
+#: An entry is a candidate for a line only when EVERY content word of it occurs
+#: in the line (a term or phrase the line uses, not one that shares a word), it
+#: has at most this many content words, and -- if it is a single word -- that
+#: word is at least EXTRA_MIN_SINGLE_WORD letters and not a function word. UI
+#: corpora are full of "Next", "Open", "Who": as anchors those are noise, and an
+#: imperative button sense can mislead.
+EXTRA_MAX_TERM_WORDS = 5
+EXTRA_MIN_SINGLE_WORD = 6
+_EXTRA_STOP = frozenset(
+    """about above after again against all also am any are as at be because been before being below between
+    both but by can cannot could did do does doing down during each either else even ever every few from
+    further had has have having he her here hers him his how if into it its itself just least less let like
+    may me might more most much must my neither never no nor not now of off on once one only other ought our
+    ours out over own per rather same shall she should since so some still such than their theirs them then
+    there these they those though through thus till too under until up upon us very via was we were what
+    when where whether which while who whom whose why will with within without would yet you your yours
+    another anything everything nothing something someone everyone nobody whatever whichever""".split()
+)
+
+#: File-level ``_meta.status`` / ``_meta.review_status`` values that exclude a
+#: whole file. ``draft`` / ``needs_native_review`` / ``machine_reviewed`` are NOT
+#: here: they are the lifecycle stamp of every machine-translated file in all
+#: four corpora (the accord TM itself is ``draft / machine_reviewed``), each of
+#: which went through the MQM judge. A file that says it never did is excluded.
+EXTRA_REJECTED_STATUSES = frozenset(
+    {"unreviewed", "untranslated", "stub", "placeholder", "wip", "pending", "rejected", "machine_unreviewed"}
+)
+#: Review findings this severe on a value that is still current exclude it.
+EXTRA_REJECTED_SEVERITIES = frozenset({"critical", "major"})
+
+_HTML = re.compile(r"<[A-Za-z/!]")
+_PLACEHOLDERISH = re.compile(r"\{[^}]*\}|%\d*\$?[sdf@]|\$\{")
+_ACCORD_NAME = re.compile(r"\bAccord\b", re.I)
+
+
+def _flat_strings(obj: Any, prefix: str = "") -> Dict[str, str]:
+    """Nested JSON -> flat dotted keys. Arrays, non-strings and ``_``-prefixed
+    subtrees (``_meta``) are skipped."""
+    out: Dict[str, str] = {}
+    if not isinstance(obj, dict):
+        return out
+    for k, v in obj.items():
+        if not isinstance(k, str) or k.startswith("_"):
+            continue
+        key = f"{prefix}.{k}" if prefix else k
+        if isinstance(v, dict):
+            out.update(_flat_strings(v, key))
+        elif isinstance(v, str):
+            out[key] = v
+    return out
+
+
+def _file_status(doc: Dict[str, Any]) -> Optional[str]:
+    meta = doc.get("_meta")
+    if not isinstance(meta, dict):
+        return None
+    for field in ("status", "review_status"):
+        value = meta.get(field)
+        if isinstance(value, str) and value.strip().lower() in EXTRA_REJECTED_STATUSES:
+            return f"{field}={value}"
+    return None
+
+
+def _flagged_keys(root: Path, lang: str) -> Set[str]:
+    """Keys a corpus's own review flagged for ``lang``, where it records them.
+
+    The website's pipeline writes ``localization/hard-cases/`` (git-ignored, so
+    present only in a local checkout): ``hard-cases-*.json`` cases are strings
+    the judge rejected or the ladder could not fix, and ``review-<lang>-*.json``
+    holds MQM findings. A judge-rejected key, or a critical/major finding on a
+    value that is still current, is not an exemplar.
+    """
+    hard = root / "localization" / "hard-cases"
+    out: Set[str] = set()
+    if not hard.is_dir():
+        return out
+    for path in sorted(hard.glob("hard-cases-*.json")):
+        try:
+            cases = read_json(path).get("cases", [])
+        except (OSError, ValueError):
+            continue
+        for case in cases if isinstance(cases, list) else []:
+            if isinstance(case, dict) and case.get("lang") == lang and isinstance(case.get("key"), str):
+                out.add(case["key"])
+    for path in sorted(hard.glob(f"review-{lang}-*.json")):
+        try:
+            findings = read_json(path).get("findings", {})
+        except (OSError, ValueError):
+            continue
+        bundle = path.stem.split("-", 2)[-1]
+        current: Dict[str, str] = {}
+        for d in EXTRA_LAYOUTS[0][2]:
+            if Path(d).name == bundle and (root / d / f"{lang}.json").is_file():
+                current = _flat_strings(read_json(root / d / f"{lang}.json"))
+        for key, finding in findings.items() if isinstance(findings, dict) else []:
+            if not isinstance(finding, dict):
+                continue
+            severe = any(
+                isinstance(e, dict) and e.get("severity") in EXTRA_REJECTED_SEVERITIES
+                for e in finding.get("errors", [])
+            )
+            if severe and current.get(key) == finding.get(lang):
+                out.add(key)
+    return out
+
+
+def _usable(english: str, text: str, lang: str) -> Optional[str]:
+    """Why this pair is not an anchor, or None."""
+    e, t = english.strip(), text.strip()
+    if not e or not t:
+        return "empty"
+    if e == t:
+        return "same_as_english"
+    if len(e) > EXTRA_MAX_ANCHOR_CHARS or len(t) > EXTRA_MAX_ANCHOR_CHARS:
+        return "too_long"
+    if "\n" in e or "\n" in t or _HTML.search(e) or _HTML.search(t):
+        return "markup"
+    if _PLACEHOLDERISH.search(e) or _PLACEHOLDERISH.search(t):
+        return "placeholder"
+    if _ACCORD_NAME.search(e):
+        # The document's own name is pinned to the accord TM's rendering.
+        return "names_the_accord"
+    if any(claim in e or claim in t for claim in seg.WITHDRAWN):
+        return "withdrawn_claim"
+    rng = seg.SCRIPT.get(lang)
+    if rng and not re.search(f"[{rng}]", t):
+        return "wrong_script"
+    terms = _term_tokens(e)
+    if not terms or len(terms) > EXTRA_MAX_TERM_WORDS:
+        return "not_a_term"
+    if len(terms) == 1 and len(next(iter(terms))) < EXTRA_MIN_SINGLE_WORD:
+        return "not_a_term"
+    return None
+
+
+def _term_tokens(text: str) -> FrozenSet[str]:
+    return frozenset(_tokens(text) - _EXTRA_STOP)
+
+
+class ExtraCorpus(NamedTuple):
+    name: str
+    rank: int
+    root: Path
+    commit: str
+
+
+def detect_extra(root: Path) -> List[ExtraCorpus]:
+    """The corpora a ``--extra-tm`` root holds. Refuses a root that holds none."""
+    root = root.resolve()
+    found = []
+    for name, rank, dirs in EXTRA_LAYOUTS:
+        if any((root / d / "en.json").is_file() for d in dirs):
+            found.append(ExtraCorpus(name, rank, root, _commit_of(root)))
+    if not found:
+        layouts = ", ".join(f"{n}: {' | '.join(d)}" for n, _, d in EXTRA_LAYOUTS)
+        raise SystemExit(f"[refuse] --extra-tm {root}: no known corpus layout ({layouts})")
+    return found
+
+
+def _commit_of(root: Path) -> str:
+    """The checkout's commit, for provenance; read-only. Only the root's OWN
+    repository: a plain directory inside another checkout is "unknown", not
+    its parent's HEAD."""
+    if not (root / ".git").exists():
+        return "unknown"
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "HEAD"], capture_output=True, text=True, timeout=10, check=False
+        )
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+    return out.stdout.strip() if out.returncode == 0 else "unknown"
+
+
+def load_extra_tm(
+    roots: Sequence[Path], langs: Sequence[str]
+) -> Tuple[Dict[str, List[ExtraAnchor]], List[Tuple[ExtraCorpus, Dict[str, Dict[str, int]]]]]:
+    """``{lang: [anchors]}`` from every root, plus per-corpus stats.
+
+    De-duplicated by English across corpora: the same label in the website and
+    the client is ONE anchor, from the higher-ranked corpus.
+    """
+    corpora = sorted((c for r in roots for c in detect_extra(Path(r))), key=lambda c: c.rank)
+    seen_roots: Set[Tuple[str, Path]] = set()
+    out: Dict[str, List[ExtraAnchor]] = {lang: [] for lang in langs}
+    taken: Dict[str, Set[str]] = {lang: set() for lang in langs}
+    report: List[Tuple[ExtraCorpus, Dict[str, Dict[str, int]]]] = []
+    dirs_of = {name: dirs for name, _, dirs in EXTRA_LAYOUTS}
+    for corpus in corpora:
+        if (corpus.name, corpus.root) in seen_roots:
+            continue
+        seen_roots.add((corpus.name, corpus.root))
+        stats: Dict[str, Dict[str, int]] = {}
+        for lang in langs:
+            s: Dict[str, int] = {}
+            flagged = _flagged_keys(corpus.root, lang)
+            for d in dirs_of[corpus.name]:
+                en_path, lo_path = corpus.root / d / "en.json", corpus.root / d / f"{lang}.json"
+                if not en_path.is_file() or not lo_path.is_file():
+                    continue
+                lo_doc = read_json(lo_path)
+                why_file = _file_status(lo_doc)
+                en_flat, lo_flat = _flat_strings(read_json(en_path)), _flat_strings(lo_doc)
+                if why_file:
+                    s["file_" + why_file.split("=")[0]] = s.get("file_" + why_file.split("=")[0], 0) + len(lo_flat)
+                    continue
+                for key in sorted(lo_flat):
+                    english = en_flat.get(key)
+                    if english is None:
+                        why: Optional[str] = "no_english"
+                    elif key in flagged:
+                        why = "review_flagged"
+                    else:
+                        why = _usable(english, lo_flat[key], lang)
+                    if why is None and english is not None:
+                        norm = " ".join(english.split()).lower()
+                        if norm in taken[lang]:
+                            why = "duplicate"
+                        else:
+                            taken[lang].add(norm)
+                            out[lang].append(
+                                ExtraAnchor(
+                                    corpus.rank,
+                                    f"{corpus.name}:{key}",
+                                    english.strip(),
+                                    lo_flat[key].strip(),
+                                    frozenset(_tokens(english)),
+                                )
+                            )
+                    s[why or "kept"] = s.get(why or "kept", 0) + 1
+            stats[lang] = s
+        report.append((corpus, stats))
+    return out, report
+
+
+def extra_anchors(
+    pool: Sequence[ExtraAnchor], needed: Sequence[str], en_flat: Dict[str, Any]
+) -> List[Tuple[str, str, str]]:
+    """Terminology anchors for one request, bounded (see EXTRA_* above).
+
+    An entry is a candidate for a line when every content word of it occurs in
+    that line: a term the line uses. Candidates rank by the summed rarity (idf
+    over the pool) of their words -- multi-word and rarer terms first -- then
+    corpus rank (website, client, agent UI), then brevity. Each key contributes
+    at most EXTRA_PER_KEY, taken round-robin so every line gets its best term
+    before any line gets its second; the result is emitted grouped by corpus
+    rank.
+    """
+    if not pool:
+        return []
+    df: Dict[str, int] = {}
+    index: Dict[str, List[int]] = {}
+    for i, a in enumerate(pool):
+        for t in a.tokens - _EXTRA_STOP:
+            df[t] = df.get(t, 0) + 1
+            index.setdefault(t, []).append(i)
+    n = len(pool)
+
+    def idf(t: str) -> float:
+        return math.log((n + 1) / (df.get(t, 0) + 1)) + 1.0
+
+    per_key: List[List[Tuple[float, int]]] = []
+    for key in needed:
+        # Containment is over ALL the entry's words, function words included,
+        # so "No Memories" is not offered to a line about memories.
+        line = frozenset(_tokens(str(en_flat.get(key, ""))))
+        cands: Dict[int, float] = {}
+        for t in line - _EXTRA_STOP:
+            for i in index.get(t, []):
+                if i not in cands and pool[i].tokens <= line:
+                    cands[i] = sum(idf(x) for x in pool[i].tokens - _EXTRA_STOP)
+        ranked = sorted(cands.items(), key=lambda c: (-c[1], pool[c[0]].rank, len(pool[c[0]].english), pool[c[0]].key))
+        per_key.append([(score, i) for i, score in ranked])
+    # A key's anchors are its top EXTRA_PER_KEY candidates (shared with another
+    # key, they appear once); round-robin by depth, so every key's best comes
+    # before any key's second.
+    chosen: List[Tuple[float, int]] = []
+    seen: Set[int] = set()
+    for depth in range(EXTRA_PER_KEY):
+        for cands_k in per_key:
+            if depth < len(cands_k) and cands_k[depth][1] not in seen:
+                chosen.append(cands_k[depth])
+                seen.add(cands_k[depth][1])
+    out: List[Tuple[float, int]] = []
+    budget = EXTRA_MAX_BLOCK_CHARS
+    for score, i in chosen[:EXTRA_ANCHOR_LIMIT]:
+        a = pool[i]
+        cost = len(a.key) + len(a.english) + len(a.text) + 16
+        if cost > budget:
+            continue
+        out.append((score, i))
+        budget -= cost
+    out.sort(key=lambda c: (pool[c[1]].rank, -c[0], pool[c[1]].key))
+    return [(pool[i].key, pool[i].english, pool[i].text) for _, i in out]
+
+
+def print_extra_report(report: Sequence[Tuple[ExtraCorpus, Dict[str, Dict[str, int]]]]) -> None:
+    """One line per corpus: provenance (commit) and what was kept or skipped."""
+    for corpus, stats in report:
+        kept = sum(s.get("kept", 0) for s in stats.values())
+        skipped: Dict[str, int] = {}
+        for s in stats.values():
+            for why, count in s.items():
+                if why != "kept":
+                    skipped[why] = skipped.get(why, 0) + count
+        why_text = ", ".join(f"{k}={v}" for k, v in sorted(skipped.items()))
+        print(
+            f"[extra-tm] {corpus.name} (rank {corpus.rank}) {corpus.root.name}@{corpus.commit}: "
+            f"{kept} anchor(s) across {len(stats)} locale(s); skipped {why_text or 'none'}"
+        )
+
+
+_EXTRA_RULE = """
+ANCHORS FROM THE WEBSITE AND APPS. Anchor keys that start with "website:",
+"client:" or "agent-ui:" are NOT lines of this document. They are this
+language's shipped strings from the CIRIS website, the CIRIS apps and the
+agent's own interface: what its users already read. They are there for the
+TERMS they share with these lines, so one concept reads the same way
+everywhere, and for register. They do not override the CANONICAL TERMINOLOGY
+block, nor the document's own name as the previous edition renders it, and a
+UI label's brevity is not a model for this document's voice."""
+
+_EXTRA_RULE_REVIEW = (
+    _EXTRA_RULE + "\nA term rendered as those anchors render it is not a terminology finding on that ground alone."
+)
 # ─────────────────────────────────────────────────────────────────────────────
 
 _ACCORD_RULES = """- These lines are the CIRIS Accord: a governance covenant the agent reads
@@ -989,9 +1387,14 @@ def import_localize(stage_dir: Path) -> ModuleType:
 
 def install(L: ModuleType, stage: Stage, tms: Dict[str, TM]) -> None:
     """Point the vendored module's hooks at the accord."""
+    # Concurrent lane shards share one provider key: wait out 402/429/5xx in
+    # place instead of letting the vendored code read them as a dead rung.
+    lane_backoff.install(L)
     for name, text in accord_prompts(L, stage.stem).items():
+        if stage.extra_tm:
+            text += _EXTRA_RULE_REVIEW if name == "SYSTEM_REVIEW" else _EXTRA_RULE
         setattr(L, name, text)
-    setattr(L, "anchors_for", make_anchors(tms))
+    setattr(L, "anchors_for", make_anchors(tms, stage.extra_tm))
 
     # Glossary: the deprecated ACCORD row is the document's own name here.
     upstream_deprecated = L.gloss.deprecated
@@ -1162,6 +1565,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         action="store_true",
         help="seed lines whose English is unchanged from the TM edition with its shipped translation",
     )
+    ap.add_argument(
+        "--extra-tm",
+        action="append",
+        type=Path,
+        default=[],
+        metavar="DIR",
+        help="a ciris-website, CIRISClient or CIRISAgent checkout whose translated strings become extra "
+        "terminology anchors (never values); repeatable",
+    )
     ap.add_argument("--units", default="", help="space-separated units to run (default: all, one at a time)")
     ap.add_argument("--stage-dir", type=Path, default=None, help=argparse.SUPPRESS)
     ap.add_argument("--localized-dir", type=Path, default=LOCALIZED, help=argparse.SUPPRESS)
@@ -1213,6 +1625,9 @@ def _main(args: argparse.Namespace, rest: List[str], stage: Stage) -> int:
     tms = {lang: build_tm(stage.localized, args.tm_version, lang, args.tm_stem) for lang in stage.languages}
     if args.seed_exact_tm:
         stage.seed_tm = tms
+    if args.extra_tm:
+        stage.extra_tm, extra_report = load_extra_tm(args.extra_tm, stage.languages)
+        print_extra_report(extra_report)
     stats = stage.build()
     for lang, s in sorted(stats.items()):
         extra = ", ".join(f"{k}={v}" for k, v in s.items() if k not in ("present", "total") and v)

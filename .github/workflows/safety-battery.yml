@@ -457,7 +457,13 @@ jobs:
           printf '%s' "$DEEPINFRA_API_KEY" > "$HOME/.deepinfra_key"
 
       - name: Run safety battery (capture)
+        id: capture
         if: steps.dedup.outputs.skip != 'true' && steps.secrets_check.outputs.have_secret == 'true'
+        # Bounded BELOW the job's 90 minutes (#1264). When the job timeout fired
+        # first, the job was cancelled mid-step and nothing after it ran: no
+        # logs, no traces, no partial results. A step timeout ends only this
+        # step, and the `always()` diagnostic upload below still gets its turn.
+        timeout-minutes: 75
         run: |
           mkdir -p qa_reports "$CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR"
           python3 -m tools.qa_runner safety_battery \
@@ -563,7 +569,7 @@ jobs:
             } >> $GITHUB_STEP_SUMMARY
           fi
 
-      - name: Upload agent server logs (whenever delivery is unproven)
+      - name: Upload agent server logs (capture unfinished or delivery unproven)
         # When trace_count=0 the bundle alone doesn't tell us WHY the lens
         # push didn't fire. The agent server logs (logs/sqlite/latest.log,
         # incidents_latest.log, console.log) have the adapter-startup,
@@ -579,9 +585,21 @@ jobs:
         # at `kex_present: false` for 360s and threw away the only record of why.
         # Production and delivery are different claims; this step exists for the
         # second one, and was keyed to the first.
+        #
+        # AND WHENEVER THE CAPTURE DID NOT FINISH (#1264). `always()` makes this
+        # run after a failed, timed-out or cancelled capture too: run
+        # 38492155330 hit the job timeout and left no artifact at all, so the
+        # stall could not be diagnosed from the run. The partial results and
+        # the trace tee ride along, so a stalled run still shows how far it got.
         if: >-
-          steps.bundle.outputs.trace_count == '0' ||
-          steps.bundle.outputs.delivery_shipped != 'True'
+          always() &&
+          steps.dedup.outputs.skip != 'true' &&
+          steps.secrets_check.outputs.have_secret == 'true' && (
+            steps.capture.outcome != 'success' ||
+            steps.bundle.outcome != 'success' ||
+            steps.bundle.outputs.trace_count == '0' ||
+            steps.bundle.outputs.delivery_shipped != 'True'
+          )
         uses: actions/upload-artifact@v6
         with:
           name: safety-battery-agent-logs-${{ github.run_id }}-${{ needs.pick-lang.outputs.lang }}
@@ -595,6 +613,8 @@ jobs:
             logs/postgres/console.log
             logs/postgres/canonical_reachability.log
             qa_reports/capture_workflow.log
+            qa_reports/safety_battery/
+            qa_reports/capture_traces/
           retention-days: 30
           if-no-files-found: warn
 

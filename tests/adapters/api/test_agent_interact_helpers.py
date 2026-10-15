@@ -962,3 +962,33 @@ class TestInteractionTrackingIntegration:
                 if j > i:
                     assert other_id in _response_events
                     assert other_id in _message_responses
+
+
+class TestOutcomeForAnsweredTask:
+    """#1264: an answer from a FAILED task is its failure notice, not a reply."""
+
+    @staticmethod
+    def _outcome(status):
+        from ciris_engine.logic.adapters.api.routes.agent import InteractOutcome, _outcome_for_answered_task
+
+        task = None if status is None else Mock(status=status)
+        with patch("ciris_engine.logic.persistence.get_task_by_id", return_value=task):
+            return _outcome_for_answered_task("task-1"), InteractOutcome
+
+    def test_failed_task_reports_failed(self):
+        from ciris_engine.schemas.runtime.enums import TaskStatus
+
+        outcome, InteractOutcome = self._outcome(TaskStatus.FAILED)
+        assert outcome is InteractOutcome.FAILED
+
+    @pytest.mark.parametrize("status_name", ["ACTIVE", "COMPLETED", None])
+    def test_other_tasks_report_complete(self, status_name):
+        from ciris_engine.schemas.runtime.enums import TaskStatus
+
+        outcome, InteractOutcome = self._outcome(getattr(TaskStatus, status_name) if status_name else None)
+        assert outcome is InteractOutcome.COMPLETE
+
+    def test_no_task_id_is_complete(self):
+        from ciris_engine.logic.adapters.api.routes.agent import InteractOutcome, _outcome_for_answered_task
+
+        assert _outcome_for_answered_task(None) is InteractOutcome.COMPLETE

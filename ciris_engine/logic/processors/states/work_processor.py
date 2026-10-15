@@ -30,6 +30,9 @@ from ciris_engine.schemas.services.resources_core import ResourceAction
 
 logger = logging.getLogger(__name__)
 
+#: Tasks handled by their own processors; a failed thought never closes them here.
+_TASKS_NOT_CLOSED_ON_FAILURE = frozenset({"WAKEUP_ROOT", "SYSTEM_TASK"})
+
 
 class WorkProcessor(BaseProcessor):
     """Handles the WORK state for normal task/thought processing."""
@@ -238,7 +241,7 @@ class WorkProcessor(BaseProcessor):
             try:
                 if isinstance(result, Exception):
                     logger.error(f"Error processing thought {item.thought_id}: {result}", exc_info=True)
-                    self._mark_thought_failed(item.thought_id, str(result))
+                    await self._fail_thought(item, str(result))
                 else:
                     processed_count += 1
                     if result is None:
@@ -247,7 +250,7 @@ class WorkProcessor(BaseProcessor):
                         await self._dispatch_thought_result(item, result)
             except Exception as e:
                 logger.error(f"Error handling result for thought {item.thought_id}: {e}", exc_info=True)
-                self._mark_thought_failed(item.thought_id, str(e))
+                await self._fail_thought(item, str(e))
 
         logger.info(f"[BATCH] Completed {processed_count}/{len(batch)} thoughts")
         return processed_count
@@ -293,6 +296,64 @@ class WorkProcessor(BaseProcessor):
         persistence.update_thought_status(
             thought_id=thought_id, status=ThoughtStatus.FAILED, final_action={"error": error}
         )
+
+    async def _fail_thought(self, item: Any, error: str) -> None:
+        """Mark a thought FAILED, and close its task if nothing else can answer it."""
+        self._mark_thought_failed(item.thought_id, error)
+        source_task_id = getattr(item, "source_task_id", None)
+        if source_task_id:
+            await self._close_task_left_without_thoughts(str(source_task_id), item.thought_id, error)
+
+    async def _close_task_left_without_thoughts(self, task_id: str, thought_id: str, error: str) -> None:
+        """A task whose last live thought failed must not stay ACTIVE (CIRISAgent#1264).
+
+        Nothing re-seeds an ACTIVE task once it has thoughts, so a task whose only
+        live thought raised (a DMA that exhausted its LLM retries, say) sat ACTIVE
+        with no work: no reply, no completion, and an interact() caller waiting out
+        its whole window for an answer that could never come. The task is marked
+        FAILED, and the channel is told unless the task already spoke. The notice is
+        sent under this task's scope, so the API adapter hands it only to a request
+        this task owns, never to the next request on the channel.
+        """
+        task = persistence.get_task_by_id(task_id, self.agent_occurrence_id)
+        if task is None or task.status not in (TaskStatus.ACTIVE, TaskStatus.PENDING):
+            return
+        if task.task_id in _TASKS_NOT_CLOSED_ON_FAILURE or task.parent_task_id == "WAKEUP_ROOT":
+            return
+        thoughts = persistence.get_thoughts_by_task_id(task_id, self.agent_occurrence_id)
+        if any(t.status in (ThoughtStatus.PENDING, ThoughtStatus.PROCESSING) for t in thoughts):
+            return  # another thought is still live and can answer
+
+        persistence.update_task_status(task_id, TaskStatus.FAILED, self.agent_occurrence_id)
+        logger.warning(
+            "Task %s FAILED: its last live thought %s failed (%s); no thought is left to answer it",
+            task_id,
+            thought_id,
+            error[:200],
+        )
+
+        already_spoke = any(
+            t.final_action is not None and str(t.final_action.action_type).lower() == "speak" for t in thoughts
+        )
+        if already_spoke:
+            return
+        await self._notify_task_failed(task, thought_id)
+
+    async def _notify_task_failed(self, task: Task, thought_id: str) -> None:
+        """Tell the task's channel the request could not be processed (best-effort)."""
+        bus = getattr(self.services, "communication_bus", None)
+        channel_id = task.channel_id
+        if bus is None or not channel_id or channel_id.startswith("__") or channel_id == "system":
+            return
+        from ciris_engine.logic.infrastructure.authorization.reasoning_scope import reasoning_scope
+        from ciris_engine.logic.utils.localization import get_preferred_language, get_string
+
+        message = get_string(get_preferred_language(), "agent.error_generic")
+        try:
+            with reasoning_scope(task_id=task.task_id, thought_id=thought_id, phase="task_failure_notice"):
+                await bus.send_message_sync(channel_id=channel_id, content=message, handler_name="WorkProcessor")
+        except Exception as e:  # noqa: BLE001 - the task is already FAILED; the notice is best-effort
+            logger.warning("Could not notify channel %s that task %s failed: %s", channel_id, task.task_id, e)
 
     def _should_skip_ticket_by_status(self, ticket_status: str) -> bool:
         """Check if ticket should be skipped based on status.

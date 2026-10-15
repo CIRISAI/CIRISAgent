@@ -13,6 +13,9 @@
 #   TM_STEM         filename stem of the translation-memory edition (default accord)
 #   SEED_EXACT_TM   true = lines whose English is unchanged from the TM edition take
 #                   its shipped translation instead of a fresh draft (default false)
+#   EXTRA_TM        space-separated corpus roots (a ciris-website, CIRISClient or
+#                   CIRISAgent checkout) whose translated strings become extra
+#                   terminology anchors, never values (TARGET=accord; default none)
 #   UNITS           space-separated accord units; empty = every unit, one at a time
 #   KEYS            space-separated fnmatch patterns over flat dotted keys
 #   LANGS           space-separated locale codes; empty = all 28
@@ -30,10 +33,12 @@ case "${TARGET:-accord}" in
          --tm-stem "${TM_STEM:-accord}"
          --units "${UNITS:-}")
     if [ "${SEED_EXACT_TM:-false}" = "true" ]; then cmd+=(--seed-exact-tm); fi
+    for d in ${EXTRA_TM:-}; do cmd+=(--extra-tm "$d"); done
     ;;
   ui)
     export LOCALIZE_TARGET=ui
-    cmd=(python3 localization/localize.py)
+    # localize.py's own CLI, with provider backoff installed (lane_backoff.py).
+    cmd=(python3 localization/lane_backoff.py)
     ;;
   *)
     echo "TARGET must be accord or ui, got '${TARGET}'" >&2

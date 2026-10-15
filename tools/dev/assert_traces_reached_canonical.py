@@ -90,9 +90,7 @@ REPLICATION_SERVED = re.compile(r"replication_envelopes_served_total[\"'\s:=]+(\
 
 #: NOT delivery. Retained only so the report can say the application plane moved,
 #: which is a genuinely different fact — see the module docstring.
-SHIP_CONFIRMED = re.compile(
-    r"\[DELIVERY-PROBE\]\s+canonical\s+(\S+)\s+SHIP CONFIRMED\s+—\s+envelopes_sent_total=(\d+)"
-)
+SHIP_CONFIRMED = re.compile(r"\[DELIVERY-PROBE\]\s+canonical\s+(\S+)\s+SHIP CONFIRMED\s+—\s+envelopes_sent_total=(\d+)")
 
 #: The agent's probe says this OUT LOUD when the substrate has no such counter,
 #: which is a different fact from "nothing was delivered" and must not be graded
@@ -174,6 +172,17 @@ def main() -> int:
         help="Write the receipt's verbatim payload here (the projection is derived from it)",
     )
     ap.add_argument(
+        "--require-authored",
+        action="store_true",
+        help=(
+            "ENFORCED: fail with exit 5 unless this node's own receipt reports authored > 0. "
+            "This is the rung BELOW delivery — did the node seal any trace at all — and it "
+            "does not depend on the upstream KEX/replication work, so it can be enforced "
+            "while delivery is still only reported. Fail-closed: an unreadable count fails "
+            "too. Needs --receipt-url."
+        ),
+    )
+    ap.add_argument(
         "--peer",
         default=None,
         help="Only consider probe lines for this canonical key (default: any).",
@@ -194,6 +203,7 @@ def main() -> int:
 
     deadline = time.monotonic() + max(0, args.wait_secs)
     last_receipt_print = ""
+    args.authored_seen = None
     while True:
         rc = None
         if args.receipt_url:
@@ -204,14 +214,20 @@ def main() -> int:
             rc, shown = _ask_receipt(args, quiet_if_same_as=last_receipt_print)
             if shown:
                 last_receipt_print = shown
-            if rc is not None and rc != 1:
+            if rc is not None and rc not in (1, AUTHORED_NONE):
                 # 0 and RECEIPT_UNKNOWN are both settled: the first is the answer
                 # we wanted, the second cannot become knowable by re-reading a log.
-                # Only 1 (a canonical answered and does not hold it) is worth
-                # waiting on, because delivery is asynchronous.
+                # Only 1 (a canonical answered and does not hold it) and
+                # AUTHORED_NONE (nothing sealed YET) are worth waiting on,
+                # because sealing and delivery are both asynchronous.
                 return rc
         if rc is None:
             rc = _evaluate(args)
+            if getattr(args, "require_authored", False) and not args.authored_seen:
+                # FAIL-CLOSED. The ladder says nothing about whether this node
+                # sealed anything, so a fallback can never satisfy the authored
+                # rung on its own.
+                rc = AUTHORED_NONE
         # 3 IS TERMINAL, LIKE 0. Waiting exists because delivery is
         # ASYNCHRONOUS — a rung that has not appeared yet may appear. But 3 says
         # the substrate exposes no replication counter AT ALL (CIRISServer#518),
@@ -223,6 +239,9 @@ def main() -> int:
         #
         # 1 and 2 keep retrying: those CAN change while we wait.
         if rc in (0, 3) or time.monotonic() >= deadline:
+            if rc == AUTHORED_NONE and args.authored_seen is None:
+                print("FAIL (authored): the receipt never reported this node's authored count, so")
+                print("      authored > 0 is UNPROVEN — and an unproven enforced rung fails.")
             if rc == 1 and args.receipt_url:
                 # THE RECEIPT IS THE VERDICT; THE LADDER IS THE DIAGNOSIS. A
                 # canonical saying "I hold nothing of yours" settles WHETHER
@@ -245,6 +264,41 @@ def main() -> int:
 #: its own code so the workflow can say "not established" and mean it.
 RECEIPT_UNKNOWN = 4
 
+#: Exit 5 — ENFORCED: this node authored no traces (or the count is unreadable).
+#: The rung below delivery. From 2026-10-09 to 10-14 every five-platform run
+#: sealed nothing — the mock-LLM latch (CIRISAgent#1244) had been set by adapter
+#: discovery in a LIVE run — and the job stayed green because delivery is
+#: reported, not enforced, and "authored: 0" made the receipt verdict None,
+#: which is exit 4, "unknown, not failure". A node that authored nothing has not
+#: delivered anything for an unknown reason; it has a local fault.
+AUTHORED_NONE = 5
+
+
+def _authored_count(data: dict) -> Optional[int]:
+    """This node's own authored-trace count from the receipt, or None if unreadable.
+
+    Read from the verbatim payload's top-level ``agents`` (this node's own
+    account, independent of any canonical answering), falling back to a
+    projected ``agents`` list. The largest per-agent count wins: one agent id
+    with traces is enough to prove sealing works.
+    """
+    import json as _json
+
+    agents = None
+    raw = data.get("raw_json")
+    if isinstance(raw, str) and raw:
+        try:
+            agents = (_json.loads(raw) or {}).get("agents")
+        except (ValueError, AttributeError):
+            agents = None
+    if agents is None:
+        agents = data.get("agents")
+    if not isinstance(agents, list) or not agents:
+        return None
+    counts = [a.get("authored") for a in agents if isinstance(a, dict)]
+    counts = [c for c in counts if isinstance(c, int) and not isinstance(c, bool)]
+    return max(counts) if counts else None
+
 
 def _ask_receipt(args, quiet_if_same_as: str = "") -> "tuple[Optional[int], Optional[str]]":
     """The canonical's answer, or None to fall back to the ladder.
@@ -256,8 +310,8 @@ def _ask_receipt(args, quiet_if_same_as: str = "") -> "tuple[Optional[int], Opti
     `quiet_if_same_as` — the raw payload's read_at is stripped for that
     comparison so a re-read of the same state is recognised as the same state.
     """
-    import io as _io
     import contextlib as _ctx
+    import io as _io
 
     buf = _io.StringIO()
     with _ctx.redirect_stdout(buf):
@@ -350,6 +404,19 @@ def _ask_receipt_impl(args) -> Optional[int]:
             bits.append(f"error={c['error']}")
         print("   - " + "  ".join(bits))
 
+    if getattr(args, "require_authored", False):
+        authored = _authored_count(data)
+        if authored is not None:
+            args.authored_seen = max(authored, getattr(args, "authored_seen", None) or 0)
+        print(f"  authored (this node's own count) = {authored!r}  [ENFORCED: must be > 0]")
+        if not authored:
+            if authored is None:
+                print("FAIL (authored): the receipt carries no readable authored count — unproven, so it fails.")
+            else:
+                print("FAIL (authored): this node has sealed NO traces. That is a local fault, not delivery:")
+                print("      check the [MOCK-GUARD] and [CONSENT] lines in the agent log first.")
+            return AUTHORED_NONE
+
     if verdict is True:
         print("PASS: every canonical that answered holds the newest trace this node authored.")
         return 0
@@ -418,12 +485,16 @@ def _evaluate(args) -> int:
     print(f"Scanned {len(found)} log file(s), {len(probes)} [DELIVERY-PROBE] line(s).")
     print(f"  1. ROOTED       {'yes — ' + rooted.group(1) if rooted else 'NO'}")
     print(f"  2. KEX PRESENT  {'yes' if kex else 'NO'}")
-    print(f"  3. REPLICATION  {'replication_envelopes_served_total=' + str(served) if served is not None else 'NO SIGNAL'}")
+    print(
+        f"  3. REPLICATION  {'replication_envelopes_served_total=' + str(served) if served is not None else 'NO SIGNAL'}"
+    )
     if ship:
         # Printed for context only. A reader who sees this and assumes delivery is
         # making precisely the CIRISEdge#434 mistake, so it is labelled inline.
-        print(f"     (application plane: envelopes_sent_total={ship.group(2)} — "
-              f"NOT trace delivery, see CIRISEdge#434)")
+        print(
+            f"     (application plane: envelopes_sent_total={ship.group(2)} — "
+            f"NOT trace delivery, see CIRISEdge#434)"
+        )
 
     replicated = served is not None and served > 0
     reached: Optional[str] = "replication" if replicated else "kex" if kex else "rooted" if rooted else None

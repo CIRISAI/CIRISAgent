@@ -296,7 +296,8 @@ class HandoffRun:
 
     def _record(self, name: str, ok: bool, detail: Optional[str] = None) -> None:
         self.results.append({"test": name, "status": "✅ PASS" if ok else "❌ FAIL", "error": None if ok else detail})
-        self.console.print(f" [{'OK' if ok else 'FAIL'}] {name}{f': {detail}' if detail else ''}")
+        # The detail is the failure text; a pass prints none (run 5's [OK] lines read as failures).
+        self.console.print(f" [{'OK' if ok else 'FAIL'}] {name}{f': {detail}' if detail and not ok else ''}")
 
     def _headers(self) -> Dict[str, str]:
         return {"Authorization": f"Bearer {self.token}"} if self.token else {}

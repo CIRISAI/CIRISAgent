@@ -8,6 +8,7 @@ Manages server lifecycle, browser automation, and test execution.
 import asyncio
 import json
 import os
+import time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -147,6 +148,7 @@ class WebUITestRunner:
         self.test_config.base_url = f"http://{self.server_config.host}:{self.server_config.port}"
 
         self._server: Optional[ServerManager] = None
+        self._launched_at: Optional[float] = None
         self._browser: Optional[BrowserHelper] = None
 
         # Output directory
@@ -176,6 +178,7 @@ class WebUITestRunner:
         self._server.kill_existing_servers()
 
         # Start server
+        self._launched_at = time.time()
         status = self._server.start()
 
         if not status.healthy:
@@ -384,6 +387,8 @@ class WebUITestRunner:
                     llm_api_key=self.test_config.llm_api_key,
                     admin_username=self.test_config.admin_username,
                     admin_password=self.test_config.admin_password,
+                    node_home=self._server.backend_home if self._server else "",
+                    launched_at=self._launched_at,
                 )
                 reports = await run_licensed_agent_flow(self._browser, licensed_config)
                 suite.reports = reports

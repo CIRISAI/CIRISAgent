@@ -9,6 +9,7 @@ from ciris_engine.logic.infrastructure.authorization.reasoning_scope import reas
 from ciris_engine.logic.processors.core.step_decorators import step_point, streaming_step
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.utils.halt_latch import agent_act_scope, exempt_act_for, exempt_act_scope, read_halt_latch
+from ciris_engine.logic.utils.node_ownership import node_owned
 from ciris_engine.protocols.services.graph.telemetry import TelemetryServiceProtocol
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.accord_halt import ACCORD_HALT_REFUSAL, AccordHaltState
@@ -16,6 +17,7 @@ from ciris_engine.schemas.runtime.audit import AuditActionContext
 from ciris_engine.schemas.runtime.contexts import DispatchContext
 from ciris_engine.schemas.runtime.enums import HandlerActionType, ThoughtStatus
 from ciris_engine.schemas.runtime.models import Thought
+from ciris_engine.schemas.runtime.node_ownership import NODE_UNCLAIMED_ERROR, NodeOwnership
 from ciris_engine.schemas.services.runtime_control import ActionResponse, StepPoint
 from ciris_engine.schemas.types import JSONDict
 
@@ -185,6 +187,22 @@ class ActionDispatcher:
                 action_selection_result,
             )
 
+        # EVERY NODE IS ALWAYS CLAIMED: no act on an unowned node, read fresh for
+        # THIS act. After the halt, so a halted agent answers with its halt. No
+        # act is exempt here: an unowned node has no named human to defer to.
+        ownership = await node_owned(fresh=True)
+        if ownership.unclaimed:
+            return await self._refuse_on_unowned_node(
+                ownership,
+                handler,
+                final_action_result,
+                thought,
+                dispatch_context,
+                action_type,
+                thought_item,
+                action_selection_result,
+            )
+
         start_time = self._time_service.now()
 
         with exempt_act_scope(halt if halt.halted else None):
@@ -330,16 +348,90 @@ class ActionDispatcher:
         PENDING also survives a restart under the latch, where the startup
         reclaim would fail a PROCESSING row as a dead process's leftover.
         """
-        refusal = halt.refusal_reason()
-        logger.warning(
-            f"Accord halt: refused {action_type.value} for thought {thought.thought_id} ({refusal}, {halt.reading.value})"
+        return await self._refuse_act(
+            refusal=halt.refusal_reason(),
+            refused_token=ACCORD_HALT_REFUSAL,
+            gate="Accord halt",
+            reading=halt.reading.value,
+            extra={"accord_halt_reading": halt.reading.value, "accord_halt_invocation_id": halt.invocation_id},
+            metric="accord_halt_refused_acts_total",
+            handler=handler,
+            final_action_result=final_action_result,
+            thought=thought,
+            dispatch_context=dispatch_context,
+            action_type=action_type,
+            thought_item=thought_item,
+            action_selection_result=action_selection_result,
         )
 
-        self._ensure_audit_service(action_type, "accord halt refusal")
+    async def _refuse_on_unowned_node(
+        self,
+        ownership: NodeOwnership,
+        handler: BaseActionHandler,
+        final_action_result: ActionSelectionDMAResult,
+        thought: Thought,
+        dispatch_context: DispatchContext,
+        action_type: HandlerActionType,
+        thought_item: ProcessingQueueItem,
+        action_selection_result: Any,
+    ) -> ActionResponse:
+        """Refuse one act on an unowned node: EVERY NODE IS ALWAYS CLAIMED.
+
+        The same refusal as a standing halt (`_refuse_act`): audit row, terminal
+        ACTION_RESULT, thought back to PENDING to re-deliberate once claimed.
+        """
+        return await self._refuse_act(
+            refusal=f"{NODE_UNCLAIMED_ERROR}:{ownership.reading.value}",
+            refused_token=NODE_UNCLAIMED_ERROR,
+            gate="Node ownership",
+            reading=ownership.reading.value,
+            extra={"node_ownership_reading": ownership.reading.value},
+            metric="node_unclaimed_refused_acts_total",
+            handler=handler,
+            final_action_result=final_action_result,
+            thought=thought,
+            dispatch_context=dispatch_context,
+            action_type=action_type,
+            thought_item=thought_item,
+            action_selection_result=action_selection_result,
+        )
+
+    async def _refuse_act(
+        self,
+        *,
+        refusal: str,
+        refused_token: str,
+        gate: str,
+        reading: str,
+        extra: Dict[str, Optional[str]],
+        metric: str,
+        handler: BaseActionHandler,
+        final_action_result: ActionSelectionDMAResult,
+        thought: Thought,
+        dispatch_context: DispatchContext,
+        action_type: HandlerActionType,
+        thought_item: ProcessingQueueItem,
+        action_selection_result: Any,
+    ) -> ActionResponse:
+        """Refuse one act and RECORD it: the one refusal path for every act gate.
+
+        A signed audit row, then a terminal ACTION_RESULT through the normal
+        trace pipeline, so CC 1.13.6 totality holds — the trace ends on an act
+        that did not happen and says why.
+
+        The thought is NOT failed. It goes back to PENDING: nothing ran, so there
+        is nothing to duplicate, and once the gate opens it re-deliberates from
+        the saved task and thought rather than replaying the action selected
+        here. PENDING also survives a restart, where the startup reclaim would
+        fail a PROCESSING row as a dead process's leftover.
+        """
+        logger.warning(f"{gate}: refused {action_type.value} for thought {thought.thought_id} ({refusal}, {reading})")
+
+        self._ensure_audit_service(action_type, f"{gate} refusal")
         params = extract_audit_parameters(action_type, final_action_result.action_parameters)
-        params["refused"] = ACCORD_HALT_REFUSAL
-        params["accord_halt_reading"] = halt.reading.value
-        params["accord_halt_invocation_id"] = halt.invocation_id or ""
+        params["refused"] = refused_token
+        for key, value in extra.items():
+            params[key] = value or ""
         audit_context = AuditActionContext(
             thought_id=thought.thought_id,
             task_id=getattr(dispatch_context, "task_id", "unknown"),
@@ -357,11 +449,10 @@ class ActionDispatcher:
                 occurrence_id=thought.agent_occurrence_id,
             )
         except Exception as e:  # noqa: BLE001 - the refusal stands either way
-            logger.error(f"Accord halt: could not return thought {thought.thought_id} to PENDING: {e}")
+            logger.error(f"{gate}: could not return thought {thought.thought_id} to PENDING: {e}")
 
         refused_params = self._extract_action_params_dict(final_action_result)
-        refused_params["accord_halt_invocation_id"] = halt.invocation_id
-        refused_params["accord_halt_reading"] = halt.reading.value
+        refused_params.update(extra)
         response = ActionResponse(
             success=False,
             handler=handler.__class__.__name__,
@@ -377,7 +468,7 @@ class ActionDispatcher:
         )
         if self.telemetry_service:
             await self.telemetry_service.record_metric(
-                "accord_halt_refused_acts_total",
+                metric,
                 value=1.0,
                 tags={"action": action_type.value, "source_module": "action_dispatcher"},
             )

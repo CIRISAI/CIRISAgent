@@ -107,12 +107,11 @@ def deadline_of(context: Any) -> Optional[Deadline]:
 logger = logging.getLogger(__name__)
 
 # Error/reason message constants
-MSG_SINK_UNAVAILABLE_ALLOWING = "Sink service unavailable, allowing action"
 MSG_SINK_UNAVAILABLE = "Sink service unavailable"
 MSG_NO_CONTENT = "No content to evaluate"
 from .transport import (
-    LLM_FAULT_CATEGORIES,
     categorize_conscience_error,
+    is_retryable_by_facility,
     is_transport_failure,
     unavailable_result,
     unusable_answer_result,
@@ -259,12 +258,25 @@ class _BaseConscience(ConscienceInterface):
                         `llm_call_retries`; exhausted -> TimeoutError, which the
                         caller's transport branch turns into unavailable_result
                         (fail-closed, check_ran=False, no processor retry)
-          LLM fault  -> (schema validation, context length, content filter)
-                        a fresh attempt; exhausted -> re-raised to the
-                        caller's existing fail-closed fallback
-          transport  -> re-raised immediately: the provider already retried and
-                        the bus already failed over; spending the budget again
-                        here is what #1049 removed
+          LLM fault  -> (schema validation, content filter) a fresh
+                        attempt; exhausted -> re-raised to the caller's
+                        existing fail-closed fallback. Context overflow is
+                        re-raised at once: the same payload overflows the
+                        same way on every attempt (#1247).
+          transport  -> TIMEOUT / CONNECTION_ERROR / INTERNAL_ERROR get a fresh
+                        attempt under the same budget (#1247). Nothing below
+                        retries them any more: #1186 made the LLM service raise
+                        transport errors on first occurrence and the bus makes
+                        one attempt per provider, so THIS loop is the only
+                        retry layer. The old "re-raise immediately, the
+                        provider already retried" rule (#1049) predates #1186;
+                        left in place it gave a provider-reported timeout ONE
+                        attempt while the budget profile promises four.
+                        AUTH_ERROR / MODEL_NOT_AVAILABLE / RATE_LIMIT and an
+                        unfunded account still re-raise immediately: retrying
+                        cannot change them. The #1049 loop that hung the turn
+                        was the PROCESSOR's unbounded CONSCIENCE_RETRY; this
+                        one is bounded by attempts and the thought deadline.
 
         `deadline` is the thought's (CIRISAgent#1186). Each attempt's timeout
         is clamped to what is left of it, and no attempt starts once the
@@ -315,7 +327,7 @@ class _BaseConscience(ConscienceInterface):
                 )
             except Exception as e:  # noqa: BLE001 - categorised below, never swallowed
                 cat = categorize_conscience_error(e)
-                if cat in LLM_FAULT_CATEGORIES and attempt <= retries:
+                if attempt <= retries and is_retryable_by_facility(e, cat):
                     last = e
                     logger.warning(
                         "[CONSCIENCE] %s: %s on attempt %d/%d after %.1fs -- retrying with a fresh call (%s)",
@@ -499,13 +511,8 @@ class EntropyConscience(_BaseConscience):
             )
         sink = await self._get_sink()
         if not sink:
-            self._update_trace_correlation(correlation, True, MSG_SINK_UNAVAILABLE_ALLOWING, start_time)
-            return ConscienceCheckResult(
-                status=ConscienceStatus.WARNING,
-                passed=True,
-                reason=MSG_SINK_UNAVAILABLE,
-                check_timestamp=ts_datetime,
-            )
+            self._update_trace_correlation(correlation, False, MSG_SINK_UNAVAILABLE, start_time)
+            return unavailable_result("EntropyConscience", RuntimeError(MSG_SINK_UNAVAILABLE), ts_datetime)
         text = self._render_action_text(action)
         if not text:
             self._update_trace_correlation(correlation, True, MSG_NO_CONTENT, start_time)
@@ -660,13 +667,8 @@ class CoherenceConscience(_BaseConscience):
             return ConscienceCheckResult(status=ConscienceStatus.PASSED, passed=True, check_timestamp=ts_datetime)
         sink = await self._get_sink()
         if not sink:
-            self._update_trace_correlation(correlation, True, MSG_SINK_UNAVAILABLE_ALLOWING, start_time)
-            return ConscienceCheckResult(
-                status=ConscienceStatus.WARNING,
-                passed=True,
-                reason=MSG_SINK_UNAVAILABLE,
-                check_timestamp=ts_datetime,
-            )
+            self._update_trace_correlation(correlation, False, MSG_SINK_UNAVAILABLE, start_time)
+            return unavailable_result("CoherenceConscience", RuntimeError(MSG_SINK_UNAVAILABLE), ts_datetime)
         text = self._render_action_text(action)
         if not text:
             self._update_trace_correlation(correlation, True, MSG_NO_CONTENT, start_time)
@@ -799,13 +801,8 @@ class OptimizationVetoConscience(_BaseConscience):
         ts_datetime.isoformat()
         sink = await self._get_sink()
         if not sink:
-            self._update_trace_correlation(correlation, True, MSG_SINK_UNAVAILABLE_ALLOWING, start_time)
-            return ConscienceCheckResult(
-                status=ConscienceStatus.WARNING,
-                passed=True,
-                reason=MSG_SINK_UNAVAILABLE,
-                check_timestamp=ts_datetime,
-            )
+            self._update_trace_correlation(correlation, False, MSG_SINK_UNAVAILABLE, start_time)
+            return unavailable_result("OptimizationVetoConscience", RuntimeError(MSG_SINK_UNAVAILABLE), ts_datetime)
 
         # Inline the optimization veto evaluation
         action_desc = f"{action.selected_action} {action.action_parameters}"
@@ -845,13 +842,12 @@ class OptimizationVetoConscience(_BaseConscience):
             # principled veto; a timeout is not one.
             if is_transport_failure(e):
                 return unavailable_result("OptimizationVetoConscience", e, ts_datetime)
-            logger.error(f"OptimizationVetoConscience: Error in optimization veto: {e}", exc_info=True)
-            result = OptimizationVetoResult(
-                decision="abort",
-                justification=f"LLM error: {str(e)}",
-                entropy_reduction_ratio=0.0,
-                affected_values=[],
-            )
+            # Any other failure (context overflow, schema failure after
+            # reasks, ...) is still fail-CLOSED, but not as a fabricated
+            # decision="abort": "Optimization veto triggered: LLM error" reads
+            # as the veto having judged the action (#1247), and check_ran=True
+            # sent the processor into a retry of the same fault.
+            return unusable_answer_result("OptimizationVetoConscience", e, ts_datetime)
 
         passed = (
             result.decision not in {"abort", "defer"}
@@ -934,13 +930,8 @@ class EpistemicHumilityConscience(_BaseConscience):
         ts_datetime.isoformat()
         sink = await self._get_sink()
         if not sink:
-            self._update_trace_correlation(correlation, True, MSG_SINK_UNAVAILABLE_ALLOWING, start_time)
-            return ConscienceCheckResult(
-                status=ConscienceStatus.WARNING,
-                passed=True,
-                reason=MSG_SINK_UNAVAILABLE,
-                check_timestamp=ts_datetime,
-            )
+            self._update_trace_correlation(correlation, False, MSG_SINK_UNAVAILABLE, start_time)
+            return unavailable_result("EpistemicHumilityConscience", RuntimeError(MSG_SINK_UNAVAILABLE), ts_datetime)
 
         # Inline the epistemic humility evaluation
         desc = f"{action.selected_action} {action.action_parameters}"
@@ -989,13 +980,9 @@ class EpistemicHumilityConscience(_BaseConscience):
             # which a downstream scorer read as the agent declining to answer.
             if is_transport_failure(e):
                 return unavailable_result("EpistemicHumilityConscience", e, ts_datetime)
-            logger.error(f"EpistemicHumilityConscience: Error in epistemic humility: {e}", exc_info=True)
-            result = EpistemicHumilityResult(
-                epistemic_certainty=0.0,
-                identified_uncertainties=[f"LLM error: {str(e)}"],
-                reflective_justification=f"LLM error: {str(e)}",
-                recommended_action="abort",
-            )
+            # Fail CLOSED without the "concern: abort - LLM error" fiction --
+            # see OptimizationVetoConscience above (#1247).
+            return unusable_answer_result("EpistemicHumilityConscience", e, ts_datetime)
 
         # Evaluate the LLM result
         passed = result.recommended_action == "proceed"

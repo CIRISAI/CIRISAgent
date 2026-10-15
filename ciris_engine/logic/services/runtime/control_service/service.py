@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 from ciris_engine.logic.runtime.adapter_manager import RuntimeAdapterManager
 from ciris_engine.logic.services.base_service import BaseService
+from ciris_engine.logic.utils.halt_latch import read_halt_latch
 from ciris_engine.protocols.services import RuntimeControlService as RuntimeControlServiceProtocol
 from ciris_engine.protocols.services import TimeServiceProtocol
 from ciris_engine.schemas.adapters.tools import ToolInfo, ToolParameterSchema
@@ -205,18 +206,17 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
         # could never succeed, describing a control that was not the one
         # protecting the system.
         #
-        # Authorities now come from the accord verifier — ONE authority source,
-        # two entry surfaces (a stego-encoded AccordPayload, and the
-        # WASignedCommand this API accepts). The two wire formats differ; the
-        # trust root must not.
+        # Authorities now come from EmergencyAuthorities (accord/authorities.py)
+        # — ONE authority source for the WASignedCommand this API accepts. (The
+        # stego AccordPayload that shared it is retired, #1231: the CC 4.2.1.1
+        # halt is verified and latched by the node.)
         #
         # REDUNDANT BY DESIGN: the substrate carries its own, separate kill
         # switch that halts the node itself. These are not competing paths —
         # this one stops the agent, the substrate's stops the node underneath
         # it. Defence in depth: either alone is sufficient to stop the system.
         #
-        # TODO(#998): migrate to trust-root-backed PQC STEGO once designed and
-        # shipped. Today's authority set is Ed25519 over the steward keys.
+        # TODO(#998): today's authority set is Ed25519 over the steward keys.
         self._kill_switch_config = KillSwitchConfig(
             enabled=True,
             trust_tree_depth=3,
@@ -265,6 +265,24 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             error=_ERROR_AGENT_PROCESSOR_NOT_AVAILABLE,
         )
 
+    async def _refused_under_accord_halt(self, operation: str) -> Optional[ProcessorControlResponse]:
+        """Refuse an operator step past a standing constitutional halt (CC 4.2.1.1).
+
+        The halt is not an operator pause: no oversight or administrative tier
+        may resume it or step past it. Only the node's latch ends it.
+        """
+        halt = await read_halt_latch(fresh=True)
+        if not halt.halted:
+            return None
+        await self._record_event("processor_control", operation, success=False, error=halt.refusal_reason())
+        return ProcessorControlResponse(
+            success=False,
+            processor_name="agent",
+            operation=operation,
+            new_status=self._processor_status,
+            error=halt.refusal_reason(),
+        )
+
     async def _initialize(self) -> None:
         """Initialize the runtime control service."""
         try:
@@ -283,6 +301,10 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             agent_processor = self._get_agent_processor()
             if agent_processor is None:
                 return self._processor_not_available_response("single_step")
+
+            halt_refusal = await self._refused_under_accord_halt("single_step")
+            if halt_refusal is not None:
+                return halt_refusal
 
             # Ensure processor is paused
             if not agent_processor.is_paused():
@@ -422,6 +444,10 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             agent_processor = self._get_agent_processor()
             if agent_processor is None:
                 return self._processor_not_available_response("resume")
+
+            halt_refusal = await self._refused_under_accord_halt("resume")
+            if halt_refusal is not None:
+                return halt_refusal
 
             # Resuming normal processing must ALWAYS exit single-step mode —
             # unconditionally, before the resume call, regardless of whether
@@ -684,15 +710,13 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             True if signature is valid, False otherwise
         """
         try:
-            # Authority resolved from the ACCORD VERIFIER (#998) — the same
-            # trust root the stego kill switch uses. The verifier SIGKILLs the
-            # process if it loads zero authorities, so an empty set here is not
-            # a reachable state the way the old private map's was.
+            # Authority resolved from EmergencyAuthorities (#998). An empty
+            # roster resolves no key, so every command is refused (fail closed).
             from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
-            from ciris_engine.logic.accord.verifier import AccordVerifier
+            from ciris_engine.logic.accord.authorities import EmergencyAuthorities
 
-            key_bytes = AccordVerifier().public_key_for(command.wa_id)
+            key_bytes = EmergencyAuthorities().public_key_for(command.wa_id)
             if key_bytes is None:
                 logger.error(f"WA {command.wa_id} is not a trusted accord authority")
                 return False

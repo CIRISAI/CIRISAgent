@@ -1,6 +1,6 @@
 import json
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
@@ -21,9 +21,11 @@ from ciris_engine.logic.persistence import (
     get_thoughts_older_than,
 )
 from ciris_engine.logic.services.base_scheduled_service import BaseScheduledService
+from ciris_engine.logic.utils.halt_latch import read_halt_latch, refuse_agent_send_under_halt, run_when_first_unhalted
 from ciris_engine.logic.utils.localization import get_preferred_language, get_string
 from ciris_engine.protocols.services.infrastructure.database_maintenance import DatabaseMaintenanceServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
+from ciris_engine.schemas.runtime.accord_halt import AgentSendSurface
 from ciris_engine.schemas.runtime.enums import ServiceType, TaskStatus, ThoughtStatus
 
 logger = logging.getLogger(__name__)
@@ -87,6 +89,17 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         # tables, not generic DB ops.
         await self._invoke_persist_maintenance()
 
+        # CC 4.2.1.1: under a standing constitutional halt the agent's tasks and
+        # thoughts are frozen, not stale. Both sweeps below are age-based (5
+        # minutes) and would complete or delete every held task — and the stale
+        # notice they send is the agent speaking. Skip them; they run again on
+        # the next cycle after the halt ends.
+        halt = await read_halt_latch()
+        if halt.halted:
+            logger.info(f"Stale-task sweeps skipped: tasks are held by a constitutional halt ({halt.refusal_reason()})")
+            logger.info("Periodic maintenance tasks completed.")
+            return
+
         # Clean up stale wakeup/shutdown tasks from dead occurrences
         # This is critical for multi-occurrence deployments where an occurrence
         # may die mid-wakeup, leaving shared tasks in ACTIVE state forever
@@ -110,13 +123,12 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
 
         engine = get_persist_engine()
         if engine is None:
-            logger.debug(
-                "persist engine not wired; skipping engine.maintain()"
-            )
+            logger.debug("persist engine not wired; skipping engine.maintain()")
             return
 
         try:
             import json as _json
+
             # engine.maintain() returns a JSON string with vacuum +
             # archive stats per module.
             blob = engine.maintain()
@@ -194,7 +206,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         await self._cleanup_stale_wakeup_tasks()
 
         # --- Clean up old active tasks from previous runs ---
-        await self._cleanup_old_active_tasks()
+        await self._sweep_old_active_tasks_at_startup()
 
         # --- Clean up duplicate temporal edges (v1.5.6 PostgreSQL bug) ---
         await self._cleanup_duplicate_temporal_edges()
@@ -342,10 +354,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         a peer. This is the one claim a booting process can make safely, and it
         makes it only about itself.
         """
-        from ciris_engine.logic.persistence.models.thoughts import (
-            get_thoughts_by_status,
-            update_thought_status,
-        )
+        from ciris_engine.logic.persistence.models.thoughts import get_thoughts_by_status, update_thought_status
         from ciris_engine.logic.utils.occurrence_utils import get_current_occurrence_id
         from ciris_engine.schemas.runtime.enums import ThoughtStatus
 
@@ -353,9 +362,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
             occurrence_id = get_current_occurrence_id()
             stranded = get_thoughts_by_status(ThoughtStatus.PROCESSING, occurrence_id)
             if not stranded:
-                logger.info(
-                    "Orphan reclaim: no PROCESSING thoughts held by occurrence %r at startup.", occurrence_id
-                )
+                logger.info("Orphan reclaim: no PROCESSING thoughts held by occurrence %r at startup.", occurrence_id)
                 return
 
             reclaimed = 0
@@ -399,10 +406,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         leaves-first to satisfy the `parent_thought_id` self-FK.
         """
         from ciris_engine.logic.persistence.models.graph import get_persist_engine
-        from ciris_engine.logic.persistence.models.thoughts import (
-            _list_with_filter,
-            delete_thoughts_by_ids,
-        )
+        from ciris_engine.logic.persistence.models.thoughts import _list_with_filter, delete_thoughts_by_ids
 
         if get_persist_engine() is None:
             logger.debug("persist engine not wired; skipping _cleanup_invalid_thoughts")
@@ -852,9 +856,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
                 last_ts = "9999-12-31T23:59:59Z"
                 last_id = ""
                 while True:
-                    cursor_json = json.dumps(
-                        {"version": "v1", "last_ts": last_ts, "last_id": last_id}
-                    )
+                    cursor_json = json.dumps({"version": "v1", "last_ts": last_ts, "last_id": last_id})
                     raw = engine.task_list(json.dumps({"status": status_val}), cursor_json, 200)
                     parsed = json.loads(raw) if isinstance(raw, str) else raw
                     items = (parsed.get("items") if isinstance(parsed, dict) else None) or []
@@ -870,9 +872,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
                         try:
                             stale_tasks.append(_persist_row_to_task(row))
                         except Exception as inner_e:
-                            logger.warning(
-                                "Failed to materialize task %s during cleanup: %s", tid, inner_e
-                            )
+                            logger.warning("Failed to materialize task %s during cleanup: %s", tid, inner_e)
                         last_ts = str(row.get("created_at", last_ts))
                         last_id = tid
                     if len(items) < 200:
@@ -898,11 +898,17 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
 
                 # Check task age
                 if isinstance(task.created_at, str):
-                    from datetime import datetime
-
                     task_created = datetime.fromisoformat(task.created_at.replace("Z", UTC_TIMEZONE_SUFFIX))
                 else:
                     task_created = task.created_at
+
+                # "From a previous run" means created before this process
+                # started. The hourly periodic pass reuses this cleanup, and
+                # the age test alone completed tasks THIS run was still
+                # working on, then told their channel the agent had
+                # restarted (#1264).
+                if isinstance(self._start_time, datetime) and task_created >= self._start_time:
+                    continue
 
                 task_age = current_time - task_created
                 # Mark tasks older than 5 minutes as completed
@@ -935,6 +941,30 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         except Exception as e:
             logger.error(f"Failed to clean up old active tasks: {e}", exc_info=True)
 
+    async def _sweep_old_active_tasks_at_startup(self) -> None:
+        """The startup old-task sweep, deferred while the halt latch cannot be read clear.
+
+        CC 4.2.1.1: after a restart under a standing halt these "old" tasks are
+        the held ones, waiting to re-deliberate. The node is usually not
+        answering yet when startup cleanup runs, so read the latch: with no halt
+        standing the sweep runs now, as it always did; otherwise it waits for
+        the first reading that finds none, and is skipped if a halt was seen on
+        the way. The stale WAKEUP/shutdown sweep is not deferred — it must run
+        before a fresh wakeup (#1069) and touches only ceremony tasks.
+        """
+        if not (await read_halt_latch()).halted:
+            await self._cleanup_old_active_tasks()
+            return
+        run_when_first_unhalted(self._deferred_old_task_sweep)
+        logger.info("Old-task sweep deferred until the constitutional-halt latch reads clear")
+
+    async def _deferred_old_task_sweep(self, halt_seen: bool) -> None:
+        """The startup old-task sweep, run once the latch first reads clear."""
+        if halt_seen:
+            logger.info("Old-task sweep skipped: those tasks were held by a constitutional halt, not abandoned")
+            return
+        await self._cleanup_old_active_tasks()
+
     async def _notify_stale_task_completed(self, task: Any) -> None:
         """Send a notification to the channel that a stale task was auto-completed due to restart."""
         if not self.bus_manager:
@@ -958,14 +988,25 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
             )
             return
 
+        # CC 4.2.1.1: the notice is the agent speaking, from a maintenance loop.
+        if await refuse_agent_send_under_halt(AgentSendSurface.STALE_TASK_NOTICE, channel_id):
+            return
+
         try:
+            from ciris_engine.logic.infrastructure.authorization.reasoning_scope import reasoning_scope
+
             lang = get_preferred_language()
             msg = get_string(lang, "agent.restarted_stale_task")
-            await self.bus_manager.communication.send_message_sync(
-                channel_id=channel_id,
-                content=msg,
-                handler_name="DatabaseMaintenanceService",
-            )
+            # Sent under the stale task's scope: the API adapter delivers a
+            # message only to a request its own task owns. Unscoped, it went
+            # FIFO to whatever request was waiting on the channel, and a
+            # live question was answered with "I was restarted" (#1264).
+            with reasoning_scope(task_id=task.task_id, thought_id=None, phase="stale_task_notice"):
+                await self.bus_manager.communication.send_message_sync(
+                    channel_id=channel_id,
+                    content=msg,
+                    handler_name="DatabaseMaintenanceService",
+                )
             logger.info(f"Sent stale task notification to channel {channel_id}")
         except Exception as e:
             logger.warning(f"Failed to send stale task notification to {channel_id}: {e}")
@@ -1142,9 +1183,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         Future dedupe runs (if needed) should ship as a one-off
         `tools/ops/` script, not runtime maintenance.
         """
-        logger.debug(
-            "_cleanup_duplicate_temporal_edges: no-op on 2.9.0 (v1.5.5 dedupe shim)"
-        )
+        logger.debug("_cleanup_duplicate_temporal_edges: no-op on 2.9.0 (v1.5.5 dedupe shim)")
 
     def get_capabilities(self) -> "ServiceCapabilities":
         """Get service capabilities."""
@@ -1251,4 +1290,3 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         )
 
         return metrics
-

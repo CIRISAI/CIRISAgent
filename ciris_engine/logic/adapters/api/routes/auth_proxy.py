@@ -62,6 +62,9 @@ router = APIRouter(tags=["Authentication"])
 #: env var exists for tests that stand the node up elsewhere.
 NODE_UPSTREAM = os.environ.get("CIRIS_NODE_HTTP_URL", "http://127.0.0.1:4243")
 
+#: The node binds :4243 a few seconds after :8080 starts serving.
+NODE_STARTING_RETRY_AFTER_SECONDS = 2
+
 #: Hop-by-hop headers, which describe THIS connection and must not be relayed
 #: onto another one (RFC 9110 §7.6.1). `host` must be recomputed for the upstream
 #: and `content-length` re-derived from the body httpx actually sends — relaying
@@ -229,6 +232,25 @@ async def proxy_auth_to_node(path: str, request: Request) -> Response:
                 content=await request.body(),
             )
     except httpx.RequestError as exc:
+        from ciris_engine.logic.runtime.node_fold import node_booting
+
+        if node_booting():
+            # The boot window: :8080 serves before the node binds :4243. Not an
+            # outage, and not an auth decision -- the identity service is still
+            # starting. 503 + Retry-After tells the caller to come back; WARNING,
+            # not ERROR, because nothing has failed. A miss once the node is
+            # listening still logs ERROR below (CIRISAgent#1262 staged QA).
+            logger.warning(
+                "auth proxy: the node is still starting (not yet listening at %s); answered 503, retry in %ss",
+                NODE_UPSTREAM,
+                NODE_STARTING_RETRY_AFTER_SECONDS,
+            )
+            return Response(
+                content=b'{"detail":"identity service starting"}',
+                status_code=503,
+                headers={"Retry-After": str(NODE_STARTING_RETRY_AFTER_SECONDS)},
+                media_type="application/json",
+            )
         # The node not being reachable is an infrastructure failure, not an auth
         # decision. 502 says so; 401 would tell the caller their credentials were
         # rejected by something that never saw them.

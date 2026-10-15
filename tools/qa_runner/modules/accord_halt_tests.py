@@ -190,6 +190,7 @@ class AccordHaltTests:
         tee_dir = Path(os.environ.get(TEE_DIR_ENV, ""))
         async with httpx.AsyncClient(timeout=60.0) as http:
             run = HandoffRun(self._base_url, self._token, handoff_dir, tee_dir, self.console)
+            run.stream_client_factory = lambda: httpx.AsyncClient(timeout=None)
             self.results.extend(await run.run(http))
         return self.results
 

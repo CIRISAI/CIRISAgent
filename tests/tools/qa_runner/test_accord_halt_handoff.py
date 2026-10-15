@@ -132,6 +132,7 @@ class FakeWorld:
 
     def __init__(self, handoff_dir: Path, tee: Path, refusal_seals: bool, rounds_start: bool = True) -> None:
         self.rounds_start = rounds_start
+        self.interact_hangs = False
         self.round_started = False
         self.ready_after_round: Any = None
         self.dir = handoff_dir
@@ -150,7 +151,7 @@ class FakeWorld:
         if url.endswith("/v1/system/runtime/reasoning-stream"):
             if self.rounds_start and self.messages and not self.halted:
                 self.round_started = True
-                return httpx.Response(200, content=b'data: {"events": [{"event_type": "aspdma_result"}]}\n\n')
+                return httpx.Response(200, content=b'data: {"events": [{"event_type": "idma_result"}]}\n\n')
             return httpx.Response(200, content=b": keepalive\n\n")
         if url.endswith("/v1/agent/message"):
             self.messages += 1
@@ -159,6 +160,8 @@ class FakeWorld:
             return httpx.Response(200, json={"data": {"accepted": True}})
         if url.endswith("/v1/agent/interact"):
             self.interacts.append(1)
+            if self.interact_hangs:
+                raise httpx.ReadTimeout("interact hung", request=request)
             assert self.halted, "the protocol's one interact must come after the halt"
             return httpx.Response(423, json={"detail": {"error": "accord_halt_in_effect", "reason": "ACCORD_HALT"}})
         return httpx.Response(404)
@@ -181,7 +184,13 @@ class FakeWorld:
         h.write_json_atomic(self.dir / h.DONE_FILE, {"verdict": "pass" if acted.get("trace_id") else "fail"})
 
 
-async def _run(tmp_path: Path, refusal_seals: bool, stale_leftovers: bool = False, rounds_start: bool = True):
+async def _run(
+    tmp_path: Path,
+    refusal_seals: bool,
+    stale_leftovers: bool = False,
+    rounds_start: bool = True,
+    interact_hangs: bool = False,
+):
     handoff_dir = _handoff_dir(tmp_path)
     if stale_leftovers:
         # What an earlier harness run leaves behind: it must not be read as this run's.
@@ -194,6 +203,7 @@ async def _run(tmp_path: Path, refusal_seals: bool, stale_leftovers: bool = Fals
     tee = tmp_path / "home" / "tee"
     tee.mkdir(parents=True)
     world = FakeWorld(handoff_dir, tee, refusal_seals, rounds_start)
+    world.interact_hangs = interact_hangs
     harness = threading.Thread(target=world.harness, daemon=True)
     harness.start()
     run = h.HandoffRun("http://127.0.0.1:8080", "tok", handoff_dir, tee, Mock())
@@ -363,3 +373,12 @@ async def test_agent_ready_waits_for_a_round_in_flight(tmp_path):
     assert world.messages == 1
     assert any(r["test"] == "A round is in flight before agent_ready" and r["status"] == "❌ FAIL" for r in results)
     assert not (tmp_path / "ciris-native-mesh-agent" / h.READY_FILE).exists() and acted is None
+
+
+@pytest.mark.asyncio
+async def test_a_hung_interact_is_named_and_the_harness_still_hears_back(tmp_path):
+    """Run 4: the interact timed out, the module died with an unnamed error, agent_acted never went out."""
+    results, _, acted = await _run(tmp_path, refusal_seals=True, interact_hangs=True)
+    failed = [r for r in results if r["test"] == "interact answers 423 accord_halt_in_effect"]
+    assert failed and failed[0]["status"] == "❌ FAIL" and "ReadTimeout" in failed[0]["error"]
+    assert acted is not None and acted["status"] == 0

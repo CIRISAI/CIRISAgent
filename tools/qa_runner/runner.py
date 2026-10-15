@@ -2024,7 +2024,8 @@ class QARunner:
                 if not module_passed:
                     all_passed = False
             except Exception as e:
-                self.console.print(f"[red][FAIL] Error running {module.value}: {e}[/red]")
+                # repr: a timeout's str() is empty, which left run 4's failure unnamed.
+                self.console.print(f"[red][FAIL] Error running {module.value}: {e!r}[/red]")
                 import traceback
 
                 if self.config.verbose:

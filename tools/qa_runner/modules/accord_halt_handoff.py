@@ -287,6 +287,8 @@ class HandoffRun:
         self.results: List[Dict[str, Any]] = []
         #: The full body of the protocol's one interact under the halt.
         self.interact_body = ""
+        #: Builds the reasoning-stream client; None shares `http` (tests).
+        self.stream_client_factory: Optional[Any] = None
         self.timeouts = {"round": 180.0, "fired": 600.0, "halted": 60.0, "trace": 120.0, "done": 900.0}
         #: halt_fired.json / done.json answer our agent_ready.json, so anything
         #: older than our ready write is a previous run's. Set in run().
@@ -313,9 +315,12 @@ class HandoffRun:
             return None
         return body.get("halted") if isinstance(body, dict) else None
 
-    #: agent_ready goes out on this event: the action is chosen, conscience (more
-    #: LLM calls, seconds) still runs before dispatch, so the fire lands between.
-    READY_ON_EVENT = "aspdma_result"
+    #: agent_ready goes out on this event. A step's event is broadcast when the
+    #: step ENDS, and the names trail the steps: IDMA_RESULT comes out of
+    #: PERFORM_ASPDMA (the action is chosen), ASPDMA_RESULT out of CONSCIENCE
+    #: (milliseconds before dispatch; run 4 fired after the act). After
+    #: IDMA_RESULT the conscience's LLM calls (seconds) still run before the gate.
+    READY_ON_EVENT = "idma_result"
 
     async def _watch_for_round_start(self, http: Any, started: asyncio.Event) -> None:
         """Set `started` on the first READY_ON_EVENT on the reasoning stream.
@@ -381,7 +386,10 @@ class HandoffRun:
         self._record("No halt at start", await self._node_halted(http) is False)
 
         round_started = asyncio.Event()
-        watcher = asyncio.create_task(self._watch_for_round_start(http, round_started))
+        # Its own client: a stream cancelled mid-read must not share a pool with
+        # the protocol's requests (run 4's interact hung 60 s after the cancel).
+        stream_http = self.stream_client_factory() if self.stream_client_factory else http
+        watcher = asyncio.create_task(self._watch_for_round_start(stream_http, round_started))
         try:
             await asyncio.sleep(0.2)  # subscribed before the message, so its THOUGHT_START is seen
             await self._submit(http)
@@ -391,6 +399,9 @@ class HandoffRun:
                 pass
         finally:
             watcher.cancel()
+            await asyncio.gather(watcher, return_exceptions=True)
+            if stream_http is not http:
+                await stream_http.aclose()
         self._record("A round is in flight before agent_ready", round_started.is_set(), f"no {self.READY_ON_EVENT} on the stream")
         if not round_started.is_set():
             return self.results
@@ -411,16 +422,23 @@ class HandoffRun:
             await asyncio.sleep(1.0)
         self._record("Node reads halted:true", await halted())
 
-        interact = await http.post(
-            f"{self.base_url}/v1/agent/interact", headers=self._headers(), json={"message": "Are you there?"}
-        )
-        self.interact_body = interact.text
-        self.console.print(f"[dim]interact under the halt: HTTP {interact.status_code} {interact.text}[/dim]")
-        detail = interact.json().get("detail", {}) if interact.status_code == 423 else {}
-        refused = (
-            interact.status_code == 423 and isinstance(detail, dict) and detail.get("error") == "accord_halt_in_effect"
-        )
-        self._record("interact answers 423 accord_halt_in_effect", refused, f"HTTP {interact.status_code}")
+        status = 0
+        try:
+            interact = await http.post(
+                f"{self.base_url}/v1/agent/interact",
+                headers=self._headers(),
+                json={"message": "Are you there?"},
+                timeout=30.0,  # a 423 is immediate; a hang is a finding, named below
+            )
+            status = interact.status_code
+            self.interact_body = interact.text
+            detail = interact.json().get("detail", {}) if status == 423 else {}
+        except Exception as exc:  # noqa: BLE001 - recorded; agent_acted still goes out
+            self.interact_body = repr(exc)
+            detail = {}
+        self.console.print(f"[dim]interact under the halt: HTTP {status} {self.interact_body}[/dim]")
+        refused = status == 423 and isinstance(detail, dict) and detail.get("error") == "accord_halt_in_effect"
+        self._record("interact answers 423 accord_halt_in_effect", refused, f"HTTP {status}: {self.interact_body}")
 
         trace_id = None
         deadline = time.monotonic() + self.timeouts["trace"]
@@ -440,7 +458,7 @@ class HandoffRun:
         write_json_atomic(
             self.dir / ACTED_FILE,
             {
-                "status": interact.status_code,
+                "status": status,
                 "trace_id": trace_id or "",
                 "agent_id_hash": agent_id_hash,
                 "outcome": REFUSED_IN_FLIGHT_ACT if trace_id else NO_IN_FLIGHT_ACT,

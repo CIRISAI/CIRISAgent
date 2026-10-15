@@ -304,3 +304,38 @@ async def test_ios_setup_is_never_completed_without_the_pin(monkeypatch):
     monkeypatch.setattr(web_ui, "_ios_fetch_claim_pin_home", lambda *a, **k: (None, "devicectl copy failed"))
     ok = await web_ui._ios_complete_setup_if_needed("http://localhost:18080", "UDID", "ai.ciris.mobile", "t", "a")
     assert ok is False and posted == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("module_name, fn", [("tools.memory_benchmark", "complete_setup"), ("tools.introspect_memory", "_complete_setup")])
+@pytest.mark.parametrize("claim_ok", [True, False])
+async def test_benchmark_tools_claim_before_setup(tmp_path, monkeypatch, module_name, fn, claim_ok):
+    """memory-benchmark.yml and introspection boot a real agent: they claim first too, or stop."""
+    import importlib
+
+    tool = importlib.import_module(module_name)
+    order: List[str] = []
+
+    async def claim(client: Any, base_url: str, homes: Any, user: str, *a: Any, **k: Any) -> node_claim.ClaimOutcome:
+        order.append(f"claim:{user}")
+        return node_claim.ClaimOutcome(claim_ok, "pin", "ok" if claim_ok else "No claim PIN readable")
+
+    class Client:
+        def __init__(self, *a: Any, **k: Any) -> None:
+            pass
+
+        async def __aenter__(self) -> "Client":
+            return self
+
+        async def __aexit__(self, *a: Any) -> None:
+            return None
+
+        async def post(self, url: str, json: Any = None) -> Any:
+            order.append(url.rsplit("/v1", 1)[1])
+            return MagicMock(status_code=200, text="{}")
+
+    monkeypatch.setattr(node_claim, "claim_like_the_wizard", claim)
+    monkeypatch.setattr(httpx, "AsyncClient", Client)
+    ok = await getattr(tool, fn)(BRAIN, 8080, homes=[str(tmp_path)])
+    assert ok is claim_ok
+    assert order == (["claim:owner", "/setup/complete"] if claim_ok else ["claim:owner"])

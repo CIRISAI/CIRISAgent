@@ -350,10 +350,10 @@ class WorkProcessor(BaseProcessor):
         if bus is None or not channel_id or channel_id.startswith("__") or channel_id == "system":
             return
         from ciris_engine.logic.infrastructure.authorization.reasoning_scope import reasoning_scope
-        from ciris_engine.logic.utils.localization import get_preferred_language, get_string
 
         # CC 4.2.1.1: the notice is the agent speaking, from outside the act gate.
         from ciris_engine.logic.utils.halt_latch import refuse_agent_send_under_halt
+        from ciris_engine.logic.utils.localization import get_preferred_language, get_string
         from ciris_engine.schemas.runtime.accord_halt import AgentSendSurface
 
         if await refuse_agent_send_under_halt(AgentSendSurface.TASK_FAILURE_NOTICE, channel_id):

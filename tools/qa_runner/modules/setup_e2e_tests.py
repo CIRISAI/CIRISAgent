@@ -23,6 +23,7 @@ import httpx
 
 from ..config import QAConfig, QAModule, QATestCase
 from tools.qa_runner.announce_bundle import DEFAULT_NODE_URL, check_announce_bundle
+from tools.qa_runner.node_claim import CLAIM_PIN_FILE, claim_node, find_claim_pin, mint_federation_id
 
 logger = logging.getLogger(__name__)
 
@@ -621,22 +622,17 @@ class SetupE2ETestModule:
         once the node is owned, idempotent) before it claims and completes;
         without it the claim has no fed-ID to bind and every announce answers
         503. Sent through the brain (8080), which proxies it to the node -- the
-        same path client >= 0.5.196 uses.
+        same path client >= 0.5.196 uses. One implementation: tools/qa_runner/node_claim.py.
         """
         start = time.perf_counter()
         step = "mint_federation_id"
 
         try:
-            response = await self.client.post(
-                f"{self.base_url}/v1/self/identity", json={"label": self.test_username}, timeout=60.0
-            )
+            minted, data, error = await mint_federation_id(self.client, self.base_url, self.test_username)
             duration_ms = (time.perf_counter() - start) * 1000
-            if response.status_code != 200:
-                await self._record_step(
-                    step, False, duration_ms, f"Status code: {response.status_code}", error=response.text[:300]
-                )
+            if not minted:
+                await self._record_step(step, False, duration_ms, error.split(":", 1)[0], error=error)
                 return
-            data = response.json()
             key_id = str(data.get("key_id", ""))
             self.report.federation_key_id = key_id or None
             await self._record_step(
@@ -659,6 +655,7 @@ class SetupE2ETestModule:
         with the node's own NodeCode; that writes the owner->node binding the
         announce later widens. Without it the node completes setup UNCLAIMED
         and answers 409 to every announce (CIRISAgent#1144 Lesson 1).
+        One implementation: tools/qa_runner/node_claim.py.
         """
         start = time.perf_counter()
         step = "claim_ownership"
@@ -667,23 +664,7 @@ class SetupE2ETestModule:
         # The PIN: the node's home is the backend's CIRIS_HOME; a run that does
         # not export it puts the backend's home in the repo checkout (server.py).
         homes = [os.environ.get("CIRIS_HOME"), str(Path(__file__).resolve().parents[3]), os.path.expanduser("~/ciris")]
-        pin_paths = [Path(h) / "claim_pin" for h in homes if h]
-        pin: Optional[str] = None
-        pin_file: Optional[Path] = None
-        for candidate in pin_paths:
-            try:
-                raw = candidate.read_text(encoding="utf-8").strip()
-            except OSError:
-                continue
-            if raw.startswith("{"):
-                try:
-                    obj = json.loads(raw)
-                    raw = str(obj.get("pin") or obj.get("claim_pin") or "")
-                except ValueError:
-                    raw = ""
-            if raw:
-                pin, pin_file = raw, candidate
-                break
+        pin, pin_file = find_claim_pin(homes)
         if pin is None:
             duration_ms = (time.perf_counter() - start) * 1000
             await self._record_step(
@@ -692,48 +673,23 @@ class SetupE2ETestModule:
                 duration_ms,
                 "No claim PIN readable -- the node minted none (already ROOT-owned: setup ran against a "
                 "database that already has an owner) or wrote it to a home this runner is not looking at",
-                error=f"looked in: {', '.join(str(p) for p in pin_paths)}",
+                error=f"looked in: {', '.join(str(Path(h) / CLAIM_PIN_FILE) for h in homes if h)}",
             )
             return
 
         try:
-            # The node's own NodeCode (served on the federation surface, proxied by the brain).
-            r = await self.client.get(f"{self.base_url}/v1/federation/node-code", timeout=30.0)
-            if r.status_code != 200:
-                r = await self.client.get(f"{node_url}/v1/federation/node-code", timeout=30.0)
-            r.raise_for_status()
-            body = r.json()
-            payload = body.get("data", body) if isinstance(body, dict) else {}
-            node_code = str(payload.get("node_code") or payload.get("code") or "")
-            if not node_code:
-                raise RuntimeError(f"no node_code in {str(body)[:200]}")
-
-            claim = {
-                "node_code": node_code,
-                "claim_pin": pin,
-                "cohort_scope": "self",
-                # A self-claim's NodeCode may carry no transport hint; the target IS this node.
-                "target_url": node_url,
-                "owner_username": self.test_username,
-                "owner_password": self.test_password,
-            }
-            # claim-remote is a NODE route; the brain's own /v1/setup router shadows
-            # the prefix, so it is posted to the node directly.
-            response = await self.client.post(f"{node_url}/v1/setup/claim-remote", json=claim, timeout=120.0)
+            outcome = await claim_node(self.client, self.base_url, pin, self.test_username, self.test_password, node_url)
             duration_ms = (time.perf_counter() - start) * 1000
-            if response.status_code != 200:
-                await self._record_step(
-                    step, False, duration_ms, f"Status code: {response.status_code}", error=response.text[:400]
-                )
+            if not outcome.ok:
+                await self._record_step(step, False, duration_ms, outcome.detail.split(":", 1)[0], error=outcome.detail)
                 return
-            data = response.json()
             self.report.node_claimed = True
             await self._record_step(
                 step,
                 True,
                 duration_ms,
-                f"Node self-claimed (PIN from {pin_file}): owner={data.get('owner') or data.get('responsible_user_key_id')}",
-                details={"pin_file": str(pin_file), "node_code_prefix": node_code[:24], "response_keys": sorted(data.keys()) if isinstance(data, dict) else []},
+                f"Node self-claimed (PIN from {pin_file}): owner={outcome.owner}",
+                details={"pin_file": str(pin_file), "node_code_prefix": outcome.node_code_prefix, "response_keys": outcome.response_keys},
             )
         except Exception as e:  # noqa: BLE001
             duration_ms = (time.perf_counter() - start) * 1000

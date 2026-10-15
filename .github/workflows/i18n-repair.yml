@@ -72,6 +72,10 @@ on:
         default: "fast"
         type: choice
         options: [fast, batch]
+      shards:
+        description: "Parallel locale shards, 1-28. 7 = 4 locales each; 1 = the old one-job lane. One commit either way."
+        required: false
+        default: "7"
 
 concurrency:
   # One writer at a time. Parallel agents racing on one bundle is the failure
@@ -100,4 +104,5 @@ jobs:
       langs: ${{ inputs.langs }}
       max_keys: ${{ inputs.max_keys }}
       mode: ${{ inputs.mode }}
+      shards: ${{ inputs.shards }}
       commit: true

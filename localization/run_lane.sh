@@ -37,7 +37,8 @@ case "${TARGET:-accord}" in
     ;;
   ui)
     export LOCALIZE_TARGET=ui
-    cmd=(python3 localization/localize.py)
+    # localize.py's own CLI, with provider backoff installed (lane_backoff.py).
+    cmd=(python3 localization/lane_backoff.py)
     ;;
   *)
     echo "TARGET must be accord or ui, got '${TARGET}'" >&2

@@ -23,6 +23,23 @@
 #
 # Inputs reach the shell through env, never by ${{ }} interpolation into the
 # script body; localization/run_lane.sh builds the command from them.
+#
+# SHARDED (agent-only; CIRISClient runs one job). localize.py walks the locales
+# one at a time with blocking calls, so one job is 28 pipelines in a row. Here:
+#
+#   plan     the whole-run dry-run (so --max-keys bounds the RUN, not a shard)
+#            and the deterministic locale assignment (localization/lane_shards.py).
+#   shard    N parallel copies of the same lane, each over a disjoint LANGS
+#            subset. Read-only token: a shard NEVER commits or pushes. It uploads
+#            only its own locale files, its report, its log and its exit status.
+#   collect  the one writer. Refuses any shard whose artifact holds a file
+#            outside its own locales, runs the gate over the combined tree,
+#            merges the reports (spend summed), and commits ONCE.
+#
+# Fail-closed is unchanged: a shard that exits 1 (keys the ladder could not
+# render, or the reviewer rejected) still banks its accepted values -- the lane
+# never writes a rejected one -- and the run fails. One writer per branch is
+# still the callers' i18n-write-<ref> concurrency group.
 
 name: i18n lane
 
@@ -103,14 +120,27 @@ on:
         required: false
         default: ""
         type: string
+      shards:
+        description: "parallel locale shards, 1-28 (7 = 4 locales each)"
+        required: false
+        default: "7"
+        type: string
 
 permissions:
   contents: write
 
 jobs:
-  lane:
+  plan:
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.shards.outputs.matrix }}
+      # Pinned ONCE here; every shard checks out exactly these commits.
+      extra_tm_website: ${{ steps.extra_tm.outputs.website }}
+      extra_tm_client: ${{ steps.extra_tm.outputs.client }}
+      extra_tm_provenance: ${{ steps.extra_tm_provenance.outputs.provenance }}
     env:
       TARGET: ${{ inputs.target }}
       LANE: ${{ inputs.lane }}
@@ -124,10 +154,12 @@ jobs:
       LANGS: ${{ inputs.langs }}
       MAX_KEYS: ${{ inputs.max_keys }}
       MODE: ${{ inputs.mode }}
+      SHARDS: ${{ inputs.shards }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.ref || github.ref }}
+          persist-credentials: false
 
       - uses: actions/setup-python@v5
         with:
@@ -139,9 +171,9 @@ jobs:
       # Extra translation memory (--extra-tm): the website's and the apps'
       # translated strings, as terminology anchors only -- the adapter never
       # writes them as values. Each repository is resolved to its default
-      # branch's commit FIRST, checked out at exactly that SHA (read-only, no
-      # credentials kept), and the SHA goes into the step summary, the plan
-      # log and the commit message.
+      # branch's commit ONCE, here, and every shard checks out exactly these
+      # SHAs (plan outputs), so no two shards can anchor on different corpora.
+      # The SHAs go into the step summary, the plan log and the commit message.
       - name: Extra translation memory -- pin the default-branch commits
         id: extra_tm
         if: inputs.extra_tm && inputs.target == 'accord'
@@ -181,6 +213,7 @@ jobs:
             client/shared/src/desktopMain/resources/localization
 
       - name: Extra translation memory -- provenance
+        id: extra_tm_provenance
         if: steps.extra_tm.outcome == 'success'
         env:
           WEBSITE_SHA: ${{ steps.extra_tm.outputs.website }}
@@ -194,12 +227,16 @@ jobs:
             echo "EXTRA_TM=. .extra-tm/ciris-website .extra-tm/CIRISClient"
             echo "EXTRA_TM_PROVENANCE=$provenance"
           } >> "$GITHUB_ENV"
+          echo "provenance=$provenance" >> "$GITHUB_OUTPUT"
           {
             echo "### Extra translation memory (anchors only, never values)"
             echo "$provenance"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Plan (no API call)
+      - name: Plan (no API call) -- the whole run, before it is split
+        # Over every requested locale, so --max-keys refuses a run that is too
+        # large in total exactly as the single-job lane did; a shard's slice
+        # would always look small.
         env:
           LOCALIZE_PROVIDER: ${{ vars.LOCALIZE_PROVIDER || 'openrouter' }}
         run: |
@@ -212,7 +249,97 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Run the lane
+      - name: Shard the locales
+        id: shards
+        run: |
+          set -euo pipefail
+          matrix="$(python3 localization/lane_shards.py matrix --shards "$SHARDS" --langs "$LANGS")"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Shards"
+            echo '```'
+            python3 localization/lane_shards.py layout --shards "$SHARDS" --langs "$LANGS"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  shard:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    # A shard NEVER writes the branch: read-only token, no persisted
+    # credentials, no commit step. collect is the only writer.
+    permissions:
+      contents: read
+    strategy:
+      # One shard failing (fail-closed rejections, a provider outage) must not
+      # cancel the others: their accepted work is still banked by collect.
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    env:
+      TARGET: ${{ inputs.target }}
+      LANE: ${{ inputs.lane }}
+      ACCORD_VERSION: ${{ inputs.accord_version }}
+      TM_VERSION: ${{ inputs.tm_version }}
+      STEM: ${{ inputs.accord_stem }}
+      TM_STEM: ${{ inputs.tm_stem }}
+      SEED_EXACT_TM: ${{ inputs.seed_exact_tm }}
+      UNITS: ${{ inputs.accord_units }}
+      KEYS: ${{ inputs.keys }}
+      LANGS: ${{ matrix.langs }}
+      SHARD: ${{ matrix.shard }}
+      MAX_KEYS: ${{ inputs.max_keys }}
+      MODE: ${{ inputs.mode }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Vendored pipeline matches its record
+        run: python3 tools/dev/check_localize_vendoring.py
+
+      # Extra translation memory: the SAME commits plan pinned, for every
+      # shard. Never re-resolved here -- a default branch that moved mid-run
+      # would otherwise give shards different anchors.
+      - name: Extra translation memory -- ciris-website (read-only, plan's pin)
+        if: needs.plan.outputs.extra_tm_website != ''
+        uses: actions/checkout@v4
+        with:
+          repository: CIRISAI/ciris-website
+          ref: ${{ needs.plan.outputs.extra_tm_website }}
+          path: .extra-tm/ciris-website
+          persist-credentials: false
+          sparse-checkout: |
+            src/i18n
+
+      - name: Extra translation memory -- CIRISClient (read-only, plan's pin)
+        if: needs.plan.outputs.extra_tm_website != ''
+        uses: actions/checkout@v4
+        with:
+          repository: CIRISAI/CIRISClient
+          ref: ${{ needs.plan.outputs.extra_tm_client }}
+          path: .extra-tm/CIRISClient
+          persist-credentials: false
+          sparse-checkout: |
+            client/shared/src/desktopMain/resources/localization
+
+      - name: Extra translation memory -- verify the pin
+        if: needs.plan.outputs.extra_tm_website != ''
+        env:
+          WEBSITE_SHA: ${{ needs.plan.outputs.extra_tm_website }}
+          CLIENT_SHA: ${{ needs.plan.outputs.extra_tm_client }}
+        run: |
+          set -euo pipefail
+          test "$(git -C .extra-tm/ciris-website rev-parse HEAD)" = "$WEBSITE_SHA"
+          test "$(git -C .extra-tm/CIRISClient rev-parse HEAD)" = "$CLIENT_SHA"
+          echo "EXTRA_TM=. .extra-tm/ciris-website .extra-tm/CIRISClient" >> "$GITHUB_ENV"
+
+      - name: Run the lane (this shard's locales only)
+        id: lane
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -220,13 +347,88 @@ jobs:
           LOCALIZE_LADDER: ${{ vars.LOCALIZE_LADDER }}
           LOCALIZE_REVIEW_MODEL: ${{ vars.LOCALIZE_REVIEW_MODEL }}
         run: |
-          set -euo pipefail
+          set -uo pipefail
           pip install --quiet anthropic
-          localization/run_lane.sh --mode "$MODE" --report i18n-report.json | tee lane.log
+          rc=0
+          localization/run_lane.sh --mode "$MODE" --report i18n-report.json 2>&1 | tee lane.log || rc=$?
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
           {
-            echo "### $TARGET / $LANE lane"
+            echo "### $TARGET / $LANE lane -- shard $SHARD ($LANGS), exit $rc"
             echo '```'
             tail -400 lane.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$rc"
+
+      - name: Pack this shard's own locale files
+        # always(), so a shard that exited 1 still hands over what it accepted.
+        if: always()
+        env:
+          LANE_RC: ${{ steps.lane.outputs.rc }}
+        run: |
+          set -euo pipefail
+          python3 localization/lane_shards.py pack --shard "$SHARD" --langs "$LANGS" --rc "$LANE_RC" \
+            --report i18n-report.json --log lane.log --out "$RUNNER_TEMP/i18n-shard"
+
+      - name: Upload this shard
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: i18n-shard-${{ matrix.shard }}
+          path: ${{ runner.temp }}/i18n-shard
+          if-no-files-found: error
+          retention-days: 14
+
+  collect:
+    needs: [plan, shard]
+    # always(): a failed shard still has accepted work to bank (fail-closed
+    # withholds only the rejected values). Not when the plan refused the run.
+    if: always() && needs.plan.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      TARGET: ${{ inputs.target }}
+      LANE: ${{ inputs.lane }}
+      ACCORD_VERSION: ${{ inputs.accord_version }}
+      STEM: ${{ inputs.accord_stem }}
+      LANGS: ${{ inputs.langs }}
+      SHARDS: ${{ inputs.shards }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Download the shards
+        # Outside the checkout: nothing reaches the tree until collect has
+        # checked who wrote it. A shard with no artifact is reported by collect.
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: i18n-shard-*
+          path: ${{ runner.temp }}/i18n-shards
+
+      - name: Collect -- each shard's own locales, nothing else
+        # Recomputes the assignment from the same inputs (it does not take an
+        # artifact's word for what it owns), refuses a shard WHOLE if it carries
+        # any file outside its locales, copies the rest into the checkout, and
+        # merges the MQM reports with the spend summed. Exits 1 if any shard is
+        # missing, refused or failed -- after copying what passed.
+        id: collect
+        run: |
+          set -euo pipefail
+          echo "count=$(python3 localization/lane_shards.py layout --shards "$SHARDS" --langs "$LANGS" | wc -l)" >> "$GITHUB_OUTPUT"
+          python3 localization/lane_shards.py collect --shards "$SHARDS" --langs "$LANGS" \
+            --from "$RUNNER_TEMP/i18n-shards" --report i18n-report.json | tee collect.log
+          {
+            echo "### Collect -- $TARGET / $LANE lane"
+            echo '```'
+            cat collect.log
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -238,8 +440,9 @@ jobs:
           path: i18n-report.json
 
       - name: Gate -- the pipeline proposes, this decides
-        # always(), so a lane that exited 1 still gets what it DID write checked,
-        # and the operator sees both facts.
+        # always(), so a run with a failed shard still gets what it DID write
+        # checked, and the operator sees both facts.
+        id: gate
         if: always()
         run: |
           set -euo pipefail
@@ -256,11 +459,14 @@ jobs:
       - name: Commit
         env:
           BRANCH: ${{ github.ref_name }}
-        # ALWAYS, even when the lane exited 1. The lane writes only ACCEPTED
-        # values, so committing on failure banks the good work and leaves the
-        # rejected keys missing for the next run (CIRISClient: skipping this on
-        # failure discarded 587 good translations per run, seven runs running).
-        if: always() && inputs.commit
+          SHARD_COUNT: ${{ steps.collect.outputs.count || inputs.shards }}
+          EXTRA_TM_PROVENANCE: ${{ needs.plan.outputs.extra_tm_provenance }}
+        # Even when a shard failed: the lane writes only ACCEPTED values, so
+        # committing on failure banks the good work and leaves the rejected keys
+        # missing for the next run (CIRISClient: skipping this on failure
+        # discarded 587 good translations per run, seven runs running). NOT when
+        # the combined tree failed the gate: the gate is what decides.
+        if: always() && inputs.commit && steps.gate.outcome == 'success'
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
@@ -295,6 +501,9 @@ jobs:
           Gated in this run by tools/dev/check_localize_vendoring.py and, for the
           Accord, accord_localize.py --verify. The MQM findings are attached to
           the run as i18n-report.json.
+
+          Run as $SHARD_COUNT parallel locale shard(s); each shard's own locale
+          files were collected into this one commit (localization/lane_shards.py).
 
           Accord files are hash-pinned (ACCORD_EXPECTED_HASHES) and covered by
           the root-signed accord manifest: re-pin and re-sign before merge.

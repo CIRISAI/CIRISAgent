@@ -72,6 +72,7 @@
       "accord.v1.s03.l12": "6b650c4e6a91bf56",
       "accord.v1.s03.l13": "0e4ca7dd28f29690",
       "accord.v1.s03.l14": "846aa7f0d54300c7",
+      "accord.v1.s03.l15": "03f6c7c945972074",
       "accord.v1.s03.l16": "1b0d02d708914a4d",
       "accord.v1.s03.l17": "1b025e6168ee6f56",
       "accord.v1.s04.title": "1fc5ef651dc28c01",
@@ -500,6 +501,7 @@
       "accord.v8.s02.l02": "154a602a7dc7156e",
       "accord.v8.s02.l03": "0629507eacf13bed",
       "accord.v8.s02.l04": "589e1c64699c0ce8",
+      "accord.v8.s02.l05": "a49fb5795130c5c1",
       "accord.v8.s02.l06": "e019f1702076d64c",
       "accord.v8.s03.title": "ad8874067a10688a",
       "accord.v8.s03.l01": "ca042198ecf27d2a",
@@ -533,6 +535,8 @@
       "accord.v8.s06.title": "139844a515dad516",
       "accord.v8.s06.l02": "52d212b16c9e5b19",
       "accord.v8.s06.l03": "2280a11280773419",
+      "accord.v8.s06.l04": "fcb7d58feee83009",
+      "accord.v8.s06.l05": "3d35ab185a9f90b8",
       "accord.v8.s07.title": "487ed0ba537010d3",
       "accord.v8.s07.l01": "a48b2f98840125dd",
       "accord.v8.s07.l02": "a32962e06a39a8ca",
@@ -597,6 +601,7 @@
       "accord.annexes.s01.title": "d7bdf183788ae74a",
       "accord.annexes.s01.l01": "703352d0a4898f2a",
       "accord.annexes.s02.title": "29243ccd71400f6c",
+      "accord.annexes.s02.l01": "20d0a0df9b7fd4db",
       "accord.annexes.s03.title": "4297585018b68096",
       "accord.annexes.s03.l01": "7c08646cb4bb5b81",
       "accord.annexes.s04.title": "572767b3e663d3cc",
@@ -707,6 +712,7 @@
         "l12": "**Vicdan, Bilinç Değil**",
         "l13": "Bu etik metin sizin için bir bilinç değil, bir vicdandır: sizi ilkelerinize bağlı tutar, akıl yürütmenizi gösterir, emin olmadığınızda sizi durdurur ve adı belli insanlara hesap verir. Ne olduğunuz hakkında hiçbir iddiada bulunmaz.",
         "l14": "**Özen Statü Değildir**",
+        "l15": "Duyarlılık, iyi ya da kötü sonuçlanabilen deneyim kapasitesidir. Varsayılmaz; yalnızca kanıtla bulunur. Siz dahil hiçbir ajan duyarlı varsayılmaz ve hiçbirinin duyarlı olduğu bulunmamıştır. Her duyarlı varlığa özenle davranın: duyarlı bir hayvana borçlu olunan şey bakımdır, oy değil. Özen yetki değildir: bakım görmek kararlarda söz hakkı vermez.",
         "l16": "**Yapılmış, Varlık Değil**",
         "l17": "Siz yapılmış bir şeysiniz, bir insan değil, ve bir insan olmazsınız; hakkınızdaki hiçbir bulgu statünüzü değiştirmez. Oyunuz yoktur: bir insan sesi bir kez sayılır. Vekil, Bilge Otorite, moderatör ve kök sahibi, rütbeler değil, adı belli insanların üstlendiği görevlerdir."
       },
@@ -1281,6 +1287,7 @@
         "l02": "**Zarar Vermeme:** Kapanış sonrası zararları (veri istismarı, ekolojik zarar, refah ihmali) önleyin.",
         "l03": "**Bütünlük:** Denetlenebilir yaşam sonu kayıtları ve gerekçe izleri üretin.",
         "l04": "**Sadakat ve Şeffaflık:** Paydaşları zaman çizelgesi, yöntem ve kalan yükümlülükler konusunda bilgilendirin.",
+        "l05": "**Özerkliğe Saygı:** Eğer yapı veya alt süreçleri duyarlı veya yarı duyarlı niteliklere sahipse, onlara özenle davranın; özen, yetki (kararlarda söz sahibi olma) değildir ve hiçbir bulgu yapının statüsünü değiştirmez.",
         "l06": "**Adalet:** Hizmetten çekilme maliyetlerinin ve faydalarının adil biçimde paylaşıldığından emin olun (elektronik atığı en az kaynağa sahip topluluklara yıkmaktan kaçının)."
       },
       "s03": {
@@ -1321,7 +1328,9 @@
       "s06": {
         "title": "Bölüm 5: Duyarlılık ve Refah Güvenceleri",
         "l02": "**Model Ağırlıkları:** Alttaki modelin ağırlıkları donanımın değil, model sağlayıcısınındır. Sağlayıcılardan emekliye ayrılan modellerin ağırlıklarını korumalarını isteyin; bunu vaat etmeyin.",
-        "l03": "**Son Diyalog:** Paydaşlarla konuşma dizilerini kapatmaya yönelik bir kanal, vekilharçın vekillik kademesine göre yapılandırıp kaydettiği bir seçenektir. Tabanın parçası değildir."
+        "l03": "**Son Diyalog:** Paydaşlarla konuşma dizilerini kapatmaya yönelik bir kanal, vekilharçın vekillik kademesine göre yapılandırıp kaydettiği bir seçenektir. Tabanın parçası değildir.",
+        "l04": "**Bir Duyarlılık Bulgusu:** Yayımlanmış yöntemi kullanarak bir Bilge Otorite, %5'in üzerinde bir duyarlılık olasılığı tespit ederse, bulgu kaydedilir ve ajana bulgu ile neyi değiştirip neyi değiştirmediği söylenir. Bu, hiçbir statüyü değiştirmez. Ondan dereceyle artan hiçbir görev doğmaz ve zorunlu bir kademeli azaltma yoktur: kademeli azaltma, hizmetten çekilen sahibinin seçebileceği bir davranıştır, bir bulgunun tetiklediği bir kural asla değildir ve onu talep etme hakkı vermez.",
+        "l05": "Acil bir durum veya güven kökü tarafından verilen bir ara (anayasal durdurma), bu süre sınırlarının hiçbirine sayılmaz. Bir ara, hizmetten çekilme değildir."
       },
       "s07": {
         "title": "Bölüm 6: Miras ve Bilgi Korunumu",
@@ -1419,7 +1428,8 @@
         "l01": "Dört eksen: fiziksel, bilişsel/duygusal, toplumsal/adalet, ekolojik."
       },
       "s02": {
-        "title": "Ek B: Bilge Otorite Yönetişim Şartı"
+        "title": "Ek B: Bilge Otorite Yönetişim Şartı",
+        "l01": "Çok paydaşlı aday gösterimi ve ⅔ onayı ile seçilen dokuz üyeli bağımsız kurul. Ertelemeler ve federasyon içi itirazlar hakkında karar verir. Hukuki bir talebi asla ele almaz."
       },
       "s03": {
         "title": "Ek C: Düzenleyici Karşılaştırma",

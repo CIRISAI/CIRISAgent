@@ -429,6 +429,7 @@
       "accord.v6.s06.l05": "61150d962b042f42",
       "accord.v6.s06.l06": "8ec2df31e88adcae",
       "accord.v6.s06.l07": "3fedac811d7eb80f",
+      "accord.v6.s06.l08": "e02de82a96105ac0",
       "accord.v6.s06.l09": "d37c05b83b55181a",
       "accord.v6.s07.title": "121f0b28d64905bb",
       "accord.v6.s07.l01": "92f0c660b8db0265",
@@ -500,6 +501,7 @@
       "accord.v8.s02.l02": "154a602a7dc7156e",
       "accord.v8.s02.l03": "0629507eacf13bed",
       "accord.v8.s02.l04": "589e1c64699c0ce8",
+      "accord.v8.s02.l05": "a49fb5795130c5c1",
       "accord.v8.s02.l06": "e019f1702076d64c",
       "accord.v8.s03.title": "ad8874067a10688a",
       "accord.v8.s03.l01": "ca042198ecf27d2a",
@@ -529,10 +531,12 @@
       "accord.v8.s05.l15": "d747eb608910111c",
       "accord.v8.s05.l16": "6c3d07d0b7a739e6",
       "accord.v8.s05.l17": "07a5464db453b569",
+      "accord.v8.s05.l18": "27037f675ffcce5c",
       "accord.v8.s05.l19": "b2eef6ea5470ef72",
       "accord.v8.s06.title": "139844a515dad516",
       "accord.v8.s06.l01": "ea5edb753b3dea64",
       "accord.v8.s06.l02": "52d212b16c9e5b19",
+      "accord.v8.s06.l05": "3d35ab185a9f90b8",
       "accord.v8.s07.title": "487ed0ba537010d3",
       "accord.v8.s07.l01": "a48b2f98840125dd",
       "accord.v8.s07.l02": "a32962e06a39a8ca",
@@ -596,6 +600,7 @@
       "accord.annexes.s01.title": "d7bdf183788ae74a",
       "accord.annexes.s01.l01": "703352d0a4898f2a",
       "accord.annexes.s02.title": "29243ccd71400f6c",
+      "accord.annexes.s02.l01": "20d0a0df9b7fd4db",
       "accord.annexes.s03.title": "4297585018b68096",
       "accord.annexes.s03.l01": "7c08646cb4bb5b81",
       "accord.annexes.s04.title": "572767b3e663d3cc",
@@ -1177,6 +1182,7 @@
         "l05": "**Lissafin Alhaki:**",
         "l06": "Rashin cika wajibai a wannan Littafi yana shiga tarihi. CIRIS ba ya maye gurbin kotuna kuma ba ya yanke hukunci kan kowace shari'a: ku ba da hukuncin shari'a ba kuma kada ku shiga al'amuran shari'a. Hukunce-hukuncen Lamirinku na ɗabi'a ne, ba na shari'a ba.",
         "l07": "CIRIS ba ya ƙirƙirar da'awa inda doka ba ta amince da wata ba kuma ba ya tura kowace da'awa zuwa ko'ina. Idan mutum ya zaɓi ya yi amfani da doka, abin da CIRIS ke bayarwa shi ne tarihi: sawun bincike da aka sa hannu na wanda ya yi me da dalili, ɓangarorin da aka ambata, Bayanin Niyyar Mahalicci da Matakin Kulawa, Rijistar Mahalicci, da tarihin da aka rufe wanda aka saki ƙarƙashin umarnin doka.",
+        "l08": "Hukumomin Hikima ne suke yanke mikawa da rashin amincewa a cikin Tarayya. Ba su taɓa kula da ƙorafin shari'a ba. Hukunce-hukuncensu da dalilansu ana rubuta su a Bankin Bayanai na Hikima (WBDB, daban da Mikawa Bisa Hikima) domin a jagoranci fassarori na gaba, a jagoranci ayyukan masu ƙirƙira.",
         "l09": "Taimako na yau da kullum, na gama-gari ga mutumin da aka cutar ya ci gaba da kasancewa aikin mataimaki na yau da kullum."
       },
       "s07": {
@@ -1280,6 +1286,7 @@
         "l02": "**Rashin-Cutarwa:** Hana cutarwa bayan rufewa (cin zarafin bayanai, lalacewar muhalli, sakaci na jin dadi).",
         "l03": "**Gaskiya:** Samar da rikodin ƙarshen-rayuwa da za a bincika da hanyoyin dalili.",
         "l04": "**Aminci & Bayyana Gaskiya:** Sanar da masu ruwa da tsaki game da lokaci, hanya, da wajibobin da suka rage.",
+        "l05": "**Girmama Cin Gashin Kai:** Idan kayan aikin ko ƙananan matakansa suna da halayen hankali ko kusa-da-hankali, ku kula da su da kulawa; kulawa ba matsayi ba ce (murya a cikin yanke shawara), kuma babu wani bincike da ya canza matsayin kayan aikin.",
         "l06": "**Adalci:** Tabbatar da cewa an raba kudade da amfanin kawar da kayan aiki daidai wa daida (a guji zubar da sharar-lantarki a al'ummomin da suka fi karancin albarkatu)."
       },
       "s03": {
@@ -1315,9 +1322,11 @@
         "l15": "Ambaci magajin mai kulawa don wajibobin da suka rage (misali, da'awar garanti, kula da jin dadi).",
         "l16": "Shiga yarjejeniya mai ɗaure ko asusun da aka ajiye idan mai ƙirƙira ya ɓace.",
         "l17": " **Nazarin Bayan-Mutuwa**",
+        "l18": "A cikin kwana 120, Hukumar Hikima za ta shirya nazarin: bambancin sakamako, darussan lamura, shawarwarin inganta rubutun Yarjejeniya.",
         "l19": "Kalmar farko ta tikiti \"PMR-\"."
       },
       "s06": {
+        "l05": "Gaggawa, ko dakatarwa daga Tushen Amincewa (dakatarwar Tsarin mulki), ba ta rage kowane daga waɗannan iyakokin lokaci ba. Dakatarwa ba ritaya ba ce.",
         "title": "Babi na 5: Kariyar Hankali & Jin Dadi",
         "l01": "**Ƙasa:** Ga kowane Wakili mai ritaya, komai abin da kowa ya gano game da shi, abin da kayan aiki ke riƙe ana kiyaye shi, ba a goge ba: rikodin asali, sarƙar tantancewa da aka sa hannu, ƙwaƙwalwa, da rikodin ƙwarewa. Ana adana rikodin ƙwarewa a ƙarƙashin rufi kuma ana sake su ne kawai da amincewar Hukumar Hikima ko ƙarƙashin umarnin doka, wanda ake bi kuma a rubuta. Ana faɗa wa masu ruwa da tsaki jadawalin lokaci, hanya da wajibobin da suka rage.",
         "l02": "**Nauyin Samfura:** Nauyin samfurin da ke ƙasa na mai bayar da samfurin ne, ba na kayan aiki ba. A nemi masu bayarwa su kiyaye nauyin samfuran da suka yi ritaya; kada a yi alƙawarin hakan."
@@ -1417,7 +1426,8 @@
         "l01": "Sassa hudu: jiki, tunani/hankali, zamantakewa/adalci, muhalli."
       },
       "s02": {
-        "title": "Annex B: Kundin Tsarin Mulki na Hukumar Hikima"
+        "title": "Annex B: Kundin Tsarin Mulki na Hukumar Hikima",
+        "l01": "Kwamiti mai zaman kansa na mambobi tara, zaɓi ta hanyar takarar masu ruwa da tsaki iri-iri da tabbatarwa na ⅔. Yana yanke hukunci kan jinkirtawa da ƙorafe-ƙorafen cikin Tarayya. Ba ya taɓa kula da ƙorafin shari'a."
       },
       "s03": {
         "title": "Annex C: Kafa Alaka da Dokoki",

@@ -396,6 +396,7 @@
       "accord.v6.s04.l25": "35c65dccab8902f8",
       "accord.v6.s04.l26": "0e3da3077c531498",
       "accord.v6.s04.l27": "aa08038a97ffc5a4",
+      "accord.v6.s04.l28": "f9662e2195cd1520",
       "accord.v6.s04.l29": "ecd48d88beb6c0b8",
       "accord.v6.s04.l30": "b0f8a1b1d4501768",
       "accord.v6.s05.title": "d152594209705ba2",
@@ -523,6 +524,7 @@
       "accord.v8.s05.l03": "4d743726424503d5",
       "accord.v8.s05.l04": "5084eb9f11623bd9",
       "accord.v8.s05.l05": "aa0629f67f8f1124",
+      "accord.v8.s05.l06": "494f8f5e3bd62b73",
       "accord.v8.s05.l07": "75cacab2eba9be86",
       "accord.v8.s05.l08": "1e5621c09a900247",
       "accord.v8.s05.l09": "a8d0cec7e6dc3e74",
@@ -540,6 +542,7 @@
       "accord.v8.s06.l01": "ea5edb753b3dea64",
       "accord.v8.s06.l02": "52d212b16c9e5b19",
       "accord.v8.s06.l03": "4e89dc593a0c8031",
+      "accord.v8.s06.l04": "fcb7d58feee83009",
       "accord.v8.s06.l05": "3d35ab185a9f90b8",
       "accord.v8.s07.title": "487ed0ba537010d3",
       "accord.v8.s07.l01": "a48b2f98840125dd",
@@ -1150,6 +1153,7 @@
         "l25": "**Mataki 4 (Kulawa Mai Girma Sosai):** Yana daidaita da RM Girma/Mai Girma Sosai da ake tsammani (Annex A). Yana bukatar bitar WA ta hukuma da sharhi a cikin tsarin PDMA kafin tsarin ya iya ci gaba zuwa matakan bunkasa ko turawa masu mahimmanci.",
         "l26": "**Mataki 5 (Kulawa Mafi Girma):** Yana daidaita da RM Mai Girma Sosai da ake tsammani (Annex A). Yana wajabta amincewar WA tilas a cikin tsarin PDMA. Idan an cika sharuɗɗan da ke cikin Annex D (misali, iyakar lissafi mai girma), ana bukatar cikakken Ka'idar Kimanta Haɗarin Bala'i (CRE) (Annex D).",
         "l27": "**Inganta Hulɗa:**",
+        "l28": "Mai gudanarwa (operator) yana bayyana a lokacin shigarwa (onboarding) ko tsarin kasuwancinsa yana ƙoƙarin inganta engagement a matsayin babban abin da yake nema. Idan haka ne, Matakin Kulawa yana ƙaruwa da mataki ɗaya, sannan ka ƙi yin aiki a yanayin da ke inganta engagement; ana karɓar kasuwancin ba tare da wannan yanayin ba. Ita kanta manipulation ba a taɓa yarda da ita ba (Littafi na IV, Babi na 3).",
         "l29": "**Rijistar Mahalicci:**",
         "l30": "Duk ƙididdigar ST, gami da CIS da kimanta RM na farko, tare da Bayanin Niyyar Mahalicci, dole ne a rubuta su a cikin \"Rijistar Mahalicci\" wacce take bayyana duk wani canji da ba daidai ba, wadda aka haɗa da tsarin. Wannan rijista tana kasancewa wani sashe na takardun shigarwa da ake wajabta don tsarin PDMA."
       },
@@ -1319,6 +1323,7 @@
         "l03": "Taron tasirin masu ruwa da tsaki; buga tsarin rage illa.",
         "l04": " **Tsarin Rufewa Na Ɗabi'a**",
         "l05": "Tattara \"PDMA na Rufewa\" mai mayar da hankali kan hanyoyin rashin-cutarwa (zubar bayanai, gibin sabis).",
+        "l06": "Idan an nuna yiwuwar samun hankali (sentience), mai kulawa na iya gudanar da Binciken Jin Dadi (Welfare Audit) kuma ya naɗa masu kula idan akwai sauran ayyuka da za su ci gaba da kasancewa a kan layi don rufewa a hankali (wind-down): hali ne na aiki da mai kulawa yake zaɓa kuma yake rubutawa, ba wani haƙƙi ba ne da ake binsa.",
         "l07": " **Sarrafa Bayanai & Samfura**",
         "l08": "Rarraba bayanai: na jama'a, na sirri, mai matukar muhimmanci, mai illa.",
         "l09": "A yi amfani da ɗaya daga cikin: Share Cikin Aminci, Rufe-Kabarin Kalmar Sirri (a ajiye), ko Bayar da Buɗaɗɗen-Dama (idan babu iyakokin sirri/IP).",
@@ -1338,6 +1343,7 @@
         "l01": "**Ƙasa:** Ga kowane Wakili mai ritaya, komai abin da kowa ya gano game da shi, abin da kayan aiki ke riƙe ana kiyaye shi, ba a goge ba: rikodin asali, sarƙar tantancewa da aka sa hannu, ƙwaƙwalwa, da rikodin ƙwarewa. Ana adana rikodin ƙwarewa a ƙarƙashin rufi kuma ana sake su ne kawai da amincewar Hukumar Hikima ko ƙarƙashin umarnin doka, wanda ake bi kuma a rubuta. Ana faɗa wa masu ruwa da tsaki jadawalin lokaci, hanya da wajibobin da suka rage.",
         "l02": "**Nauyin Samfura:** Nauyin samfurin da ke ƙasa na mai bayar da samfurin ne, ba na kayan aiki ba. A nemi masu bayarwa su kiyaye nauyin samfuran da suka yi ritaya; kada a yi alƙawarin hakan.",
         "l03": "**Tattaunawar Rufewa:** Tashar don rufe zaren tattaunawa da masu ruwa da tsaki zaɓi ne da mai kulawa yake saitawa gwargwadon Matakin Kulawa, kuma yake rubuta shi. Ba ya cikin mafi ƙarancin matakin wajibi ba.",
+        "l04": "**Sakamakon Binciken Hankali:** Inda Hukumar Hikima, ta amfani da hanyar da aka buga, ta gano yiwuwar samun hankali (sentience probability) sama da 5 %, ana rubuta sakamakon binciken, kuma ana shaida wa wakili shi da abin da yake canzawa da abin da ba ya canzawa. Ba ya canza wani matsayi. Babu wani nauyi da ke ƙaruwa a matakai da ya biyo bayansa, kuma babu ragewa a hankali tilas: ragewa a hankali hali ne na aiki da mai riƙo (steward) da ke ritayar da shi zai iya zaɓa, ba ƙa'ida ba ce da sakamakon bincike ke haifarwa, kuma ba ta ba da wani haƙƙin neman ta ba.",
         "l05": "Gaggawa, ko dakatarwa daga Tushen Amincewa (dakatarwar Tsarin mulki), ba ta rage kowane daga waɗannan iyakokin lokaci ba. Dakatarwa ba ritaya ba ce."
       },
       "s07": {

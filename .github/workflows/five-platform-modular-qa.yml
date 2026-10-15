@@ -826,7 +826,8 @@ jobs:
           for d in $roots; do
             [ -d "$d" ] || continue
             # depth 3: AppData/Local/Temp sits three below $HOME on Windows.
-            find "$d" -maxdepth 3 -name 'ciris_desktop*.log' -newermt '-3 hours' \
+            # .jstack.txt: the jcmd thread dump of a JVM that was alive but never served.
+            find "$d" -maxdepth 3 \( -name 'ciris_desktop*.log' -o -name 'ciris_desktop*.jstack.txt' \) -newermt '-3 hours' \
               -exec cp {} artifacts/ \; 2>/dev/null
           done
           echo "client-log search roots: $roots"

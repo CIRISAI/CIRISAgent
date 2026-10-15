@@ -442,7 +442,11 @@ class ServerManager:
                     # initialising before running the step whose whole job is to
                     # initialise it. initialization_complete is the right signal:
                     # the API is serving and can accept the wizard's POST.
-                    is_setup = bool(agent_state) and agent_state.lower() == "setup" and health_data.get("initialization_complete", False)
+                    is_setup = (
+                        bool(agent_state)
+                        and agent_state.lower() == "setup"
+                        and health_data.get("initialization_complete", False)
+                    )
 
                     if is_ready or is_first_run or (self.config.first_run_mode and is_setup):
                         status.running = True
@@ -541,7 +545,8 @@ class ServerManager:
         try:
             # Find processes using the port
             # `lsof` is POSIX-only; on Windows this raised FileNotFoundError.
-            # An empty list means "could not determine", NOT "port is free".
+            # None means "could not determine"; [] means a lookup ran and found
+            # no listener. Either way there is nothing for us to kill.
             from tools.qa_runner.platform_procs import pids_listening_on
 
             _found = pids_listening_on(self.config.port)
@@ -558,7 +563,7 @@ class ServerManager:
 
         except FileNotFoundError:
             # Kept as a last resort, but pids_listening_on() no longer raises
-            # FileNotFoundError — it returns [] when it cannot tell — so this
+            # FileNotFoundError — it returns None when it cannot tell — so this
             # branch is now effectively unreachable. `pkill` is POSIX-only and
             # would itself have raised here on Windows, which is the bug this
             # whole change is fixing.

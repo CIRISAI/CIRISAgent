@@ -36,6 +36,10 @@ class LicensedAgentConfig(WebUITestConfig):
     portal_url: str = "https://portal.ciris.ai"
     poll_timeout: int = 300  # 5 minutes to authorize via Portal
     poll_interval: int = 5
+    #: The backend's CIRIS_HOME (where its node writes claim_pin) and its launch
+    #: time, for the claim the API path makes before /v1/setup/complete.
+    node_home: str = ""
+    launched_at: Optional[float] = None
 
 
 # =============================================================================
@@ -449,7 +453,27 @@ async def test_complete_licensed_setup(
 
             report.message = "Setup submitted - waiting for completion"
         else:
-            # Try direct API call for setup completion
+            # Direct API setup, in the wizard's order: every node is always
+            # claimed, so claim first (tools/qa_runner/node_claim.py) or fail.
+            import httpx
+
+            from tools.qa_runner.node_claim import claim_like_the_wizard
+
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                claim = await claim_like_the_wizard(
+                    client,
+                    config.base_url,
+                    [config.node_home or os.environ.get("CIRIS_HOME")],
+                    config.admin_username,
+                    config.admin_password,
+                    since=config.launched_at,
+                )
+            if not claim.ok:
+                report.result = TestResult.FAILED
+                report.message = f"Node claim ({claim.step}) failed, setup not attempted: {claim.detail}"
+                report.duration_seconds = (datetime.now() - start).total_seconds()
+                return report
+
             payload = {
                 "llm_provider": config.llm_provider,
                 "llm_api_key": config.llm_api_key,

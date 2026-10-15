@@ -199,3 +199,108 @@ async def test_desktop_up_never_completes_setup_on_an_unowned_node(tmp_path, mon
     monkeypatch.setattr(web_ui.requests, "post", lambda url, **kw: posted.append(url))
     assert await web_ui._complete_setup(BRAIN, True, str(tmp_path)) is False
     assert posted == []
+
+
+def _api_only_browser() -> Any:
+    """A setup page with no account step and no Continue button: the flow takes its API path."""
+    from unittest.mock import AsyncMock
+
+    browser = MagicMock()
+    browser.goto = AsyncMock()
+    browser.wait = AsyncMock()
+    browser.screenshot = AsyncMock(return_value=MagicMock(path="shot.png"))
+    browser.get_page_content = AsyncMock(return_value="<html>setup</html>")
+    locator = MagicMock()
+    locator.count = AsyncMock(return_value=0)
+    locator.filter.return_value = locator
+    browser.page.locator.return_value = locator
+    return browser
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("claim_ok", [True, False])
+async def test_licensed_flow_api_path_claims_before_setup(tmp_path, monkeypatch, claim_ok):
+    from tools.qa_runner.modules.web_ui import licensed_agent_flow as flow
+
+    order: List[str] = []
+
+    async def claim(client: Any, base_url: str, homes: Any, *args: Any, **kwargs: Any) -> node_claim.ClaimOutcome:
+        order.append("claim")
+        assert homes == [str(tmp_path)]
+        return node_claim.ClaimOutcome(claim_ok, "pin", "node claimed" if claim_ok else "No claim PIN readable")
+
+    def post(url: str, **kw: Any) -> Any:
+        order.append(url.rsplit("/v1", 1)[1])
+        return MagicMock(status_code=200)
+
+    monkeypatch.setattr(node_claim, "claim_like_the_wizard", claim)
+    monkeypatch.setattr(flow.requests, "post", post)
+    config = flow.LicensedAgentConfig(base_url=BRAIN, llm_api_key="", node_home=str(tmp_path))
+    report = await flow.test_complete_licensed_setup(_api_only_browser(), config, {})
+    if claim_ok:
+        assert order == ["claim", "/setup/complete"] and report.result == flow.TestResult.PASSED
+    else:
+        assert order == ["claim"] and report.result == flow.TestResult.FAILED
+        assert "setup not attempted" in report.message
+
+
+@pytest.mark.parametrize("simulator", [True, False])
+def test_ios_reads_the_claim_pin_from_the_app_container(tmp_path, monkeypatch, simulator):
+    """Simulator: the container in place; device: devicectl copies the file. Never a log."""
+    from tools.qa_runner.modules.web_ui import __main__ as web_ui
+
+    container = tmp_path / "container"
+    (container / "Documents" / "ciris").mkdir(parents=True)
+    (container / "Documents" / "ciris" / "claim_pin").write_text("Q4YC-AZQA")
+    dest = tmp_path / "dest"
+    dest.mkdir()
+    seen: List[Any] = []
+
+    def simctl(args: List[str], timeout: int = 120) -> Any:
+        seen.append(args)
+        return MagicMock(stdout=f"{container}\n", stderr="")
+
+    def run(cmd: List[str], **kw: Any) -> Any:
+        seen.append(cmd)
+        src = cmd[cmd.index("--source") + 1]
+        Path(cmd[cmd.index("--destination") + 1]).write_text((container / src).read_text())
+        return MagicMock(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(web_ui, "_simctl", simctl)
+    monkeypatch.setattr(web_ui.subprocess, "run", run)
+    home, why = web_ui._ios_fetch_claim_pin_home("UDID", "ai.ciris.mobile", simulator=simulator, dest=dest)
+    assert why == "" and home is not None
+    assert node_claim.find_claim_pin([home])[0] == "Q4YC-AZQA"
+    if simulator:
+        assert seen == [["get_app_container", "UDID", "ai.ciris.mobile", "data"]]
+    else:
+        assert seen[0][:5] == ["xcrun", "devicectl", "device", "copy", "from"]
+        assert "appDataContainer" in seen[0] and "Documents/ciris/claim_pin" in seen[0]
+
+
+@pytest.mark.parametrize("simulator", [True, False])
+def test_ios_unreachable_pin_fails_closed(tmp_path, monkeypatch, simulator):
+    from tools.qa_runner.modules.web_ui import __main__ as web_ui
+
+    monkeypatch.setattr(web_ui, "_simctl", lambda args, timeout=120: MagicMock(stdout="", stderr="No such app"))
+    monkeypatch.setattr(
+        web_ui.subprocess, "run", lambda cmd, **kw: MagicMock(returncode=1, stdout="", stderr="file not found")
+    )
+    home, why = web_ui._ios_fetch_claim_pin_home(
+        "UDID", "ai.ciris.mobile", simulator=simulator, dest=tmp_path, timeout_s=0.1, poll_s=0.05
+    )
+    assert home is None and why
+
+
+@pytest.mark.asyncio
+async def test_ios_setup_is_never_completed_without_the_pin(monkeypatch):
+    from tools.qa_runner.modules.web_ui import __main__ as web_ui
+
+    posted: List[str] = []
+    monkeypatch.setattr(
+        web_ui.requests, "get", lambda url, **kw: MagicMock(status_code=200, json=lambda: {"data": {"first_run": True}})
+    )
+    monkeypatch.setattr(web_ui.requests, "post", lambda url, **kw: posted.append(url))
+    monkeypatch.setattr(web_ui, "_ios_fetch_claim_pin_home", lambda *a, **k: (None, "devicectl copy failed"))
+    ok = await web_ui._ios_complete_setup_if_needed("http://localhost:18080", "UDID", "ai.ciris.mobile", "t", "a")
+    assert ok is False and posted == []

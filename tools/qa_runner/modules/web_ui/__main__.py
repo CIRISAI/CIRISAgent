@@ -2658,12 +2658,28 @@ def _find_desktop_jar() -> Optional[Path]:
     return None
 
 
-def _complete_setup(base_url: str, mock_llm: bool) -> bool:
-    """Call /v1/setup/complete to create the known-password admin user.
+async def _complete_setup(base_url: str, mock_llm: bool, home: str, since: Optional[float] = None) -> bool:
+    """Claim the node, then call /v1/setup/complete to create the known-password admin user.
 
-    Mirrors qa_runner.server.APIServerManager._complete_qa_setup.
+    Mirrors qa_runner.server.APIServerManager._complete_qa_setup: the wizard's
+    order, through the one claim implementation (tools/qa_runner/node_claim.py).
+    Every node is always claimed; setup refuses an unowned node (409
+    node_unclaimed), and an unclaimed boot fails here, closed.
     """
-    payload = {
+    import httpx
+
+    from tools.qa_runner.node_claim import claim_like_the_wizard
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        claim = await claim_like_the_wizard(
+            client, base_url, [home], TEST_ADMIN_USERNAME, TEST_ADMIN_PASSWORD, since=since
+        )
+    if not claim.ok:
+        print(f" [FAIL] node claim ({claim.step}): {claim.detail}")
+        return False
+    print(f" [OK] node claimed by {TEST_ADMIN_USERNAME} (PIN from {claim.pin_file})")
+
+    payload: Dict[str, object] = {
         "llm_provider": "mock" if mock_llm else "openai",
         "llm_api_key": "test-key-for-qa",
         "llm_model": "mock-model" if mock_llm else "gpt-4",
@@ -3260,14 +3276,15 @@ async def run_desktop_up(args: argparse.Namespace) -> int:
         startup_timeout=args.timeout,
     )
     server = ServerManager(cfg)
+    launched_at = time.time()
     status = server.start()
     if not status.running:
         print(f" [FAIL] backend failed: {status.error}")
         return 1
 
     # 3. Complete setup
-    print("[3/5] Completing setup wizard via /v1/setup/complete...")
-    if not _complete_setup(server.base_url, args.mock_llm):
+    print("[3/5] Claiming the node, then completing setup via /v1/setup/complete...")
+    if not await _complete_setup(server.base_url, args.mock_llm, _desktop_home(server), since=launched_at):
         server.stop()
         return 1
     # Username only. The password is a fixed constant in this file

@@ -26,7 +26,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 IS_WINDOWS = sys.platform == "win32"
 
@@ -48,12 +48,16 @@ def kill_processes_matching(pattern: str) -> int:
             image = pattern if pattern.lower().endswith(".exe") else f"{pattern}.exe"
             r = subprocess.run(
                 ["taskkill", "/F", "/IM", image],
-                capture_output=True, text=True, timeout=_TIMEOUT,
+                capture_output=True,
+                text=True,
+                timeout=_TIMEOUT,
             )
             return 1 if r.returncode == 0 else 0
         r = subprocess.run(
             ["pkill", "-9", "-f", pattern],
-            capture_output=True, text=True, timeout=_TIMEOUT,
+            capture_output=True,
+            text=True,
+            timeout=_TIMEOUT,
         )
         return 1 if r.returncode == 0 else 0
     except (FileNotFoundError, subprocess.SubprocessError, OSError):
@@ -62,20 +66,31 @@ def kill_processes_matching(pattern: str) -> int:
         return 0
 
 
-def pids_listening_on(port: int) -> List[int]:
-    """PIDs listening on `port`. Empty list if it cannot be determined.
+def pids_listening_on(port: int) -> Optional[List[int]]:
+    """PIDs listening on `port`, or None when the lookup itself failed.
 
-    Empty means "could not tell", NOT "nothing is listening" — callers must not
-    read it as proof the port is free. `lsof` is absent on Windows and often on
-    minimal Linux images too, so this returns [] far more often than the old
-    code assumed.
+    THREE ANSWERS, NOT TWO:
+
+      * ``[1234, ...]`` -- these processes hold the port
+      * ``[]``          -- a lookup RAN and found no listener: the port is free
+      * ``None``        -- could not tell (no lsof/ss/netstat, a timeout, or a
+                           listener whose owning process the tool would not name)
+
+    The old contract returned [] for both of the last two, so every caller had
+    to print "(could not tell)" even when netstat had run and answered -- which
+    is what the desktop-ui diagnosis did on a Windows runner whose port was in
+    fact free. Callers must still not read None as "free".
     """
     try:
         if IS_WINDOWS:
             r = subprocess.run(
                 ["netstat", "-ano", "-p", "TCP"],
-                capture_output=True, text=True, timeout=_TIMEOUT,
+                capture_output=True,
+                text=True,
+                timeout=_TIMEOUT,
             )
+            if r.returncode != 0:
+                return None
             pids = []
             for line in r.stdout.splitlines():
                 parts = line.split()
@@ -87,30 +102,43 @@ def pids_listening_on(port: int) -> List[int]:
                         except ValueError:
                             pass
             return sorted(set(pids))
+        lsof_answered = False
         try:
             r = subprocess.run(
                 ["lsof", "-tiTCP:" + str(port), "-sTCP:LISTEN"],
-                capture_output=True, text=True, timeout=_TIMEOUT,
+                capture_output=True,
+                text=True,
+                timeout=_TIMEOUT,
             )
             pids = sorted({int(x) for x in r.stdout.split() if x.strip().isdigit()})
             if pids:
                 return pids
+            # lsof exits 1 with no output when nothing matches; anything on
+            # stderr, or another code, is lsof failing rather than answering.
+            lsof_answered = r.returncode in (0, 1) and not r.stderr.strip()
         except (FileNotFoundError, subprocess.SubprocessError, OSError, ValueError):
             pass
         # `ss` where lsof is absent or answered nothing: minimal Linux images ship
-        # iproute2 and not lsof, and an empty answer from either one is
-        # indistinguishable from "nothing is listening" to the caller -- which is
-        # exactly the confusion this module's docstring warns about.
-        r = subprocess.run(
-            ["ss", "-ltnpH", "sport", "=", f":{port}"],
-            capture_output=True, text=True, timeout=_TIMEOUT,
-        )
-        pids = set()
-        for m in re.finditer(r"pid=(\d+)", r.stdout):
-            pids.add(int(m.group(1)))
-        return sorted(pids)
+        # iproute2 and not lsof.
+        try:
+            r = subprocess.run(
+                ["ss", "-ltnpH", "sport", "=", f":{port}"],
+                capture_output=True,
+                text=True,
+                timeout=_TIMEOUT,
+            )
+        except (FileNotFoundError, subprocess.SubprocessError, OSError):
+            return [] if lsof_answered else None
+        if r.returncode != 0:
+            return [] if lsof_answered else None
+        found = sorted({int(m.group(1)) for m in re.finditer(r"pid=(\d+)", r.stdout)})
+        if not found and r.stdout.strip():
+            # ss sees a listener but will not name its process (another user's
+            # socket without privileges). Held, holder unknown -- NOT free.
+            return None
+        return found
     except (FileNotFoundError, subprocess.SubprocessError, OSError, ValueError):
-        return []
+        return None
 
 
 def kill_pids(pids: "List[int]") -> int:
@@ -127,7 +155,8 @@ def kill_pids(pids: "List[int]") -> int:
             if IS_WINDOWS:
                 subprocess.run(
                     ["taskkill", "/F", "/T", "/PID", str(pid)],
-                    capture_output=True, timeout=_TIMEOUT,
+                    capture_output=True,
+                    timeout=_TIMEOUT,
                 )
             else:
                 import os

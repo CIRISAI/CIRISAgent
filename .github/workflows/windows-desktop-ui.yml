@@ -269,6 +269,9 @@ jobs:
           # surface it chose -- "[gate] clientMode=..." -- exists only here.
           # Two wrong diagnoses were made from its absence.
           Copy-Item "$env:TEMP\ciris_desktop*.log" artifacts -ErrorAction SilentlyContinue
+          # The jcmd thread dump the harness takes of a JVM that is alive but
+          # never served -- the only record of where it hung once it is killed.
+          Copy-Item "$env:TEMP\ciris_desktop*.jstack.txt" artifacts -ErrorAction SilentlyContinue
           # .env carries secrets — ship the SHAPE, never the values, so a failed
           # run is diagnosable without leaking keys into a public artifact.
           if (Test-Path "$env:CIRIS_HOME\.env") {

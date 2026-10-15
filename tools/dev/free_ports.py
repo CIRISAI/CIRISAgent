@@ -20,8 +20,8 @@ which reads as a product fault and is not one. `platform_procs.pids_listening_on
 already handled Windows via `netstat -ano`; the YAML simply never used it.
 
 ABSENCE OF A PID IS NOT PROOF OF A FREE PORT — that is the trap the old code fell
-into, and `pids_listening_on` says so in its own docstring: empty means "could not
-tell". So the authority here is not a process listing at all. It is a **bind
+into, and `pids_listening_on` says so in its own docstring: None means "could not
+tell", and even [] is only one tool's opinion. So the authority here is not a process listing at all. It is a **bind
 attempt**: if we can bind the port, it is free, and no amount of missing tooling
 can make that answer wrong. The process listing is used only to find something to
 kill and to name the culprit in a failure.
@@ -139,7 +139,13 @@ def main() -> int:
     print(f"  {args.label}: STILL HELD after {args.timeout:.0f}s: {', '.join(map(str, listening))}")
     for port in listening:
         pids = pids_listening_on(port)
-        print(f"    :{port} -> {'pids ' + ', '.join(map(str, pids)) if pids else 'holder unknown (no process listing available)'}")
+        if pids:
+            holder = "pids " + ", ".join(map(str, pids))
+        elif pids is None:
+            holder = "holder unknown (no process listing available)"
+        else:
+            holder = "no listener in the process listing, yet the bind is refused"
+        print(f"    :{port} -> {holder}")
     return 1
 
 

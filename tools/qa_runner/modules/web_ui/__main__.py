@@ -2504,7 +2504,7 @@ def _kill_port(port: int) -> None:
         # images), where it raised FileNotFoundError instead of finding nothing.
         from tools.qa_runner.platform_procs import pids_listening_on
 
-        for pid in pids_listening_on(port):
+        for pid in pids_listening_on(port) or []:
             try:
                 os.kill(int(pid), 9)
             except Exception:
@@ -3142,8 +3142,12 @@ def _await_desktop_test_server(
     on Windows, and reporting it as a startup failure sent three downstream legs
     looking for product defects that were not there (CIRISAgent#1172).
     """
-    deadline = time.time() + budget_s
+    t0 = time.time()
+    deadline = t0 + budget_s
+    first_byte_s: Optional[float] = None
     while time.time() < deadline:
+        if first_byte_s is None and _log_size(log_path) > 0:
+            first_byte_s = time.time() - t0
         if proc.poll() is not None:
             break  # dead: no point waiting out the budget
         for host in _LOOPBACKS:
@@ -3164,14 +3168,29 @@ def _await_desktop_test_server(
     except OSError:
         tail = []
     started = any("TestAutomation" in line and "Server started" in line for line in tail)
+    log_bytes = _log_size(log_path)
+    if first_byte_s is None and log_bytes > 0:
+        first_byte_s = time.time() - t0
 
     print(f" [FAIL] desktop test server not reachable within {budget_s:.0f}s")
     print(f"     jvm: {'ALIVE' if alive else f'EXITED rc={rc}'}")
     print(f"     its log says the server started: {'YES' if started else 'no'}")
+    print(f"     log bytes: {log_bytes}")
+    print(f"     time to first byte: {f'{first_byte_s:.1f}s' if first_byte_s is not None else 'never'}")
+    # A LIVE JVM THAT HAS NOT SERVED: capture where it is stuck BEFORE anyone
+    # kills it. Both launch paths call this function first, so dumping here
+    # puts the stacks on disk ahead of _kill_desktop_app in either one.
+    if alive and not started:
+        _dump_jvm_threads(proc, log_path)
     if started and alive:
         print("     => REACHABILITY, not startup: the app is serving and we could not")
         print(f"        reach it on any of {list(_LOOPBACKS)}. Firewall, or a bound")
         print("        interface we did not try. NOT a client or product fault.")
+    elif alive and log_bytes == 0:
+        # Main.kt prints on entry; a JVM that is alive yet has written NOTHING
+        # in the whole budget is wedged before that line (AWT/Taskbar init on
+        # Windows is the first suspect), which no larger budget would cure.
+        print("     => JVM hung before main's first output (not slow startup) -- see thread dump")
     elif alive:
         print("     => still starting when the budget expired: raise it, do not")
         print("        read this as a product failure.")
@@ -3181,12 +3200,89 @@ def _await_desktop_test_server(
         from tools.qa_runner.platform_procs import pids_listening_on
 
         holders = pids_listening_on(port)
-        print(f"     pids listening on {port}: {holders or '(could not tell)'}")
+        if holders is None:
+            verdict = "(could not tell)"
+        elif not holders:
+            verdict = "free (lookup ran, no listener)"
+        else:
+            verdict = str(holders)
+        print(f"     pids listening on {port}: {verdict}")
     except Exception:  # noqa: BLE001
         pass
     print(f"     inspect: {log_path}")
     for line in tail[-25:]:
         print(f"     | {line[:200]}")
+    return None
+
+
+def _log_size(log_path: Path) -> int:
+    """Bytes in the app's log so far; 0 when it is missing or unreadable."""
+    try:
+        return log_path.stat().st_size
+    except OSError:
+        return 0
+
+
+#: jcmd attaches to the target and walks every thread; a wedged JVM can take a
+#: while to answer, but a diagnosis must never hold the run hostage.
+_JCMD_TIMEOUT_S = 15.0
+
+
+def _find_jcmd() -> Optional[str]:
+    """jcmd from JAVA_HOME/bin (the JDK CI set up), else PATH."""
+    import shutil
+
+    exe = "jcmd.exe" if sys.platform == "win32" else "jcmd"
+    java_home = os.environ.get("JAVA_HOME", "").strip()
+    if java_home:
+        candidate = Path(java_home) / "bin" / exe
+        if candidate.is_file():
+            return str(candidate)
+    return shutil.which("jcmd")
+
+
+def _jstack_path(log_path: Path) -> Path:
+    """Thread-dump file paired with a launch log, in the same temp dir.
+
+    ``ciris_desktop_setup.<stamp>.log`` -> ``ciris_desktop_setup.<stamp>.jstack.txt``,
+    so the CI collectors' ``ciris_desktop*.jstack.txt`` glob carries it out.
+    """
+    return log_path.with_name(f"{log_path.stem}.jstack.txt")
+
+
+def _dump_jvm_threads(proc: "subprocess.Popen[bytes]", log_path: Path) -> Optional[Path]:
+    """``jcmd <pid> Thread.print`` into a file next to the log. Never raises.
+
+    A JVM that is alive but has not served is stuck somewhere, and once it is
+    killed the only evidence of where is gone. Returns the dump path, or None
+    when no usable dump was taken (no jcmd, attach failed, timeout).
+    """
+    try:
+        jcmd = _find_jcmd()
+        if not jcmd:
+            print("     thread dump: skipped (no jcmd on JAVA_HOME/bin or PATH)")
+            return None
+        out_path = _jstack_path(log_path)
+        r = subprocess.run(
+            [jcmd, str(proc.pid), "Thread.print"],
+            capture_output=True,
+            text=True,
+            timeout=_JCMD_TIMEOUT_S,
+        )
+        body = (r.stdout or "") + (f"\n--- stderr ---\n{r.stderr}" if r.stderr else "")
+        out_path.write_text(f"# {jcmd} {proc.pid} Thread.print -> rc={r.returncode}\n{body}", encoding="utf-8")
+        if r.returncode != 0:
+            first = (r.stderr or r.stdout or "").strip().splitlines()[:1]
+            print(
+                f"     thread dump: jcmd rc={r.returncode} ({first[0][:160] if first else 'no output'}) -> {out_path}"
+            )
+            return None
+        print(f"     thread dump: {out_path}")
+        return out_path
+    except subprocess.TimeoutExpired:
+        print(f"     thread dump: jcmd did not answer within {_JCMD_TIMEOUT_S:.0f}s; skipped")
+    except Exception as exc:  # noqa: BLE001 -- a diagnosis must never fail the run
+        print(f"     thread dump: failed ({type(exc).__name__}: {exc})")
     return None
 
 
@@ -3764,12 +3860,11 @@ def _host_listener(port: int) -> Optional[str]:
     runner POSIX-only, which is what tests/tools/qa_runner/
     test_no_posix_only_binaries.py exists to prevent.
 
-    That helper returns [] both when the port is free AND when it cannot
-    determine the answer, and those must not be conflated. Conflating them here
-    is safe in one direction only: we refuse to start when we KNOW someone owns
-    the port, and proceed when we do not know. A false "free" costs us the
-    ambiguity this guard was added for; a false "owned" would block a run that
-    should have proceeded.
+    That helper returns [] when the port is free and None when it cannot
+    determine the answer. Both map to None here, deliberately: we refuse to
+    start only when we KNOW someone owns the port, and proceed when we do not
+    know. A false "free" costs us the ambiguity this guard was added for; a
+    false "owned" would block a run that should have proceeded.
     """
     from tools.qa_runner.platform_procs import pids_listening_on
 

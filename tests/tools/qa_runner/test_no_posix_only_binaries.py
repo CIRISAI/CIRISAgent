@@ -121,8 +121,7 @@ def test_no_posix_only_binary_is_invoked() -> None:
     assert not failures, (
         f"{len(failures)} POSIX-only binary invocation(s) in the QA runner. On Windows these "
         "raise FileNotFoundError [WinError 2], or -- worse, if wrapped in a bare except -- "
-        "silently do nothing and let the test pass without doing its job.\n  "
-        + "\n  ".join(failures)
+        "silently do nothing and let the test pass without doing its job.\n  " + "\n  ".join(failures)
     )
 
 
@@ -142,12 +141,13 @@ def test_the_desktop_pattern_is_not_hardcoded_to_one_platform() -> None:
                     failures.append(f"{path.relative_to(REPO)}:{i} hardcodes {literal}")
     assert not failures, (
         "the desktop binary name is platform-specific; use desktop_process_pattern() so the "
-        "runner hunts the process that can actually exist on the host it is running on.\n  "
-        + "\n  ".join(failures)
+        "runner hunts the process that can actually exist on the host it is running on.\n  " + "\n  ".join(failures)
     )
 
 
-@pytest.mark.parametrize("plat,expected", [("win32", "CIRIS-windows"), ("darwin", "CIRIS-macos"), ("linux", "CIRIS-linux")])
+@pytest.mark.parametrize(
+    "plat,expected", [("win32", "CIRIS-windows"), ("darwin", "CIRIS-macos"), ("linux", "CIRIS-linux")]
+)
 def test_desktop_pattern_resolves_per_platform(monkeypatch: pytest.MonkeyPatch, plat: str, expected: str) -> None:
     from tools.qa_runner import platform_procs
 
@@ -170,7 +170,8 @@ def test_helpers_never_raise_when_the_tool_is_missing(monkeypatch: pytest.Monkey
 
     monkeypatch.setattr(platform_procs.subprocess, "run", boom, raising=True)
     assert platform_procs.kill_processes_matching("anything") == 0
-    assert platform_procs.pids_listening_on(8080) == []
+    # None, not []: a lookup that could not run must not read as "port is free".
+    assert platform_procs.pids_listening_on(8080) is None
 
 
 #: Modules on the Windows desktop path. The mobile/ios suites drive an Android
@@ -228,11 +229,12 @@ def test_temp_path_lands_in_the_real_temp_dir(monkeypatch: pytest.MonkeyPatch, t
     result.unlink()
 
 
-def test_empty_pid_list_means_unknown_not_free() -> None:
+def test_none_means_unknown_not_free() -> None:
     """Guard the contract, since misreading it would reintroduce a race.
 
-    pids_listening_on() returns [] when it CANNOT TELL -- no lsof, no netstat,
-    a timeout. Callers must not treat that as proof the port is free.
+    pids_listening_on() returns None when it CANNOT TELL -- no lsof, no netstat,
+    a timeout -- and [] only when a lookup ran and found nothing. Callers must
+    not treat None as proof the port is free.
     """
     import inspect
 

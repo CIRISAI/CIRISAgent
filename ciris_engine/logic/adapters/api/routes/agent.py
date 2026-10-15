@@ -917,7 +917,10 @@ async def _raise_if_accord_halted() -> None:
     from ciris_engine.logic.utils.halt_latch import read_halt_latch
     from ciris_engine.schemas.runtime.accord_halt import ACCORD_HALT_REFUSAL
 
-    halt = await read_halt_latch()
+    # Fresh: admitting a message is a decision, not a poll. A cached "no halt"
+    # admitted CSD-129 run 4's interact 0.9 s after the node latched, and it
+    # then waited out its timeout on a thought the halt held.
+    halt = await read_halt_latch(fresh=True)
     if not halt.halted:
         return
     raise HTTPException(

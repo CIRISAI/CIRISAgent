@@ -106,6 +106,20 @@ def test_without_a_halt_the_same_request_reaches_intake(latch, api_app, on_messa
     on_message.assert_awaited_once()
 
 
+@pytest.mark.parametrize("path", ["/agent/message", "/agent/interact"])
+def test_a_cached_no_halt_reading_never_admits_a_message(latch, api_app, on_message, monkeypatch, path):
+    """CSD-129 run 4: the act gate read "no halt" 1 s before the latch; intake reused it and admitted."""
+    import asyncio
+
+    monkeypatch.setattr(halt_latch, "HALT_READ_CACHE_TTL_SECONDS", 60.0)
+    latch.state = NOT_HALTED
+    assert asyncio.run(halt_latch.read_halt_latch()).halted is False  # primes the cache
+    latch.state = HALTED  # the node latches
+    response = TestClient(api_app).post(path, json={"message": "Are you there?"})
+    assert response.status_code == 423
+    on_message.assert_not_awaited()
+
+
 def test_fail_closed_reading_also_refuses(latch, api_app):
     latch.state = _state(True, AccordHaltReading.NO_NODE)
     response = TestClient(api_app).post("/agent/interact", json={"message": "hello"})

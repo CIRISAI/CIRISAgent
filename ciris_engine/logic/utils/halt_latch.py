@@ -51,9 +51,9 @@ HALT_STATUS_URL = f"http://127.0.0.1:{NODE_FOLD_PORT}/v1/accord/halt-status"
 #: and the node is not answering; the act waits for the next read.
 HALT_READ_TIMEOUT_SECONDS = 1.0
 
-#: Holds, sweeps and intake may reuse a reading this old. The act gate and the
-#: bus backstop never do (`fresh=True`): a cached "no halt" would admit an act
-#: for up to this long after the node latched.
+#: Holds, sweeps and status may reuse a reading this old. Decisions never do
+#: (`fresh=True`): the act gate, the bus backstop and API intake. A cached "no
+#: halt" would admit an act, or a message, for up to this long after the latch.
 HALT_READ_CACHE_TTL_SECONDS = 1.0
 
 #: How often a held loop re-reads the latch to notice a release or a lapse.

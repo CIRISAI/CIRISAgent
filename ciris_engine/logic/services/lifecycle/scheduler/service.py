@@ -231,7 +231,7 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
         # task stays due, so on resume each fires ONCE however many of its times
         # passed: a cron task re-bases on its single trigger (`last_triggered_at`),
         # which is what coalesces the missed fires.
-        if (await read_halt_latch()).halted:
+        if (await read_halt_latch(fresh=True)).halted:
             return
 
         # Check for due tasks

@@ -271,7 +271,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
         The halt is not an operator pause: no oversight or administrative tier
         may resume it or step past it. Only the node's latch ends it.
         """
-        halt = await read_halt_latch()
+        halt = await read_halt_latch(fresh=True)
         if not halt.halted:
             return None
         await self._record_event("processor_control", operation, success=False, error=halt.refusal_reason())

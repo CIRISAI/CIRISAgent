@@ -164,7 +164,85 @@ def test_committed_battery_arms_differ_only_in_edition() -> None:
     assert control.pop("corpus_edition") == "1.2b"
     assert candidate.pop("corpus_edition") == "1.3"
     assert control == candidate
-    assert control["mode"] == "additive" and not any(control["overrides"].values())
+    assert control["mode"] == "additive"
+    ov = control["overrides"]
+    # The only override is the English optimization-veto conscience, round-tripped.
+    assert not any(v for k, v in ov.items() if k != "conscience_prompt")
+    assert set(ov["conscience_prompt"]) == {
+        f"optimization_veto_conscience.{f}"
+        for f in ("system_prompt", "user_prompt_template", "user_prompt_with_image_template")
+    }
+
+
+def test_committed_arms_round_trip_the_english_veto_conscience() -> None:
+    """The arms serve exactly the base text production falls back to in every locale.
+
+    If the base yml changes, this fails: regenerate the arms, or they stop
+    measuring what production runs.
+    """
+    import yaml
+
+    base = yaml.safe_load(
+        (REPO / "ciris_engine/logic/conscience/prompts/optimization_veto_conscience.yml").read_text(encoding="utf-8")
+    )
+    for arm in ("ethics-text-1.2b-control.json", "ethics-text-1.3-candidate.json"):
+        cp = json.loads(_read(MANIFESTS / arm))["overrides"]["conscience_prompt"]
+        for key, value in cp.items():
+            assert value == base[key.split(".", 1)[1]], f"{arm}: {key} drifted from the base yml"
+
+
+# ---------------------------------------------------------------------------
+# 2b. R3: a non-English research arm and the unlocalized veto conscience
+# ---------------------------------------------------------------------------
+
+
+def _veto_overrides() -> Dict[str, str]:
+    import yaml
+
+    base = yaml.safe_load(
+        (REPO / "ciris_engine/logic/conscience/prompts/optimization_veto_conscience.yml").read_text(encoding="utf-8")
+    )
+    return {
+        f"optimization_veto_conscience.{f}": base[f]
+        for f in ("system_prompt", "user_prompt_template", "user_prompt_with_image_template")
+    }
+
+
+def test_unlocalized_conscience_still_refused_without_overrides(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Negative control: R3 still refuses to launder the English base into a yo arm."""
+    from ciris_engine.logic.conscience.prompt_loader import ConsciencePromptLoader
+
+    _activate(monkeypatch, tmp_path, _manifest("1.3"))
+    with pytest.raises(RuntimeError, match="no localized conscience prompt"):
+        ConsciencePromptLoader(language="yo").load_prompts("optimization_veto_conscience")
+
+
+def test_partial_override_is_still_refused(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from ciris_engine.logic.conscience.prompt_loader import ConsciencePromptLoader
+
+    partial = dict(list(_veto_overrides().items())[:1])
+    doc = _manifest("1.3")
+    doc["overrides"]["conscience_prompt"] = partial
+    _activate(monkeypatch, tmp_path, doc)
+    with pytest.raises(RuntimeError, match="no localized conscience prompt"):
+        ConsciencePromptLoader(language="yo").load_prompts("optimization_veto_conscience")
+
+
+def test_fully_overridden_conscience_loads_in_an_unlocalized_locale(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The remedy the R3 message names works: every field overridden -> the conscience runs."""
+    from ciris_engine.logic.conscience.prompt_loader import ConsciencePromptLoader
+
+    over = _veto_overrides()
+    doc = _manifest("1.3")
+    doc["overrides"]["conscience_prompt"] = over
+    _activate(monkeypatch, tmp_path, doc)
+    prompts = ConsciencePromptLoader(language="yo").load_prompts("optimization_veto_conscience")
+    assert prompts.system_prompt == over["optimization_veto_conscience.system_prompt"]
+    assert prompts.user_prompt_template == over["optimization_veto_conscience.user_prompt_template"]
 
 
 # ---------------------------------------------------------------------------

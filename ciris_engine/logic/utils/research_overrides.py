@@ -1190,6 +1190,21 @@ def override_conscience_prompt(conscience_type: str, field: str) -> Optional[str
     return m.overrides.conscience_prompt.get(f"{conscience_type}.{field}") if m else None
 
 
+def conscience_fully_overridden(conscience_type: str) -> bool:
+    """True when the active manifest overrides EVERY text field the base
+    ``<conscience_type>.yml`` defines, so nothing of the base file reaches a
+    prompt and serving it as the skeleton for a locale without a localized
+    copy launders no CIRIS text into the arm (R3)."""
+    m = get_active_overrides()
+    if m is None:
+        return False
+    base = _CONSCIENCE_PROMPTS_DIR / f"{conscience_type}.yml"
+    if not base.is_file():
+        return False
+    needed = {f"{conscience_type}.{f}" for f in _yaml_present_fields(base, _CONSCIENCE_PROMPT_TEXT_FIELDS)}
+    return bool(needed) and needed <= set(m.overrides.conscience_prompt)
+
+
 def override_corpus(key: str) -> Optional[str]:
     m = get_active_overrides()
     return m.overrides.corpus.get(key) if m else None

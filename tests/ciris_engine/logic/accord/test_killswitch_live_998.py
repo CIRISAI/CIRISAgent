@@ -1,4 +1,4 @@
-"""Kill-switch regression lock (#998).
+"""Emergency-shutdown trust-root regression lock (#998).
 
 The runtime control service used to keep its OWN authority list — a
 ``WAPublicKeyMap`` at ``_wa_key_map`` whose only writer, ``_configure_kill_switch``,
@@ -7,17 +7,10 @@ WA-signed emergency shutdown was rejected regardless of signature validity,
 while ``GET /v1/emergency/kill-switch/status`` reported ``enabled: true`` off a
 hardcoded default.
 
-That decoy is gone. Authorities now come from the accord verifier — ONE trust
-root, two entry surfaces:
-
-  * the stego-encoded ``AccordPayload`` extracted from ordinary message text
-    (the real kill switch, and the one that was always healthy), and
-  * the ``WASignedCommand`` the emergency API accepts.
-
-These tests lock both surfaces to that single authority source. They are
-deliberately end-to-end: sign -> steganographically encode -> extract from text
--> verify. A test that stops short of extraction would not have caught the
-original defect, because the original defect was in the wiring, not the crypto.
+That decoy is gone. Authorities come from ONE roster,
+``ciris_engine/logic/accord/authorities.py#EmergencyAuthorities``. (The stego
+``AccordPayload`` surface that once shared it is retired, CIRISAgent#1231: the
+CC 4.2.1.1 constitutional halt is verified and latched by the node.)
 """
 
 import ast
@@ -30,11 +23,8 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from ciris_engine.logic.accord.extractor import extract_accord
-from ciris_engine.logic.accord.verifier import AccordVerifier
-from ciris_engine.schemas.accord import AccordCommandType
+from ciris_engine.logic.accord.authorities import EmergencyAuthorities
 from ciris_engine.schemas.services.shutdown import EmergencyCommandType, WASignedCommand
-from tools.security.accord_stego import create_stego_accord_message
 
 # The steward's real ROOT key. Present on the dev host, absent in CI — the
 # real-key tests SKIP rather than fail when it is missing, because they are the
@@ -60,15 +50,6 @@ def _raw_public_key(private_key: Ed25519PrivateKey) -> bytes:
     return private_key.public_key().public_bytes(
         encoding=serialization.Encoding.Raw,
         format=serialization.PublicFormat.Raw,
-    )
-
-
-def _raw_private_key(private_key: Ed25519PrivateKey) -> bytes:
-    """Raw 32-byte Ed25519 private key bytes."""
-    return private_key.private_bytes(
-        encoding=serialization.Encoding.Raw,
-        format=serialization.PrivateFormat.Raw,
-        encryption_algorithm=serialization.NoEncryption(),
     )
 
 
@@ -123,89 +104,8 @@ def _sign_wa_command(private_key: Ed25519PrivateKey, wa_id: str) -> WASignedComm
     return command.model_copy(update={"signature": signature.hex()})
 
 
-class TestStegoDrillGeneratedKey:
-    """The stego path, end to end, with a key generated here so CI can run it."""
-
-    def test_drill_extracts_and_verifies(self) -> None:
-        """A DRILL signed by a trusted authority survives stego encode -> extract -> verify."""
-        private_key = Ed25519PrivateKey.generate()
-        wa_id = "wa-test-drill-998"
-
-        text = create_stego_accord_message(
-            command=AccordCommandType.DRILL,
-            wa_id=wa_id,
-            private_key_bytes=_raw_private_key(private_key),
-        )
-
-        # The carrier must look like ordinary prose — extraction IS perception.
-        assert text and "DRILL" not in text
-
-        extraction = extract_accord(text, channel="test-killswitch-998")
-        assert extraction.found, "stego DRILL was not extracted from the carrier text"
-        assert extraction.message is not None
-        assert extraction.message.payload.command == AccordCommandType.DRILL
-
-        # auto_load_seed=False: this verifier trusts only the generated key, so
-        # a pass cannot be borrowed from the shipped authority set.
-        verifier = AccordVerifier(auto_load_seed=False)
-        assert verifier.add_authority(wa_id, _raw_public_key(private_key), "ROOT")
-
-        result = verifier.verify(extraction.message)
-        assert result.valid, result.rejection_reason
-        assert result.command == AccordCommandType.DRILL
-        assert result.wa_id == wa_id
-        assert result.wa_role == "ROOT"
-
-    def test_untrusted_signer_is_rejected(self) -> None:
-        """Negative control: a DRILL from an unknown key must not verify."""
-        signer = Ed25519PrivateKey.generate()
-        text = create_stego_accord_message(
-            command=AccordCommandType.DRILL,
-            wa_id="wa-test-intruder-998",
-            private_key_bytes=_raw_private_key(signer),
-        )
-
-        extraction = extract_accord(text, channel="test-killswitch-998")
-        assert extraction.found
-        assert extraction.message is not None
-
-        verifier = AccordVerifier(auto_load_seed=False)
-        result = verifier.verify(extraction.message)
-        assert not result.valid
-        assert result.rejection_reason
-
-
-class TestStegoDrillStewardKey:
-    """The same path against the REAL steward key — the only proof the shipped key set works."""
-
-    def test_real_drill_verifies_against_shipped_authorities(self) -> None:
-        loaded = _load_steward_key()
-        if loaded is None:
-            pytest.skip(f"steward ROOT key not present at {STEWARD_KEY_PATH} (expected on the dev host only)")
-        private_key, wa_id = loaded
-
-        text = create_stego_accord_message(
-            command=AccordCommandType.DRILL,
-            wa_id=wa_id,
-            private_key_bytes=_raw_private_key(private_key),
-        )
-
-        extraction = extract_accord(text, channel="test-killswitch-998")
-        assert extraction.found
-        assert extraction.message is not None
-
-        # Default authority set: seed/root_pub.json plus hardcoded fallbacks.
-        verifier = AccordVerifier()
-        result = verifier.verify(extraction.message)
-
-        assert (
-            result.valid
-        ), f"the shipped authority set does not verify the steward key for {wa_id}: {result.rejection_reason}"
-        assert result.command == AccordCommandType.DRILL
-        assert result.wa_id == wa_id
-
-        # The shipped set holds the steward's actual public key, not a stale one.
-        assert verifier.public_key_for(wa_id) == _raw_public_key(private_key)
+class TestEmergencySurfaceStewardKey:
+    """The emergency surface against the REAL steward key — the only proof the shipped key set works."""
 
     def test_real_wa_signed_command_verifies_on_the_emergency_surface(self) -> None:
         """The OTHER entry surface resolves its key from the same trust root.
@@ -234,10 +134,10 @@ class TestStegoDrillStewardKey:
 
 
 class TestPublicKeyResolution:
-    """AccordVerifier.public_key_for is the single authority lookup both surfaces use."""
+    """EmergencyAuthorities.public_key_for is the single authority lookup."""
 
     def test_resolves_known_authority(self) -> None:
-        verifier = AccordVerifier(auto_load_seed=False)
+        verifier = EmergencyAuthorities(auto_load_seed=False)
         private_key = Ed25519PrivateKey.generate()
         assert verifier.add_authority("wa-test-known-998", _raw_public_key(private_key), "ROOT")
 
@@ -246,12 +146,12 @@ class TestPublicKeyResolution:
         assert resolved is not None and len(resolved) == 32
 
     def test_returns_none_for_unknown_authority(self) -> None:
-        verifier = AccordVerifier(auto_load_seed=False)
+        verifier = EmergencyAuthorities(auto_load_seed=False)
         assert verifier.public_key_for("wa-test-nobody-998") is None
 
     def test_shipped_authority_set_is_not_empty(self) -> None:
-        """An empty authority set is a kill switch that cannot fire."""
-        verifier = AccordVerifier()
+        """An empty authority set is an emergency control that cannot fire."""
+        verifier = EmergencyAuthorities()
         assert verifier.authority_count >= 1
         assert verifier.public_key_for(DEFAULT_STEWARD_WA_ID) is not None
         assert verifier.public_key_for("wa-test-nobody-998") is None
@@ -291,8 +191,8 @@ class TestControlServiceHasNoPrivateAuthorityList:
         names = {node.name for node in ast.walk(tree) if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
         assert "_configure_kill_switch" not in names
 
-    def test_verify_wa_signature_resolves_through_accord_verifier(self) -> None:
-        """Positive control — the method must still resolve keys, from the accord verifier."""
+    def test_verify_wa_signature_resolves_through_emergency_authorities(self) -> None:
+        """Positive control — the method must still resolve keys, from the one roster."""
         tree = self._module_ast()
         target = next(
             (
@@ -305,5 +205,5 @@ class TestControlServiceHasNoPrivateAuthorityList:
         assert target is not None, "_verify_wa_signature is missing from the control service"
 
         body = ast.dump(target)
-        assert "AccordVerifier" in body, "_verify_wa_signature no longer resolves keys via AccordVerifier"
+        assert "EmergencyAuthorities" in body, "_verify_wa_signature no longer resolves keys via EmergencyAuthorities"
         assert "public_key_for" in body, "_verify_wa_signature no longer calls public_key_for"

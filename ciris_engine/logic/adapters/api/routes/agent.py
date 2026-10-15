@@ -18,6 +18,7 @@ from ciris_engine.logic.adapters.base_observer import BillingServiceError, Credi
 from ciris_engine.schemas.api.agent import AgentLineage, MessageContext, ServiceAvailability
 from ciris_engine.schemas.api.auth import ROLE_PERMISSIONS, AuthContext, Permission, UserRole
 from ciris_engine.schemas.api.responses import SuccessResponse
+from ciris_engine.schemas.runtime.accord_halt import AccordHaltState, AccordRowForward
 from ciris_engine.schemas.runtime.messages import IncomingMessage
 from ciris_engine.schemas.services.credit_gate import CreditAccount, CreditContext
 from ciris_engine.schemas.types import JSONDict
@@ -57,6 +58,8 @@ class MessageRejectionReason(str, Enum):
     RATE_LIMITED = "RATE_LIMITED"  # Rate limit exceeded
     CHANNEL_RESTRICTED = "CHANNEL_RESTRICTED"  # Channel access denied
     RESOURCE_SHED = "RESOURCE_SHED"  # Runtime self-protection: admission closed under resource pressure
+    ACCORD_HALT = "ACCORD_HALT"  # CC 4.2.1.1 constitutional halt: agent acts paused, no new work admitted
+    ACCORD_ROW_FORWARDED = "ACCORD_ROW_FORWARDED"  # An accord row, handed to the node; not work for the agent
 
 
 class ImagePayload(BaseModel):
@@ -110,6 +113,8 @@ class InteractOutcome(str, Enum):
     #: raised, e.g. a DMA that exhausted its LLM retries. `response` is the
     #: localized error notice, not a reply; the task is FAILED and will not answer.
     FAILED = "failed"
+    #: The message was a v2 accord row; it went to the node, not to the agent.
+    ACCORD_ROW_FORWARDED = "accord_row_forwarded"
 
 
 class InteractResponse(BaseModel):
@@ -137,7 +142,11 @@ class InteractResponse(BaseModel):
         InteractOutcome.COMPLETE,
         description="complete: response is the agent's reply; timeout: deadline passed, the task is still "
         "running and its reply will appear in history; paused: processor paused, message queued; "
-        "failed: the task failed before answering and response is the error notice",
+        "failed: the task failed before answering and response is the error notice; "
+        "accord_row_forwarded: the message was an accord row, handed to the node",
+    )
+    accord_forward: Optional[AccordRowForward] = Field(
+        None, description="The node's verdict, when the message was an accord row (outcome accord_row_forwarded)"
     )
 
 
@@ -158,6 +167,9 @@ class MessageSubmissionResponse(BaseModel):
     accepted: bool = Field(..., description="Whether message was accepted for processing")
     rejection_reason: Optional[MessageRejectionReason] = Field(None, description="Reason if rejected")
     rejection_detail: Optional[str] = Field(None, description="Additional detail about rejection")
+    accord_forward: Optional[AccordRowForward] = Field(
+        None, description="The node's verdict, when the message was an accord row (reason ACCORD_ROW_FORWARDED)"
+    )
 
 
 class ConversationMessage(BaseModel):
@@ -206,6 +218,9 @@ class AgentStatus(BaseModel):
     services_active: int = Field(..., description="Number of active services")
     memory_usage_mb: float = Field(..., description="Current memory usage in MB")
     multi_provider_services: Optional[JSONDict] = Field(None, description="Services with provider counts")
+    accord_halt: Optional[AccordHaltState] = Field(
+        None, description="The constitutional-halt latch as the agent's act gate last read it (CC 4.2.1.1)"
+    )
 
 
 class AgentIdentity(BaseModel):
@@ -867,6 +882,103 @@ def _raise_if_shed(result: Any, message_id: str, request: Request) -> None:
     )
 
 
+async def _forward_if_accord_row(text: str) -> Optional[AccordRowForward]:
+    """A v2 accord row sent to the agent goes to the node instead (CC 4.2.1.1).
+
+    Checked before the halt refusal: a row is delivery to the node, not work for
+    the agent, and a resumption row must get through while the halt stands.
+    The node verifies and latches; the agent does no crypto.
+    """
+    from ciris_engine.logic.accord.ingress import extract_accord_row, forward_accord_row
+
+    row = extract_accord_row(text)
+    return await forward_accord_row(row) if row is not None else None
+
+
+def _accord_forward_detail(forward: AccordRowForward) -> str:
+    if not forward.delivered:
+        return f"Accord row could not be delivered to the node: {forward.error}"
+    return (
+        f"Accord row handed to the node (HTTP {forward.status_code}, {forward.invocation_kind or 'unknown kind'} "
+        f"{forward.invocation_id or ''}): halted={forward.halted}, confirmed={forward.confirmed}, "
+        f"released={forward.released}{f', refusal={forward.refusal}' if forward.refusal else ''}"
+        f"{f', error={forward.error}' if forward.error else ''}"
+    )
+
+
+async def _raise_if_accord_halted() -> None:
+    """423 when a constitutional halt stands (CC 4.2.1.1, CIRISAgent#1231).
+
+    Checked FIRST, before SHED: a halted agent answers with its halt, not with a
+    resource condition. No Retry-After — the halt is not a resource condition,
+    and `lapses_at`, when the node reports one, is the honest bound. The error
+    token is the node's own, so a client sees one name for one fact.
+    """
+    from ciris_engine.logic.utils.halt_latch import read_halt_latch
+
+    # Fresh: admitting a message is a decision, not a poll. A cached "no halt"
+    # admitted CSD-129 run 4's interact 0.9 s after the node latched, and it
+    # then waited out its timeout on a thought the halt held.
+    halt = await read_halt_latch(fresh=True)
+    if not halt.halted:
+        return
+    raise _accord_halt_refusal(halt)
+
+
+def _accord_halt_refusal(halt: Any, held_task_id: Optional[str] = None, admitted: bool = False) -> HTTPException:
+    """The 423 a halt answers with. `admitted`: the message got in just before the halt and is held."""
+    from ciris_engine.schemas.runtime.accord_halt import ACCORD_HALT_REFUSAL
+
+    if not admitted:
+        message = (
+            "The agent's acts are paused under a constitutional halt. Nothing was admitted; "
+            "the halt ends when the holders release it or its fuse lapses."
+        )
+    else:
+        message = (
+            "The agent's acts are paused under a constitutional halt. This message was admitted just "
+            "before it; its task is held, not dropped, and no reply can come until the halt ends."
+        )
+    detail: Dict[str, Any] = {
+        "error": ACCORD_HALT_REFUSAL,
+        "reason": MessageRejectionReason.ACCORD_HALT.value,
+        "message": message,
+        "halt": halt.model_dump(mode="json"),
+    }
+    if held_task_id is not None:
+        detail["held_task_id"] = held_task_id
+    return HTTPException(status_code=423, detail=detail)
+
+
+#: How often a waiting interact looks for a halt that landed after admission.
+INTERACT_HALT_POLL_SECONDS = 0.5
+
+
+async def _wait_for_reply_or_halt(event: asyncio.Event, timeout: float) -> Optional[Any]:
+    """Wait for the agent's reply; the halt that lands meanwhile, if one does.
+
+    A message admitted just before a halt has its thought held: no reply can
+    come, so the caller is told now (423) instead of after the whole timeout.
+    Raises asyncio.TimeoutError like `wait_for` when neither happens.
+    """
+    from ciris_engine.logic.utils.halt_latch import read_halt_latch
+
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    while True:
+        remaining = deadline - loop.time()
+        if remaining <= 0:
+            raise asyncio.TimeoutError
+        try:
+            await asyncio.wait_for(event.wait(), timeout=min(INTERACT_HALT_POLL_SECONDS, remaining))
+            return None
+        except asyncio.TimeoutError:
+            pass
+        halt = await read_halt_latch()
+        if halt.halted:
+            return halt
+
+
 def _cleanup_interaction_tracking(message_id: str, request: Optional[Request] = None) -> None:
     """Clean up interaction tracking for given message ID.
 
@@ -926,6 +1038,24 @@ async def submit_message(
 
     # Check permissions
     _check_send_messages_permission(auth, request)
+
+    # An accord row goes to the node; then a standing halt refuses intake
+    # before anything is created.
+    forward = await _forward_if_accord_row(body.message)
+    if forward is not None:
+        return SuccessResponse(
+            data=MessageSubmissionResponse(
+                message_id=str(uuid.uuid4()),
+                task_id=None,
+                channel_id=f"api_{auth.user_id}",
+                submitted_at=datetime.now(timezone.utc).isoformat(),
+                accepted=False,
+                rejection_reason=MessageRejectionReason.ACCORD_ROW_FORWARDED,
+                rejection_detail=_accord_forward_detail(forward),
+                accord_forward=forward,
+            )
+        )
+    await _raise_if_accord_halted()
 
     # Create message and tracking
     message_id, channel_id, msg = await _create_interaction_message(auth, body, request)
@@ -1037,6 +1167,22 @@ async def interact(request: Request, body: InteractRequest, auth: AuthObserverDe
     # Check permissions
     _check_send_messages_permission(auth, request)
 
+    # An accord row goes to the node, not the agent. Then a standing halt: no
+    # reply can come, so say so up front.
+    forward = await _forward_if_accord_row(body.message)
+    if forward is not None:
+        return SuccessResponse(
+            data=InteractResponse(
+                message_id=str(uuid.uuid4()),
+                response=_accord_forward_detail(forward),
+                state=_get_current_cognitive_state(request),
+                processing_time_ms=0,
+                outcome=InteractOutcome.ACCORD_ROW_FORWARDED,
+                accord_forward=forward,
+            )
+        )
+    await _raise_if_accord_halted()
+
     # Create message and tracking
     message_id, channel_id, msg = await _create_interaction_message(auth, body, request)
     msg = _attach_credit_metadata(msg, request, auth, channel_id)
@@ -1098,7 +1244,14 @@ async def interact(request: Request, body: InteractRequest, auth: AuthObserverDe
     timeout = _get_interaction_timeout(request)
 
     try:
-        await asyncio.wait_for(event.wait(), timeout=timeout)
+        halt = await _wait_for_reply_or_halt(event, timeout)
+        if halt is not None:
+            try:
+                held_task_id = _task_id_for_interaction(message_id, request)
+            except Exception:  # noqa: BLE001 - naming the held task is a courtesy; the 423 is the answer
+                held_task_id = None
+            _cleanup_interaction_tracking(message_id, request)
+            raise _accord_halt_refusal(halt, held_task_id, admitted=True)
 
         # Get response
         import os
@@ -1630,6 +1783,8 @@ async def _build_agent_status(
     # Get version information
     version, codename, code_hash = _get_version_info()
 
+    from ciris_engine.logic.utils.halt_latch import read_halt_latch
+
     return AgentStatus(
         agent_id=agent_id,
         name=agent_name,
@@ -1644,6 +1799,7 @@ async def _build_agent_status(
         services_active=services_active,
         memory_usage_mb=memory_usage_mb,
         multi_provider_services=multi_provider_services,
+        accord_halt=await read_halt_latch(),
     )
 
 

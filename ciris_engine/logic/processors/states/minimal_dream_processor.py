@@ -23,6 +23,7 @@ from ciris_engine.logic.config import ConfigAccessor
 from ciris_engine.logic.processors.core.base_processor import BaseProcessor
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem, ThoughtContent
 from ciris_engine.logic.utils.context_utils import build_dispatch_context
+from ciris_engine.logic.utils.halt_latch import hold_tick, read_halt_latch, refuse_agent_send_under_halt
 from ciris_engine.schemas.actions import PonderParams
 from ciris_engine.schemas.conscience.core import EpistemicData
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
@@ -30,6 +31,7 @@ from ciris_engine.schemas.processors.base import ProcessorServices
 from ciris_engine.schemas.processors.core import ConscienceApplicationResult
 from ciris_engine.schemas.processors.results import DreamResult
 from ciris_engine.schemas.processors.states import AgentState
+from ciris_engine.schemas.runtime.accord_halt import AgentSendSurface
 from ciris_engine.schemas.runtime.enums import HandlerActionType, TaskStatus, ThoughtStatus, ThoughtType
 from ciris_engine.schemas.runtime.models import Task, TaskContext, Thought
 
@@ -132,6 +134,12 @@ class MinimalDreamProcessor(BaseProcessor):
         self._stop_event: Optional[Any] = None
         self.dream_metrics: dict[str, Any] = {}
 
+        # Two callers drive process(): the dream loop's own task, and the main
+        # round (state_processors maps DREAM here). Unserialized, both picked
+        # up the same seed thought and dispatched it twice; one ended the
+        # session and the other then dereferenced current_session=None.
+        self._process_lock = asyncio.Lock()
+
     def get_supported_states(self) -> List[AgentState]:
         """Dream processor handles DREAM state."""
         return [AgentState.DREAM]
@@ -146,7 +154,11 @@ class MinimalDreamProcessor(BaseProcessor):
         return super().initialize()
 
     async def process(self, round_number: int) -> DreamResult:
-        """Process one round of dream consolidation."""
+        """Process one round of dream consolidation, one caller at a time."""
+        async with self._process_lock:
+            return await self._process_round(round_number)
+
+    async def _process_round(self, round_number: int) -> DreamResult:
         start = self.time_service.now()
 
         # Initialize session on first round
@@ -171,7 +183,9 @@ class MinimalDreamProcessor(BaseProcessor):
                 try:
                     await self._process_dream_thought(thought)
                     thoughts_processed += 1
-                    self.current_session.thoughts_processed += 1
+                    # stop_dreaming() can end the session while a thought is in flight.
+                    if self.current_session is not None:
+                        self.current_session.thoughts_processed += 1
                 except Exception as e:
                     logger.error(f"[DREAM] Error processing thought {thought.thought_id}: {e}")
                     errors += 1
@@ -448,6 +462,10 @@ class MinimalDreamProcessor(BaseProcessor):
         if not self.startup_channel_id:
             return
 
+        # CC 4.2.1.1: the announcement is the agent speaking, outside the act gate.
+        if await refuse_agent_send_under_halt(AgentSendSurface.DREAM_ANNOUNCE, self.startup_channel_id):
+            return
+
         try:
             if hasattr(self, "discord_service") and self.discord_service:
                 await self.discord_service.send_message(self.startup_channel_id, f"*{message}*")
@@ -499,6 +517,12 @@ class MinimalDreamProcessor(BaseProcessor):
                 if elapsed >= duration:
                     logger.info(f"[DREAM] Duration reached ({elapsed:.0f}s >= {duration}s)")
                     break
+
+                # CC 4.2.1.1: the dream loop runs on its own task, outside the main
+                # round hold, so it holds itself. No dream thought advances.
+                if (await read_halt_latch()).halted:
+                    await hold_tick(self._stop_event)
+                    continue
 
                 # Process one round
                 _ = await self.process(round_number)

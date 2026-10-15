@@ -434,6 +434,9 @@ class GuidanceOrigin(str, Enum):
 
     WISE_AUTHORITY = "wise_authority"
     DOMAIN_AUTO_DEFERRAL = "domain_auto_deferral"
+    #: The reasoning loop asked for guidance under a standing constitutional
+    #: halt (CC 4.2.1.1): no request went out. Unsigned, a machine notice.
+    ACCORD_HALT = "accord_halt"
 
 
 class GuidanceResponse(BaseModel):

@@ -1,5 +1,14 @@
 # Functional Specification Document: Covenant Invocation System
 
+> **RETIRED (CIRISAgent#1231, 2.16.0).** The 77-byte stego `AccordPayload` kill
+> switch described here — extraction, verification, execution, the
+> `/v1/system/accord-invocation` route and its `SIGKILL` path — is removed from
+> the agent. Its successor is the CC 4.2.1.1 constitutional halt: holder-signed
+> v2 rows are forwarded unchanged to the folded node (`ciris_engine/logic/accord/ingress.py`),
+> which verifies and latches them, and the agent's act gate pauses every
+> effectful act while the latch stands (`ciris_engine/logic/utils/halt_latch.py`).
+> The halt pauses; it never ends the process. Kept for history only.
+
 **Version**: 1.0
 **Status**: PROPOSED
 **Author**: CIRIS Development Team

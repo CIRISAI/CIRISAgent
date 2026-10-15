@@ -44,7 +44,6 @@ class QAModule(Enum):
     CONTEXT_ENRICHMENT = "context_enrichment"  # Context enrichment tool testing
     VISION = "vision"  # Native multimodal vision testing
     AIR = "air"  # AIR (Artificial Interaction Reminder) parasocial prevention testing
-    ACCORD = "accord"  # Accord invocation system (unfilterable kill switch) testing
     ACCORD_METRICS = "accord_metrics"  # Accord metrics trace capture and signing testing
     SYSTEM_MESSAGES = "system_messages"  # System message visibility for UI/UX testing
     HOSTED_TOOLS = "hosted_tools"  # CIRIS hosted tools (web search via proxy) testing
@@ -63,6 +62,9 @@ class QAModule(Enum):
     SAFETY_INTERPRET = "safety_interpret"  # Apply a rubric's criteria.json to a capture bundle; emit signed verdicts (CIRISNodeCore FSD/JUDGE_MODEL.md)
     SECRETS_ENCRYPTION = "secrets_encryption"  # Secrets encryption testing (CIRISVerify v1.6.0+)
     MEMORY_BENCHMARK = "memory_benchmark"  # Memory usage benchmark under message load
+    ACCORD_HALT = (
+        "accord_halt"  # CC 4.2.1.1 constitutional halt end to end (direct-latch mode; ciris-server >= 0.5.226)
+    )
     MESH_REPRO = "mesh_repro"  # CIRISServer traceflow harness as an agent QA gate + prod-wheel test-anchor guard (#924)
 
     # Cognitive state live testing modules
@@ -450,9 +452,6 @@ class QAConfig:
         elif module == QAModule.AIR:
             # AIR parasocial prevention tests use SDK client
             return []  # Will be handled separately by runner
-        elif module == QAModule.ACCORD:
-            # Accord tests run standalone (no server needed)
-            return []  # Will be handled separately by runner
         elif module == QAModule.ACCORD_METRICS:
             # Accord metrics trace capture tests use SDK client
             return []  # Will be handled separately by runner
@@ -471,6 +470,11 @@ class QAConfig:
             return HE300BenchmarkModule.get_he300_benchmark_tests()
         elif module == QAModule.DEGRADED_MODE:
             # Degraded mode tests use SDK client
+            return []  # Will be handled separately by runner
+        elif module == QAModule.ACCORD_HALT:
+            # Drives a real node's latch in the runner's throwaway CIRIS_HOME.
+            # NOT in the ALL sequence: it needs ciris-server >= 0.5.226 (0.5.225
+            # refuses trace ingest while halted) and skips below that.
             return []  # Will be handled separately by runner
         elif module == QAModule.MESH_REPRO:
             # Mesh-repro drives the external CIRISServer harness (no CIRIS

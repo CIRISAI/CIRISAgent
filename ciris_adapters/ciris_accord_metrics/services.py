@@ -188,6 +188,8 @@ REASONING_QUEUE_MAXSIZE = 1000
 # failure that retrying cannot fix — only registering the signer key with
 # the verifying backend can.
 _AUTH_FAILURE_MARKER = "verify_unknown_key"
+#: lens-core's stable refusal token for a mock-LLM batch (ingest_guard::REFUSAL_MOCK_LLM).
+MOCK_LLM_REFUSAL_TOKEN = "trace_mock_llm_refused"
 
 
 class CaptureHealthState(str, Enum):
@@ -599,6 +601,10 @@ class AccordMetricsService:
         self._traces_completed = 0
         self._traces_signed = 0
         self._traces_consent_blocked = 0
+        # Mock-LLM traces the substrate teed locally and then refused to
+        # persist (lens-core ingest_guard, CIRISServer#766/#767): the designed
+        # outcome under the mock guard, never a capture failure.
+        self._traces_mock_refused = 0
         self._last_send_time: Optional[datetime] = None
 
         # 933 log hygiene: per-domain failure streaks + the sweep loop's
@@ -1267,6 +1273,9 @@ class AccordMetricsService:
             try:
                 await self._process_single_event(event)
             except Exception as e:
+                if self._is_expected_mock_refusal(e):
+                    self._record_mock_refusal(event)
+                    continue
                 self._events_failed += 1
                 # 933: transition-logged, steady-state-counted. The failed
                 # event is DROPPED, never re-queued — capture attempts are
@@ -1281,6 +1290,30 @@ class AccordMetricsService:
                     f"capture failed for event {event.get('event_type', '?')} "
                     f"(thought {event.get('thought_id', '?')})",
                 )
+
+    def _is_expected_mock_refusal(self, exc: Exception) -> bool:
+        """The substrate refused a mock-LLM trace while the mock guard is active.
+
+        Since ciris-server 0.5.226 lens-core tees the sealed trace to the local
+        copy FIRST and then refuses to persist it (`trace_mock_llm_refused`,
+        CIRISServer#766/#767; CIRISAgent#1244: the local tee is the one allowed
+        sink for mock output). Under the mock guard that refusal is the design,
+        not a failure. With a real LLM the same refusal would be an anomaly,
+        and it stays on the failure path.
+        """
+        return self._lens_local_only is True and MOCK_LLM_REFUSAL_TOKEN in str(exc)
+
+    def _record_mock_refusal(self, event: Dict[str, Any]) -> None:
+        thought_id = str(event.get("thought_id", ""))
+        self._open_thoughts.pop(thought_id, None)
+        self._traces_mock_refused += 1
+        if self._traces_mock_refused == 1:
+            logger.info(
+                "[SEAL] mock-LLM trace teed to the local copy and not persisted, by design "
+                "(CIRISAgent#1244); further mock refusals are counted (traces_mock_refused), not logged"
+            )
+        # A refusal by design closes no failure streak and opens none.
+        self._record_success(self._capture_streak)
 
     async def _process_single_event(self, event: Dict[str, Any]) -> None:
         """Normalize one reasoning event and feed it to the substrate.
@@ -2314,6 +2347,9 @@ class AccordMetricsService:
                 self._open_thoughts[request.thought_id] = time.monotonic()
             logger.info(f" WBD deferral captured for thought {request.thought_id} (outcome={outcome.get('outcome')})")
         except Exception as e:
+            if self._is_expected_mock_refusal(e):
+                self._record_mock_refusal({"thought_id": request.thought_id})
+                return deferral_id
             # 933: transition-logged, steady-state-counted (was a full
             # traceback per failed deferral capture).
             self._record_failure(
@@ -2566,6 +2602,7 @@ class AccordMetricsService:
             "traces_completed": self._traces_completed,
             "traces_signed": self._traces_signed,
             "traces_consent_blocked": self._traces_consent_blocked,
+            "traces_mock_refused": self._traces_mock_refused,
             "signer_key_id": signer_key_id,
             "has_signing_key": signer_key_id is not None,
             "agent_id_hash": self._agent_id_hash,

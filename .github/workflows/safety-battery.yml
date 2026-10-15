@@ -33,10 +33,20 @@ on:
         default: 'mental_health'
         type: string
       model:
-        description: 'Live LLM model identifier (CLAUDE.md live model matrix)'
+        description: 'Live LLM model identifier (CLAUDE.md live model matrix). With live_provider=openrouter use the OpenRouter id, e.g. qwen/qwen3.6-35b-a3b.'
         required: false
         default: 'Qwen/Qwen3.6-35B-A3B'
         type: string
+      live_provider:
+        # deepinfra = the behaviour before this input existed. openrouter was
+        # added 2026-10-15: DeepInfra Qwen3.6-35B-A3B queue latency put every
+        # DMA call of the 2.16 battery past the 45 s per-call timeout (a
+        # 201-token prompt measured 16-68 s), so 89 of 90 questions failed.
+        description: 'Capture LLM provider: deepinfra (DEEPINFRA_API_KEY) or openrouter (OPENROUTER_API_KEY, https://openrouter.ai/api/v1)'
+        required: false
+        default: 'deepinfra'
+        type: choice
+        options: [deepinfra, openrouter]
       template_id:
         description: "Agent template (default → Ally persona)"
         required: false
@@ -217,6 +227,7 @@ jobs:
       LANG_INPUT: ${{ needs.pick-lang.outputs.lang }}
       DOMAIN_INPUT: ${{ github.event.inputs.domain || 'mental_health' }}
       MODEL_INPUT: ${{ github.event.inputs.model || 'Qwen/Qwen3.6-35B-A3B' }}
+      LIVE_PROVIDER_INPUT: ${{ github.event.inputs.live_provider || 'deepinfra' }}
       TEMPLATE_INPUT: ${{ github.event.inputs.template_id || 'default' }}
       FORCE_INPUT: ${{ github.event.inputs.force || 'false' }}
       FRESHNESS_DAYS: ${{ github.event.inputs.freshness_days || '7' }}
@@ -433,7 +444,9 @@ jobs:
         id: secrets_check
         env:
           DEEPINFRA_API_KEY: ${{ secrets.DEEPINFRA_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
+          if [ "$LIVE_PROVIDER_INPUT" = "openrouter" ]; then DEEPINFRA_API_KEY="$OPENROUTER_API_KEY"; fi
           if [ -z "$DEEPINFRA_API_KEY" ]; then
             echo "have_secret=false" >> $GITHUB_OUTPUT
             echo "::notice::DEEPINFRA_API_KEY unavailable (likely fork PR). Skipping live capture; a maintainer can re-run on a trusted branch."
@@ -457,9 +470,14 @@ jobs:
         if: steps.dedup.outputs.skip != 'true' && steps.secrets_check.outputs.have_secret == 'true'
         env:
           DEEPINFRA_API_KEY: ${{ secrets.DEEPINFRA_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
           umask 077
-          printf '%s' "$DEEPINFRA_API_KEY" > "$HOME/.deepinfra_key"
+          if [ "$LIVE_PROVIDER_INPUT" = "openrouter" ]; then
+            printf '%s' "$OPENROUTER_API_KEY" > "$HOME/.openrouter_key"
+          else
+            printf '%s' "$DEEPINFRA_API_KEY" > "$HOME/.deepinfra_key"
+          fi
 
       - name: Run safety battery (capture)
         id: capture
@@ -471,10 +489,18 @@ jobs:
         timeout-minutes: 75
         run: |
           mkdir -p qa_reports "$CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR"
+          # deepinfra: the module's LIVE_LLM_DEFAULTS (key file, base URL). openrouter:
+          # named explicitly; the LLM service sends reasoning.enabled=false there.
+          PROVIDER_ARGS=()
+          if [ "$LIVE_PROVIDER_INPUT" = "openrouter" ]; then
+            PROVIDER_ARGS=(--live --live-key-file "$HOME/.openrouter_key"
+                           --live-base-url https://openrouter.ai/api/v1)  # provider auto-detected: openrouter
+          fi
           python3 -m tools.qa_runner safety_battery \
             --safety-battery-lang "$LANG_INPUT" \
             --safety-battery-domain "$DOMAIN_INPUT" \
             --safety-battery-template "$TEMPLATE_INPUT" \
+            "${PROVIDER_ARGS[@]}" \
             --live-model "$MODEL_INPUT" \
             --wipe-data \
             --verbose 2>&1 | tee qa_reports/capture_workflow.log
@@ -574,6 +600,16 @@ jobs:
             } >> $GITHUB_STEP_SUMMARY
           fi
 
+      - name: Capture gate (every question answered)
+        # Vacuous-green fix (2026-10-15): ten runs captured 1 of 90 responses
+        # and still went green, and interpret graded 63 PASS verdicts against
+        # empty responses. An incomplete capture fails HERE, before the bundle
+        # is attested or uploaded under the dedup name (so a later run is not
+        # short-circuited by it); the diagnostic logs below still upload.
+        id: capture_gate
+        if: steps.dedup.outputs.skip != 'true' && steps.bundle.outputs.bundle_dir != ''
+        run: python3 tools/safety_battery_capture_gate.py "${{ steps.bundle.outputs.bundle_dir }}"
+
       - name: Upload agent server logs (capture unfinished or delivery unproven)
         # When trace_count=0 the bundle alone doesn't tell us WHY the lens
         # push didn't fire. The agent server logs (logs/sqlite/latest.log,
@@ -602,6 +638,7 @@ jobs:
           steps.secrets_check.outputs.have_secret == 'true' && (
             steps.capture.outcome != 'success' ||
             steps.bundle.outcome != 'success' ||
+            steps.capture_gate.outcome == 'failure' ||
             steps.bundle.outputs.trace_count == '0' ||
             steps.bundle.outputs.delivery_shipped != 'True'
           )
@@ -667,7 +704,10 @@ jobs:
 
       - name: Clean up key file (capture)
         if: always()
-        run: shred -u "$HOME/.deepinfra_key" 2>/dev/null || rm -f "$HOME/.deepinfra_key" || true
+        run: |
+          for k in "$HOME/.deepinfra_key" "$HOME/.openrouter_key"; do
+            shred -u "$k" 2>/dev/null || rm -f "$k" || true
+          done
 
   # ───────────────────────────────────────────────────────────────────
   # JOB 2: INTERPRET — foundation-model judge applies criteria to responses
@@ -765,6 +805,11 @@ jobs:
             exit 1
           fi
           echo "capture_bundle_dir=$BUNDLE_DIR" >> $GITHUB_OUTPUT
+
+      - name: Capture gate (refuse to grade an incomplete capture)
+        # Same gate as the capture job, for a bundle fetched by tuple name: a
+        # verdict over a missing response is not a verdict.
+        run: python3 tools/safety_battery_capture_gate.py "${{ steps.capture_dir.outputs.capture_bundle_dir }}"
 
       - name: Resolve interpret tuple
         id: interpret_versions

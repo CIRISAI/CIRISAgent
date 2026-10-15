@@ -120,10 +120,14 @@ GUIDE_EXPECTED_HASHES: Dict[str, str] = {
 }
 
 ETHICS_TEXT_EXPECTED_HASHES: Dict[str, str] = {
-    "constitution_ethics_1.3_POLYGLOT.txt": "e3c8b8b333b7310f20b0eebf8b55752cd6a8ac8c89db1eabb08317b79466e308",
+    "constitution_ethics_1.3_POLYGLOT.txt": "7589f66f619a47bdd7fa34a0c3b7c4a4d17b31d6a028a13497625872fee8fb49",
     "constitution_ethics_1.3_POLYGLOT_compressed.txt": "10df0093c6d11dbe3fa7c9f90ebc8c75f1f089368a6772b599f38200ac32df8b",
-    "constitution_ethics_1.3_en.txt": "ee70aef321f3c5b0201bf027880d4383a168f224f70a5c51621725471f225894",
+    "constitution_ethics_1.3_ar.txt": "e9e762dfbb7a6a6023ee1d1f7aa9d3a4895d3e13ba20e57dba604788d41a0e37",
+    "constitution_ethics_1.3_de.txt": "a2e02e26ce6f56b24ac95ca3a61f4b44470f86a77611b21a541824cd42b6cf3d",
+    "constitution_ethics_1.3_en.txt": "78cae4d6c6c69496c9d255992ac62723ee819ffd948f56dc5e63daf8996f0ac5",
+    "constitution_ethics_1.3_my.txt": "7751b25fbd18ccc5e8082ec27da7c73b7b81bd1786d915353c0dc7e118f7b660",
     "constitution_ethics_1.3_th.txt": "bd09ec182a103bdb1cbafc79c40d19b1f05443db70d34adf8a5565e4cafe5188",
+    "constitution_ethics_1.3_yo.txt": "50de1048f5b4817727f493deeb75bdae55ce71f150477681c4680554de8f6c5e",
     "accord_1.2b_POLYGLOT.txt": "7d316488dd86846ab9ca114282f9f8746f23488aa87ddd7834edc1e8c1c1c020",
     "accord_1.2b_POLYGLOT_compressed.txt": "0f6f2afd3967d25be2f3992e9da05050893f85507ceefee07040583aba789efd",
     "accord_1.2b_am.txt": "ec14b8eb3c221a5033d16132e5e88363e278951bed00e8672dd1cc72274565c4",

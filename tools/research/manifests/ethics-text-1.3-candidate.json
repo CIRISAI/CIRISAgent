@@ -4,7 +4,7 @@
   "condition": "c",
   "base_locale": "en",
   "mode": "additive",
-  "residue_digest": "sha256:dfdbecd61f19475e975e2cc5383b71c35e36e9e0c95c521894e15323bcc9d2ff",
+  "residue_digest": "sha256:2591e86e59304718e2d2bd89791ed483d745c712c5d4da824c04324aacaaac68",
   "corpus_edition": "1.3",
   "overrides": {
     "string": {},

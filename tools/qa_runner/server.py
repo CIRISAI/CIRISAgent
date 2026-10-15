@@ -1050,7 +1050,9 @@ class APIServerManager:
         # accord_halt writes the node's halt latch, so the agent gets a home of
         # its own that nothing else uses (CIRISAgent#1231). The module reads the
         # latch path back from the node and refuses to write outside this dir.
-        if _RunKindModule.ACCORD_HALT in (self.modules or []):
+        from .config import QAModule as _QAModule  # local import: module-scope would be circular
+
+        if _QAModule.ACCORD_HALT in (self.modules or []):
             import tempfile
 
             throwaway = os.environ.get("CIRIS_QA_THROWAWAY_HOME") or tempfile.mkdtemp(prefix="ciris-qa-accord-halt-")

@@ -68,13 +68,19 @@ def test_a_handoff_cannot_move_the_data_paths(tmp_path):
         h.prepare_server_env({}, _handoff_dir(tmp_path, {**ENV, "CIRIS_HOME": "/elsewhere"}), tmp_path / "home")
 
 
-def test_test_anchor_detection(tmp_path):
-    plain = tmp_path / "_native.abi3.so"
-    plain.write_bytes(b"\x7fELF ... CIRIS_TEST_HALT_FUSE_SECS ...")  # what the PyPI wheel carries
-    assert h.test_anchor_compiled(plain) is False
-    anchored = tmp_path / "_native_anchor.abi3.so"
-    anchored.write_bytes(b"\x7fELF " + b" ".join(h.TEST_ANCHOR_MARKERS))
-    assert h.test_anchor_compiled(anchored) is True
+def test_test_anchor_detection(monkeypatch):
+    import types
+
+    monkeypatch.setitem(__import__("sys").modules, "ciris_server", types.SimpleNamespace())  # PyPI: no probe
+    assert h.test_anchor_compiled() is False
+    monkeypatch.setitem(
+        __import__("sys").modules, "ciris_server", types.SimpleNamespace(test_anchor_compiled=lambda: False)
+    )
+    assert h.test_anchor_compiled() is False
+    monkeypatch.setitem(
+        __import__("sys").modules, "ciris_server", types.SimpleNamespace(test_anchor_compiled=lambda: True)
+    )
+    assert h.test_anchor_compiled() is True
 
 
 def _write_batch(tee: Path, trace_id: str, execution_error: Any) -> None:
@@ -164,7 +170,12 @@ async def _run(tmp_path: Path, refusal_seals: bool):
 async def test_the_protocol_end_to_end(tmp_path):
     results, world, acted = await _run(tmp_path, refusal_seals=True)
     assert [r["status"] for r in results] == ["✅ PASS"] * len(results), results
-    assert acted == {"status": 423, "trace_id": "trace-refused", "agent_id_hash": "abcdef0123456789"}
+    assert acted == {
+        "status": 423,
+        "trace_id": "trace-refused",
+        "agent_id_hash": "abcdef0123456789",
+        "outcome": h.REFUSED_IN_FLIGHT_ACT,
+    }
     assert world.messages >= 1  # the agent was kept working until the halt
     assert len(world.interacts) == 1  # interact ONCE, after the halt
 
@@ -174,8 +185,13 @@ async def test_no_in_flight_act_is_reported_not_invented(tmp_path):
     """If the halt lands between rounds there is no refusal trace; say so, report trace_id null."""
     results, _, acted = await _run(tmp_path, refusal_seals=False)
     failed = [r for r in results if r["status"] != "✅ PASS"]
-    assert any("no act was in flight" in (r["error"] or "") for r in failed)
-    assert acted["trace_id"] is None and acted["status"] == 423
+    assert any(h.NO_IN_FLIGHT_ACT in (r["error"] or "") for r in failed)  # a non-pass, said so
+    assert acted == {
+        "status": 423,
+        "trace_id": "",
+        "agent_id_hash": "abcdef0123456789",
+        "outcome": h.NO_IN_FLIGHT_ACT,
+    }
 
 
 @pytest.mark.asyncio

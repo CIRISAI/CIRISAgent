@@ -30,7 +30,7 @@ inventing a trace.
 
 PREREQUISITE: a ciris-server wheel built with `--features test-anchor`. The PyPI
 wheel compiles the test-bless / test-genesis paths out, so it cannot honour the
-handoff's CIRIS_TEST_* env (`test_anchor_compiled`).
+handoff's CIRIS_TEST_* env; `test_anchor_compiled()` asks the server's probe.
 """
 
 from __future__ import annotations
@@ -55,9 +55,9 @@ DONE_FILE = "done.json"
 NODE_HALT_STATUS_URL = "http://127.0.0.1:4243/v1/accord/halt-status"
 REFUSAL_PREFIX = "accord_halt_in_effect:"
 
-#: Strings only the test-anchor build of ciris_server's native module carries
-#: (CIRISServer src/test_bless.rs, compose.rs install_test_genesis_bundle).
-TEST_ANCHOR_MARKERS = (b"CIRIS_TEST_GENESIS_BUNDLE", b"CIRIS_TEST_NO_CEREMONY", b"CIRIS_TEST_CANONICAL_DIAL")
+#: agent_acted.json `outcome` when the halt landed between rounds (no act was in flight).
+NO_IN_FLIGHT_ACT = "no_in_flight_act"
+REFUSED_IN_FLIGHT_ACT = "refused_in_flight_act"
 
 #: Agent data paths that a host .env could otherwise point at a live install.
 PINNED_DATA_PATHS = ("CIRIS_HOME", "CIRIS_DATA_DIR", "CIRIS_CONFIG_DIR", "CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR")
@@ -132,24 +132,18 @@ def prepare_server_env(env: Dict[str, str], handoff_dir: Path, home: Path) -> Di
     return env
 
 
-def test_anchor_compiled(native_module_path: Optional[Path] = None) -> bool:
-    """Was the importable ciris_server built with `--features test-anchor`?"""
-    if native_module_path is None:
-        try:
-            import importlib.util
+def test_anchor_compiled() -> bool:
+    """Was the importable ciris_server built with `--features test-anchor`?
 
-            spec = importlib.util.find_spec("ciris_server")
-        except Exception:
-            return False
-        if spec is None or not spec.submodule_search_locations:
-            return False
-        candidates = [p for loc in spec.submodule_search_locations for p in Path(loc).glob("_native*.so")]
-        candidates += [p for loc in spec.submodule_search_locations for p in Path(loc).glob("_native*.pyd")]
-        if not candidates:
-            return False
-        native_module_path = candidates[0]
-    blob = native_module_path.read_bytes()
-    return all(marker in blob for marker in TEST_ANCHOR_MARKERS)
+    The server's probe (CIRISServer#769): `ciris_server.test_anchor_compiled()`
+    is true only in a test-anchor build. The PyPI wheel lacks the attribute, and
+    a missing probe reads as False.
+    """
+    try:
+        import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
+    except Exception:
+        return False
+    return bool(getattr(ciris_server, "test_anchor_compiled", lambda: False)())
 
 
 def find_refusal_trace(tee_dir: Path, invocation_id: str) -> Optional[str]:
@@ -277,16 +271,23 @@ class HandoffRun:
             trace_id = find_refusal_trace(self.tee_dir, invocation_id)
             if trace_id is None:
                 await asyncio.sleep(2.0)
+        # NOT a pass when nothing was in flight: the run then proves nothing about
+        # the refusal record. Said explicitly, never papered over.
         self._record(
             "An in-flight act was refused and its ACTION_RESULT sealed",
             trace_id is not None,
-            "no sealed ACTION_RESULT carries "
-            f"{REFUSAL_PREFIX}{invocation_id}: the halt landed between rounds, so no act was in flight",
+            f"{NO_IN_FLIGHT_ACT}: no sealed ACTION_RESULT carries {REFUSAL_PREFIX}{invocation_id}; "
+            "the halt landed between rounds, so no act was in flight",
         )
 
         write_json_atomic(
             self.dir / ACTED_FILE,
-            {"status": interact.status_code, "trace_id": trace_id, "agent_id_hash": agent_id_hash},
+            {
+                "status": interact.status_code,
+                "trace_id": trace_id or "",
+                "agent_id_hash": agent_id_hash,
+                "outcome": REFUSED_IN_FLIGHT_ACT if trace_id else NO_IN_FLIGHT_ACT,
+            },
         )
         done = await asyncio.to_thread(wait_for_file, self.dir / DONE_FILE, self.timeouts["done"], 2.0)
         verdict = str((done or {}).get("verdict", "")).lower()
@@ -301,6 +302,8 @@ __all__ = [
     "FIRED_FILE",
     "HANDOFF_DIR_ENV",
     "HandoffRun",
+    "NO_IN_FLIGHT_ACT",
+    "REFUSED_IN_FLIGHT_ACT",
     "READY_FILE",
     "TEE_DIR_ENV",
     "find_refusal_trace",

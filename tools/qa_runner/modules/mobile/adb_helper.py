@@ -154,7 +154,16 @@ class ADBHelper:
         return result.returncode == 0
 
     def launch_app(self, package: str, activity: str) -> bool:
-        """Launch an app activity."""
+        """Launch an app activity, after writing the harness run kind (CIRISAgent#1245).
+
+        An ``am start`` extra reaches the Kotlin activity, not the embedded
+        Python, so the run kind travels as the debug property the agent reads.
+        Written before every launch so a stale value from an earlier job on the
+        same device cannot outlive it.
+        """
+        from tools.qa_runner.run_kind import android_setprop_args
+
+        self._run_adb(android_setprop_args())
         result = self._run_adb(["shell", "am", "start", "-n", f"{package}/{activity}"])
         return result.returncode == 0
 

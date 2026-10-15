@@ -19,6 +19,10 @@ def _clear_mock_signals(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.delenv("CIRIS_MOCK_LLM", raising=False)
     monkeypatch.delenv("CIRIS_TRACE_RUN_KIND", raising=False)
+    # The test session sets CIRIS_TESTING_MODE (tests/conftest.py); a production
+    # run carries none of the harness-only launch flags the run-kind backstop reads.
+    for flag in mock_llm_guard.HARNESS_FLAG_ENV_VARS:
+        monkeypatch.delenv(flag, raising=False)
     monkeypatch.setattr(sys, "argv", [a for a in sys.argv if a != "--mock-llm"])
     monkeypatch.delitem(env_utils._ENV_VALUES, "CIRIS_MOCK_LLM", raising=False)
     mock_llm_guard._reset_for_tests()

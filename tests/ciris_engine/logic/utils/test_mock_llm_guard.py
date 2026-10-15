@@ -161,6 +161,77 @@ class TestRunKind:
         assert any("is not one of qa|battery|production" in r.getMessage() for r in caplog.records)
 
 
+_HARNESS_FLAGS = [
+    ("CIRIS_TESTING_MODE", "true"),
+    ("CIRIS_BENCHMARK_MODE", "true"),
+    ("CIRIS_TEST_MODE", "1"),
+    ("CIRIS_RESEARCH_PROMPT_OVERRIDES", "/tmp/manifest.json"),
+]
+
+
+class TestHarnessFlagBackstop:
+    """A harness that forgot to declare is still a harness run (CIRISAgent#1245).
+
+    Precedence: mock latch > explicit qa/battery > harness-only flags > production.
+    """
+
+    @pytest.mark.parametrize("flag,value", _HARNESS_FLAGS)
+    @pytest.mark.parametrize("declared", [None, "", "production", "PRODUCTION"])
+    def test_flag_moves_an_undeclared_or_production_run_to_qa(
+        self,
+        real_llm_mode: None,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+        flag: str,
+        value: str,
+        declared: "str | None",
+    ) -> None:
+        if declared is not None:
+            monkeypatch.setenv("CIRIS_TRACE_RUN_KIND", declared)
+        monkeypatch.setenv(flag, value)
+        with caplog.at_level(logging.WARNING, logger=mock_llm_guard.__name__):
+            assert trace_run_kind() == TraceRunKind.QA
+            assert trace_run_kind() == TraceRunKind.QA
+        warnings = [r for r in caplog.records if flag in r.getMessage()]
+        assert len(warnings) == 1, "the backstop warns once per process"
+
+    @pytest.mark.parametrize("flag,value", _HARNESS_FLAGS)
+    def test_explicit_battery_outranks_the_flags(
+        self, real_llm_mode: None, monkeypatch: pytest.MonkeyPatch, flag: str, value: str
+    ) -> None:
+        monkeypatch.setenv("CIRIS_TRACE_RUN_KIND", "battery")
+        monkeypatch.setenv(flag, value)
+        assert trace_run_kind() == TraceRunKind.BATTERY
+
+    @pytest.mark.parametrize("flag,value", _HARNESS_FLAGS)
+    def test_mock_outranks_the_flags(
+        self, mock_llm_mode: None, monkeypatch: pytest.MonkeyPatch, flag: str, value: str
+    ) -> None:
+        monkeypatch.setenv(flag, value)
+        assert trace_run_kind() == TraceRunKind.MOCK
+
+    @pytest.mark.parametrize("flag", ["CIRIS_TESTING_MODE", "CIRIS_BENCHMARK_MODE", "CIRIS_TEST_MODE"])
+    @pytest.mark.parametrize("value", ["false", "0", "no", ""])
+    def test_falsy_boolean_flags_do_not_trigger(
+        self, real_llm_mode: None, monkeypatch: pytest.MonkeyPatch, flag: str, value: str
+    ) -> None:
+        monkeypatch.setenv(flag, value)
+        assert trace_run_kind() == TraceRunKind.PRODUCTION
+
+    def test_negative_no_flags_no_declaration_is_production(
+        self, real_llm_mode: None, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Guards against over-triggering: a normal run stays production."""
+        for flag, _ in _HARNESS_FLAGS:
+            monkeypatch.delenv(flag, raising=False)
+        monkeypatch.delenv("CIRIS_TRACE_RUN_KIND", raising=False)
+        assert mock_llm_guard.harness_flag_present() is None
+        assert trace_run_kind() == TraceRunKind.PRODUCTION
+
+    def test_the_flag_list_is_the_documented_four(self) -> None:
+        assert set(mock_llm_guard.HARNESS_FLAG_ENV_VARS) == {f for f, _ in _HARNESS_FLAGS}
+
+
 class TestBootstrapModulesLatchBeforeEdge:
     """Codex P1: a mock named only in RuntimeBootstrapConfig.modules must latch before edge init."""
 

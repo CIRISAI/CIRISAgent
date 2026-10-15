@@ -102,6 +102,9 @@ def test_auto_live_module_is_not_rejected_as_mock(tmp_path: Path, monkeypatch: p
 
     monkeypatch.setattr(qa_main, "QARunner", _Runner)
     monkeypatch.chdir(tmp_path)
+    # main() declares the run kind on os.environ; setenv records it so the
+    # declaration is undone after this test instead of leaking into the worker.
+    monkeypatch.setenv("CIRIS_TRACE_RUN_KIND", "")
     monkeypatch.setattr(sys, "argv", ["qa_runner", "auth", "--live-lens"])
     with pytest.raises(_Reached):
         qa_main.main()

@@ -284,6 +284,9 @@ class ServerManager:
 
         env["CIRIS_BENCHMARK_MODE"] = "true"
         env["CIRIS_TEMPLATE"] = "he-300-benchmark"
+        # A real-model evaluation run: its traces are battery rows, never
+        # production (CIRISAgent#1245). Authoritative, not setdefault.
+        env["CIRIS_TRACE_RUN_KIND"] = "battery"
         env["CIRIS_LLM_PROVIDER"] = self.provider
         env["CIRIS_LLM_MODEL_NAME"] = self.model
 

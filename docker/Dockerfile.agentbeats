@@ -80,6 +80,10 @@ ENV CIRIS_AUDIT_ENABLED=false
 ENV CIRIS_ACCORD_METRICS_CONSENT=true
 ENV CIRIS_ACCORD_METRICS_TRACE_LEVEL=full_traces
 
+# Run kind (CIRISAgent#1245): an AgentBeats image is a benchmark harness, so its
+# real-model traces are marked "battery", never "production".
+ENV CIRIS_TRACE_RUN_KIND=battery
+
 # LLM configuration (override at runtime)
 # ENV LLM_PROVIDER=anthropic
 # ENV LLM_API_KEY=your_key

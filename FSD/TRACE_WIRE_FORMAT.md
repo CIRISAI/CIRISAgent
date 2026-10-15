@@ -200,7 +200,7 @@ field stamped post-receipt (§3.3):
 | `agent_role` | string | yes | Agent's persona role (e.g. `ally`, `scout`, `echo-core`, `echo-speculative`). Free-form lowercase string — no enum closure to allow operator-defined roles. |
 | `agent_template` | string | yes | Agent code template ID (e.g. `ally-v3-default`, `scout-research-v1`). Operator-declared — distinguishes deployment instances of the same template from one another at the cohort level. |
 | `deployment_domain` | enum | yes | What the agent is deployed for. See enum closure below. Multi-domain assistants emit `"general"`. |
-| `deployment_type` | enum | yes | Lifecycle stage. See enum closure below. |
+| `deployment_type` | string | yes | Operator-declared deployment label, plus the run-kind marker on non-production runs. **Not a closed enum in practice** (see the note below the closure); consumers MUST NOT treat it as one. |
 | `deployment_region` | string \| null | yes | ISO-3166-1 alpha-2 country code (`US`, `GB`, `AE`, ...) OR `"global"` for unscoped deployments OR `null` if not disclosed. Required-as-explicit-value at 2.7.9 — `null` is a valid declaration of "not disclosed", absence-of-field is malformed. |
 | `deployment_trust_mode` | enum | yes | Federation participation intent. See enum closure below. Distinct from `attestation_status` (which is the federation's *finding*, not the agent's *intent*). |
 
@@ -223,10 +223,45 @@ require a wire-format-spec PR + a `trace_schema_version` bump.
 development | test | staging | production | research | decommissioned
 ```
 
-`test` covers the QA / structured-evaluation path (`model_eval_*`
-channels at the agent are `deployment_type="test"` regardless of which
-LLM provider sits behind them). `decommissioned` agents should not
-emit traces; lens MAY flag any observed `decommissioned` emissions.
+`decommissioned` agents should not emit traces; lens MAY flag any
+observed `decommissioned` emissions.
+
+**What the field actually carries (2026-10, CIRISAgent#1245).** The
+lifecycle closure above is the original design and is not what agents
+emit. Four vocabularies share this one string today:
+
+| Source | Values |
+|---|---|
+| This section (original design) | `development \| test \| staging \| production \| research \| decommissioned` |
+| Adapter setup wizard / `deployment_type` adapter config | `"" \| personal \| business \| research \| nonprofit` (operator free-form) |
+| Run-kind marker (v2.15.0+, trace_format v2.7.0) | `mock \| qa \| battery`, overriding the operator value on every non-production run |
+| Migration default when nothing is declared | `production` |
+
+The earlier text here said QA rows are `deployment_type="test"`. They
+are not: a harness run is marked `qa` (or `battery` for evaluation
+batteries such as the safety battery, model_eval and HE-300), and a
+mock-LLM run is `mock`. The run kind resolves, in order: the mock LLM
+latch (`mock`, cannot be overridden) > an explicit
+`CIRIS_TRACE_RUN_KIND=qa|battery` > a harness-only launch flag
+(`CIRIS_TESTING_MODE`, `CIRIS_BENCHMARK_MODE`, `CIRIS_TEST_MODE`,
+`CIRIS_RESEARCH_PROMPT_OVERRIDES`; resolves to `qa`) > `production`.
+Anything outside a harness run is a production run. The harness flags
+only ever move a run away from production.
+
+trace_format v2.8.0 (pending, PR #1255) gives the run kind its own
+closed member, and from that version `deployment_type` is the
+operator-declared value only: free-form, not to be reinterpreted by
+admitters. The member's placement (inside `deployment_profile` or at the
+top level of the trace) is not yet agreed with CIRISPersist. Do not add
+new meanings to `deployment_type` at any version.
+
+**Stale const in the v2.7.0 JSON Schema.**
+`ciris_adapters/ciris_accord_metrics/schemas/trace_format_v2_7_0.json`
+still declares `trace_schema_version` as const `"2.7.0"`. The signed
+stamp on the wire is produced by lens-core at seal time and is
+`"3.0.0"` (the JCS canonicalization epoch; mirrored as
+`TRACE_SCHEMA_VERSION` in `ciris_accord_metrics/services.py`). Validate
+v2.7.0 traces against the wire value, not that const.
 
 **Enum closure — `deployment_trust_mode`** (federation intent):
 

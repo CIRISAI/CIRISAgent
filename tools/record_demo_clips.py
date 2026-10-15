@@ -758,6 +758,9 @@ def launch_desktop_app() -> Optional[subprocess.Popen]:
     print("Launching CIRIS desktop in test mode...")
     env = os.environ.copy()
     env["CIRIS_TEST_MODE"] = "true"
+    # Demo recording drives a scripted session: a harness run, never production
+    # (CIRISAgent#1245).
+    env["CIRIS_TRACE_RUN_KIND"] = "qa"
 
     proc = subprocess.Popen(
         [sys.executable, "-m", "ciris_engine.cli"],

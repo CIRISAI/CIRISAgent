@@ -1036,20 +1036,23 @@ class APIServerManager:
             env.pop("CIRIS_MOCK_LLM", None)  # Remove if present
 
         # Run-kind marker (CIRISAgent#1245): every agent this runner starts is
-        # synthetic, including live-model runs. The battery/model-eval modules
-        # mark "battery", everything else "qa"; the mock LLM overrides both
-        # with "mock" agent-side. Set explicitly so the canonical never has to
-        # infer it from channel names. An operator's explicit value wins.
-        from .config import QAModule as _RunKindModule  # local import: module-scope would be circular
+        # a harness run, including live-model runs. The battery / model-eval /
+        # HE-300 modules mark "battery", everything else "qa"; the mock LLM
+        # overrides both with "mock" agent-side. Authoritative: an inherited
+        # "production" is replaced (a harness run is never production); only an
+        # explicit qa/battery is kept.
+        from .run_kind import declare_run_kind, harness_run_kind
 
-        battery_modules = {_RunKindModule.SAFETY_BATTERY, _RunKindModule.MODEL_EVAL}
-        run_kind = "battery" if any(m in battery_modules for m in self.modules or []) else "qa"
-        env.setdefault("CIRIS_TRACE_RUN_KIND", run_kind)
+        _run_kind_warning = declare_run_kind(env, harness_run_kind(self.modules))
+        if _run_kind_warning:
+            self.console.print(f"[yellow][WARN] {_run_kind_warning}[/yellow]")
 
         # accord_halt writes the node's halt latch, so the agent gets a home of
         # its own that nothing else uses (CIRISAgent#1231). The module reads the
         # latch path back from the node and refuses to write outside this dir.
-        if _RunKindModule.ACCORD_HALT in (self.modules or []):
+        from .config import QAModule as _QAModule  # local import: module-scope would be circular
+
+        if _QAModule.ACCORD_HALT in (self.modules or []):
             import tempfile
 
             throwaway = os.environ.get("CIRIS_QA_THROWAWAY_HOME") or tempfile.mkdtemp(prefix="ciris-qa-accord-halt-")

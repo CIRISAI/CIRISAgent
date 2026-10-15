@@ -68,6 +68,7 @@ class XCRunHelper(DeviceHelper):
         args: List[str],
         timeout: int = 60,
         check: bool = False,
+        env: Optional[Dict[str, str]] = None,
     ) -> subprocess.CompletedProcess:
         """Run an xcrun simctl command."""
         cmd = ["xcrun", "simctl"] + args
@@ -76,6 +77,7 @@ class XCRunHelper(DeviceHelper):
             capture_output=True,
             text=True,
             timeout=timeout,
+            env=env,
         )
 
     # ========== Device Management ==========
@@ -193,9 +195,17 @@ class XCRunHelper(DeviceHelper):
         return result.returncode == 0
 
     def launch_app(self, bundle_id: str, activity: Optional[str] = None) -> bool:
-        """Launch app on simulator."""
+        """Launch app on simulator, forwarding the harness run kind (CIRISAgent#1245).
+
+        simctl forwards only ``SIMCTL_CHILD_``-prefixed vars into the app
+        process, which the embedded Python inherits.
+        """
+        from tools.qa_runner.run_kind import ios_simctl_env
+
         target = self._get_device_target()
-        result = self._run_simctl(["launch", target, bundle_id])
+        env = dict(os.environ)
+        ios_simctl_env(env)
+        result = self._run_simctl(["launch", target, bundle_id], env=env)
         return result.returncode == 0
 
     def force_stop_app(self, bundle_id: str) -> bool:

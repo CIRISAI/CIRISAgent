@@ -3874,35 +3874,35 @@ def _host_listener(port: int) -> Optional[str]:
     return f"pid {', '.join(str(p) for p in pids)}"
 
 
-def _run_kind_to_forward() -> Optional[str]:
-    """The harness's run-kind marker (CIRISAgent#1245), if this job declared one.
+def _run_kind_to_forward() -> str:
+    """The run-kind marker to forward (CIRISAgent#1245): ``qa`` unless the job declared ``battery``.
 
     Mobile app processes inherit nothing from the runner, so a marker set only
     in the workflow env never reached the Android or iOS backend, and live-model
-    traces from those legs stayed `production`.
+    traces from those legs stayed `production`. A standalone run of this
+    harness declares nothing, and is still a harness run: it forwards ``qa``.
     """
-    value = os.environ.get("CIRIS_TRACE_RUN_KIND", "").strip()
-    return value or None
+    from tools.qa_runner.run_kind import forwarded_run_kind
+
+    return forwarded_run_kind()
 
 
 def _forward_run_kind_ios(env: Dict[str, str]) -> None:
     """simctl only forwards SIMCTL_CHILD_-prefixed vars into the launched app."""
-    kind = _run_kind_to_forward()
-    if kind:
-        env["SIMCTL_CHILD_CIRIS_TRACE_RUN_KIND"] = kind
+    from tools.qa_runner.run_kind import ios_simctl_env
+
+    ios_simctl_env(env)
 
 
 def _forward_run_kind_android(serial: Optional[str]) -> None:
     """Set the debug property the Android backend reads (mock_llm_guard.ANDROID_RUN_KIND_PROP).
 
     Always written, so a stale value from an earlier job on the same emulator
-    cannot outlive the job that set it (an empty value reads as production).
+    cannot outlive the job that set it.
     """
-    _adb(
-        ["shell", "setprop", "debug.ciris.trace_run_kind", _run_kind_to_forward() or "''"],
-        serial=serial,
-        timeout=10,
-    )
+    from tools.qa_runner.run_kind import android_setprop_args
+
+    _adb(android_setprop_args(), serial=serial, timeout=10)
 
 
 def _simctl(args: List[str], timeout: int = 120) -> subprocess.CompletedProcess:
@@ -5002,6 +5002,15 @@ async def run_desktop_tests(args: argparse.Namespace) -> int:
 async def main() -> int:
     """Main entry point."""
     args = parse_args()
+
+    # A standalone run of this harness is a harness run (CIRISAgent#1245):
+    # declare it on the process env, so the backend ServerManager starts, the
+    # desktop JAR and every device forwarder inherit "qa" (or the job's "battery").
+    from tools.qa_runner.run_kind import declare_process_run_kind
+
+    _run_kind_warning = declare_process_run_kind()
+    if _run_kind_warning:
+        print(f"[WARN] {_run_kind_warning}")
 
     # Handle list command
     if args.command == "list":

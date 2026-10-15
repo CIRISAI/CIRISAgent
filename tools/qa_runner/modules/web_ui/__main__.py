@@ -2658,12 +2658,28 @@ def _find_desktop_jar() -> Optional[Path]:
     return None
 
 
-def _complete_setup(base_url: str, mock_llm: bool) -> bool:
-    """Call /v1/setup/complete to create the known-password admin user.
+async def _complete_setup(base_url: str, mock_llm: bool, home: str, since: Optional[float] = None) -> bool:
+    """Claim the node, then call /v1/setup/complete to create the known-password admin user.
 
-    Mirrors qa_runner.server.APIServerManager._complete_qa_setup.
+    Mirrors qa_runner.server.APIServerManager._complete_qa_setup: the wizard's
+    order, through the one claim implementation (tools/qa_runner/node_claim.py).
+    Every node is always claimed; setup refuses an unowned node (409
+    node_unclaimed), and an unclaimed boot fails here, closed.
     """
-    payload = {
+    import httpx
+
+    from tools.qa_runner.node_claim import claim_like_the_wizard
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        claim = await claim_like_the_wizard(
+            client, base_url, [home], TEST_ADMIN_USERNAME, TEST_ADMIN_PASSWORD, since=since
+        )
+    if not claim.ok:
+        print(f" [FAIL] node claim ({claim.step}): {claim.detail}")
+        return False
+    print(f" [OK] node claimed by {TEST_ADMIN_USERNAME} (PIN from {claim.pin_file})")
+
+    payload: Dict[str, object] = {
         "llm_provider": "mock" if mock_llm else "openai",
         "llm_api_key": "test-key-for-qa",
         "llm_model": "mock-model" if mock_llm else "gpt-4",
@@ -3260,14 +3276,15 @@ async def run_desktop_up(args: argparse.Namespace) -> int:
         startup_timeout=args.timeout,
     )
     server = ServerManager(cfg)
+    launched_at = time.time()
     status = server.start()
     if not status.running:
         print(f" [FAIL] backend failed: {status.error}")
         return 1
 
     # 3. Complete setup
-    print("[3/5] Completing setup wizard via /v1/setup/complete...")
-    if not _complete_setup(server.base_url, args.mock_llm):
+    print("[3/5] Claiming the node, then completing setup via /v1/setup/complete...")
+    if not await _complete_setup(server.base_url, args.mock_llm, _desktop_home(server), since=launched_at):
         server.stop()
         return 1
     # Username only. The password is a fixed constant in this file
@@ -4228,13 +4245,15 @@ async def run_ios_up(args: argparse.Namespace) -> int:
     IOS_TEST_REMOTE_PORT = 9091
     IOS_BACKEND_REMOTE_PORT = 8080
     print(
-        f"[3/4] iproxy {args.desktop_port}->{IOS_TEST_REMOTE_PORT} "
-        f"and {args.api_port}->{IOS_BACKEND_REMOTE_PORT}..."
+        f"[3/4] iproxy {args.desktop_port}->{IOS_TEST_REMOTE_PORT}, "
+        f"{args.api_port}->{IOS_BACKEND_REMOTE_PORT} and {IOS_NODE_LOCAL_PORT}->{IOS_NODE_REMOTE_PORT}..."
     )
     atexit.register(_kill_iproxy_children)
     for local_port, remote_port, label in (
         (args.desktop_port, IOS_TEST_REMOTE_PORT, "test-automation"),
         (args.api_port, IOS_BACKEND_REMOTE_PORT, "backend api"),
+        # The claim posts claim-remote to the NODE: the brain shadows /v1/setup.
+        (IOS_NODE_LOCAL_PORT, IOS_NODE_REMOTE_PORT, "node read-API"),
     ):
         try:
             proc = subprocess.Popen(
@@ -4310,6 +4329,70 @@ async def run_ios_up(args: argparse.Namespace) -> int:
     return 0
 
 
+#: Host-side forward of the device's node read-API (18xxx: physical-device convention).
+IOS_NODE_LOCAL_PORT = 18243
+IOS_NODE_REMOTE_PORT = 4243
+
+#: The app's CIRIS_HOME inside its data container (the engine writes Documents/ciris).
+IOS_APP_CIRIS_HOME = "Documents/ciris"
+
+
+def _ios_fetch_claim_pin_home(
+    udid: str, bundle_id: str, *, simulator: bool, dest: Path, timeout_s: float = 120.0, poll_s: float = 2.0
+) -> "tuple[Optional[str], str]":
+    """A local directory holding the app's `claim_pin`, read from the app's data container.
+
+    Simulator: the container is on this host (`simctl get_app_container ... data`),
+    so the app's CIRIS_HOME is used in place. Physical device: `devicectl device
+    copy from --domain-type appDataContainer` copies the file into `dest`. The
+    node writes the PIN during compose, so both wait for it up to `timeout_s`.
+    Returns (None, reason) when it cannot be reached: the caller fails closed.
+    The PIN itself is never printed.
+    """
+    deadline = time.monotonic() + timeout_s
+    reason = "no claim_pin yet"
+    while True:
+        if simulator:
+            box = _simctl(["get_app_container", udid, bundle_id, "data"], timeout=30)
+            root = (box.stdout or "").strip().splitlines()
+            if root and root[0].startswith("/"):
+                home = Path(root[0]) / IOS_APP_CIRIS_HOME
+                if (home / "claim_pin").is_file():
+                    return str(home), ""
+                reason = f"no claim_pin in {home}"
+            else:
+                reason = f"no data container for {bundle_id} ({(box.stderr or '').strip()[:200]})"
+        else:
+            target = dest / "claim_pin"
+            cmd = [
+                "xcrun",
+                "devicectl",
+                "device",
+                "copy",
+                "from",
+                "--device",
+                udid,
+                "--domain-type",
+                "appDataContainer",
+                "--domain-identifier",
+                bundle_id,
+                "--source",
+                f"{IOS_APP_CIRIS_HOME}/claim_pin",
+                "--destination",
+                str(target),
+            ]
+            try:
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+                if result.returncode == 0 and target.is_file() and target.stat().st_size > 0:
+                    return str(dest), ""
+                reason = f"devicectl copy failed: {(result.stderr or result.stdout).strip()[:200]}"
+            except (OSError, subprocess.SubprocessError) as e:
+                reason = f"devicectl copy failed: {type(e).__name__}: {e}"
+        if time.monotonic() >= deadline:
+            return None, reason
+        time.sleep(poll_s)
+
+
 async def _ios_complete_setup_if_needed(
     api_base: str,
     devicectl_udid: str,
@@ -4341,6 +4424,35 @@ async def _ios_complete_setup_if_needed(
     if not first_run:
         print(f" [INFO] device already configured (first_run=false) — skipping setup")
         return True
+
+    # Every node is always claimed: the app's own claim PIN, read from its data
+    # container (never from a log), claims the node before setup, or nothing does.
+    pin_dir = Path(tempfile.mkdtemp(prefix="ciris-ios-claim-"))
+    pin_home, why = await asyncio.to_thread(
+        _ios_fetch_claim_pin_home, devicectl_udid, bundle_id, simulator=False, dest=pin_dir
+    )
+    if pin_home is None:
+        print(f" [FAIL] cannot read the app's claim PIN ({why}); refusing to complete setup on an unowned node")
+        return False
+    import httpx
+
+    from tools.qa_runner.node_claim import claim_like_the_wizard
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        claim = await claim_like_the_wizard(
+            client,
+            api_base,
+            [pin_home],
+            TEST_ADMIN_USERNAME,
+            TEST_ADMIN_PASSWORD,
+            pin_timeout_s=5.0,
+            node_url=f"http://localhost:{IOS_NODE_LOCAL_PORT}",
+        )
+    shutil.rmtree(pin_dir, ignore_errors=True)
+    if not claim.ok:
+        print(f" [FAIL] node claim ({claim.step}): {claim.detail}")
+        return False
+    print(f" [OK] node claimed by {TEST_ADMIN_USERNAME}")
 
     # Device needs setup. POST /v1/setup/complete with QA creds.
     print(f" device is first-run — completing setup via {api_base}/v1/setup/complete")

@@ -260,7 +260,9 @@ Available modules:
     )
 
     # Authentication
-    parser.add_argument("--username", default="jeff", help="Test username (default: jeff)")
+    parser.add_argument(
+        "--username", default="qa-harness-user", help="Setup user who claims the node (default: qa-harness-user)"
+    )
     parser.add_argument(
         "--password",
         default="__auto_detect__",

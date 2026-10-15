@@ -17,7 +17,9 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
 from ciris_engine.logic.config.db_paths import get_sqlite_db_full_path
 from ciris_engine.logic.setup.wizard import create_env_file
 from ciris_engine.logic.utils.env_file import env_line
+from ciris_engine.logic.utils.node_ownership import claim_pin_file, node_owned
 from ciris_engine.schemas.api.responses import SuccessResponse
+from ciris_engine.schemas.runtime.node_ownership import CLAIM_ROUTE, NODE_UNCLAIMED_ERROR, UPGRADE_CLAIM_ROUTES
 
 from .._common import RESPONSES_400_403_500
 from .dependencies import SetupOnlyDep
@@ -26,6 +28,11 @@ from .llm_validation import _get_provider_base_url
 from .models import SetupCompleteRequest
 
 logger = logging.getLogger(__name__)
+
+
+class _NodeUnclaimedRefusal(Exception):
+    """Setup completion on a node with no owner: refused with 409, never minted."""
+
 
 router = APIRouter()
 
@@ -209,10 +216,7 @@ def _node_owner_named(username: str) -> Optional[_AdoptedNodeOwner]:
     way, by consulting `_list_active_by_role` alongside `list_was()`).
     """
     try:
-        from ciris_engine.logic.persistence.stores.authentication_store import (
-            _is_brain_wa_row,
-            _list_active_by_role,
-        )
+        from ciris_engine.logic.persistence.stores.authentication_store import _is_brain_wa_row, _list_active_by_role
     except Exception:  # pragma: no cover - store unavailable in some test rigs
         return None
 
@@ -300,8 +304,7 @@ async def _set_password_for_wa(auth_service: Any, setup: SetupCompleteRequest, w
     """
     if isinstance(wa_cert, _AdoptedNodeOwner):
         logger.info(
-            "CIRIS_USER_CREATE: skipping password for node-claimed owner %s — "
-            "the node owns auth for this identity",
+            "CIRIS_USER_CREATE: skipping password for node-claimed owner %s — " "the node owns auth for this identity",
             wa_cert.wa_id,
         )
         return
@@ -522,9 +525,7 @@ def _enforce_single_holder(setup: SetupCompleteRequest, wa_cert: Any) -> None:
     from ciris_engine.logic.persistence.stores import authentication_store
 
     try:
-        holders = authentication_store.live_oauth_holders(
-            str(setup.oauth_provider), str(setup.oauth_external_id)
-        )
+        holders = authentication_store.live_oauth_holders(str(setup.oauth_provider), str(setup.oauth_external_id))
     except Exception:  # noqa: BLE001
         logger.exception("CIRIS_USER_CREATE: could not verify the single-holder invariant")
         return
@@ -551,9 +552,7 @@ def _enforce_single_holder(setup: SetupCompleteRequest, wa_cert: Any) -> None:
     )
     if ours in holders and len(holders) > 1:
         authentication_store.update_wa_certificate(str(ours), {"active": False})
-        remaining = authentication_store.live_oauth_holders(
-            str(setup.oauth_provider), str(setup.oauth_external_id)
-        )
+        remaining = authentication_store.live_oauth_holders(str(setup.oauth_provider), str(setup.oauth_external_id))
         logger.error(
             "CIRIS_USER_CREATE: retired our own cert; %d live holder(s) remain "
             "(1 is correct — the fabric's owner-binding).",
@@ -736,9 +735,7 @@ async def _create_setup_users(
         if existing_wa is None and setup.oauth_provider and setup.oauth_external_id:
             fabric_provider = str(setup.oauth_provider)
             fabric_provider_subject = str(setup.oauth_external_id)
-            fabric_holder_id = authentication_store.fabric_oauth_holder_id(
-                fabric_provider, fabric_provider_subject
-            )
+            fabric_holder_id = authentication_store.fabric_oauth_holder_id(fabric_provider, fabric_provider_subject)
 
         if fabric_holder_id:
             # LOG THE FACT, NOT THE SUBJECT.
@@ -1015,9 +1012,7 @@ def _emit_accord_metrics_consent(setup: SetupCompleteRequest) -> None:
     if "ciris_accord_metrics" not in setup.enabled_adapters:
         return
     try:
-        from ciris_engine.logic.services.governance.consent.trace_sharing import (
-            grant_trace_sharing,
-        )
+        from ciris_engine.logic.services.governance.consent.trace_sharing import grant_trace_sharing
         from ciris_engine.schemas.consent.trace_sharing import TraceConsentSource
 
         result = grant_trace_sharing(
@@ -1149,12 +1144,17 @@ def _write_run_without_ai(f: Any) -> None:
     logger.info(
         "[RUN-WITHOUT-AI] recorded in the home's .env: %s=true %s=%s -- from now on every boot is ciris-server "
         "and the client (no brain); the read API will be on :%d. Set %s=false in the environment to run the brain once.",
-        ENV_FLAG, ENV_KEY_ID, key_id or "<unresolved: the node will use the wheel's default label>", 4243, ENV_FLAG,
+        ENV_FLAG,
+        ENV_KEY_ID,
+        key_id or "<unresolved: the node will use the wheel's default label>",
+        4243,
+        ENV_FLAG,
     )
     if not key_id:
         logger.error(
             "[RUN-WITHOUT-AI] the node key alias could not be resolved at setup-complete; node-only boots will "
-            "NOT serve the identity this wizard claimed until %s is set in .env", ENV_KEY_ID
+            "NOT serve the identity this wizard claimed until %s is set in .env",
+            ENV_KEY_ID,
         )
 
 
@@ -1617,6 +1617,13 @@ async def complete_setup(
                 },
             )
 
+        # EVERY NODE IS ALWAYS CLAIMED. Setup mints a ROOT WA, and a node that
+        # sees a ROOT mints no claim PIN, so completing on an unowned node would
+        # suppress the deployer's PIN. Read here, once the engine is wired.
+        ownership = await node_owned(fresh=True)
+        if ownership.unclaimed:
+            raise _NodeUnclaimedRefusal(ownership.unclaimed_message())
+
         # Audit the key initialization - ensures audit_log table exists.
         # Attestation verifies audit_log exists, so we must have at least one
         # entry before attestation runs post-setup.
@@ -1711,6 +1718,27 @@ async def complete_setup(
             }
         )
 
+    except _NodeUnclaimedRefusal as refusal:
+        # Roll back like the signing failure above, so the next attempt is
+        # still a first run: the deployer claims the node, then completes.
+        logger.warning(f"Setup completion refused: {refusal}")
+        if config_path is not None:
+            try:
+                config_path.unlink(missing_ok=True)
+            except OSError as unlink_err:
+                logger.warning(f"[Setup Complete] Could not roll back {config_path}: {unlink_err}")
+        if setup.run_without_ai:
+            _retract_run_without_ai(config_path)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": NODE_UNCLAIMED_ERROR,
+                "message": f"{NODE_UNCLAIMED_ERROR}: claim the node first. {refusal}",
+                "claim_pin_file": claim_pin_file(),
+                "claim_route": CLAIM_ROUTE,
+                "upgrade_claim_routes": list(UPGRADE_CLAIM_ROUTES),
+            },
+        )
     except Exception as e:
         logger.error(f"Setup completion failed: {e}", exc_info=True)
         if setup.run_without_ai:

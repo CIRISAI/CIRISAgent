@@ -60,6 +60,7 @@ class MessageRejectionReason(str, Enum):
     RESOURCE_SHED = "RESOURCE_SHED"  # Runtime self-protection: admission closed under resource pressure
     ACCORD_HALT = "ACCORD_HALT"  # CC 4.2.1.1 constitutional halt: agent acts paused, no new work admitted
     ACCORD_ROW_FORWARDED = "ACCORD_ROW_FORWARDED"  # An accord row, handed to the node; not work for the agent
+    NODE_UNCLAIMED = "NODE_UNCLAIMED"  # The node has no owner: an agent does not run on an unowned node
 
 
 class ImagePayload(BaseModel):
@@ -979,6 +980,33 @@ async def _wait_for_reply_or_halt(event: asyncio.Event, timeout: float) -> Optio
             return halt
 
 
+async def _raise_if_node_unclaimed() -> None:
+    """423 when the node has no owner: EVERY NODE IS ALWAYS CLAIMED.
+
+    Checked after the halt (a halted agent answers with its halt) and before
+    anything is created. The body names both ways to claim the node and where
+    the deployer finds the claim PIN, never the PIN itself.
+    """
+    from ciris_engine.logic.utils.node_ownership import node_owned
+    from ciris_engine.schemas.runtime.node_ownership import NODE_UNCLAIMED_ERROR
+
+    ownership = await node_owned()
+    if not ownership.unclaimed:
+        return
+    raise HTTPException(
+        status_code=423,
+        detail={
+            "error": NODE_UNCLAIMED_ERROR,
+            "reason": MessageRejectionReason.NODE_UNCLAIMED.value,
+            "message": ownership.unclaimed_message(),
+            "claim_pin_file": ownership.claim_pin_file,
+            "claim_route": ownership.claim_route,
+            "upgrade_claim_routes": ownership.upgrade_claim_routes,
+            "reading": ownership.reading.value,
+        },
+    )
+
+
 def _cleanup_interaction_tracking(message_id: str, request: Optional[Request] = None) -> None:
     """Clean up interaction tracking for given message ID.
 
@@ -1056,6 +1084,7 @@ async def submit_message(
             )
         )
     await _raise_if_accord_halted()
+    await _raise_if_node_unclaimed()
 
     # Create message and tracking
     message_id, channel_id, msg = await _create_interaction_message(auth, body, request)
@@ -1182,6 +1211,7 @@ async def interact(request: Request, body: InteractRequest, auth: AuthObserverDe
             )
         )
     await _raise_if_accord_halted()
+    await _raise_if_node_unclaimed()
 
     # Create message and tracking
     message_id, channel_id, msg = await _create_interaction_message(auth, body, request)

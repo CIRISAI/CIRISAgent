@@ -15,6 +15,7 @@ from ciris_engine.logic.processors.support.processing_queue import ProcessingQue
 from ciris_engine.logic.services.infrastructure.resource_monitor.pressure import pressure_gate_of
 from ciris_engine.logic.utils.context_utils import build_dispatch_context
 from ciris_engine.logic.utils.halt_latch import hold_tick, read_halt_latch
+from ciris_engine.logic.utils.node_ownership import hold_until_node_owned
 from ciris_engine.logic.utils.shutdown_manager import (
     get_global_shutdown_reason,
     is_global_shutdown_requested,
@@ -282,6 +283,12 @@ class AgentProcessor:
         if self._stop_event is not None:
             self._stop_event.clear()
         logger.info(f"Starting agent processing (rounds: {num_rounds or 'infinite'})")
+
+        # EVERY NODE IS ALWAYS CLAIMED: no WAKEUP or WORK on an unowned node.
+        # Held here, re-reading on a tick, until the deployer claims it.
+        if not await hold_until_node_owned(self._stop_event):
+            logger.info("Stopped while held on an unowned node; the processor never started")
+            return
 
         # Determine startup target state based on cognitive behaviors
         # When wakeup is bypassed, transition directly to WORK (partnership model)

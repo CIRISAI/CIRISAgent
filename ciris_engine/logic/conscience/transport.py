@@ -27,7 +27,10 @@ the processor issues CONSCIENCE_RETRY + PONDER, the retry makes the same call,
 and it times out identically. Observed: 28 CONSCIENCE_RETRY lines, 4 override
 rounds, one conscience call taking 142s to fail. Retrying a call that just timed
 out, immediately, with the same payload, is guaranteed to spend another full
-timeout. Transport failures must FAIL FAST.
+timeout. Transport failures must FAIL FAST at the processor: no CONSCIENCE_RETRY
+into a dead provider. (The facility's own bounded per-try x attempts loop is a
+different layer and DOES retry transient transport -- see
+FACILITY_RETRY_TRANSPORT_CATEGORIES, #1247.)
 
 THE POLICY ALREADY EXISTS, and this is the part that had slipped: the LLM service
 categorizes every error (`_categorize_llm_error`) into TIMEOUT / CONNECTION_ERROR
@@ -80,6 +83,58 @@ LLM_FAULT_CATEGORIES = frozenset(
         "VALIDATION_ERROR",
     }
 )
+
+
+#: Transport categories the conscience facility RETRIES with a fresh call
+#: (CIRISAgent#1247). Since #1186 nothing below the conscience retries a
+#: transport failure: the LLM service raises it on first occurrence ("Retrying
+#: is the enclosing stage's per-try's job") and the bus makes one attempt per
+#: provider. So the facility's per-try x attempts budget is the ONLY retry
+#: layer -- and before #1247 it retried only its own `wait_for` expiry, never a
+#: timeout the provider reported first, which arrives wrapped by the bus as
+#: "All LLM services failed for <shard>. Last error: ... timeout". A single
+#: slow draw was enough to leave a faculty not run.
+#:
+#: These are independent draws on elastic capacity: a fresh request can
+#: succeed. AUTH_ERROR / MODEL_NOT_AVAILABLE fail identically forever, and
+#: RATE_LIMIT is already waited out by the bus's own cooldown loop, so those
+#: stay fail-fast.
+FACILITY_RETRY_TRANSPORT_CATEGORIES = frozenset({"TIMEOUT", "CONNECTION_ERROR", "INTERNAL_ERROR"})
+
+#: LLM-fault categories the facility retries. CONTEXT_LENGTH_EXCEEDED is NOT
+#: one: the facility re-sends the identical payload, so an over-long prompt
+#: overflows identically on every attempt -- each retry is a provider call that
+#: cannot succeed (#1247: "Input too long: 55321 input tokens, limit is 32768").
+FACILITY_RETRY_LLM_FAULT_CATEGORIES = frozenset({"CONTENT_FILTER", "VALIDATION_ERROR"})
+
+#: Phrases meaning the account cannot pay. Categorised INTERNAL_ERROR when the
+#: provider returns them as a 500 (#1247 saw "HTTP 500 Insufficient credits: 0
+#: available"), but retrying cannot fund the account.
+_UNFUNDED_MARKERS = (
+    "insufficient credit",
+    "insufficient_quota",
+    "insufficient balance",
+    "credit balance is too low",
+    "credit limit exceeded",
+    "error code: 402",
+    "http 402",
+)
+
+
+def is_retryable_by_facility(exc: BaseException, category: Optional[str] = None) -> bool:
+    """Should the conscience facility spend another attempt on this failure?
+
+    True for transient transport (an independent draw may answer) and for the
+    LLM faults a fresh draw can fix. False for config faults, rate limits, an
+    unfunded account, context overflow, and anything unrecognised.
+    """
+    cat = category or categorize_conscience_error(exc)
+    if cat in FACILITY_RETRY_LLM_FAULT_CATEGORIES:
+        return True
+    if cat in FACILITY_RETRY_TRANSPORT_CATEGORIES:
+        text = str(exc).lower()
+        return not any(marker in text for marker in _UNFUNDED_MARKERS)
+    return False
 
 
 def categorize_conscience_error(exc: BaseException) -> str:

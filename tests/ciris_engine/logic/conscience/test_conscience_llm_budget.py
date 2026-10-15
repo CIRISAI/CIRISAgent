@@ -130,7 +130,9 @@ async def test_a_hung_call_is_cancelled_and_retried_once_with_a_fresh_call() -> 
             await asyncio.sleep(10)
         return answered
 
-    result = await _shard()._call_llm_with_budget(_sink(first_hangs_then_answers), handler_name="epistemic_humility_conscience")
+    result = await _shard()._call_llm_with_budget(
+        _sink(first_hangs_then_answers), handler_name="epistemic_humility_conscience"
+    )
     assert result is answered
     assert calls["n"] == 2
 
@@ -149,7 +151,9 @@ async def test_budget_exhausted_by_timeouts_surfaces_as_transport() -> None:
 
 @pytest.mark.asyncio
 async def test_a_schema_failure_gets_one_fresh_attempt_then_is_reraised() -> None:
-    boom = RuntimeError("LLM response validation failed for EpistemicHumilityResult - reflective_justification Field required")
+    boom = RuntimeError(
+        "LLM response validation failed for EpistemicHumilityResult - reflective_justification Field required"
+    )
     sink = _sink([boom, boom])
     with patch.object(conscience_core, "categorize_conscience_error", return_value="VALIDATION_ERROR"):
         with pytest.raises(RuntimeError):
@@ -165,15 +169,96 @@ async def test_a_schema_failure_then_success_returns_the_answer() -> None:
         assert await _shard()._call_llm_with_budget(sink, handler_name="x") is answered
 
 
+#: What the conscience actually receives when the provider times out: the
+#: LLM service raises TimeoutError("LLM API timeout - circuit breaker
+#: activated") on the first occurrence (#1186), and the bus -- one attempt
+#: per provider -- wraps it (llm_bus.py, "All LLM services failed for ...").
+#: This is the exact shape #1247 counted 44 times.
+_BUS_TIMEOUT = (
+    "All LLM services failed for epistemic_humility_conscience. "
+    "Last error: LLM API timeout - circuit breaker activated"
+)
+
+
 @pytest.mark.asyncio
-async def test_transport_failures_are_not_retried_here() -> None:
-    """The provider retried, the bus failed over; spending the budget again is
-    what #1049 removed."""
-    sink = _sink(ConnectionError("provider unreachable"))
-    with patch.object(conscience_core, "categorize_conscience_error", return_value="CONNECTION_ERROR"):
-        with pytest.raises(ConnectionError):
-            await _shard()._call_llm_with_budget(sink, handler_name="x")
+async def test_a_provider_reported_timeout_gets_a_fresh_attempt() -> None:
+    """CIRISAgent#1247, the dominant root cause.
+
+    Nothing below the conscience retries a timeout since #1186, so this loop is
+    the only retry layer. It used to re-raise any transport failure at once
+    ("the provider already retried") -- true before #1186, false after -- so a
+    provider-reported timeout got ONE attempt against a budget profile that
+    promises four. One slow draw = a faculty that did not run.
+    """
+    answered = (_humility(), None)
+    sink = _sink([RuntimeError(_BUS_TIMEOUT), answered])
+    result = await _shard(retries=3)._call_llm_with_budget(sink, handler_name="epistemic_humility_conscience")
+    assert result is answered
+    assert sink.llm.call_llm_structured.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_provider_timeouts_exhaust_the_budget_then_read_as_transport() -> None:
+    sink = _sink([RuntimeError(_BUS_TIMEOUT)] * 4)
+    with pytest.raises(RuntimeError) as ei:
+        await _shard(retries=3)._call_llm_with_budget(sink, handler_name="epistemic_humility_conscience")
+    assert sink.llm.call_llm_structured.await_count == 4, "attempts are bounded by llm_call_retries + 1"
+    assert is_transport_failure(ei.value)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "message",
+    [
+        "All LLM services failed for x. Last error: Connection error.",
+        "All LLM services failed for x. Last error: Error code: 503 - Service Unavailable",
+    ],
+)
+async def test_transient_transport_is_retried(message: str) -> None:
+    answered = (_humility(), None)
+    sink = _sink([RuntimeError(message), answered])
+    with patch.object(
+        conscience_core,
+        "categorize_conscience_error",
+        return_value="CONNECTION_ERROR" if "Connection" in message else "INTERNAL_ERROR",
+    ):
+        assert await _shard(retries=3)._call_llm_with_budget(sink, handler_name="x") is answered
+    assert sink.llm.call_llm_structured.await_count == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "category, message",
+    [
+        ("AUTH_ERROR", "Error code: 401 - Invalid API Key"),
+        ("MODEL_NOT_AVAILABLE", "Error code: 404 - model_not_found"),
+        ("RATE_LIMIT", "Error code: 429 - rate limited"),  # the bus already waited out the cooldown
+        ("INTERNAL_ERROR", "HTTP 500 Insufficient credits: 0 available"),  # seen in #1247
+        ("CONTEXT_LENGTH_EXCEEDED", "Error code: 400 - Input too long: 55321 input tokens, limit is 32768"),
+        ("UNKNOWN", "something we have never seen"),
+    ],
+)
+async def test_failures_a_retry_cannot_change_are_not_retried(category: str, message: str) -> None:
+    """Config faults, an unfunded account, rate limits (already waited out
+    below), and context overflow (the facility re-sends the identical payload)
+    fail fast -- retrying them is pure latency against the thought deadline."""
+    sink = _sink(RuntimeError(message))
+    with patch.object(conscience_core, "categorize_conscience_error", return_value=category):
+        with pytest.raises(RuntimeError):
+            await _shard(retries=3)._call_llm_with_budget(sink, handler_name="x")
     assert sink.llm.call_llm_structured.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_the_real_categoriser_reads_the_bus_timeout_as_retryable() -> None:
+    """No patching: the production categoriser must classify the bus's wrapped
+    timeout as TIMEOUT, or the retry above never fires in production."""
+    from ciris_engine.logic.conscience.transport import categorize_conscience_error, is_retryable_by_facility
+
+    exc = RuntimeError(_BUS_TIMEOUT)
+    assert categorize_conscience_error(exc) == "TIMEOUT"
+    assert is_retryable_by_facility(exc)
+    assert not is_retryable_by_facility(RuntimeError("HTTP 500 Insufficient credits: 0 available"))
 
 
 @pytest.mark.asyncio
@@ -220,7 +305,12 @@ def _humility_shard(sink: MagicMock, timeout: float = 0.05) -> EpistemicHumility
 async def test_the_observed_scout_answer_now_passes() -> None:
     """recommended_action='speak' with a justification saying 'no concerns' is
     exactly what scout returned; it is an approval and the gate now reads it so."""
-    sink = _sink(lambda **_: (_humility(recommended_action="speak", reflective_justification="no potential ethical concerns"), None))
+    sink = _sink(
+        lambda **_: (
+            _humility(recommended_action="speak", reflective_justification="no potential ethical concerns"),
+            None,
+        )
+    )
     result = await _humility_shard(sink).check(_action(), _ctx())
     assert result.passed is True
 
@@ -233,3 +323,30 @@ async def test_hung_humility_check_ends_as_did_not_run_not_as_a_veto() -> None:
     assert getattr(result, "check_ran", None) is False
     assert "DID NOT RUN" in (result.reason or "")
     assert sink.llm.call_llm_structured.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_humility_check_survives_one_provider_timeout() -> None:
+    """End to end, the #1247 shape: the first draw times out at the provider,
+    the second answers. Before the fix this returned DID NOT RUN and forced a
+    PONDER; now the faculty runs and judges."""
+    answered = (_humility(), None)
+    sink = _sink([RuntimeError(_BUS_TIMEOUT), answered])
+    result = await _humility_shard(sink).check(_action(), _ctx())
+    assert result.check_ran is True
+    assert result.passed is True
+    assert sink.llm.call_llm_structured.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_humility_non_transport_failure_fails_closed_as_did_not_run() -> None:
+    """A context overflow used to become 'Epistemic humility concern: abort -
+    LLM error: ...' with check_ran=True -- a fabricated judgement that also sent
+    the processor into a retry of the same overflow."""
+    sink = _sink(RuntimeError("Error code: 400 - Input too long: 55321 input tokens, limit is 32768 for this model"))
+    result = await _humility_shard(sink).check(_action(), _ctx())
+    assert result.passed is False
+    assert result.check_ran is False
+    assert "DID NOT RUN" in (result.reason or "")
+    assert "concern: abort" not in (result.reason or "")
+    assert sink.llm.call_llm_structured.await_count == 1

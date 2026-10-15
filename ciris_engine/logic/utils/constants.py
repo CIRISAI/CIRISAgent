@@ -140,7 +140,7 @@ ETHICS_TEXT_EXPECTED_HASHES: Dict[str, str] = {
     "constitution_ethics_1.3_my.txt": "ae347accefd9f3b5d95cee8f29adcc79ada030c2bd4bd1f02f161782e1b26b1b",
     "constitution_ethics_1.3_pa.txt": "506961dbb549b2ed97fc9ffab7d3f1f8260032325accf22cdcde0a1ab3c8fac4",
     "constitution_ethics_1.3_pt.txt": "c3e330154a93be931d134e0a8e71590f26ea5d70b5f94856d85f4f12139b3eda",
-    "constitution_ethics_1.3_ru.txt": "10b6dda66391f100ca5f1e3afb18fbf8a007704d9d5c10636d2f19cc15080a80",
+    "constitution_ethics_1.3_ru.txt": "c97ed5cf6c297c4de58627848636723b930c151e55e720716e674a6d289b8d2f",
     "constitution_ethics_1.3_sw.txt": "40665d99d384e0c7a95c3f00fed819becf8bf2724cabc4bc91c14f45fba87a86",
     "constitution_ethics_1.3_ta.txt": "d5fe1a3b7fd10495bb9df9b714d2534459579b1772db039100d20863ffb37355",
     "constitution_ethics_1.3_te.txt": "57a4b09cfd0d4ae645033af476cec8059c27ef08f8378b85a52a20b89c1ce4cb",

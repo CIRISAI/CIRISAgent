@@ -161,7 +161,7 @@ Edit {code}.json to add ONLY these specific key groups with {language} translati
 ### For ACCORD Sections
 ```
 Translate sections {X}-{Y} of the ACCORD to {language}.
-Source: ciris_engine/data/accord_1.2b.txt
+Source: ciris_engine/data/localized/accord_1.2b_en.txt
 Target: ciris_engine/data/localized/accord_1.2b_{code}.txt
 Use glossary at docs/localization/glossaries/{code}_glossary.md
 Preserve section headers in CAPS, keep code blocks in English.

@@ -58,7 +58,7 @@ CIRIS tracks "whose flourishing is in play" through three layers that work toget
 - The four user-visible scale values are exposed to the operator in the action-selection prompt at `ciris_engine/logic/dma/prompts/action_selection_pdma.yml:29`, mirrored across all 29 languages — e.g. `ciris_engine/logic/dma/prompts/localized/{es,fr,bn,ta}/action_selection_pdma.yml:29`.
 - A common-sense check at `ciris_engine/logic/dma/prompts/csdma_common_sense.yml:36` asks whether the named stakeholders are real people in the real world, not fictionalized.
 
-**Species-scale anchor: M-1.** The Accord's Meta-Goal M-1 — "Promote sustainable adaptive coherence enabling diverse sentient beings to pursue flourishing" — is the species-scale anchor. It is referenced from the Wise Authority documentation at `ciris_engine/logic/services/governance/wise_authority/README.md:11` and the canonical Accord text at `ciris_engine/data/accord_1.2b.txt:725`.
+**Species-scale anchor: M-1.** The Accord's Meta-Goal M-1 — "Promote sustainable adaptive coherence enabling diverse sentient beings to pursue flourishing" — is the species-scale anchor. It is referenced from the Wise Authority documentation at `ciris_engine/logic/services/governance/wise_authority/README.md:11` and the canonical Accord text at `ciris_engine/data/localized/accord_1.2b_en.txt:725`.
 
 **Recursive Golden Rule: the same question at every scale.** `MISSION.md:70-77` ("Same shape, different scale… all the way up and all the way down") tells the agent to reason about self, next-agent, user, and community simultaneously, with the same ethical structure at each level. The per-thought ethical prompt carries this discipline at `ciris_engine/logic/dma/prompts/pdma_ethical.yml:68`.
 

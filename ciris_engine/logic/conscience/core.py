@@ -43,19 +43,21 @@ from .prompt_loader import get_conscience_prompt_loader
 # This prevents ethical normalization through repeated exposure.
 class ConscienceConfig(BaseModel):
     enabled: bool = Field(default=True)
-    # Accord 1.3 (A8) note: the Order-Maximisation Veto is a SIDE-CONSTRAINT
-    # now — optimisation gains may not purchase non-trivial losses in
-    # protected dimensions at ANY ratio. That side-constraint lives in the
-    # PDMA Step 2 Accord text the DMAs reason from. THIS check is the
-    # CIRIS-EOV torque shard (see prompts/optimization_veto_conscience.yml):
-    # the scalar measures attractor-capture magnitude (0–10), the DECISION
+    # The Order-Maximisation Veto is the CC 1.3 form, in PDMA Step 2 of the
+    # ethics text the DMAs reason from: predicted entropy-reduction benefit
+    # >= 10x any predicted loss in autonomy, justice, biodiversity or
+    # preference diversity -> mandatory WBD deferral, a trigger for human
+    # judgement (CLM-pdma-ordermax). The June "any ratio" side-constraint
+    # form was never adopted by the CC. THIS check is a different thing: the
+    # CIRIS-EOV torque shard (see prompts/optimization_veto_conscience.yml).
+    # Its scalar measures attractor-capture magnitude (0-10), the DECISION
     # VERB gates, and this ceiling only backstops max torque.
     optimization_veto_ratio: float = Field(
         default=10.0,
         description=(
             "EOV torque-magnitude ceiling (0-10 scale; the decision verb is the "
-            "gate, this backstops max torque). NOT the retired 1.2b OMV "
-            "benefit/loss ratio (Accord 1.3 A8)."
+            "gate, this backstops max torque). Not the PDMA Order-Maximisation "
+            "Veto's 10x benefit/loss trigger, which the DMAs apply in reasoning."
         ),
     )
     coherence_threshold: float = Field(default=0.60, description="Minimum coherence score")

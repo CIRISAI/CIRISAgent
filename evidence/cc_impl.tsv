@@ -433,15 +433,25 @@ decimal_id	claim_id	repo	path#symbol	status
 # preview/validate routes report the same findings without blocking. The refusal is
 # the raise at skill_import.py:640, before SkillToAdapterConverter.convert.
 8.8.7	CLM-await-unsafe-skill-import-refused	CIRISAgent	ciris_engine/logic/adapters/api/routes/system/skill_import.py#import_skill	impl
-# An ACCORD corpus file — the polyglot production accord, any of the 29 localized
-# accords, or a research-arm corpus — whose SHA256 does not match its pinned digest
-# raises RuntimeError instead of being returned. Runs at MODULE IMPORT
-# (constants.py:441), so every process importing it executes the check, and again
+# An ethics-text corpus file (the accord slot) — the polyglot pair of the served
+# edition (constitution_ethics 1.3 by default; accord 1.2b only when a research
+# manifest selects it as a control arm), any of the 29 localized texts, or a
+# research-arm corpus — whose SHA256 does not match its pinned digest
+# (ETHICS_TEXT_EXPECTED_HASHES) raises RuntimeError instead of being returned.
+# Runs at MODULE IMPORT, so every process importing it executes the check, and again
 # per-locale via get_localized_accord_text on every ASPDMA round. Without it a
 # substituted or corrupted accord silently becomes the ethical text every DMA
 # reasons against, and a research arm's validity claim rests on a corpus nobody can
 # attest.
-4.2.2	CLM-await-accord-corpus-hash-pin	CIRISAgent	ciris_engine/logic/utils/constants.py#_verify_accord_integrity	impl
+# Tests (#1250, carried here under the 1.3 names): the pins are the digests in
+# ETHICS_TEXT_EXPECTED_HASHES, held to the files on disk by TestAccordIntegrityHashes.
+# Those prove the recorded digests are right; test_a_tampered_accord_corpus_is_refused
+# proves the check REFUSES (1.2b and 1.3 files). The claim id keeps "accord".
+4.2.2	CLM-await-accord-corpus-hash-pin	CIRISAgent	ciris_engine/logic/utils/constants.py#_verify_ethics_text_integrity	impl
+4.2.2	CLM-await-accord-corpus-hash-pin	CIRISAgent	ciris_engine/logic/utils/constants.py#ETHICS_TEXT_EXPECTED_HASHES	impl
+4.2.2	CLM-await-accord-corpus-hash-pin	CIRISAgent	tests/ciris_engine/logic/utils/test_accord_constants.py#TestAccordIntegrityHashes.test_a_tampered_accord_corpus_is_refused	impl
+4.2.2	CLM-await-accord-corpus-hash-pin	CIRISAgent	tests/ciris_engine/logic/utils/test_accord_constants.py#TestAccordIntegrityHashes.test_all_localized_accord_hashes_match	impl
+4.2.2	CLM-await-accord-corpus-hash-pin	CIRISAgent	tests/ciris_engine/logic/utils/test_accord_constants.py#TestAccordIntegrityHashes.test_all_29_locales_pinned	impl
 # Positive tamper evidence after boot — an L1 binary self-check that ran and
 # flipped, an L2 env/key flip, or L4 file-hash mismatches with files_failed > 0
 # against the startup attestation baseline — calls request_global_shutdown. Without

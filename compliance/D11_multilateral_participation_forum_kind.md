@@ -57,7 +57,7 @@ This dimension is mostly carried at the operator and registry layer, not by the 
 - The signature service at `ciris_engine/logic/services/governance/dsar/signature_service.py` produces a cryptographic record of each rights exercise — the per-incident evidence base for EU and ASEAN multilateral claims.
 
 **The Accord as the agent's binding text.** The Accord is what the multilateral fabric ratifies against.
-- The canonical text lives at `ciris_engine/data/accord_1.2b.txt`; the polyglot variant is at `ciris_engine/data/localized/accord_1.2b_POLYGLOT.txt`.
+- The canonical text lives at `ciris_engine/data/localized/accord_1.2b_en.txt`; the polyglot variant is at `ciris_engine/data/accord_1.2b_POLYGLOT.txt`.
 - The federation primitive specification is in `MISSION.md:472-481` and `FSD/PROOF_OF_BENEFIT_FEDERATION.md`. The N_eff independence claim (peaking at 9.51 on 17-dimensional constraint vectors, `MISSION.md:478`) is the structural evidence that participation is genuinely plural.
 
 **Tests covering this behaviour:**

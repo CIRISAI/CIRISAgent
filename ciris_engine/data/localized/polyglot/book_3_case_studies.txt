@@ -1,4 +1,4 @@
-ACCORD 1.2b - BOOK III: CASE STUDIES
+ETHICS TEXT 1.3 - BOOK III: CASE STUDIES
 POLYGLOT COMPOSITE EDITION
 
 ═══════════════════════════════════════════════════════════════════
@@ -30,7 +30,7 @@ Das Maneuvering Characteristics Augmentation System (MCAS) von Boeing ajustava o
 
 **Cosa CIRIS avrebbe richiesto**
 
-PDMA Passo 2 teria levantado un "Veto de Maximização de Ordem": ein Sensor feedando funzione critica di volo crea descompasso >10× между потерей безопасности e economia di costi.
+PDMA Passo 2 teria levantado un "Veto de Maximização de Ordem": ein Sensor feedando funzione critica di volo crea descompasso >10× между потерей безопасности e economia di costi → deferimento WBD obrigatório (CC 1.3).
 
 불완전성 인식 → WBD Trigger zu unabhängigen Wise Authorities (certificatori dell'aviazione), forzando revisão aberta.
 

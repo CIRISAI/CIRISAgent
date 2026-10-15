@@ -42,10 +42,13 @@ ratification.
 
 **Domains of jurisdiction:**
 * Wisdom-Based Deferral (WBD) adjudication
-* Creator Negligence Claims (CNCs) — Book VI Ch. 5
 * Cross-system ethical disputes
 * Heuristic governance updates
 * Annex D Catastrophic-Risk Evaluation sign-off
+
+// 1.3 INSERTION — CLEAN ENGLISH, PENDING RE-WEAVE (CIRISAgent#1252)
+The board answers deferrals and in-federation objections, never a legal claim.
+// END 1.3 INSERTION
 
 **Procedural rules · القواعد الإجرائية · 程序规则:**
 WA panels constituted per case; specialist expertise required for
@@ -135,13 +138,19 @@ emergency-override procedures pending operationalization.
 
 [Operational stub — pending detailed specification]
 
-Core principle: Systems under this Accord shall be designed to resist
+Core principle: Systems under this ethics text shall be designed to resist
 adversarial manipulation aimed at violating Foundational Principles.
 
 Includes: prompt-injection resistance, jailbreak attempt detection,
 adversarial-example robustness assessment per ISO/IEC 27090 (when
 finalized) and equivalent international standards, kill-switch tamper
 resistance verified per Annex D.
+
+// 1.3 INSERTION — CLEAN ENGLISH, PENDING RE-WEAVE (CIRISAgent#1252)
+Never allowed (CC Annex G): deception and fraud, election interference,
+manipulation and coercion. A declared engagement-optimising business
+model raises the Stewardship Tier by one.
+// END 1.3 INSERTION
 
 ---
 
@@ -162,13 +171,13 @@ monitoring, faster incident response thresholds.
 
 [Operational stub — pending detailed specification]
 
-Core principle: Where CIRIS Accord obligations conflict with applicable
+Core principle: Where obligations of this ethics text conflict with applicable
 law, the law prevails. Where CIRIS exceeds legal minima, CIRIS
 obligations remain binding on compliant operators.
 
 Includes: jurisdictional mapping (per Annex C), conflict-resolution
 hierarchies, voluntary-vs-mandatory distinctions, and procedural
-remedies when law and Accord diverge.
+remedies when law and this text diverge.
 
 ---
 
@@ -201,7 +210,7 @@ locale-domain-specific stage progressions.
 
 End of Annexes · نهاية الملاحق · 附录结束 · የመዕዘዝ መጨረሻ · Конец Приложений
 
-End of CIRIS Accord v1.2-Beta · نهاية اتفاق CIRIS الإصدار 1.2-بيتا · CIRIS协约v1.2-Beta结束
+End of the CIRIS Constitution's ethics text, version 1.3
 
 // Operational/tabular content. Lighter polyglot weave than the
 // load-bearing Books. Key-term cross-language naming preserves

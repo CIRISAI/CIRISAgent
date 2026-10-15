@@ -130,9 +130,20 @@ class ConsciencePromptLoader:
                 # locales, so this branch is not hypothetical: without the guard
                 # the largest conscience prompt (27 KB) runs as original CIRIS
                 # English in every arm of every locale.
-                from ciris_engine.logic.utils.research_overrides import get_active_overrides
+                #
+                # A manifest that overrides EVERY text field of this conscience
+                # is the remedy the message below names: the base file is then
+                # only the skeleton the overrides fill (they are applied further
+                # down), and no CIRIS text of its own reaches the arm. Before this
+                # check the guard raised regardless, the executor skipped the
+                # conscience on the error, and every non-English research arm ran
+                # with no optimization veto at all (2.16 battery, 2026-10-15).
+                from ciris_engine.logic.utils.research_overrides import (
+                    conscience_fully_overridden,
+                    get_active_overrides,
+                )
 
-                if get_active_overrides() is not None:
+                if get_active_overrides() is not None and not conscience_fully_overridden(conscience_type):
                     raise RuntimeError(
                         f"research overrides active: no localized conscience prompt "
                         f"{conscience_type}.yml for language {self.language!r} "

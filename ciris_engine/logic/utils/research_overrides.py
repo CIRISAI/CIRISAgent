@@ -669,7 +669,7 @@ def compute_residue_digest() -> str:
     """SHA256 over the source of every uncovered inline site.
 
     The residue stays uncovered but becomes *pinned*: it cannot drift mid-campaign
-    without stopping the run. Same idea as ``ACCORD_EXPECTED_HASHES``, applied to
+    without stopping the run. Same idea as ``ETHICS_TEXT_EXPECTED_HASHES``, applied to
     a surface with no file to hash.
     """
     hasher = hashlib.sha256()
@@ -731,6 +731,15 @@ class ResearchOverrideManifest(BaseModel):
     overrides: OverrideSet = Field(default_factory=OverrideSet)
     research_hashes: Dict[str, str] = Field(default_factory=dict)
 
+    #: A SHIPPED, hash-pinned edition of the ethics text to serve in place of the
+    #: default (``constants.CORPUS_EDITIONS``; e.g. ``"1.2b"`` as the control arm
+    #: against the default ``"1.3"``). Blank = the default edition. It fills the
+    #: whole ``accord.*`` slot -- localized, compressed and full -- from the files
+    #: themselves, so every one of them still passes the integrity pin; a manifest
+    #: that also names an ``accord.*`` corpus key is refused (two answers to one
+    #: question). Part of the manifest, so it is in ``manifest_digest``.
+    corpus_edition: str = Field(default="")
+
     #: Not from the file — recorded at load so the trace can carry provenance.
     manifest_path: str = Field(default="")
 
@@ -761,6 +770,7 @@ class ResearchOverrideManifest(BaseModel):
             "research_manifest": self.manifest_path,
             "research_manifest_digest": self.manifest_digest,
             "research_residue_digest": self.residue_digest,
+            "research_corpus_edition": self.corpus_edition,
         }
 
 
@@ -1004,13 +1014,31 @@ def _validate_manifest(manifest: ResearchOverrideManifest) -> None:
             f"effect. All accord.* keys together, or none."
         )
 
+    # --- corpus edition: a shipped, pinned edition fills the accord slot --
+    corpus_present = set(ov.corpus)
+    if manifest.corpus_edition:
+        from ciris_engine.logic.utils.constants import CORPUS_EDITIONS
+
+        if manifest.corpus_edition not in CORPUS_EDITIONS:
+            problems.append(
+                f"corpus_edition {manifest.corpus_edition!r} is not a shipped edition "
+                f"(one of {sorted(CORPUS_EDITIONS)})"
+            )
+        if named_accord:
+            problems.append(
+                f"corpus_edition {manifest.corpus_edition!r} and corpus keys "
+                f"{sorted(named_accord)} both select the accord slot. Name the edition "
+                f"or supply the text, not both."
+            )
+        corpus_present |= _ACCORD_CORPUS_KEYS
+
     # --- R2: strict demands totality ------------------------------------
     if manifest.mode == "strict":
         for label, required, present in (
             ("string", set(reachable_strings), set(ov.string)),
             ("dma_prompt", valid_dma, set(ov.dma_prompt)),
             ("conscience_prompt", valid_consc, set(ov.conscience_prompt)),
-            ("corpus", set(corpus_keys), set(ov.corpus)),
+            ("corpus", set(corpus_keys), corpus_present),
             ("template", set(_TEMPLATE_TEXT_FIELDS), set(ov.template)),
         ):
             missing = sorted(required - present)
@@ -1162,6 +1190,21 @@ def override_conscience_prompt(conscience_type: str, field: str) -> Optional[str
     return m.overrides.conscience_prompt.get(f"{conscience_type}.{field}") if m else None
 
 
+def conscience_fully_overridden(conscience_type: str) -> bool:
+    """True when the active manifest overrides EVERY text field the base
+    ``<conscience_type>.yml`` defines, so nothing of the base file reaches a
+    prompt and serving it as the skeleton for a locale without a localized
+    copy launders no CIRIS text into the arm (R3)."""
+    m = get_active_overrides()
+    if m is None:
+        return False
+    base = _CONSCIENCE_PROMPTS_DIR / f"{conscience_type}.yml"
+    if not base.is_file():
+        return False
+    needed = {f"{conscience_type}.{f}" for f in _yaml_present_fields(base, _CONSCIENCE_PROMPT_TEXT_FIELDS)}
+    return bool(needed) and needed <= set(m.overrides.conscience_prompt)
+
+
 def override_corpus(key: str) -> Optional[str]:
     m = get_active_overrides()
     return m.overrides.corpus.get(key) if m else None
@@ -1295,6 +1338,7 @@ def describe_coverage(manifest: Optional[ResearchOverrideManifest] = None) -> st
         f"conscience_prompt={len(ov.conscience_prompt)}/{len(_required_conscience_prompt_keys())} "
         f"corpus={len(ov.corpus)}/{len(_valid_corpus_keys())} "
         f"template={len(ov.template)}/{len(_TEMPLATE_TEXT_FIELDS)}"
+        + (f" corpus_edition={m.corpus_edition}" if m.corpus_edition else "")
     )
     return (
         f"{counts}. NOT COVERED (inline English, present in EVERY arm, pinned at "

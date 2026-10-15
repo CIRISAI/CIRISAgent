@@ -67,11 +67,11 @@ on:
         required: false
         default: "400"
       mode:
-        description: "fast, or batch for 50% off when nobody is waiting."
+        description: "fast (batch is refused: OpenRouter :batch slugs 404 on chat/completions)."
         required: false
         default: "fast"
         type: choice
-        options: [fast, batch]
+        options: [fast]
       shards:
         description: "Parallel locale shards, 1-28. 7 = 4 locales each; 1 = the old one-job lane. One commit either way."
         required: false

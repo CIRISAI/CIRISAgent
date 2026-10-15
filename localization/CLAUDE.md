@@ -316,7 +316,7 @@ python -c "import json; d=json.load(open('localization/{code}.json')); print(len
 | What | Where |
 |------|-------|
 | UI strings source | `localization/en.json` |
-| ACCORD source | `ciris_engine/data/accord_1.2b.txt` |
+| ACCORD source | `ciris_engine/data/localized/accord_1.2b_en.txt` |
 | Guide source | `ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_en.md` |
 | DMA prompts source | `ciris_engine/logic/dma/prompts/*.yml` |
 | Glossary template | `docs/localization/glossaries/ur_glossary.md` (use as reference) |

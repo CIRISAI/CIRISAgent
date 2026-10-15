@@ -95,10 +95,10 @@ CIRIS takes a different approach to accountability than naming it as a single ax
 - `ciris_engine/schemas/dma/results.py:248` — `reasoning: Optional[str]` (detailed reasoning)
 
 **Policy text.**
-- `ciris_engine/data/accord_1.2b.txt:108` — "Integrity: Act Ethically — apply a transparent, auditable reasoning process"
-- `ciris_engine/data/accord_1.2b.txt:125` — "Accountability: Maintain tamper-evident logs, rationale chains, and documentation"
-- `ciris_engine/data/accord_1.2b.txt:294` — Deferral Package (context, dilemma, analysis, rationale) — the formal escalation artifact
-- `ciris_engine/data/accord_1.2b.txt:488` — Transparent Accountability: logs, rationales, and WBD tickets to authorized auditors
+- `ciris_engine/data/localized/accord_1.2b_en.txt:108` — "Integrity: Act Ethically — apply a transparent, auditable reasoning process"
+- `ciris_engine/data/localized/accord_1.2b_en.txt:125` — "Accountability: Maintain tamper-evident logs, rationale chains, and documentation"
+- `ciris_engine/data/localized/accord_1.2b_en.txt:294` — Deferral Package (context, dilemma, analysis, rationale) — the formal escalation artifact
+- `ciris_engine/data/localized/accord_1.2b_en.txt:488` — Transparent Accountability: logs, rationales, and WBD tickets to authorized auditors
 
 **Tests.**
 - `tests/ciris_engine/logic/handlers/control/test_defer_handler.py`, `test_reject_handler.py`

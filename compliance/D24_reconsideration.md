@@ -79,7 +79,7 @@ This is one of the most concretely implemented dimensions in CIRIS. The canonica
 - `ciris_engine/schemas/dma/results.py:73` — `fragility_flag`: "True if reasoning may be brittle — set based on low k_eff, rigidity phase, or high correlation"
 
 **Policy text.**
-- `ciris_engine/data/accord_1.2b.txt:294` — Deferral Package (context, dilemma, analysis, rationale) — the formal reconsideration artifact
+- `ciris_engine/data/localized/accord_1.2b_en.txt:294` — Deferral Package (context, dilemma, analysis, rationale) — the formal reconsideration artifact
 - `ciris_engine/data/agent_experience.txt:60` — "Changes > 20% variance trigger reconsideration"
 - `ciris_engine/logic/runtime/README.md:192` — "< 20% variance or reconsideration" trigger documented
 - `ciris_engine/logic/conscience/README.md:64` — high-entropy input example suggesting reconsideration

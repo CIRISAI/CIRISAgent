@@ -165,7 +165,8 @@ def test_the_written_file_loads_through_the_real_loader(monkeypatch: pytest.Monk
     from ciris_engine.logic.utils import constants
 
     name = "constitution_ethics_1.3_yo.txt"
-    assert name not in constants.ACCORD_EXPECTED_HASHES, "not pinned yet: pins are a reviewed step"
+    # The real yo 1.3 file is pinned once that locale completes; this synthetic one never is.
+    monkeypatch.delitem(constants.ETHICS_TEXT_EXPECTED_HASHES, name, raising=False)
     real_files = importlib.resources.files
     monkeypatch.setattr(
         importlib.resources,
@@ -205,3 +206,174 @@ def test_real_1_3_round_trips_and_most_lines_have_an_exact_tm_anchor() -> None:
     tm_text = {e for e, _ in tm.values()}
     covered = sum(1 for v in doc.segments().values() if v in tm_text)
     assert covered / len(doc.slots) > 0.85
+
+
+# ── the glossary an ethics-text run sends ────────────────────────────────────
+
+ETHICS_PROBE = [
+    "VIII. The Ethics Text Begins",
+    "But the heart of this text, the ethics text of the CIRIS Constitution, is here.",
+]
+
+
+def _installed(tmp_path: Path, stem: str) -> Any:
+    stage = AL.Stage("1.3" if stem == "constitution_ethics" else "1.2b", stage_dir=tmp_path / "stage", stem=stem)
+    stage.build()
+    L = AL.import_localize(stage.dir)
+    AL.install(L, stage, {})
+    return L
+
+
+def test_ethics_run_drops_the_pipeline_stage_label_and_pins_the_texts_name(tmp_path: Path) -> None:
+    stage = AL.Stage("1.3", stage_dir=tmp_path / "stage", stem="constitution_ethics")
+    stage.build()
+    L = AL.import_localize(stage.dir)
+    # precondition: the vendored glossary sends the stage label as "Ethics"
+    assert L.gloss.relevant("am", ETHICS_PROBE) == {"Ethics": "ህሊና"}
+    AL.install(L, stage, {})
+    for lang in ("am", "my", "yo"):
+        sent = L.gloss.relevant(lang, ETHICS_PROBE)
+        assert "Ethics" not in sent, lang
+        assert sent["ethics text"] == AL.ETHICS_TEXT_RENDERINGS[lang]
+        assert AL.ETHICS_TEXT_RENDERINGS[lang] in L.gloss.block(lang, ETHICS_PROBE)
+    assert "ህሊና" not in L.gloss.block("am", ETHICS_PROBE), "am must not be told ethics = conscience"
+
+
+def test_every_ethics_text_rendering_is_a_supported_locale() -> None:
+    manifest = json.loads((LOCALIZED / "manifest.json").read_text(encoding="utf-8"))
+    assert set(AL.ETHICS_TEXT_RENDERINGS) <= set(manifest["languages"]) - {"en"}
+    assert all(v.strip() == v and v for v in AL.ETHICS_TEXT_RENDERINGS.values())
+
+
+def test_accord_runs_keep_the_ethics_row_but_recase_yoruba(tmp_path: Path) -> None:
+    L = _installed(tmp_path, "accord")
+    assert L.gloss.relevant("yo", ["Ethics."]) == {"Ethics": "ìwà rere"}
+    assert "ethics text" not in L.gloss.relevant("yo", ETHICS_PROBE), "the name row is for the ethics text only"
+    assert L.gloss.relevant("am", ["Ethics."]) == {"Ethics": "ህሊና"}, "only yo is re-cased"
+
+
+# ── principle names: the shipped 1.2b corpus is the authority (ruling 2026-10-14) ──
+
+GLOSSARY_LANGS = sorted(
+    p.name.split("_")[0]
+    for p in (Path(AL.__file__).resolve().parent / "glossaries").glob("*_glossary.md")
+    if not p.name.startswith("TEMPLATE")
+)
+
+
+@pytest.fixture
+def ethics_glossary(tmp_path: Path) -> Any:
+    """(vendored terms(), the terms() a constitution_ethics run sends)."""
+    stage = AL.Stage("1.3", stage_dir=tmp_path / "stage", stem="constitution_ethics")
+    stage.build()
+    L = AL.import_localize(stage.dir)
+    vendored = L.gloss.terms
+    AL.install(L, stage, {})
+    return vendored, L.gloss.terms
+
+
+def test_no_ethics_row_is_rendered_as_its_own_english(ethics_glossary: Any) -> None:
+    vendored, sent = ethics_glossary
+    assert len(GLOSSARY_LANGS) == 28
+    # precondition: the vendored tables do have such rows, so the check is not vacuous
+    assert vendored("fr")["Wise Authority"] == "Wise Authority"
+    assert vendored("de")["Reasoning"] == "Reasoning"
+    for lang in GLOSSARY_LANGS:
+        rows = sent(lang)
+        assert AL.english_renderings(rows, lang) == [], lang
+        allowed = AL.ENGLISH_RENDERING_KEPT_EVERYWHERE | AL.ENGLISH_RENDERING_KEPT.get(lang, frozenset())
+        for english, rendering in rows.items():
+            if rendering.strip().casefold() == english.strip().casefold():
+                assert english in allowed, (lang, english)
+
+
+def test_the_english_rendering_check_fails_on_an_injected_row() -> None:
+    injected = {"Integrity": "Integrity", "Justice": "Gerechtigkeit", "CIRIS": "CIRIS", "Agent": "Agent"}
+    # the checker sees the leftover English, and only it: CIRIS is a proper name,
+    # de's 1.2b writes "Agent", and "Gerechtigkeit" is a translation
+    assert AL.english_renderings(injected, "de") == ["Integrity"]
+    assert AL.english_renderings(injected, "ha") == ["Agent", "Integrity"]
+    sent = AL.accord_terms(injected, "de", "constitution_ethics")
+    assert "Integrity" not in sent and sent["Justice"] == "Gerechtigkeit" and sent["CIRIS"] == "CIRIS"
+    # an Accord (not ethics-text) run is not filtered: the filter is what removed it
+    assert AL.accord_terms(injected, "de", "accord")["Integrity"] == "Integrity"
+
+
+def test_every_principle_fix_corrects_an_existing_row_to_the_shipped_1_2b_rendering(ethics_glossary: Any) -> None:
+    vendored, sent = ethics_glossary
+    assert AL.CONSTITUTION_ETHICS_GLOSSARY_FIX, "the fix table is not empty"
+    for lang, fixes in AL.CONSTITUTION_ETHICS_GLOSSARY_FIX.items():
+        corpus = (LOCALIZED / f"accord_1.2b_{lang}.txt").read_text(encoding="utf-8").casefold()
+        for english, rendering in fixes.items():
+            assert english in vendored(lang), (lang, english, "a fix corrects a row, it never adds one")
+            assert vendored(lang)[english] != rendering, (lang, english)
+            assert rendering.casefold() in corpus, (lang, english, "never invented: it is the 1.2b corpus's")
+            assert sent(lang)[english] == rendering, (lang, english)
+
+
+def test_unresolvable_rows_are_not_sent_and_version_history_rows_never_are(ethics_glossary: Any) -> None:
+    vendored, sent = ethics_glossary
+    for lang, removed in AL.CONSTITUTION_ETHICS_GLOSSARY_REMOVE.items():
+        for english in removed:
+            assert english in vendored(lang), (lang, english)
+            assert english not in sent(lang), (lang, english)
+    assert vendored("de")["1.0"] == "2026-03-27", "precondition: the version table parses as terms"
+    for lang in GLOSSARY_LANGS:
+        assert not [e for e in sent(lang) if AL.VERSION_ROW.fullmatch(e)], lang
+        assert "ethics check" not in {e.casefold() for e in sent(lang)}, lang
+
+
+def test_accord_runs_keep_the_vendored_principle_rows(tmp_path: Path) -> None:
+    L = _installed(tmp_path, "accord")
+    assert L.gloss.relevant("th", ["2 Integrity"]) == {"Integrity": "ความซื่อสัตย์"}
+    assert L.gloss.relevant("fr", ["Wise Authority"]) == {"Wise Authority": "Wise Authority"}
+
+
+def test_ethics_run_sends_the_corpus_principle_names(ethics_glossary: Any) -> None:
+    _, sent = ethics_glossary
+    assert sent("th")["Integrity"] == "ความซื่อตรง"
+    assert sent("de")["Resilience"] == "Resilienz"
+    assert sent("de")["Non-maleficence"] == "Schadensvermeidung"
+    assert sent("uk")["Integrity"] == "Цілісність"
+    assert sent("fr")["Wise Authority"] == "Autorité Sage"
+
+
+#: The "human advisor" renderings the ruling excludes ("Wise Authority not human advisor").
+HUMAN_ADVISOR = {"de": "Menschlicher Berater", "hi": "मानव सलाहकार", "sw": "Mshauri wa Kibinadamu", "ko": "담당자"}
+
+
+def test_no_ethics_run_renders_wise_authority_as_a_human_advisor(ethics_glossary: Any) -> None:
+    vendored, sent = ethics_glossary
+    # precondition: the vendored glossaries do pin it, so the check is not vacuous
+    assert all(vendored(lang)["Wise Authority"] == ha for lang, ha in HUMAN_ADVISOR.items())
+    banned = {ha.casefold() for ha in HUMAN_ADVISOR.values()} | {"mshauri", "berater", "सलाहकार"}
+    for lang in GLOSSARY_LANGS:
+        row = sent(lang).get("Wise Authority")
+        if row is None:
+            assert lang == "sw", f"{lang}: only sw has no non-human-advisor 1.2b rendering"
+            continue
+        assert not any(b in row.casefold() for b in banned), (lang, row)
+        assert "/" not in row, (lang, row, "one rendering, not a slash pair")
+    assert sent("tr")["Wise Authority"] == "Bilge Otorite"
+    assert sent("de")["Wise Authority"] == "Wise Authority"
+    # the UI glossary is not changed by this: an accord-stem run still sends the vendored row
+    assert AL.accord_terms(vendored("de"), "de", "accord")["Wise Authority"] == "Menschlicher Berater"
+
+
+@pytest.mark.skipif(not REAL_13.is_file(), reason="constitution_ethics_1.3_en.txt lands with #1256")
+def test_no_ethics_request_tells_a_locale_wise_authority_is_a_human_advisor(tmp_path: Path) -> None:
+    stage = AL.Stage("1.3", stage_dir=tmp_path / "stage", stem="constitution_ethics")
+    stage.build()
+    L = AL.import_localize(stage.dir)
+    text = [s.text for s in seg.parse(REAL_13.read_text(encoding="utf-8")).slots]
+    # precondition: the vendored prose does say it, so the check is not vacuous
+    assert "मानव सलाहकार" in L.gloss.block("hi", text)
+    assert "人工顾问" in L.gloss.block("zh", text)
+    AL.install(L, stage, {})
+    for lang in GLOSSARY_LANGS:
+        sent = L.gloss.block(lang, text).casefold()
+        for ha in (*AL.HUMAN_ADVISOR_PROSE, *(h.casefold() for h in HUMAN_ADVISOR.values())):
+            assert ha not in sent, (lang, ha)
+    assert "智慧权威" in L.gloss.block("zh", text), "the corrected row is still sent"
+    # an accord-stem run keeps the vendored prose
+    assert AL.accord_guidance([("Notes", "- like 人工顾问")], "accord") == [("Notes", "- like 人工顾问")]

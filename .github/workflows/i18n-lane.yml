@@ -106,7 +106,7 @@ on:
         default: "400"
         type: string
       mode:
-        description: "fast | batch (batch is 50% cheaper, for backfills)"
+        description: "fast (batch is refused by run_lane.sh: OpenRouter :batch slugs 404 on chat/completions)"
         required: false
         default: "fast"
         type: string
@@ -505,7 +505,7 @@ jobs:
           Run as $SHARD_COUNT parallel locale shard(s); each shard's own locale
           files were collected into this one commit (localization/lane_shards.py).
 
-          Accord files are hash-pinned (ACCORD_EXPECTED_HASHES) and covered by
+          Accord files are hash-pinned (ETHICS_TEXT_EXPECTED_HASHES) and covered by
           the root-signed accord manifest: re-pin and re-sign before merge.
           MSG
           # REBASE BEFORE PUSHING: a lane takes minutes, and a human can land a

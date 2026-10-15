@@ -31,6 +31,17 @@ time; no vendored file is edited. This module:
    would be told, for its own title, "retiring term, do not coin a rendering".
    For accord runs that row is dropped, and the name is pinned to how this
    language's shipped edition renders it (the translation memory) instead.
+   For constitution_ethics runs the pipeline-stage "Ethics" row (the UI label
+   for the conscience step) is dropped too, and one row pins "ethics text"
+   (``ETHICS_TEXT_RENDERINGS``). For those runs the shipped 1.2b corpus is
+   the authority for principle names: rows that contradict it are corrected
+   to its rendering (``CONSTITUTION_ETHICS_GLOSSARY_FIX``) or, with no 1.2b
+   majority, not sent (``CONSTITUTION_ETHICS_GLOSSARY_REMOVE``), and no row
+   whose rendering is its own English is sent unless it is a proper noun or
+   identifier, or the 1.2b corpus keeps it too (``ENGLISH_RENDERING_KEPT``).
+   A term that occurs only inside a longer matched term is not sent
+   (``drop_contained``).
+   The drafting rung is ``ACCORD_DRAFTER``, not the vendored Claude rung 0.
 6. Runs the lanes ONE UNIT AT A TIME, because the pipeline sends a language's
    whole selection in one request and a whole accord does not fit in one reply.
    ``--units`` narrows a run to named units; selection within a unit stays
@@ -65,12 +76,16 @@ Usage (every localize.py flag passes through)::
     python3 localization/accord_localize.py --version 1.3 --segments
     python3 localization/accord_localize.py --version 1.3 --check
     python3 localization/accord_localize.py --version 1.3 --units section0 --lane translate --dry-run
-    python3 localization/accord_localize.py --version 1.3 --units 'v1 v2' --lane translate --mode batch \
+    python3 localization/accord_localize.py --version 1.3 --units 'v1 v2' --lane translate \
         --max-keys 2600
     python3 localization/accord_localize.py --version 1.3 --lane evaluate --keys 'accord.v9.*' --lang yo
     python3 localization/accord_localize.py --version 1.3 --verify
 
 Nothing in this file calls a model. Every call is ``localize.py``'s.
+
+``--mode batch`` is REFUSED (see ``refuse_batch_mode``): on OpenRouter the
+``:batch`` slugs it appends are served only by OpenRouter's async batch
+adapters, and ``/chat/completions`` answers every one of them with HTTP 404.
 """
 
 from __future__ import annotations
@@ -118,6 +133,267 @@ READ_ONLY_FLAGS = ("--check", "--dry-run", "--glossary-report")
 
 #: Glossary rows dropped for accord runs (see the module docstring, point 5).
 ACCORD_GLOSSARY_DROP = ("ACCORD",)
+
+#: Live rows dropped for constitution_ethics runs. "Ethics" is a PIPELINE-STAGE
+#: label in every glossary that has it (Context column "Conscience check" /
+#: "Ethics check": the UI's name for the conscience step), not the word ethics.
+#: Sent with the ethics text it made am render "ethics text" as the
+#: "conscience text" (ህሊና ጽሑፍ) in every model of the 2026-10-14 trial, which the
+#: judge passed, and made yo fail every draft for not writing the stage label.
+#: "Ethics Check" is the same UI stage label spelled out (Context column
+#: "Conscience check" / "Conscience phase" in de/es/pt). The 1.2b corpus never
+#: uses those renderings for the text's "ethics checks" (de "Ethik-Prüfungen",
+#: fr "contrôles éthiques"), and run 38627954361 rejected de and fr drafts for
+#: not writing the label (accord.v1.s07.l04).
+CONSTITUTION_ETHICS_GLOSSARY_DROP = ("ethics", "ethics check")
+
+#: A glossary's "Version History" table is parsed as terms after its header
+#: row: "1.0 -> 2026-03-27", "1.1 -> 2026-05-31". The ethics text says "1.0" and
+#: "1.1", so every locale was sent a release date as the canonical rendering of
+#: a version number. Not terminology; never sent in constitution_ethics runs.
+VERSION_ROW = re.compile(r"\d+(?:\.\d+)+")
+
+#: PRINCIPLE NAMES, corrected to the shipped 1.2b translation for
+#: constitution_ethics runs (Eric's ruling, 2026-10-14: the shipped 1.2b
+#: translation of each principle name is the authority). The glossary rows
+#: below contradicted the corpus the run's anchors come from, so a draft broke
+#: either the glossary or its anchor, and the judge could always cite the other:
+#: run 38627954361 rejected de, th, uk, fa, ta, te and ur lines on these terms
+#: (th: 11 of its 17 rejections cite Integrity or Resilience). Each value is
+#: the corpus's majority rendering, read from accord_1.2b_<lang>.txt aligned by
+#: line key to the English 1.2b; the count is aligned lines carrying it /
+#: aligned lines whose English names the term. Where the corpus is
+#: INCONSISTENT, the majority wins. A test asserts that every key is an
+#: existing glossary row and every value occurs in that locale's 1.2b file.
+#:   de  Non-maleficence  Nicht-Schaden -> Schadensvermeidung   12/12 (v1.s03.l04)
+#:   de  Resilience       Widerstandsfähigkeit -> Resilienz    14/14 (v1.s05.title)
+#:   de  Epistemic Humility  -> epistemische Demut             1/1 (v2.s05.l02)
+#:   fa  Integrity   صداقت -> درستکاری                          12/16 (v1.s04.title)
+#:   fr  Wise Authority  (rendered as its English) -> Autorité Sage   3/3; 13 raw vs 2 English
+#:   hi  Integrity   अखंडता -> सत्यनिष्ठा                        12/17 vs 4 (v1.s04.title)
+#:   hi  Epistemic Humility  ज्ञानपरक विनम्रता -> ज्ञानमीमांसीय विनम्रता  1/1
+#:   id  Resilience  Ketahanan -> Resiliensi                   12/14 (v1.s05.title)
+#:   id  Flourishing Berkembang -> kesejahteraan               10/14 vs 0
+#:   ja  Resilience  回復力 -> レジリエンス                      12/14 vs 2
+#:   ja  Epistemic Humility  認識論的謙遜 -> 認識論的謙虚さ          1/1
+#:   ko  Integrity   무결성 (0 in 1.2b) -> 성실성                 8/17; 통합성 5 (INCONSISTENT, majority)
+#:   mr  Integrity   सचोटी -> सत्यनिष्ठा                          9/17 vs 2
+#:   mr  Coherence   सुसंगतता -> सुसंगती                         11/23 vs 8 (INCONSISTENT, majority)
+#:   mr  Epistemic Humility  ज्ञानविषयक नम्रता -> ज्ञानमीमांसीय नम्रता  1/1
+#:   ru  Coherence   Когерентность -> Согласованность          16/23 vs 7 (INCONSISTENT, majority)
+#:   ta  Resilience  மீள்தன்மை -> மீள்திறன்                     10/14 vs 4 (incl. மீள்-தன்மை)
+#:   te  Coherence   సంఘటన ("incident") -> సమన్వయం             18/22 vs 0
+#:   th  Integrity   ความซื่อสัตย์ -> ความซื่อตรง                 8/17 vs 0 (v1.s04.title)
+#:   th  Resilience  ความยืดหยุ่น -> ความสามารถในการฟื้นตัว        7/14; ความคงทน 4, ความยืดหยุ่น 1 (INCONSISTENT, majority)
+#:   th  Epistemic Humility  ความถ่อมตนทางความรู้ -> ความอ่อนน้อมทางญาณวิทยา  1/1
+#:   tr  Integrity   Dürüstlük/Bütünlük -> Bütünlük            14/17; Dürüstlük 0
+#:   tr  Epistemic Humility  Bilgiye Saygı/Epistemik Alçakgönüllülük -> epistemik alçakgönüllülük  1/1
+#:   uk  Integrity   Доброчесність (0 in 1.2b) -> Цілісність    12/17
+#:   ur  Error       خرابی -> غلطی                              2/2 (v3.s05.l08, rejected in 38627954361)
+#:   ur  Epistemic Humility  علمی عاجزی -> علمی انکساری          1/1
+#:   vi  Flourishing Phát Triển Thịnh Vượng -> hưng thịnh       9/14 vs 2
+#:   vi  Epistemic Humility  Khiêm Tốn Nhận Thức -> khiêm nhường về nhận thức  1/1
+#:   zh  Integrity   正直 -> 诚信                                8/17 vs 3
+#:   zh  Coherence   连贯性 -> 一致性                             10/22 vs 8 (INCONSISTENT, majority)
+#: WISE AUTHORITY (Eric's ruling, 2026-10-14: "Wise Authority not human
+#: advisor"). Counted over the 12 aligned 1.2b lines naming it, plural and
+#: inflected forms with their stem. A "human advisor" rendering (de
+#: Menschliche Berater, hi मानव सलाहकार, sw Mshauri wa Kibinadamu) or ko's
+#: 담당자 ("person in charge") is excluded by the ruling even where 1.2b uses it;
+#: the majority of the REST decides. Where that is the English, the 1.2b corpus
+#: keeps the English, so the row is the English (see ENGLISH_RENDERING_KEPT).
+#:   de  Menschlicher Berater -> Wise Authority   English 5/12; Menschliche Berater 6 (excluded), Weise Autoritäten 1
+#:   hi  मानव सलाहकार -> Wise Authority            English 11/12; मानव सलाहकार 1 (excluded, v9.s06.l04)
+#:   id  Otoritas Bijak (0 in 1.2b) -> Wise Authority   English 12/12
+#:   ko  담당자 -> Wise Authority                   English 3/12 (v5.s04.l04, v6.s07.l01, v9.s06.l04); 담당자 10 (excluded)
+#:   ur  دانش مند اتھارٹی -> Wise Authority         English 8/12 vs دانش مند اتھارٹی(ز) 3, دانش مند حکام 1
+#:   tr  Bilge Otorite/Danışma Otoritesi -> Bilge Otorite   12/12 (Bilge Otorite, -ler, -lere); Danışma 0
+#:   sw  no rendering left: Mshauri/Washauri wa Kibinadamu 12/12 -> CONSTITUTION_ETHICS_GLOSSARY_REMOVE
+#:   fr  is corrected above (Autorité Sage). Every other locale's row already
+#:       matches its 1.2b majority: am ar bn(6 vs English 6, a tie its row is
+#:       one side of) es fa ha it ja mr my pa pt ru ta te th uk vi yo zh.
+CONSTITUTION_ETHICS_GLOSSARY_FIX: Dict[str, Dict[str, str]] = {
+    "de": {
+        "Non-maleficence": "Schadensvermeidung",
+        "Resilience": "Resilienz",
+        "Epistemic Humility": "epistemische Demut",
+        "Wise Authority": "Wise Authority",
+    },
+    "fa": {"Integrity": "درستکاری"},
+    "fr": {"Wise Authority": "Autorité Sage"},
+    "hi": {"Integrity": "सत्यनिष्ठा", "Epistemic Humility": "ज्ञानमीमांसीय विनम्रता", "Wise Authority": "Wise Authority"},
+    "id": {"Resilience": "Resiliensi", "Flourishing": "kesejahteraan", "Wise Authority": "Wise Authority"},
+    "ja": {"Resilience": "レジリエンス", "Epistemic Humility": "認識論的謙虚さ"},
+    "ko": {"Integrity": "성실성", "Wise Authority": "Wise Authority"},
+    "mr": {"Integrity": "सत्यनिष्ठा", "Coherence": "सुसंगती", "Epistemic Humility": "ज्ञानमीमांसीय नम्रता"},
+    "ru": {"Coherence": "Согласованность"},
+    "ta": {"Resilience": "மீள்திறன்"},
+    "te": {"Coherence": "సమన్వయం"},
+    "th": {
+        "Integrity": "ความซื่อตรง",
+        "Resilience": "ความสามารถในการฟื้นตัว",
+        "Epistemic Humility": "ความอ่อนน้อมทางญาณวิทยา",
+    },
+    "tr": {
+        "Integrity": "Bütünlük",
+        "Epistemic Humility": "epistemik alçakgönüllülük",
+        "Wise Authority": "Bilge Otorite",
+    },
+    "uk": {"Integrity": "Цілісність"},
+    "ur": {"Error": "غلطی", "Epistemic Humility": "علمی انکساری", "Wise Authority": "Wise Authority"},
+    "vi": {"Flourishing": "hưng thịnh", "Epistemic Humility": "khiêm nhường về nhận thức"},
+    "zh": {"Integrity": "诚信", "Coherence": "一致性"},
+}
+
+#: Rows not sent in constitution_ethics runs because the 1.2b corpus has no
+#: majority rendering to correct them to (never invented, never left wrong).
+#:   te  Flourishing  వర్ధిల్లు (0 in 1.2b): శ్రేయస్సు 6/13 vs వికాస- 6/13, a tie
+#:   de  Reasoning    "Reasoning" (its English): Denkprozess / Begründung /
+#:       Systemargumentation, 1 each of 3. It is also an English-rendering row.
+#:   sw  Wise Authority  Mshauri wa Kibinadamu ("human advisor"): every one of
+#:       the 12 aligned 1.2b lines uses it, and the ruling excludes it.
+CONSTITUTION_ETHICS_GLOSSARY_REMOVE: Dict[str, Tuple[str, ...]] = {
+    "te": ("Flourishing",),
+    "de": ("Reasoning",),
+    "sw": ("Wise Authority",),
+}
+
+#: Rows whose rendering IS its English, still sent in constitution_ethics runs.
+#: Every other such row is dropped: a glossary row that "translates" a term as
+#: itself canonizes leftover English (the ciris-website lesson), and the judge
+#: generalizes from it (run 38627954361's de judge demanded "Integrity",
+#: "Justice" and "Meta-Goal" stay English, which no de row says).
+#: Global: acronyms, product and proper names, and machine identifiers that
+#: must survive verbatim.
+ENGLISH_RENDERING_KEPT_EVERYWHERE: FrozenSet[str] = frozenset(
+    {
+        "API", "BYOK", "CIRIS", "DMA", "DSASPDMA", "IDMA", "LLM", "OAuth", "Ubuntu",
+        "domain_hint", "operational_reason", "primary_need_category", "rights_basis",
+        "secondary_need_categories",
+    }
+)  # fmt: skip
+#: Per locale: the word is also this language's word, and the 1.2b corpus
+#: writes it that way (aligned lines carrying it / lines naming the term).
+#:   de  Agent 6/6 ("Agent", "Agenten"), Online 1/1, Wise Authority (see the FIX table)
+#:   hi, id, ko, ur  Wise Authority (see the FIX table)
+#:   es  Error 2/2, Local 2/2
+#:   fr  Agent 6/6, Service 2/2
+#:   it  Online 1/1, Wise Authority 3/3 (13 raw "Wise Authority" vs 1 "Autorità Sagge")
+#:   pt  Local 2/2
+#:   tr  Transfer 3/5 ("Transfer", "Transferi"; aktarım 1)
+ENGLISH_RENDERING_KEPT: Dict[str, FrozenSet[str]] = {
+    "de": frozenset({"Agent", "Online", "Wise Authority"}),
+    "hi": frozenset({"Wise Authority"}),
+    "id": frozenset({"Wise Authority"}),
+    "ko": frozenset({"Wise Authority"}),
+    "ur": frozenset({"Wise Authority"}),
+    "es": frozenset({"Error", "Local"}),
+    "fr": frozenset({"Agent", "Service"}),
+    "it": frozenset({"Online", "Wise Authority"}),
+    "pt": frozenset({"Local"}),
+    "tr": frozenset({"Transfer"}),
+}
+
+
+def english_renderings(rows: Dict[str, str], code: str) -> List[str]:
+    """The rows of ``rows`` rendered as their own English that ``code`` may not keep."""
+    kept = ENGLISH_RENDERING_KEPT_EVERYWHERE | ENGLISH_RENDERING_KEPT.get(code, frozenset())
+    return sorted(e for e, t in rows.items() if t.strip().casefold() == e.strip().casefold() and e.strip() not in kept)
+
+
+#: The glossaries' prose ("Cultural Considerations"), sent with EVERY request,
+#: also tells four locales to call the Wise Authority a human advisor:
+#:   hi  'use respectful terminology like "मानव सलाहकार"'
+#:   sw  'use respectful terminology like "mshauri wa kibinadamu"'
+#:   ko  'use respectful terminology (담당자)'
+#:   zh  'like "智慧权威" or "人工顾问"' (人工顾问: a human advisor)
+#: Under the ruling those lines would out-argue the corrected row, so
+#: constitution_ethics runs do not send a prose line that names one of these.
+HUMAN_ADVISOR_PROSE = ("मानव सलाहकार", "mshauri wa kibinadamu", "담당자", "人工顾问")
+
+
+def accord_guidance(sections: List[Tuple[str, str]], stem: str) -> List[Tuple[str, str]]:
+    """The glossary prose an accord run of ``stem`` sends."""
+    if stem != "constitution_ethics":
+        return sections
+    out: List[Tuple[str, str]] = []
+    for title, text in sections:
+        lines = [ln for ln in text.split("\n") if not any(h in ln.casefold() for h in HUMAN_ADVISOR_PROSE)]
+        if "\n".join(lines).strip():
+            out.append((title, "\n".join(lines)))
+    return out
+
+
+#: The document's own name in constitution_ethics runs: one row, "ethics text".
+#: Each rendering is taken from this language's accepted 1.3 output (the
+#: section 0 heading "The Ethics Text Begins" and line s08.l02, both accepted by
+#: the MQM judge in batch 1) or, for the four locales batch 1 withheld it in,
+#: from the 2026-10-14 model trial's accepted drafts and the judge's own
+#: suggestions. Machine-derived, not native-reviewed. A locale with no evidence
+#: has no row; there is none missing today, but the rule stands.
+#:   am  heading "የስነ-ምግባር ጽሑፉ" (accepted) + the judge's fix for the trial's
+#:       "የህሊና ጽሑፍ" (conscience text): "የዚህ ስነ-ምግባር ጽሑፍ"; ስነ-ምግባር 61x in 1.2b
+#:   ha  heading "Rubutun Ɗabi'a" + every trial draft + the judge's suggestion
+#:   my  heading "ကျင့်ဝတ် စာသား" + muse-spark-1.3's accepted s08.l02. The judge
+#:       flip-flopped between စာသား and စာတမ်း across the trial; the heading decides.
+#:   yo  no accepted output (heading and s08.l02 both withheld). "ìwé" is the
+#:       1.2b corpus's word for a document ("ìwé alààyè", a living document);
+#:       two trial drafts wrote "ìwé ìwà rere" and the judge proposed it twice,
+#:       rejecting only the casing of the stage label.
+#:   ko  heading "윤리 문언"; the accepted s08.l02 said "윤리 문서". The heading decides.
+#:   mr  heading "नैतिकतेचा ग्रंथ" (s08.l02 uses its oblique form).
+#:   everything else: heading and s08.l02 agree.
+ETHICS_TEXT_RENDERINGS: Dict[str, str] = {
+    "am": "የስነ-ምግባር ጽሑፍ",
+    "ar": "النص الأخلاقي",
+    "bn": "নৈতিক পাঠ্য",
+    "de": "Ethiktext",
+    "es": "texto ético",
+    "fa": "متن اخلاقی",
+    "fr": "texte éthique",
+    "ha": "rubutun ɗabi'a",
+    "hi": "नैतिकता-पाठ",
+    "id": "teks etika",
+    "it": "testo etico",
+    "ja": "倫理テキスト",
+    "ko": "윤리 문언",
+    "mr": "नैतिकतेचा ग्रंथ",
+    "my": "ကျင့်ဝတ် စာသား",
+    "pa": "ਨੈਤਿਕ ਪਾਠ",
+    "pt": "texto de ética",
+    "ru": "этический текст",
+    "sw": "maandishi ya maadili",
+    "ta": "நெறிமுறை உரை",
+    "te": "నైతిక గ్రంథం",
+    "th": "ข้อความจริยธรรม",
+    "tr": "etik metin",
+    "uk": "етичний текст",
+    "ur": "اخلاقی متن",
+    "vi": "văn bản đạo đức",
+    "yo": "ìwé ìwà rere",
+    "zh": "伦理文本",
+}
+ETHICS_TEXT_TERM = "ethics text"
+
+#: Glossary renderings re-cased for accord runs: {lang: {english: (table, used)}}.
+#: The yo pipeline-stage table is written in UI capitals, and the judge enforced
+#: "ÌWÀ RERE" inside running prose despite the block's own "case is not
+#: normative" line. The 1.2b yo corpus writes it "ìwà rere" (4x, plus one
+#: title-cased heading), which is what lets it sit inside a phrase.
+GLOSSARY_RECASE: Dict[str, Dict[str, Tuple[str, str]]] = {
+    "yo": {"Ethics": ("ÌWÀ RERE", "ìwà rere")},
+}
+
+#: THE DRAFTING RUNG for accord runs on OpenRouter (a local divergence, see
+#: VENDORED.md). Only rung 0 moves; the repair rungs and the judge stay the
+#: vendored ones. Off the Claude family because the work is reviewed by Claude
+#: anyway (ruling, 2026-10-14). In the trial muse-spark-1.3 passed 16 of 18
+#: hard keys, the best of the nine models, at 41% of Sonnet 5's spend.
+#: LOCALIZE_LADDER, when set, still wins.
+ACCORD_DRAFTER = "meta/muse-spark-1.3"
+#: $/MTok (input, output), from OpenRouter's model list on 2026-10-14. Merged
+#: into the vendored PRICE table so the spend report prices the new rung.
+ACCORD_PRICE: Dict[str, Tuple[float, float]] = {ACCORD_DRAFTER: (1.25, 4.25)}
 
 #: The document families this adapter may read and write, by filename stem
 #: (``<stem>_<version>_<lang>.txt``). A CLOSED list: the stem arrives from a
@@ -1025,6 +1301,79 @@ class Context:
     lang: Optional[str] = None  # the language being drafted or repaired
 
 
+def accord_terms(rows: Dict[str, str], code: str, stem: str) -> Dict[str, str]:
+    """The live glossary rows an accord run of ``stem`` sends for ``code``."""
+    out = dict(rows)
+    for english, (table, used) in GLOSSARY_RECASE.get(code, {}).items():
+        if out.get(english) == table:
+            out[english] = used
+    if stem == "constitution_ethics":
+        removed = {e.casefold() for e in CONSTITUTION_ETHICS_GLOSSARY_REMOVE.get(code, ())}
+        out = {
+            e: t
+            for e, t in out.items()
+            if e.strip().lower() not in CONSTITUTION_ETHICS_GLOSSARY_DROP
+            and not VERSION_ROW.fullmatch(e.strip())
+            and e.strip().casefold() not in removed
+        }
+        fixes = {e.casefold(): t for e, t in CONSTITUTION_ETHICS_GLOSSARY_FIX.get(code, {}).items()}
+        out = {e: fixes.get(e.strip().casefold(), t) for e, t in out.items()}
+        leftover = set(english_renderings(out, code))
+        out = {e: t for e, t in out.items() if e not in leftover}
+        if code in ETHICS_TEXT_RENDERINGS:
+            out[ETHICS_TEXT_TERM] = ETHICS_TEXT_RENDERINGS[code]
+    return out
+
+
+def _contains_term(longer: str, short: str) -> bool:
+    """Is ``short`` a whole-word phrase inside ``longer``?"""
+    if len(short) >= len(longer):
+        return False
+    return re.search(rf"\b{re.escape(short.strip().lower())}\b", longer.strip().lower()) is not None
+
+
+def drop_contained(
+    chosen: Sequence[str], texts: Sequence[str], mentions: Callable[[str, List[str]], bool]
+) -> List[str]:
+    """Drop a term that occurs in ``texts`` ONLY inside a longer chosen term.
+
+    Ported from the ciris-website copy of glossary.py (a local patch there).
+    Such a term is not a separate instruction: it is the same words counted
+    twice, and sending both makes the block contradict itself. Vietnamese pinned
+    both "Constitutional Mesh" and "Constitutional"; the one phrase
+    "decentralized constitutional mesh" contains both, so every rendering broke
+    one row and the reviewer could always cite the other. A shorter term is kept
+    when it also occurs on its own, so "Authority" survives beside "Wise
+    Authority" in a text that uses both.
+    """
+    hay = " \n ".join(texts).lower()
+    keep: List[str] = []
+    for short in chosen:
+        longer = [c for c in chosen if c != short and _contains_term(c, short)]
+        if longer:
+            rest = hay
+            for c in sorted(longer, key=len, reverse=True):
+                rest = rest.replace(c.lower(), " ")
+            if not mentions(short, [rest]):
+                continue
+        keep.append(short)
+    return keep
+
+
+def make_relevant(gloss: ModuleType) -> Callable[..., Dict[str, str]]:
+    """The vendored ``relevant`` (longest-first, whole-word) plus ``drop_contained``."""
+
+    def relevant(code: str, texts: List[str], *, limit: int = 60) -> Dict[str, str]:
+        all_terms: Dict[str, str] = gloss.terms(code)
+        if not all_terms:
+            return {}
+        hits = sorted(((len(e), e) for e in all_terms if gloss._mentions(e, texts)), key=lambda p: (-p[0], p[1]))
+        chosen = drop_contained([e for _, e in hits], texts, gloss._mentions)
+        return {e: all_terms[e] for e in chosen[:limit]}
+
+    return relevant
+
+
 def import_localize(stage_dir: Path) -> ModuleType:
     """Import vendored localize.py against the staged accord bundle."""
     os.environ["LOCALIZE_TARGET"] = "accord"
@@ -1055,6 +1404,32 @@ def install(L: ModuleType, stage: Stage, tms: Dict[str, TM]) -> None:
         return {e: t for e, t in rows.items() if e.strip().upper() not in ACCORD_GLOSSARY_DROP}
 
     setattr(L.gloss, "deprecated", deprecated)
+
+    # Live rows: re-cased renderings, and for the ethics text its own name in
+    # place of the pipeline-stage "Ethics" label. The vendored relevant(),
+    # block() and require() all read terms() through the module global.
+    upstream_terms = L.gloss.terms
+
+    def terms(code: str) -> Dict[str, str]:
+        return accord_terms(upstream_terms(code), code, stage.stem)
+
+    setattr(L.gloss, "terms", terms)
+    setattr(L.gloss, "relevant", make_relevant(L.gloss))
+
+    upstream_guidance = L.gloss.guidance
+
+    def guidance(code: str) -> List[Tuple[str, str]]:
+        return accord_guidance(upstream_guidance(code), stage.stem)
+
+    setattr(L.gloss, "guidance", guidance)
+
+    # The drafting rung (VENDORED.md, "Local divergences"). Only when nobody
+    # chose a ladder: LOCALIZE_LADDER wins, and the Anthropic SDK path cannot
+    # reach a non-Anthropic drafter at all.
+    if L.PROVIDER == "openrouter" and not os.environ.get("LOCALIZE_LADDER"):
+        setattr(L, "LADDER", (ACCORD_DRAFTER, *L.LADDER[1:]))
+    for model, price in ACCORD_PRICE.items():
+        L.PRICE.setdefault(model, price)
 
     # Which language a structural check is about: the vendored check does not
     # take one, and the script / untranslated rules need it.
@@ -1152,6 +1527,33 @@ def segments_report(stage: Stage) -> None:
     print(f"  full pass: {n} x {langs} = {n * langs:,} key-values")
 
 
+def refuse_batch_mode(argv: Sequence[str]) -> None:
+    """Refuse ``--mode batch`` before anything is staged or billed.
+
+    The vendored ``call_model`` sends rung 0 as ``<model>:batch`` to OpenRouter's
+    ``/chat/completions``. OpenRouter serves ``:batch`` slugs only through its
+    async batch adapters (``AnthropicBatchAdapter``, ``VertexGeminiBatchAdapter``,
+    ``OpenAIBatchAdapter``) and answers the chat endpoint with HTTP 404 "cannot be
+    used with the chat/completions endpoint". So rung 0 died for every locale of
+    run 38598155352, every key went to a higher rung at full price, and
+    ``Spend.report(batch=True)`` still halved every line: the run reported
+    ~$1.82 for about $3.64 of calls. Until the pipeline submits real batch jobs,
+    the mode is refused rather than allowed to lose a rung and misreport.
+    """
+    for i, arg in enumerate(argv):
+        mode = (
+            arg.split("=", 1)[1]
+            if arg.startswith("--mode=")
+            else (argv[i + 1] if arg == "--mode" and i + 1 < len(argv) else None)
+        )
+        if mode == "batch":
+            raise SystemExit(
+                "[refuse] --mode batch: OpenRouter's :batch slugs are not served on "
+                "/chat/completions (HTTP 404), so rung 0 is lost and the spend report "
+                "halves costs that were billed in full. Use --mode fast."
+            )
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0] if __doc__ else None)
     ap.add_argument("--version", default=os.environ.get("ACCORD_VERSION", DEFAULT_TM_VERSION))
@@ -1179,6 +1581,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--verify", action="store_true", help="offline gate over the staged bundles and files")
     ap.add_argument("--no-reassemble", action="store_true", help="do not write accord files after the run")
     args, rest = ap.parse_known_args(argv)
+    refuse_batch_mode(rest)
 
     # READ-ONLY unless this is a lane run that may write. --check, --dry-run,
     # --glossary-report, --segments and --verify never touch the live bundles

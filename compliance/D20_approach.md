@@ -49,7 +49,7 @@ CIRIS names each layer of that hierarchy explicitly. The goal is Meta-Goal M-1 (
 
 **The four-level hierarchy (Goal → Approach → Method → Progress Measure).**
 - `MISSION.md:24-30` — Meta-Goal M-1 (the Goal layer)
-- `ciris_engine/data/accord_1.2b.txt` — the six Accord principles (the Approach layer: beneficence, non-maleficence, integrity, fidelity, autonomy, justice)
+- `ciris_engine/data/localized/accord_1.2b_en.txt` — the six Accord principles (the Approach layer: beneficence, non-maleficence, integrity, fidelity, autonomy, justice)
 - `ciris_engine/logic/dma/` — the five decision-making algorithms (the Method layer)
 - `ciris_engine/logic/services/graph/telemetry/` — measurement (the Progress-Measure layer — see D21)
 

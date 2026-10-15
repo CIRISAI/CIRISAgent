@@ -217,14 +217,14 @@ def test_translate_lane_reassembles_a_file_the_real_loader_loads(
     # which this synthetic one is not, so the pin is lifted for this read only.
     from ciris_engine.logic.utils import constants
 
-    monkeypatch.delitem(constants.ACCORD_EXPECTED_HASHES, "accord_1.2b_yo.txt")
+    monkeypatch.delitem(constants.ETHICS_TEXT_EXPECTED_HASHES, "accord_1.2b_yo.txt")
     real_files = importlib.resources.files
 
     def files(package: str) -> Any:
         return tree["loc"] if package == "ciris_engine.data.localized" else real_files(package)
 
     monkeypatch.setattr(importlib.resources, "files", files)
-    loaded = constants._load_localized_accord_file("yo")
+    loaded = constants._load_localized_accord_file("yo", "1.2b")
     assert loaded == target.read_text(encoding="utf-8")
 
     en = seg.parse(EN_TEXT)
@@ -258,9 +258,9 @@ def test_english_rebuilt_from_segments_passes_the_pinned_integrity_check(
         "files",
         lambda package: tmp_path if package == "ciris_engine.data.localized" else real_files(package),
     )
-    # _verify_accord_integrity raises on any byte that differs from the pin.
-    assert "accord_1.2b_en.txt" in constants.ACCORD_EXPECTED_HASHES
-    assert constants._load_localized_accord_file("en") == EN_TEXT
+    # _verify_ethics_text_integrity raises on any byte that differs from the pin.
+    assert "accord_1.2b_en.txt" in constants.ETHICS_TEXT_EXPECTED_HASHES
+    assert constants._load_localized_accord_file("en", "1.2b") == EN_TEXT
 
 
 def test_a_rejected_passage_is_withheld_and_no_partial_file_is_written(
@@ -439,3 +439,100 @@ def test_read_only_modes_never_mutate_anything(monkeypatch: pytest.MonkeyPatch, 
     ui.main()
     capsys.readouterr()
     assert _snapshot(LOCALIZED, LOCALIZATION) == before
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# --mode batch (run 38598155352: rung 0 404'd for every locale)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("flags", [["--mode", "batch"], ["--mode=batch"]])
+def test_batch_mode_is_refused_before_anything_is_staged(flags: List[str]) -> None:
+    """OpenRouter serves ``:batch`` slugs only through its async batch API; the
+    chat endpoint answers 404, so rung 0 was lost and the report halved costs
+    that were billed in full."""
+    before = _snapshot(LOCALIZED, LOCALIZATION)
+    with pytest.raises(SystemExit, match="--mode batch"):
+        AL.main(["--version", "1.2b", "--lane", "translate", "--lang", "yo", *flags])
+    assert _snapshot(LOCALIZED, LOCALIZATION) == before
+
+
+def test_fast_mode_is_not_refused() -> None:
+    AL.refuse_batch_mode(["--lane", "translate", "--mode", "fast"])
+    AL.refuse_batch_mode(["--keys", "batch"])  # a value named batch is not the mode
+
+
+@pytest.mark.parametrize("flags", [["--mode", "batch"], ["--mode=batch"]])
+def test_run_lane_refuses_batch_mode_for_both_targets(flags: List[str]) -> None:
+    for target in ("accord", "ui"):
+        env = {**os.environ, "TARGET": target, "LANE": "translate", "ACCORD_VERSION": "1.2b"}
+        env.pop("OPENROUTER_API_KEY", None)
+        proc = subprocess.run(
+            ["bash", str(LOCALIZATION / "run_lane.sh"), *flags],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        assert proc.returncode == 2, (target, proc.stdout, proc.stderr)
+        assert "--mode batch" in proc.stderr
+
+
+def test_no_i18n_workflow_offers_batch_mode() -> None:
+    for wf in sorted((REPO / ".github" / "workflows").glob("i18n-*.yml")):
+        assert "[fast, batch]" not in wf.read_text(encoding="utf-8"), wf.name
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Drafting rung and glossary hooks (VENDORED.md, "Local divergences")
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _fresh(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, **env: str) -> Any:
+    for k, v in env.items():
+        monkeypatch.setenv(k, v)
+    stage = AL.Stage("1.2b", stage_dir=tmp_path / "stage")
+    stage.build()
+    L = AL.import_localize(stage.dir)
+    vendored = L.LADDER
+    AL.install(L, stage, {})
+    return L, vendored
+
+
+def test_the_drafting_rung_is_muse_and_only_rung_0_moves(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    L, vendored = _fresh(tmp_path, monkeypatch, LOCALIZE_PROVIDER="openrouter")
+    assert vendored[0].startswith("anthropic/"), "precondition: the vendored drafter is Claude"
+    assert L.LADDER[0] == AL.ACCORD_DRAFTER == "meta/muse-spark-1.3"
+    assert L.LADDER[1:] == vendored[1:], "the repair rungs are the vendored ones"
+    assert L.PRICE[AL.ACCORD_DRAFTER] == (1.25, 4.25), "the spend report prices the new rung"
+    assert all(m in L.PRICE for m in L.LADDER)
+
+
+def test_an_explicit_ladder_still_wins(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    L, _ = _fresh(tmp_path, monkeypatch, LOCALIZE_PROVIDER="openrouter", LOCALIZE_LADDER="a/x,b/y")
+    assert L.LADDER == ("a/x", "b/y")
+
+
+def test_a_term_seen_only_inside_a_longer_term_is_not_sent() -> None:
+    def mentions(term: str, texts: List[str]) -> bool:
+        return re.search(rf"\b{re.escape(term.lower())}\b", " ".join(texts).lower()) is not None
+
+    only_inside = ["a post-quantum decentralized constitutional mesh"]
+    assert AL.drop_contained(["Constitutional Mesh", "Constitutional"], only_inside, mentions) == [
+        "Constitutional Mesh"
+    ]
+    both = ["Defer to the Wise Authority.", "Authority is earned."]
+    assert AL.drop_contained(["Wise Authority", "Authority"], both, mentions) == ["Wise Authority", "Authority"]
+    assert AL.drop_contained(["Authority"], ["Wise Authority"], mentions) == ["Authority"], "no longer term chosen"
+
+
+def test_relevant_drops_contained_terms_through_the_vendored_glossary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    L, _ = _fresh(tmp_path, monkeypatch)
+    probe = ["The Trust Topology is public."]
+    vendored = L.gloss.terms("yo")
+    assert "Trust Topology" in vendored and "Trust" in vendored, "precondition"
+    sent = L.gloss.relevant("yo", probe)
+    assert "Trust Topology" in sent and "Trust" not in sent
+    assert "Trust" in L.gloss.relevant("yo", probe + ["Trust is earned."])

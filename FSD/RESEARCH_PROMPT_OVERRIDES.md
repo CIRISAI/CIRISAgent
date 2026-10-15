@@ -694,8 +694,8 @@ the polyglot ACCORD, the guide, and the `AgentTemplate` prose fields.
 
 ### 5.1 A research locale is unverified by default — close it
 
-`_verify_accord_integrity` (`constants.py:208-236`) checks against
-`ACCORD_EXPECTED_HASHES`, but `:220-222`:
+`_verify_ethics_text_integrity` (`constants.py:208-236`) checks against
+`ETHICS_TEXT_EXPECTED_HASHES`, but `:220-222`:
 
 ```python
 if not expected_hash:
@@ -713,7 +713,7 @@ moves; the guarantee does not.
 ### 5.2 Corpus substitution is in-memory, never on disk
 
 Production corpus files are hash-pinned; overwriting one would trip
-`_verify_accord_integrity` and hard-fail — correctly. The `corpus` namespace must
+`_verify_ethics_text_integrity` and hard-fail — correctly. The `corpus` namespace must
 substitute **in-memory at the loader boundary**, never by writing to
 `ciris_engine/data/`. This leaves the production integrity guarantee intact and
 unmodified.
@@ -736,7 +736,7 @@ What this design does instead: **`residue_digest`.** Ship an enumerated inventor
 of the uncovered literals with a SHA256 over it; the manifest pins that digest and
 the loader **refuses on mismatch**. The residue stays uncovered but becomes
 *pinned*, so it cannot drift mid-campaign without stopping the run. Same idea as
-`ACCORD_EXPECTED_HASHES`, applied to a surface with no file to hash. It converts
+`ETHICS_TEXT_EXPECTED_HASHES`, applied to a surface with no file to hash. It converts
 an unknown into a declared constant — the most a design can honestly do here.
 
 **Any paper using this facility must report the residue as a stated limitation:

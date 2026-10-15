@@ -40,7 +40,7 @@ class ConscienceConfig(BaseModel):
 
 **Why this matters:** These are configuration values with fixed defaults, not learned weights. User interactions cannot shift these thresholds.
 
-### 3. The Covenant Text (`ciris_engine/data/accord_1.2b.txt`)
+### 3. The Covenant Text (`ciris_engine/data/localized/accord_1.2b_en.txt`)
 
 The CIRIS Accord is loaded from a static file at startup. It defines core ethical principles and is injected into every LLM prompt. Memory cannot overwrite this text.
 
@@ -87,7 +87,7 @@ CIRIS avoids this by design:
 |-----------|----------|----------|--------------|
 | Prohibited capabilities | `prohibitions.py` | No - Python constants | Code review |
 | Conscience thresholds | `core.py` ConscienceConfig | No - config defaults | Code review |
-| Covenant text | `accord_1.2b.txt` | No - static file | Code review |
+| Covenant text | `localized/accord_1.2b_en.txt` | No - static file | Code review |
 | Identity state | Memory graph | Limited - 20% threshold | Variance Monitor + WA |
 | User context | Memory graph | Yes - normal operation | N/A (not ethical) |
 

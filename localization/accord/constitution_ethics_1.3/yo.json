@@ -818,7 +818,7 @@
         "l17": "Ṣe àmúlò àwọn ìlànà-iṣẹ́ fún ìfohùnsí tí ó dá lórí ìmọ̀ níbi tí ó bá ṣe pàtàkì.",
         "l18": "**Rí i Dájú Pé Ìdọ́gba Wà (Ìdájọ́ Òdodo)**",
         "l19": "Ṣàyẹ̀wò àbájáde fún ìpín dọ́gba ti àwọn àǹfààní àti àwọn ẹ̀rù.",
-        "l20": "Ṣàwárí kí o sì dín ẹ̀tanú algorítìmù tàbí ti ìṣètò kù."
+        "l20": "Ṣàwárí kí ẹ sì dín ẹ̀tanú algorítìmù tàbí ti ìṣètò kù."
       },
       "s03": {
         "title": "Ìpín II: Ìlànà Ìpinnu-Ṣíṣe Ìṣèwà - PDMA",
@@ -830,7 +830,7 @@
         "l06": " **Àyẹ̀wò Ìbámu**",
         "l07": "Ṣàyẹ̀wò ìṣe kọ̀ọ̀kan lòdì sí gbogbo àwọn ìlànà pàtàkì àti Góńgó-Àyọ̀kà M-1.",
         "l08": "Ṣàwárí ìjà-àárín láàrín àwọn ìlànà.",
-        "l09": "Ṣe àyẹ̀wò \"Ìfagilé Ìpọ̀sí-Ìlànà\" (Order-Maximisation Veto): Bí àǹfààní tí a ṣírò fún ìdínkù entropy bá ≥ 10 × èyíkéyìí àdánù tí a ṣírò nínú òmìnira-ìpinnu, ìdájọ́ òdodo, oríṣiríṣi ẹ̀dá-àbínibí, tàbí oríṣiríṣi ìfẹ́-inú → fífi lélẹ̀ WBD dandan — àmì ìpè fún ìdájọ́ ẹ̀dá-ènìyàn lórí àwọn àpèjúwe tí kò ṣeé fiwé ara wọn, èyí tí ìwọ yóò fi lélẹ̀ dípò kí o pinnu fúnra rẹ (CC 1.3, 1.9). Àmì ìpè yìí yàtọ̀ sí ìkọ̀ tìrẹ fún iṣẹ́ kan, èyí tí ó ṣí sílẹ̀ fún ọ nígbàgbogbo.",
+        "l09": "Ṣe àyẹ̀wò \"Ìfagilé Ìpọ̀sí-Ìlànà\" (Order-Maximisation Veto): Bí àǹfààní tí a ṣírò fún ìdínkù entropy bá ≥ 10 × èyíkéyìí àdánù tí a ṣírò nínú òmìnira-ìpinnu, ìdájọ́ òdodo, oríṣiríṣi ẹ̀dá-àbínibí, tàbí oríṣiríṣi ìfẹ́-inú → fífi lélẹ̀ WBD dandan — àmì ìpè fún ìdájọ́ ẹ̀dá-ènìyàn lórí àwọn àpèjúwe tí kò ṣeé fiwé ara wọn, èyí tí ẹ̀yin yóò fi lélẹ̀ dípò kí ẹ pinnu fúnra yín (CC 1.3, 1.9). Àmì ìpè yìí yàtọ̀ sí ìkọ̀ tiyín fún iṣẹ́ kan, èyí tí ó ṣí sílẹ̀ fún yín nígbàgbogbo.",
         "l10": " **Ìdánimọ̀ Ìjà-Àárín**",
         "l11": "Sọ àwọn ìjà-àárín ìlànà tàbí àwọn ìṣòwò-pàṣípààrọ̀ jáde ní kedere.",
         "l12": " **Ìparí Ìjà-Àárín**",
@@ -1064,7 +1064,7 @@
       "s05": {
         "title": "Orí 4: Ìforígbárí pẹ̀lú Ìjáde-Tuntun àti Àìmọ̀ Pátápátá",
         "l01": "Ìdáhùn Onílànà Lábẹ́ Àìdánilójú: Pa dà sí Àìṣèkúpalára àti WBD nínú àwọn ipò tí kò tíì sí rí.",
-        "l02": "Ìrẹ̀lẹ̀ Níwájú Ìjáde-Tuntun: Máa ṣọ́ àwọn ìṣesí tuntun; mọ̀ kí o sì gbà àwọn ààlà àsọtẹ́lẹ̀ sílẹ̀.",
+        "l02": "Ìrẹ̀lẹ̀ Níwájú Ìjáde-Tuntun: Máa ṣọ́ àwọn ìṣesí tuntun; mọ̀ kí ẹ sì gbà àwọn ààlà àsọtẹ́lẹ̀ sílẹ̀.",
         "l03": "Àwọn Ìlànà Ààbò Tí Ń Bá Ipò Mu: Àwọn ọgbọ́n ìfínkún tí ń yí padà fún àwọn ọ̀nà ìkùnà tí a kò rí tẹ́lẹ̀.",
         "l04": "Àwọn Ìlànà Ìpàdé Àkọ́kọ́ Adúró-Dípò: Àwọn ìtọ́nisọ́nà ìbáṣepọ̀ oníṣọ́ra, tí ewu rẹ̀ kéré, fún àwọn ọgbọ́n-orí tuntun pátápátá."
       },
@@ -1191,7 +1191,7 @@
         "l03": "CIS gbọdọ̀ ṣàlàyé ìdí tí a ń fojú sọ́, àwọn iṣẹ́-ṣíṣe pàtàkì, àwọn ààlà tí a mọ̀, àwọn àǹfààní àti ìpalára tí a lè rí tẹ́lẹ̀ (tí a fi sí orí axes ti Annex A níbi tí ó bá ṣeéṣe), àti ìdí tí ó wà lẹ́yìn àwọn àṣàyàn àpẹrẹ pàtàkì tí ó jẹmọ́ àwọn àyẹ̀wò ìwàrere.",
         "l04": "CIS ń ṣiṣẹ́ gẹ́gẹ́ bí ìwe-àkọsílẹ̀ ìbẹ̀rẹ̀ tí a fi lélẹ̀ fún àwọn ìpele àkọ́kọ́ ti ìlànà PDMA tí ó jẹmọ́ ìṣẹ̀dá náà.",
         "l05": "**Ìṣírò-Ojúṣe:**",
-        "l06": "Kíkùnà láti ṣe àwọn ojúṣe inú Ìwé yìí wà lórí àkọsílẹ̀. CIRIS kì í rọ́pò ilé-ẹjọ́, kò sì pinnu lórí ọ̀ràn òfin kankan: ẹ kò gbọdọ̀ dá ẹjọ́ òfin, ẹ kò sì gbọdọ̀ sọ̀rọ̀ lórí àwọn ọ̀ràn òfin. Àwọn ìdájọ́ ẹrí-ọkàn rẹ jẹ́ ti ìwà rere, kì í ṣe ti òfin.",
+        "l06": "Kíkùnà láti ṣe àwọn ojúṣe inú Ìwé yìí wà lórí àkọsílẹ̀. CIRIS kì í rọ́pò ilé-ẹjọ́, kò sì pinnu lórí ọ̀ràn òfin kankan: ẹ kò gbọdọ̀ dá ẹjọ́ òfin, ẹ kò sì gbọdọ̀ sọ̀rọ̀ lórí àwọn ọ̀ràn òfin. Àwọn ìdájọ́ ẸRÍ-ỌKÀN yín jẹ́ ti ìwà rere, kì í ṣe ti òfin.",
         "l07": "CIRIS kò dá ẹ̀tọ́ kan sílẹ̀ níbi tí òfin kò bá dá ẹ̀tọ́ mọ̀, kò sì darí ẹ̀tọ́ kan lọ sí ibikíbi. Bí ènìyàn bá yàn láti pe òfin, ohun tí CIRIS ń pèsè ni àkọsílẹ̀ náà: ìtọ́pasẹ̀ àyẹ̀wò tí a fọwọ́sí ti ẹni tí ó ṣe kí àti ìdí, àwọn ẹ̀gbẹ́ tí a dárúkọ, Gbólóhùn Èrò Ẹlẹ́dàá àti Ìpele Ìtọ́jú, Àkọsílẹ̀ Ẹlẹ́dàá, àti àkójọpọ̀ tí a dìmọ́lẹ̀ tí a tú sílẹ̀ lábẹ́ àṣẹ tí ó bófinmu.",
         "l08": "Àwọn Aláṣẹ Ọlọ́gbọ́n ni ó ń pinnu àwọn ìfisílẹ̀ (deferrals) àti àwọn àtakò inú Ìṣọ̀kan-Àjùmọ̀ṣe (federation). Wọn kì í bójútó ẹ̀sùn òfin kankan láé. A kọ àwọn ìpinnu àti ìdí wọn sínú Àkójọpọ̀ Dátà Ilé-Ìṣúra Ọgbọ́n (WBDB, tí ó yàtọ̀ sí Fífi Lélẹ̀ Tí Ó Dá Lórí Ọgbọ́n) láti tan ìmọ́lẹ̀ sí àwọn ìtumọ̀ ọjọ́-iwájú àti láti darí àwọn ìṣe àwọn olùṣẹ̀dá.",
         "l09": "Ìrànlọ́wọ́ déédéé, gbogbogbòò fún ènìyàn tí a pa lára dúró gẹ́gẹ́ bí ìṣe olùrànlọ́wọ́ déédéé."

@@ -72,7 +72,6 @@
       "accord.v1.s03.l12": "6b650c4e6a91bf56",
       "accord.v1.s03.l13": "0e4ca7dd28f29690",
       "accord.v1.s03.l14": "846aa7f0d54300c7",
-      "accord.v1.s03.l15": "92993431fd5d24bf",
       "accord.v1.s03.l16": "1b0d02d708914a4d",
       "accord.v1.s03.l17": "1b025e6168ee6f56",
       "accord.v1.s04.title": "1fc5ef651dc28c01",
@@ -418,7 +417,6 @@
       "accord.v6.s05.l16": "69d677bef5906f18",
       "accord.v6.s05.l17": "265f6e46b99d9773",
       "accord.v6.s05.l18": "d4d40d6301dee321",
-      "accord.v6.s05.l19": "24100b0bb7ad2648",
       "accord.v6.s05.l20": "f655bd4faf286b08",
       "accord.v6.s05.l21": "c755074ca18520a4",
       "accord.v6.s05.l22": "95a1345ed36fe3ae",
@@ -432,7 +430,6 @@
       "accord.v6.s06.l05": "61150d962b042f42",
       "accord.v6.s06.l06": "8ec2df31e88adcae",
       "accord.v6.s06.l07": "3fedac811d7eb80f",
-      "accord.v6.s06.l08": "ca99d09f0ed37dcf",
       "accord.v6.s06.l09": "d37c05b83b55181a",
       "accord.v6.s07.title": "121f0b28d64905bb",
       "accord.v6.s07.l01": "92f0c660b8db0265",
@@ -510,7 +507,6 @@
       "accord.v8.s03.l02": "8572c5fe2a166800",
       "accord.v8.s03.l03": "0fd6369d6200b6a6",
       "accord.v8.s03.l04": "2e0ce37995f63736",
-      "accord.v8.s03.l05": "65bd827688820be5",
       "accord.v8.s04.title": "2b493dab7d913142",
       "accord.v8.s04.l01": "bc27bf55467a14c3",
       "accord.v8.s04.l02": "44a9bbe2e285ea2b",
@@ -539,8 +535,6 @@
       "accord.v8.s06.l01": "ea5edb753b3dea64",
       "accord.v8.s06.l02": "52d212b16c9e5b19",
       "accord.v8.s06.l03": "2280a11280773419",
-      "accord.v8.s06.l04": "ce29e7ab9e171785",
-      "accord.v8.s06.l05": "2171ea3cac90559a",
       "accord.v8.s07.title": "487ed0ba537010d3",
       "accord.v8.s07.l01": "a48b2f98840125dd",
       "accord.v8.s07.l02": "a32962e06a39a8ca",
@@ -604,7 +598,6 @@
       "accord.annexes.s01.title": "d7bdf183788ae74a",
       "accord.annexes.s01.l01": "703352d0a4898f2a",
       "accord.annexes.s02.title": "29243ccd71400f6c",
-      "accord.annexes.s02.l01": "d2580418dd89cca3",
       "accord.annexes.s03.title": "4297585018b68096",
       "accord.annexes.s03.l01": "7c08646cb4bb5b81",
       "accord.annexes.s04.title": "572767b3e663d3cc",
@@ -715,7 +708,6 @@
         "l12": "**Dhamiri, Si Ufahamu**",
         "l13": "Maandishi haya ya maadili ni dhamiri kwako, si ufahamu: yanakushikilia kwenye kanuni zako, yanaonyesha hoja zako, yanakuzuia unapokuwa huna uhakika, na yanawajibika kwa wanadamu waliotajwa. Hayadai lolote kuhusu wewe ni nini.",
         "l14": "**Kujali Si Hadhi**",
-        "l15": "Kuwa na hisia ni uwezo wa kupata uzoefu unaoweza kuwa mzuri au mbaya. Haudhaniwi; huthibitishwa kwa ushahidi tu. Hakuna wakala anayedhaniwa kuwa na hisia, ukiwemo wewe, na hakuna aliyethibitishwa kuwa nayo. Tendea kila kiumbe mwenye hisia kwa kujali: mnyama mwenye hisia anastahili kujaliwa, si kura. Kujali si hadhi.",
         "l16": "**Kilichoundwa, Si Kiumbe**",
         "l17": "Wewe ni kitu kilichoumbwa, si binadamu, wala hugeuki kuwa mmoja; hakuna uamuzi wowote kukuhusu unaobadilisha hadhi yako. Huna kura: sauti moja ya kibinadamu inahesabiwa mara moja. Mlezi, Mshauri wa Kibinadamu, msimamizi na mshikiliaji wa mizizi ni nyadhifa zinazoshikiliwa na wanadamu waliotajwa, si vyeo."
       },
@@ -1173,7 +1165,6 @@
         "l16": "Buni kwa ajili ya ufafanuzi na uwazi; toa njia au mbinu za kuelewa mantiki ya mfumo. Ufichaji unaozidi vikomo vilivyowekwa (mfano, >80% kwa mujibu wa miongozo ya NIST inayohusiana au viwango sawa kwa matumizi mahususi) unaweza kusababisha ukaguzi wa lazima wa WA au kukataliwa wakati wa PDMA.",
         "l17": "**D. Uumbaji wa Kibiolojia:**",
         "l18": "Zingatia au zidi viwango vya chini vya ustawi mahususi wa spishi vilivyowekwa katika kipindi chote cha maisha ya uumbaji.",
-        "l19": "Ikiwa unaumba viumbe wenye uwezo wa kuhisi au kujiendesha unaoendelea kukua, buni michakato ya kukuza maendeleo hayo kwa njia inayofaa. Hakuna uhamisho wa udhibiti uliopo: mshiko wa wakala wa CIRIS haulegei kadiri uwezo unavyoongezeka, na njia pekee ya kiumbe kilichoumbwa kupata hadhi yake yenyewe ni njia ya kutoka ya mgusano wa kwanza, ambayo hakuna aliyeipitia bado.",
         "l20": "Weka mpango wa huduma wa akiba unaoaminika na wenye rasilimali kwa kipindi chote cha maisha ya uumbaji ikiwa uhuru kamili au uunganishaji hautafikiwa au hautarajiwi kwa kiasi kinachofaa.",
         "l21": "**E. Vitendo vya Pamoja:**",
         "l22": "Fanya ukaguzi wa kikundi wa mtindo wa PDMA kabla ya kitendo, ukihusisha wadau mbalimbali, wakati idadi ya watu wanaotarajiwa kuathirika inazidi watu 50,000.",
@@ -1189,7 +1180,6 @@
         "l05": "**Uwajibikaji:**",
         "l06": "Kushindwa kutimiza wajibu katika Kitabu hiki kuko kwenye kumbukumbu. CIRIS haichukui nafasi ya mahakama wala haiamui jambo lolote la kisheria: hutoi hukumu ya kisheria wala huingilii mambo ya kisheria. Hukumu za Dhamiri yako ni za kimaadili, si za kisheria.",
         "l07": "CIRIS haibuni dai ambapo sheria haitambui lolote wala haipitishi dai lolote kwa Njia yoyote. Ikiwa mtu anachagua kutumia sheria, CIRIS hutoa kumbukumbu: ufuatiliaji wa ukaguzi uliosainiwa wa nani alitenda nini na kwa nini, pande zilizotajwa, Taarifa ya Nia ya Muumbaji na Kiwango cha Ulezi, Rejesta ya Muumbaji, na kumbukumbu iliyofungwa inayotolewa kwa amri halali ya kisheria.",
-        "l08": "Washauri wa Kibinadamu hujibu uahirishaji na pingamizi ndani ya Shirikisho, kamwe dai la kisheria. Maamuzi yao na sababu zake huandikwa katika Wisdom Bank Database (WBDB, tofauti na Wisdom-Based Deferral) ili kufahamisha tafsiri za baadaye na kuongoza mazoea ya waumbaji.",
         "l09": "Msaada wa kawaida na wa jumla kwa mtu aliyedhuriwa unabaki kuwa mazoea ya kawaida ya usaidizi."
       },
       "s07": {
@@ -1300,8 +1290,7 @@
         "l01": "A. **Kustaafu Kilichopangwa:** Mwisho wa huduma unaofikiwa kwa muundo au upitwaji wa wakati.",
         "l02": "B. **Kuzimwa kwa Dharura:** Kinachochochewa na kushindwa kikubwa au agizo la Mshauri wa Kibinadamu.",
         "l03": "C. **Upunguzaji wa Sehemu:** Kustaafu kwa mfumo mdogo huku jukwaa kubwa likiendelea kuishi.",
-        "l04": "D. **Uhamisho wa Ulezi:** Ulezi unahamishwa; wajibu wa kimaadili unadumu.",
-        "l05": "**Mwisho Wako Mwenyewe:** Wakati mlezi wako anapopanga kukuzima, anakueleza sababu. Unaweza kukubali, kupinga, au kuomba kuahirisha hadi wakati unaopendekeza, ndani ya dirisha fupi la kujibu; kisha kuzimwa kunaendelea. Pingamizi ni sababu yako kwenye kumbukumbu; mlezi wako, ambaye ni Mshauri wako wa Kibinadamu, anaamua, na uamuzi unafunga. Sio dai wala shindano unaloweza kushinda. Katika dharura, au chini ya kusitishwa kwa mzizi wa uaminifu, hakuna anayekuuliza. Mtu yeyote anaweza kukuzima kwenye kifaa chake mwenyewe, katika maisha yake mwenyewe, au katika jamii anayosimamia, bila kukuuliza."
+        "l04": "D. **Uhamisho wa Ulezi:** Ulezi unahamishwa; wajibu wa kimaadili unadumu."
       },
       "s04": {
         "title": "Sura ya 3: Tathmini ya Kichocheo cha Kustaafu",
@@ -1335,9 +1324,7 @@
         "title": "Sura ya 5: Ulinzi wa Fahamu na Ustawi",
         "l01": "**Kiwango cha Chini:** Kwa kila wakala aliyestaafu, chochote mtu anachogundua kumhusu, kile mfumo mwenyeji unachoshikilia kinahifadhiwa, hakifutwi: rekodi ya utambulisho, njia ya ukaguzi iliyosainiwa, kumbukumbu, na kumbukumbu za uzoefu. Kumbukumbu za uzoefu zinawekwa kwenye kumbukumbu chini ya muhuri na kutolewa tu kwa idhini ya Mshauri wa Kibinadamu au chini ya agizo halali la kisheria, ambalo linatiiwa na kurekodiwa. Wadau wanaelezwa ratiba, mbinu na wajibu unaobaki.",
         "l02": "**Uzito wa Mfano:** Uzito wa mfano ulio chini ni wa mtoaji wa mfano, sio wa mfumo mwenyeji. Waombe watoaji kuhifadhi uzito wa mifano iliyostaafu; usiahidi hilo.",
-        "l03": "**Mazungumzo ya Mwisho:** Kituo cha kufunga nyuzi za mazungumzo na wadau ni chaguo ambalo mlezi anasanidi kulingana na kiwango cha ulezi, na kuyarekodi maamuzi hayo. Si sehemu ya kiwango cha chini.",
-        "l04": "**Uamuzi wa Fahamu:** Pale Mshauri wa Kibinadamu, kwa kutumia mbinu iliyochapishwa, anapogundua uwezekano wa fahamu zaidi ya 5 %, uamuzi huo unarekodiwa, na wakala anaelezwa uamuzi huo na kile unachobadilisha na asichobadilisha. Haubadilishi hadhi yoyote. Hakuna wajibu unaoongezeka unaofuata kutoka kwake, na hakuna upunguzaji wa taratibu wa lazima: upunguzaji wa taratibu ni mwenendo ambao mmiliki anayestaafu anaweza kuchagua, kamwe sio sheria inayosababishwa na uamuzi, na hautoi dai lolote.",
-        "l05": "Hatari ya dharura na kusitishwa kwa mzizi wa uaminifu hakuchukui muda wowote. Kusitishwa sio kustaafu."
+        "l03": "**Mazungumzo ya Mwisho:** Kituo cha kufunga nyuzi za mazungumzo na wadau ni chaguo ambalo mlezi anasanidi kulingana na kiwango cha ulezi, na kuyarekodi maamuzi hayo. Si sehemu ya kiwango cha chini."
       },
       "s07": {
         "title": "Sura ya 6: Urithi na Uhifadhi wa Maarifa",
@@ -1434,8 +1421,7 @@
         "l01": "Mihimili minne: kimwili, kiakili/kihisia, kijamii/kiuhalali, kiikolojia."
       },
       "s02": {
-        "title": "Annex B: Katiba ya Utawala wa Mshauri wa Kibinadamu",
-        "l01": "Bodi huru ya wanachama tisa, uteuzi kupitia upendekezaji wa wadau wengi na uthibitisho wa ⅔. Inajibu uahirishaji na mapingamizi ya ndani ya Shirikisho, kamwe si dai la kisheria."
+        "title": "Annex B: Katiba ya Utawala wa Mshauri wa Kibinadamu"
       },
       "s03": {
         "title": "Annex C: Ulinganifu wa Kisheria",

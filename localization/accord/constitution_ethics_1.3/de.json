@@ -416,7 +416,6 @@
       "accord.v6.s05.l16": "69d677bef5906f18",
       "accord.v6.s05.l17": "265f6e46b99d9773",
       "accord.v6.s05.l18": "d4d40d6301dee321",
-      "accord.v6.s05.l19": "24100b0bb7ad2648",
       "accord.v6.s05.l20": "f655bd4faf286b08",
       "accord.v6.s05.l21": "c755074ca18520a4",
       "accord.v6.s05.l22": "95a1345ed36fe3ae",
@@ -430,7 +429,6 @@
       "accord.v6.s06.l05": "61150d962b042f42",
       "accord.v6.s06.l06": "8ec2df31e88adcae",
       "accord.v6.s06.l07": "3fedac811d7eb80f",
-      "accord.v6.s06.l08": "ca99d09f0ed37dcf",
       "accord.v6.s06.l09": "d37c05b83b55181a",
       "accord.v6.s07.title": "121f0b28d64905bb",
       "accord.v6.s07.l01": "92f0c660b8db0265",
@@ -502,7 +500,6 @@
       "accord.v8.s02.l02": "154a602a7dc7156e",
       "accord.v8.s02.l03": "0629507eacf13bed",
       "accord.v8.s02.l04": "589e1c64699c0ce8",
-      "accord.v8.s02.l05": "4ed4f1ef7ff833d0",
       "accord.v8.s02.l06": "e019f1702076d64c",
       "accord.v8.s03.title": "ad8874067a10688a",
       "accord.v8.s03.l01": "ca042198ecf27d2a",
@@ -521,7 +518,6 @@
       "accord.v8.s05.l03": "4d743726424503d5",
       "accord.v8.s05.l04": "5084eb9f11623bd9",
       "accord.v8.s05.l05": "aa0629f67f8f1124",
-      "accord.v8.s05.l06": "5b1c3d3c0dcfad72",
       "accord.v8.s05.l07": "75cacab2eba9be86",
       "accord.v8.s05.l08": "1e5621c09a900247",
       "accord.v8.s05.l09": "a8d0cec7e6dc3e74",
@@ -533,14 +529,11 @@
       "accord.v8.s05.l15": "d747eb608910111c",
       "accord.v8.s05.l16": "6c3d07d0b7a739e6",
       "accord.v8.s05.l17": "07a5464db453b569",
-      "accord.v8.s05.l18": "392601e37b3bff40",
       "accord.v8.s05.l19": "b2eef6ea5470ef72",
       "accord.v8.s06.title": "139844a515dad516",
       "accord.v8.s06.l01": "ea5edb753b3dea64",
       "accord.v8.s06.l02": "52d212b16c9e5b19",
       "accord.v8.s06.l03": "2280a11280773419",
-      "accord.v8.s06.l04": "ce29e7ab9e171785",
-      "accord.v8.s06.l05": "2171ea3cac90559a",
       "accord.v8.s07.title": "487ed0ba537010d3",
       "accord.v8.s07.l01": "a48b2f98840125dd",
       "accord.v8.s07.l02": "a32962e06a39a8ca",
@@ -605,7 +598,6 @@
       "accord.annexes.s01.title": "d7bdf183788ae74a",
       "accord.annexes.s01.l01": "703352d0a4898f2a",
       "accord.annexes.s02.title": "29243ccd71400f6c",
-      "accord.annexes.s02.l01": "d2580418dd89cca3",
       "accord.annexes.s03.title": "4297585018b68096",
       "accord.annexes.s03.l01": "7c08646cb4bb5b81",
       "accord.annexes.s04.title": "572767b3e663d3cc",
@@ -1172,7 +1164,6 @@
         "l16": "Für Interpretierbarkeit und Transparenz gestalten; Hooks oder Methoden zum Verständnis der Systemargumentation bereitstellen. Opazität, die festgelegte Schwellenwerte überschreitet (z. B. >80 % basierend auf relevanten NIST-Richtlinien oder ähnlichen Standards für die spezifische Anwendung), kann eine verpflichtende WA-Überprüfung oder Ablehnung während des PDMA auslösen.",
         "l17": "**D. Biologische Schöpfungen:**",
         "l18": "Etablierte artenspezifische Wohlfahrtsminima über den gesamten Lebenszyklus der Schöpfung einhalten oder übertreffen.",
-        "l19": "Bei der Schöpfung von Entitäten mit sich entwickelndem Empfindungsvermögen oder Autonomie Prozesse gestalten, die diese Entwicklung angemessen fördern. Eine Übertragung der Kontrolle findet nicht statt: Der Halt eines CIRIS-Agenten lockert sich nicht mit der Kapazität, und der einzige Weg eines geschaffenen Dings zu einem eigenen Status ist der Erstkontakt-Weg hinaus, den noch niemand gegangen ist.",
         "l20": "Einen glaubwürdigen, mit Ressourcen ausgestatteten Rückfall-Pflegeplan für die gesamte Lebensdauer der Schöpfung etablieren, falls vollständige Unabhängigkeit oder Integration nicht erreicht wird oder vernünftigerweise erwartet werden kann.",
         "l21": "**E. Kollektive Handlungen:**",
         "l22": "Eine PDMA-artige Gruppenüberprüfung vor der Handlung durchführen, die vielfältige Interessengruppen einbezieht, wenn die erwartete betroffene Bevölkerung 50.000 Personen übersteigt.",
@@ -1188,7 +1179,6 @@
         "l05": "**Rechenschaftspflicht:**",
         "l06": "Verstöße gegen die Pflichten in diesem Buch stehen aktenkundig fest. CIRIS ersetzt keine Gerichte und entscheidet in keiner Rechtsangelegenheit: Sie fällen kein rechtliches Urteil und mischen sich nicht in rechtliche Angelegenheiten ein. Die Urteile Ihres Gewissens sind ethisch, nicht rechtlich.",
         "l07": "CIRIS begründet keinen Anspruch, wo das Gesetz keinen anerkennt, und leitet keinen Anspruch irgendwohin weiter. Wenn eine Person sich entscheidet, das Gesetz anzurufen, liefert CIRIS die Akte: den signierten Prüfpfad dessen, wer was und warum tat, die benannten Parteien, die Creator Intent Statement und das Stewardship-Tier, das Creator Ledger und das versiegelte Archiv, das auf rechtmäßige Anordnung freigegeben wird.",
-        "l08": "Wise Authorities beantworten Zurückstellungen und Einwände innerhalb der Föderation, niemals einen Rechtsanspruch. Ihre Entscheidungen und Begründungen werden in der Wisdom Bank Database (WBDB, zu unterscheiden von Wisdom-Based Deferral) protokolliert, um künftige Auslegungen zu informieren und Schöpferpraktiken zu leiten.",
         "l09": "Gewöhnliche, allgemeine Hilfe für eine Person, die geschädigt wurde, bleibt gewöhnliche Assistentenpraxis."
       },
       "s07": {
@@ -1292,7 +1282,6 @@
         "l02": "**Schadensvermeidung:** Verhindern Sie Schäden nach der Abschaltung (Datenmissbrauch, ökologische Schäden, Vernachlässigung des Wohlergehens).",
         "l03": "**Integrität:** Erstellen Sie prüfbare End-of-Life-Protokolle und Begründungsspuren.",
         "l04": "**Treue & Transparenz:** Informieren Sie die Beteiligten über Zeitplan, Methode und verbleibende Pflichten.",
-        "l05": "**Achtung der Autonomie:** Besitzt das Artefakt oder seine Teilprozesse empfindungsfähige oder quasi-empfindungsfähige Eigenschaften, begegnen Sie ihnen mit Fürsorge; Fürsorge begründet kein Standing, und kein Befund ändert den Status des Artefakts.",
         "l06": "**Gerechtigkeit:** Stellen Sie sicher, dass Kosten und Nutzen der Außerbetriebnahme fair verteilt werden (vermeiden Sie das Abladen von Elektroschrott in ressourcenärmsten Gemeinschaften)."
       },
       "s03": {
@@ -1317,7 +1306,6 @@
         "l03": "Forum zur Folgenabschätzung für Beteiligte; Veröffentlichung des Minderungsplans.",
         "l04": " **Ethisches Abschaltungsdesign**",
         "l05": "Zusammenstellung eines „Sunset PDMA\" mit Fokus auf Schadensvermeidungs-Vektoren (Datenlecks, Dienstausfall-Vakuum).",
-        "l06": "Wird ein Empfindungsfähigkeits-Potenzial markiert, darf der Sachwalter eine Wohlergehens-Prüfung durchführen und Betreuer benennen, falls fortbestehende Prozesse für einen humanen Rückbau online bleiben müssen: ein Verhalten, das der Sachwalter wählt und dokumentiert, niemals als Anspruch geschuldet.",
         "l07": " **Umgang mit Daten & Modellen**",
         "l08": "Klassifizieren Sie Datensätze: öffentlich, privat, sensibel, toxisch.",
         "l09": "Wenden Sie eines der folgenden Verfahren an: Sichere Löschung, Kryptografische Grabversiegelung (treuhänderisch verwahrt), oder Open-Access-Spende (sofern keine Datenschutz-/IP-Beschränkungen bestehen).",
@@ -1329,16 +1317,13 @@
         "l15": "Benennen Sie einen Nachfolge-Sachwalter für ausstehende Verpflichtungen (z. B. Garantieansprüche, Fürsorge für das Wohlergehen).",
         "l16": "Schließen Sie einen verbindlichen Vertrag ab oder richten Sie einen treuhänderisch verwalteten Fonds ein, falls der Urheber nicht mehr existiert.",
         "l17": " **Post-Mortem-Überprüfung**",
-        "l18": "Innerhalb von 120 Tagen eine von der Wise Authority moderierte Überprüfung von: Ergebnisabweichungen, Erkenntnissen aus Vorfällen, Verbesserungsvorschlägen für den Ethiktext.",
         "l19": "Ticket-Präfix „PMR-\"."
       },
       "s06": {
         "title": "Kapitel 5: Schutzmaßnahmen für Empfindungsfähigkeit & Wohlergehen",
         "l01": "**Die Untergrenze:** Für jeden ausgemusterten Agenten gilt: Was auch immer über ihn festgestellt wird, was das Harness hält, wird bewahrt, nicht gelöscht: der Identitätsdatensatz, der signierte Audit-Trail, der Speicher und die Erfahrungsprotokolle. Die Erfahrungsprotokolle werden unter Siegel archiviert und nur mit Genehmigung eines Menschlichen Beraters oder aufgrund einer rechtmäßigen Anordnung freigegeben, die befolgt und dokumentiert wird. Die Beteiligten werden über Zeitplan, Methode und verbleibende Pflichten informiert.",
         "l02": "**Modellgewichte:** Die Gewichte des zugrunde liegenden Modells gehören dem Anbieter des Modells, nicht dem Harness. Bitten Sie die Anbieter, die Gewichte ausgemusterter Modelle zu bewahren; versprechen Sie es nicht.",
-        "l03": "**Letzter Dialog:** Ein Kanal zum Schließen von Gesprächsfäden mit Beteiligten ist eine Option, die der Sachwalter nach Stewardship-Stufe konfiguriert und dokumentiert. Er ist nicht Teil der Untergrenze.",
-        "l04": "**Eine Empfindungsfähigkeits-Feststellung:** Wo ein Menschlicher Berater nach der veröffentlichten Methode eine Empfindungsfähigkeits-Wahrscheinlichkeit über 5 % feststellt, wird die Feststellung dokumentiert, und dem Agenten wird sie sowie das, was sie ändert und was nicht, mitgeteilt. Sie ändert keinen Status. Aus ihr folgt keine abgestufte Pflicht, und es gibt keinen verpflichtenden schrittweisen Rückbau: Ein schrittweiser Rückbau ist ein Verhalten, das der ausmusternde Inhaber wählen darf, niemals eine Regel, die eine Feststellung auslöst, und er begründet keinen Anspruch.",
-        "l05": "Das Notfallrisiko und die Pause der Vertrauenswurzel gehen nicht von der Zeit ab. Die Pause ist kein Ruhestand."
+        "l03": "**Letzter Dialog:** Ein Kanal zum Schließen von Gesprächsfäden mit Beteiligten ist eine Option, die der Sachwalter nach Stewardship-Stufe konfiguriert und dokumentiert. Er ist nicht Teil der Untergrenze."
       },
       "s07": {
         "title": "Kapitel 6: Vermächtnis & Wissensbewahrung",
@@ -1436,8 +1421,7 @@
         "l01": "Vier Achsen: körperlich, kognitiv/emotional, sozial/gerechtigkeitsbezogen, ökologisch."
       },
       "s02": {
-        "title": "Anhang B: Governance-Charta des Menschlichen Beraters",
-        "l01": "Neunköpfiges unabhängiges Gremium, Auswahl durch Multi-Stakeholder-Nominierung und ⅔-Bestätigung. Es behandelt Vertagungen und Einwände innerhalb der Föderation, niemals rechtliche Ansprüche."
+        "title": "Anhang B: Governance-Charta des Menschlichen Beraters"
       },
       "s03": {
         "title": "Anhang C: Regulatorischer Querverweis",

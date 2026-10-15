@@ -1,6 +1,99 @@
 {
-  "version": "1.2b",
+  "version": "1.3",
   "files": {
+    "constitution_ethics_1.3_POLYGLOT.txt": {
+      "sha256": "b0796a1850cf23dfe08be4ada23f0d958085209207811dca5b4a387ffaf2c95a"
+    },
+    "constitution_ethics_1.3_POLYGLOT_compressed.txt": {
+      "sha256": "0fdadfaf1c61247ba9ab434dde91373d972bfb3efe86dcbec3898121bce4e66f"
+    },
+    "constitution_ethics_1.3_am.txt": {
+      "sha256": "4e4614b544252027e86775990339dad891d611e6f20d8405e08886ed82aafda7"
+    },
+    "constitution_ethics_1.3_ar.txt": {
+      "sha256": "724dfa0355f5a15599fdaa145318c6573af25bffc9793e3b20c2c679baa558d9"
+    },
+    "constitution_ethics_1.3_bn.txt": {
+      "sha256": "5af4cb6e132764e1467816c73601cb80ad240f1bba284edc285aeda761f3cbd7"
+    },
+    "constitution_ethics_1.3_de.txt": {
+      "sha256": "67fe27414b37d679d8823abb1306612ab6f2c8df715cde423e47cc8461a5201f"
+    },
+    "constitution_ethics_1.3_en.txt": {
+      "sha256": "b43c56f246adbd8e939510899f9657931d995db8caa8a66750221c53cdb0cf15"
+    },
+    "constitution_ethics_1.3_es.txt": {
+      "sha256": "d050759acb77cf8783dd5bd21c7d01a2cf7c67ec7d152c3bd7efefe0301a81cb"
+    },
+    "constitution_ethics_1.3_fa.txt": {
+      "sha256": "0b34b77a0094a443fa34c00b3247c7237e1a6388882650db48947a3ef5361bd2"
+    },
+    "constitution_ethics_1.3_fr.txt": {
+      "sha256": "58cdc345be7293e2007310863fa2bb88e1089beabe2fd85889ff6c990d34f55d"
+    },
+    "constitution_ethics_1.3_ha.txt": {
+      "sha256": "bd9c229cbc1786c3c551aa613dfc85c7a217a26e2af10c92f49a515c60c8ce22"
+    },
+    "constitution_ethics_1.3_hi.txt": {
+      "sha256": "a26f4238d83bc6d2aa8fb43c076551497d6a843a1c4277343729319d6628742d"
+    },
+    "constitution_ethics_1.3_id.txt": {
+      "sha256": "81ee380bc687b83dacd6ab46e8b915dcf1ed335180aea3eb770cc7eedf5954b3"
+    },
+    "constitution_ethics_1.3_it.txt": {
+      "sha256": "320fdab7cec0d0171433674523923d1839eab3bd0cc80874771641eedd27cf34"
+    },
+    "constitution_ethics_1.3_ja.txt": {
+      "sha256": "ab3f224ced1c0358510971ffe3af9e6661a47f7fcf3329d0d28648d076889964"
+    },
+    "constitution_ethics_1.3_ko.txt": {
+      "sha256": "b3b816a78a9757cd810170e9a9c37794306db5e9683b0127f4cafeb45406956f"
+    },
+    "constitution_ethics_1.3_mr.txt": {
+      "sha256": "f0409c4ccf4b855eba76b722f57b2b166a0b9d438523de8f1826110b5ac56234"
+    },
+    "constitution_ethics_1.3_my.txt": {
+      "sha256": "ae347accefd9f3b5d95cee8f29adcc79ada030c2bd4bd1f02f161782e1b26b1b"
+    },
+    "constitution_ethics_1.3_pa.txt": {
+      "sha256": "506961dbb549b2ed97fc9ffab7d3f1f8260032325accf22cdcde0a1ab3c8fac4"
+    },
+    "constitution_ethics_1.3_pt.txt": {
+      "sha256": "c3e330154a93be931d134e0a8e71590f26ea5d70b5f94856d85f4f12139b3eda"
+    },
+    "constitution_ethics_1.3_ru.txt": {
+      "sha256": "c97ed5cf6c297c4de58627848636723b930c151e55e720716e674a6d289b8d2f"
+    },
+    "constitution_ethics_1.3_sw.txt": {
+      "sha256": "40665d99d384e0c7a95c3f00fed819becf8bf2724cabc4bc91c14f45fba87a86"
+    },
+    "constitution_ethics_1.3_ta.txt": {
+      "sha256": "d5fe1a3b7fd10495bb9df9b714d2534459579b1772db039100d20863ffb37355"
+    },
+    "constitution_ethics_1.3_te.txt": {
+      "sha256": "57a4b09cfd0d4ae645033af476cec8059c27ef08f8378b85a52a20b89c1ce4cb"
+    },
+    "constitution_ethics_1.3_th.txt": {
+      "sha256": "9c5874320e9f04e4ad4a314433c4753e2d0873e1c2e697f93cbb675697b0a1a6"
+    },
+    "constitution_ethics_1.3_tr.txt": {
+      "sha256": "d96fd1b57d441bea1914cd072890d6a934fe40adeb67d8b75d1b28760226f4dc"
+    },
+    "constitution_ethics_1.3_uk.txt": {
+      "sha256": "37a481dea5a11de42698a44014783e63c7401779e0356b67a0bee81af5a6c1ed"
+    },
+    "constitution_ethics_1.3_ur.txt": {
+      "sha256": "fe889b40055ee26250abadcefb1207cf0e2e3b9e09648f552059150f58401b8a"
+    },
+    "constitution_ethics_1.3_vi.txt": {
+      "sha256": "e3dc41f65d8e3e4625cb43d79214572f95600bf6078c3d7b89be5f68594194f5"
+    },
+    "constitution_ethics_1.3_yo.txt": {
+      "sha256": "5cc9561e96e87c11158c7d3b9e16aa146ced3d2d813756f42893ffc22dac1b2d"
+    },
+    "constitution_ethics_1.3_zh.txt": {
+      "sha256": "3da2a8b65574c842411066d3d164107b783e5a61cca76fc42f55353bbbf1e42c"
+    },
     "accord_1.2b_POLYGLOT.txt": {
       "sha256": "7d316488dd86846ab9ca114282f9f8746f23488aa87ddd7834edc1e8c1c1c020"
     },
@@ -8,7 +101,7 @@
       "sha256": "0f6f2afd3967d25be2f3992e9da05050893f85507ceefee07040583aba789efd"
     },
     "accord_1.2b_am.txt": {
-      "sha256": "ec14b8eb3c221a5033d16132e5e88363e278951bed00e8672dd1cc72274565c4"
+      "sha256": "54efa38390bfa8e461ea8fd0ed5272c7b9a9d4beebc3479e8980619b40d5cfeb"
     },
     "accord_1.2b_ar.txt": {
       "sha256": "3ea2e649557bbe9cc9fe0eb55ace5d3c09ff90272bd28cdbb65ce84c910c5656"
@@ -23,7 +116,7 @@
       "sha256": "808fe5f21d649dd1ce509de357489ac0b7abad1435402e0970782035b020bb53"
     },
     "accord_1.2b_es.txt": {
-      "sha256": "20693b632924927c9c5c3a19e4c95bf5afb08b17a587f6b81fa5fc284fc40bb4"
+      "sha256": "1a5226575daea2104daac35f4a754258ddfbf2ef72629f374e07025ddd19d23d"
     },
     "accord_1.2b_fa.txt": {
       "sha256": "5eb1526a58cfd52d88c063adb7368eaca445a02d10122fdcaf8c50d99eaef88f"
@@ -53,7 +146,7 @@
       "sha256": "29d64ccaa5578eb548c531af65d1e806e7da1e30451a5dbd596e3f4ffd7e1e91"
     },
     "accord_1.2b_my.txt": {
-      "sha256": "8bfda3f55a9c7a36927257bfc76eef93a1a57500a402f34ee9553972da246d38"
+      "sha256": "ce95b65ec8bc0e0b535531c3d33ad066a13eb8bab7356eec0723ed004e010c37"
     },
     "accord_1.2b_pa.txt": {
       "sha256": "7a521cf12086a22e6ea40a1e93c40e88b9132b3db61d0c1d4a39fae19f496312"
@@ -95,12 +188,12 @@
       "sha256": "1c6f97e1a4ce2dc2d422f4eb396fdc803d75d95a8f15e929b4997c60c7522d92"
     },
     "CIRIS_COMPREHENSIVE_GUIDE.txt": {
-      "sha256": "c07f2419849fb2876d5a31c6c4523c2c7f2e75efe2172f6aa947931ba6fae9cb"
+      "sha256": "25f8f12e056110f12fdd1c9292e0d6c57acb1109b485c5d8d9ddb40755e91c9e"
     },
     "CIRIS_COMPREHENSIVE_GUIDE_MOBILE.txt": {
       "sha256": "1e09c817142e8ee0491815fef1977f5d1f58b73a87d3954be19493f36e01455d"
     }
   },
-  "signed_at": "2026-09-04T01:09:09Z",
+  "signed_at": "2026-10-15T20:08:51Z",
   "signer": "wa-ROOT-00"
 }

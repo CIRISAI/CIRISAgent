@@ -184,18 +184,36 @@ VERSION_ROW = re.compile(r"\d+(?:\.\d+)+")
 #:   vi  Epistemic Humility  Khiêm Tốn Nhận Thức -> khiêm nhường về nhận thức  1/1
 #:   zh  Integrity   正直 -> 诚信                                8/17 vs 3
 #:   zh  Coherence   连贯性 -> 一致性                             10/22 vs 8 (INCONSISTENT, majority)
+#: WISE AUTHORITY (Eric's ruling, 2026-10-14: "Wise Authority not human
+#: advisor"). Counted over the 12 aligned 1.2b lines naming it, plural and
+#: inflected forms with their stem. A "human advisor" rendering (de
+#: Menschliche Berater, hi मानव सलाहकार, sw Mshauri wa Kibinadamu) or ko's
+#: 담당자 ("person in charge") is excluded by the ruling even where 1.2b uses it;
+#: the majority of the REST decides. Where that is the English, the 1.2b corpus
+#: keeps the English, so the row is the English (see ENGLISH_RENDERING_KEPT).
+#:   de  Menschlicher Berater -> Wise Authority   English 5/12; Menschliche Berater 6 (excluded), Weise Autoritäten 1
+#:   hi  मानव सलाहकार -> Wise Authority            English 11/12; मानव सलाहकार 1 (excluded, v9.s06.l04)
+#:   id  Otoritas Bijak (0 in 1.2b) -> Wise Authority   English 12/12
+#:   ko  담당자 -> Wise Authority                   English 3/12 (v5.s04.l04, v6.s07.l01, v9.s06.l04); 담당자 10 (excluded)
+#:   ur  دانش مند اتھارٹی -> Wise Authority         English 8/12 vs دانش مند اتھارٹی(ز) 3, دانش مند حکام 1
+#:   tr  Bilge Otorite/Danışma Otoritesi -> Bilge Otorite   12/12 (Bilge Otorite, -ler, -lere); Danışma 0
+#:   sw  no rendering left: Mshauri/Washauri wa Kibinadamu 12/12 -> CONSTITUTION_ETHICS_GLOSSARY_REMOVE
+#:   fr  is corrected above (Autorité Sage). Every other locale's row already
+#:       matches its 1.2b majority: am ar bn(6 vs English 6, a tie its row is
+#:       one side of) es fa ha it ja mr my pa pt ru ta te th uk vi yo zh.
 CONSTITUTION_ETHICS_GLOSSARY_FIX: Dict[str, Dict[str, str]] = {
     "de": {
         "Non-maleficence": "Schadensvermeidung",
         "Resilience": "Resilienz",
         "Epistemic Humility": "epistemische Demut",
+        "Wise Authority": "Wise Authority",
     },
     "fa": {"Integrity": "درستکاری"},
     "fr": {"Wise Authority": "Autorité Sage"},
-    "hi": {"Integrity": "सत्यनिष्ठा", "Epistemic Humility": "ज्ञानमीमांसीय विनम्रता"},
-    "id": {"Resilience": "Resiliensi", "Flourishing": "kesejahteraan"},
+    "hi": {"Integrity": "सत्यनिष्ठा", "Epistemic Humility": "ज्ञानमीमांसीय विनम्रता", "Wise Authority": "Wise Authority"},
+    "id": {"Resilience": "Resiliensi", "Flourishing": "kesejahteraan", "Wise Authority": "Wise Authority"},
     "ja": {"Resilience": "レジリエンス", "Epistemic Humility": "認識論的謙虚さ"},
-    "ko": {"Integrity": "성실성"},
+    "ko": {"Integrity": "성실성", "Wise Authority": "Wise Authority"},
     "mr": {"Integrity": "सत्यनिष्ठा", "Coherence": "सुसंगती", "Epistemic Humility": "ज्ञानमीमांसीय नम्रता"},
     "ru": {"Coherence": "Согласованность"},
     "ta": {"Resilience": "மீள்திறன்"},
@@ -205,9 +223,13 @@ CONSTITUTION_ETHICS_GLOSSARY_FIX: Dict[str, Dict[str, str]] = {
         "Resilience": "ความสามารถในการฟื้นตัว",
         "Epistemic Humility": "ความอ่อนน้อมทางญาณวิทยา",
     },
-    "tr": {"Integrity": "Bütünlük", "Epistemic Humility": "epistemik alçakgönüllülük"},
+    "tr": {
+        "Integrity": "Bütünlük",
+        "Epistemic Humility": "epistemik alçakgönüllülük",
+        "Wise Authority": "Bilge Otorite",
+    },
     "uk": {"Integrity": "Цілісність"},
-    "ur": {"Error": "غلطی", "Epistemic Humility": "علمی انکساری"},
+    "ur": {"Error": "غلطی", "Epistemic Humility": "علمی انکساری", "Wise Authority": "Wise Authority"},
     "vi": {"Flourishing": "hưng thịnh", "Epistemic Humility": "khiêm nhường về nhận thức"},
     "zh": {"Integrity": "诚信", "Coherence": "一致性"},
 }
@@ -217,9 +239,12 @@ CONSTITUTION_ETHICS_GLOSSARY_FIX: Dict[str, Dict[str, str]] = {
 #:   te  Flourishing  వర్ధిల్లు (0 in 1.2b): శ్రేయస్సు 6/13 vs వికాస- 6/13, a tie
 #:   de  Reasoning    "Reasoning" (its English): Denkprozess / Begründung /
 #:       Systemargumentation, 1 each of 3. It is also an English-rendering row.
+#:   sw  Wise Authority  Mshauri wa Kibinadamu ("human advisor"): every one of
+#:       the 12 aligned 1.2b lines uses it, and the ruling excludes it.
 CONSTITUTION_ETHICS_GLOSSARY_REMOVE: Dict[str, Tuple[str, ...]] = {
     "te": ("Flourishing",),
     "de": ("Reasoning",),
+    "sw": ("Wise Authority",),
 }
 
 #: Rows whose rendering IS its English, still sent in constitution_ethics runs.
@@ -238,14 +263,19 @@ ENGLISH_RENDERING_KEPT_EVERYWHERE: FrozenSet[str] = frozenset(
 )  # fmt: skip
 #: Per locale: the word is also this language's word, and the 1.2b corpus
 #: writes it that way (aligned lines carrying it / lines naming the term).
-#:   de  Agent 6/6 ("Agent", "Agenten"), Online 1/1
+#:   de  Agent 6/6 ("Agent", "Agenten"), Online 1/1, Wise Authority (see the FIX table)
+#:   hi, id, ko, ur  Wise Authority (see the FIX table)
 #:   es  Error 2/2, Local 2/2
 #:   fr  Agent 6/6, Service 2/2
 #:   it  Online 1/1, Wise Authority 3/3 (13 raw "Wise Authority" vs 1 "Autorità Sagge")
 #:   pt  Local 2/2
 #:   tr  Transfer 3/5 ("Transfer", "Transferi"; aktarım 1)
 ENGLISH_RENDERING_KEPT: Dict[str, FrozenSet[str]] = {
-    "de": frozenset({"Agent", "Online"}),
+    "de": frozenset({"Agent", "Online", "Wise Authority"}),
+    "hi": frozenset({"Wise Authority"}),
+    "id": frozenset({"Wise Authority"}),
+    "ko": frozenset({"Wise Authority"}),
+    "ur": frozenset({"Wise Authority"}),
     "es": frozenset({"Error", "Local"}),
     "fr": frozenset({"Agent", "Service"}),
     "it": frozenset({"Online", "Wise Authority"}),
@@ -258,6 +288,29 @@ def english_renderings(rows: Dict[str, str], code: str) -> List[str]:
     """The rows of ``rows`` rendered as their own English that ``code`` may not keep."""
     kept = ENGLISH_RENDERING_KEPT_EVERYWHERE | ENGLISH_RENDERING_KEPT.get(code, frozenset())
     return sorted(e for e, t in rows.items() if t.strip().casefold() == e.strip().casefold() and e.strip() not in kept)
+
+
+#: The glossaries' prose ("Cultural Considerations"), sent with EVERY request,
+#: also tells four locales to call the Wise Authority a human advisor:
+#:   hi  'use respectful terminology like "मानव सलाहकार"'
+#:   sw  'use respectful terminology like "mshauri wa kibinadamu"'
+#:   ko  'use respectful terminology (담당자)'
+#:   zh  'like "智慧权威" or "人工顾问"' (人工顾问: a human advisor)
+#: Under the ruling those lines would out-argue the corrected row, so
+#: constitution_ethics runs do not send a prose line that names one of these.
+HUMAN_ADVISOR_PROSE = ("मानव सलाहकार", "mshauri wa kibinadamu", "담당자", "人工顾问")
+
+
+def accord_guidance(sections: List[Tuple[str, str]], stem: str) -> List[Tuple[str, str]]:
+    """The glossary prose an accord run of ``stem`` sends."""
+    if stem != "constitution_ethics":
+        return sections
+    out: List[Tuple[str, str]] = []
+    for title, text in sections:
+        lines = [ln for ln in text.split("\n") if not any(h in ln.casefold() for h in HUMAN_ADVISOR_PROSE)]
+        if "\n".join(lines).strip():
+            out.append((title, "\n".join(lines)))
+    return out
 
 
 #: The document's own name in constitution_ethics runs: one row, "ethics text".
@@ -959,6 +1012,13 @@ def install(L: ModuleType, stage: Stage, tms: Dict[str, TM]) -> None:
 
     setattr(L.gloss, "terms", terms)
     setattr(L.gloss, "relevant", make_relevant(L.gloss))
+
+    upstream_guidance = L.gloss.guidance
+
+    def guidance(code: str) -> List[Tuple[str, str]]:
+        return accord_guidance(upstream_guidance(code), stage.stem)
+
+    setattr(L.gloss, "guidance", guidance)
 
     # The drafting rung (VENDORED.md, "Local divergences"). Only when nobody
     # chose a ladder: LOCALIZE_LADDER wins, and the Anthropic SDK path cannot

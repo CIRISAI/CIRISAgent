@@ -335,3 +335,44 @@ def test_ethics_run_sends_the_corpus_principle_names(ethics_glossary: Any) -> No
     assert sent("de")["Non-maleficence"] == "Schadensvermeidung"
     assert sent("uk")["Integrity"] == "Цілісність"
     assert sent("fr")["Wise Authority"] == "Autorité Sage"
+
+
+#: The "human advisor" renderings the ruling excludes ("Wise Authority not human advisor").
+HUMAN_ADVISOR = {"de": "Menschlicher Berater", "hi": "मानव सलाहकार", "sw": "Mshauri wa Kibinadamu", "ko": "담당자"}
+
+
+def test_no_ethics_run_renders_wise_authority_as_a_human_advisor(ethics_glossary: Any) -> None:
+    vendored, sent = ethics_glossary
+    # precondition: the vendored glossaries do pin it, so the check is not vacuous
+    assert all(vendored(lang)["Wise Authority"] == ha for lang, ha in HUMAN_ADVISOR.items())
+    banned = {ha.casefold() for ha in HUMAN_ADVISOR.values()} | {"mshauri", "berater", "सलाहकार"}
+    for lang in GLOSSARY_LANGS:
+        row = sent(lang).get("Wise Authority")
+        if row is None:
+            assert lang == "sw", f"{lang}: only sw has no non-human-advisor 1.2b rendering"
+            continue
+        assert not any(b in row.casefold() for b in banned), (lang, row)
+        assert "/" not in row, (lang, row, "one rendering, not a slash pair")
+    assert sent("tr")["Wise Authority"] == "Bilge Otorite"
+    assert sent("de")["Wise Authority"] == "Wise Authority"
+    # the UI glossary is not changed by this: an accord-stem run still sends the vendored row
+    assert AL.accord_terms(vendored("de"), "de", "accord")["Wise Authority"] == "Menschlicher Berater"
+
+
+@pytest.mark.skipif(not REAL_13.is_file(), reason="constitution_ethics_1.3_en.txt lands with #1256")
+def test_no_ethics_request_tells_a_locale_wise_authority_is_a_human_advisor(tmp_path: Path) -> None:
+    stage = AL.Stage("1.3", stage_dir=tmp_path / "stage", stem="constitution_ethics")
+    stage.build()
+    L = AL.import_localize(stage.dir)
+    text = [s.text for s in seg.parse(REAL_13.read_text(encoding="utf-8")).slots]
+    # precondition: the vendored prose does say it, so the check is not vacuous
+    assert "मानव सलाहकार" in L.gloss.block("hi", text)
+    assert "人工顾问" in L.gloss.block("zh", text)
+    AL.install(L, stage, {})
+    for lang in GLOSSARY_LANGS:
+        sent = L.gloss.block(lang, text).casefold()
+        for ha in (*AL.HUMAN_ADVISOR_PROSE, *(h.casefold() for h in HUMAN_ADVISOR.values())):
+            assert ha not in sent, (lang, ha)
+    assert "智慧权威" in L.gloss.block("zh", text), "the corrected row is still sent"
+    # an accord-stem run keeps the vendored prose
+    assert AL.accord_guidance([("Notes", "- like 人工顾问")], "accord") == [("Notes", "- like 人工顾问")]

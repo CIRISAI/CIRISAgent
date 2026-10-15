@@ -160,6 +160,14 @@ upstream to CIRISClient, then be removed here on the next re-vendor.
       This is the ciris-website lesson: such a row canonizes leftover English.
       fr pinned `Wise Authority` as itself, while its corpus writes
       "Autorité Sage" (13 to 2), so that row is corrected instead.
+    - `Wise Authority` follows Eric's second ruling ("Wise Authority not
+      human advisor", 2026-10-14). Each locale gets its 1.2b majority
+      rendering once the "human advisor" forms (de, hi, sw) and ko's 담당자
+      are left out. That gives English for de, hi, id, ko and ur, which
+      their corpus keeps, and "Bilge Otorite" for tr. sw has no other
+      rendering, so its row is not sent. The prose bullets that tell hi, sw,
+      ko and zh to say "human advisor" are not sent either
+      (`HUMAN_ADVISOR_PROSE`, `accord_guidance`).
     - The `Ethics Check` stage label (`CONSTITUTION_ETHICS_GLOSSARY_DROP`)
       and the Version History rows ("1.0 -> 2026-03-27", `VERSION_ROW`) are
       dropped.

@@ -51,8 +51,9 @@ HALT_STATUS_URL = f"http://127.0.0.1:{NODE_FOLD_PORT}/v1/accord/halt-status"
 #: and the node is not answering; the act waits for the next read.
 HALT_READ_TIMEOUT_SECONDS = 1.0
 
-#: Reads are cached for no longer than the act cadence. Acts are seconds apart,
-#: so one second never lets an act run on a reading older than the act before it.
+#: Holds, sweeps and intake may reuse a reading this old. The act gate and the
+#: bus backstop never do (`fresh=True`): a cached "no halt" would admit an act
+#: for up to this long after the node latched.
 HALT_READ_CACHE_TTL_SECONDS = 1.0
 
 #: How often a held loop re-reads the latch to notice a release or a lapse.
@@ -216,11 +217,15 @@ def _observe(state: AccordHaltState) -> None:
         _episode_start = None
 
 
-async def read_halt_latch() -> AccordHaltState:
-    """THE reader. Cached for at most `HALT_READ_CACHE_TTL_SECONDS`."""
+async def read_halt_latch(*, fresh: bool = False) -> AccordHaltState:
+    """THE reader. Cached for at most `HALT_READ_CACHE_TTL_SECONDS`; `fresh` always asks the node.
+
+    An act is gated on a fresh read: the cache is for loops that poll, not for
+    the decision that lets an act run.
+    """
     global _cached, _cached_at
     cached = _cached
-    if cached is not None and time.monotonic() - _cached_at < HALT_READ_CACHE_TTL_SECONDS:
+    if not fresh and cached is not None and time.monotonic() - _cached_at < HALT_READ_CACHE_TTL_SECONDS:
         return cached
     state = await _read_from_node()
     _observe(state)
@@ -338,7 +343,7 @@ async def refuse_agent_send_under_halt(surface: AgentSendSurface, channel_id: Op
     True means a halt stands and the caller must not send. The refusal has
     already been recorded: a warning, a counter and an audit row.
     """
-    halt = await read_halt_latch()
+    halt = await read_halt_latch(fresh=True)
     if not halt.halted:
         return False
     await _record_refusal(surface.value, halt, channel_id)
@@ -369,7 +374,7 @@ async def bus_backstop(call: BusBackstopCall, channel_id: Optional[str] = None) 
             return None
     if _exempt_scope.get() is not None:
         return None
-    halt = await read_halt_latch()
+    halt = await read_halt_latch(fresh=True)
     if not halt.halted:
         return None
     if act is not None:

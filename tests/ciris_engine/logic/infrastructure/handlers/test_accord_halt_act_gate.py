@@ -251,6 +251,20 @@ async def test_the_gate_reads_the_latch_per_act_not_per_round(latch, handler, au
 
 
 @pytest.mark.asyncio
+async def test_a_cached_no_halt_reading_never_admits_an_act(
+    latch, handler, audit, events, thought_status, monkeypatch
+):
+    """CSD-129: the halt lands inside the cache window of an earlier "no halt" reading."""
+    monkeypatch.setattr(halt_latch, "HALT_READ_CACHE_TTL_SECONDS", 60.0)
+    latch.state = NOT_HALTED
+    assert (await halt_latch.read_halt_latch()).halted is False  # a hold or intake primed the cache
+    latch.state = HALTED  # the node latches 110 ms later
+    response = await _dispatcher(handler, audit).dispatch(_result(HandlerActionType.SPEAK), _thought(), _ctx())
+    handler.handle.assert_not_awaited()
+    assert response.error == f"accord_halt_in_effect:{INVOCATION}"
+
+
+@pytest.mark.asyncio
 async def test_the_gate_sits_after_the_registry_wait(latch, handler, audit, events, thought_status):
     """The latch is read as late as possible: a halt that lands during the wait still stops the act."""
 

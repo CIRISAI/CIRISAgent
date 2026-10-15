@@ -171,8 +171,8 @@ class ActionDispatcher:
 
         # CC 4.2.1.1 ACT GATE — the authoritative check. Read the latch for THIS
         # act, as late as possible: after the registry wait, immediately before
-        # the handler. The round holds are extra; this is the gate.
-        halt = await read_halt_latch()
+        # the handler. The round holds are extra; this is the gate. Never cached.
+        halt = await read_halt_latch(fresh=True)
         if halt.halted and exempt_act_for(action_type) is None:
             return await self._refuse_under_accord_halt(
                 halt,

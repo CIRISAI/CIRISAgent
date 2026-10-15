@@ -82,6 +82,8 @@ class AccordHaltTests:
     #: The runner gives this module its own CIRIS_HOME (see server.py); the
     #: latch is written there and nowhere else.
     SERVER_ENV: Dict[str, str] = {}
+    #: The refusal's ACTION_RESULT is checked in the sealed trace (local tee).
+    CAPTURES_TRACES = True
 
     def __init__(self, client: Any, console: Console):
         self.client = client
@@ -147,6 +149,10 @@ class AccordHaltTests:
         return text.count(f"refused:accord_halt_in_effect:{INVOCATION_ID}")
 
     async def run(self) -> List[Dict[str, Any]]:
+        from .accord_halt_handoff import HANDOFF_DIR_ENV
+
+        if os.environ.get(HANDOFF_DIR_ENV):
+            return await self._run_handoff(Path(os.environ[HANDOFF_DIR_ENV]))
         self.console.print("\n[cyan] Constitutional halt (CC 4.2.1.1), direct-latch mode[/cyan]")
 
         version = installed_server_version()
@@ -166,6 +172,25 @@ class AccordHaltTests:
             finally:
                 if self._latch is not None and self._latch.exists():
                     self._latch.unlink()
+        return self.results
+
+    async def _run_handoff(self, handoff_dir: Path) -> List[Dict[str, Any]]:
+        """CSD-129: meet CIRISServer's native harness through its handoff files (#769)."""
+        from .accord_halt_handoff import TEE_DIR_ENV, HandoffRun, test_anchor_compiled
+
+        self.console.print(f"\n[cyan] Constitutional halt (CC 4.2.1.1), CSD-129 handoff mode: {handoff_dir}[/cyan]")
+        if not test_anchor_compiled():
+            self._record(
+                "ciris-server built with test-anchor",
+                False,
+                "the installed ciris_server has no test-anchor paths, so its node cannot honour the harness's "
+                "CIRIS_TEST_* env; install a `--features test-anchor` wheel",
+            )
+            return self.results
+        tee_dir = Path(os.environ.get(TEE_DIR_ENV, ""))
+        async with httpx.AsyncClient(timeout=60.0) as http:
+            run = HandoffRun(self._base_url, self._token, handoff_dir, tee_dir, self.console)
+            self.results.extend(await run.run(http))
         return self.results
 
     async def _run(self, http: httpx.AsyncClient) -> None:

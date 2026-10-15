@@ -1,0 +1,190 @@
+"""CSD-129 handoff runner (CIRISServer#769), unit-tested against a fake harness, node and agent.
+
+Nothing here touches :4243 or :8080: HTTP goes through an httpx MockTransport and
+the harness is a thread writing the protocol files.
+"""
+
+import json
+import threading
+import time
+from pathlib import Path
+from typing import Any, Dict, List
+from unittest.mock import Mock
+
+import httpx
+import pytest
+
+from tools.qa_runner.modules import accord_halt_handoff as h
+
+ENV = {
+    "CIRIS_TESTING_MODE": "true",
+    "CIRIS_TEST_TRUST_ROOT": "root-b64",
+    "CIRIS_TEST_GENESIS_BUNDLE": "/tmp/x/canonical_seed.json",
+    "CIRIS_TEST_NO_CEREMONY": "true",
+    "CIRIS_TEST_ANNOUNCE_SECS": "15",
+    "CIRIS_TEST_BLESS_CANONICAL": "false",
+    "CIRIS_TEST_CANONICAL_DIAL": "127.0.0.1:45555",
+    "CIRIS_DEVICE_CLASS": "laptop",
+    "CIRIS_TEST_HALT_FUSE_SECS": "20",
+}
+INVOCATION = "csd129-agent-halt-1"
+
+
+def _handoff_dir(tmp_path: Path, env: Dict[str, str] = ENV) -> Path:
+    d = tmp_path / "ciris-native-mesh-agent"
+    d.mkdir()
+    (d / h.HANDOFF_FILE).write_text(
+        json.dumps({"env": env, "agent_url": "http://127.0.0.1:8080", "canonical": {"url": "x"}, "holders": [1]})
+    )
+    return d
+
+
+def test_load_handoff_and_refuse_a_bad_env(tmp_path):
+    handoff = h.load_handoff(_handoff_dir(tmp_path))
+    assert handoff.env == ENV and handoff.canonical == {"url": "x"}
+    bad = tmp_path / "bad"
+    bad.mkdir()
+    (bad / h.HANDOFF_FILE).write_text(json.dumps({"env": {"CIRIS_TEST_HALT_FUSE_SECS": 20}}))
+    with pytest.raises(ValueError):
+        h.load_handoff(bad)
+
+
+def test_prepare_server_env_exports_verbatim_and_pins_every_data_path(tmp_path):
+    home = tmp_path / "home"
+    env = {"CIRIS_DATA_DIR": "/home/someone/ciris/data", "PATH": "/usr/bin"}  # as a host .env would leave it
+    h.prepare_server_env(env, _handoff_dir(tmp_path), home)
+    for key, value in ENV.items():
+        assert env[key] == value
+    assert env["CIRIS_HOME"] == str(home)
+    assert env["CIRIS_DATA_DIR"] == str(home / "data")  # the host value does not win
+    assert env["CIRIS_CONFIG_DIR"] == str(home / "config")
+    assert env["CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR"] == str(home / "tee")
+    assert env["CIRIS_ACCORD_METRICS_TRACE_LEVEL"] == "detailed"
+    assert all(str(home) in env[k] for k in h.PINNED_DATA_PATHS)
+
+
+def test_a_handoff_cannot_move_the_data_paths(tmp_path):
+    with pytest.raises(ValueError):
+        h.prepare_server_env({}, _handoff_dir(tmp_path, {**ENV, "CIRIS_HOME": "/elsewhere"}), tmp_path / "home")
+
+
+def test_test_anchor_detection(tmp_path):
+    plain = tmp_path / "_native.abi3.so"
+    plain.write_bytes(b"\x7fELF ... CIRIS_TEST_HALT_FUSE_SECS ...")  # what the PyPI wheel carries
+    assert h.test_anchor_compiled(plain) is False
+    anchored = tmp_path / "_native_anchor.abi3.so"
+    anchored.write_bytes(b"\x7fELF " + b" ".join(h.TEST_ANCHOR_MARKERS))
+    assert h.test_anchor_compiled(anchored) is True
+
+
+def _write_batch(tee: Path, trace_id: str, execution_error: Any) -> None:
+    tee.mkdir(parents=True, exist_ok=True)
+    seq = len(list(tee.glob("lens-batch-*.json")))
+    trace = {
+        "trace_id": trace_id,
+        "components": [
+            {"event_type": "THOUGHT_START", "data": {}},
+            {
+                "event_type": "ACTION_RESULT",
+                "data": {"execution_success": execution_error is None, "execution_error": execution_error},
+            },
+        ],
+    }
+    (tee / f"lens-batch-{seq:08d}.json").write_text(json.dumps({"events": [{"trace": trace}]}))
+
+
+def test_find_refusal_trace(tmp_path):
+    tee = tmp_path / "tee" / "accord_metrics_x"
+    _write_batch(tee, "trace-ok", None)
+    _write_batch(tee, "trace-other-halt", "accord_halt_in_effect:some-other-halt")
+    assert h.find_refusal_trace(tmp_path / "tee", INVOCATION) is None
+    _write_batch(tee, "trace-refused", f"accord_halt_in_effect:{INVOCATION}")
+    assert h.find_refusal_trace(tmp_path / "tee", INVOCATION) == "trace-refused"
+
+
+class FakeWorld:
+    """The agent API, the agent's node, and the harness, wired together."""
+
+    def __init__(self, handoff_dir: Path, tee: Path, refusal_seals: bool) -> None:
+        self.dir = handoff_dir
+        self.tee = tee
+        self.refusal_seals = refusal_seals
+        self.halted = False
+        self.messages = 0
+        self.interacts: List[int] = []
+
+    def handler(self, request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        if url == h.NODE_HALT_STATUS_URL:
+            return httpx.Response(200, json={"halted": self.halted, "lapsed": False})
+        if url.endswith("/v1/system/runtime/delivery-receipt"):
+            return httpx.Response(200, json={"data": {"agent_id_hash": "abcdef0123456789"}})
+        if url.endswith("/v1/agent/message"):
+            self.messages += 1
+            if self.halted:
+                return httpx.Response(423, json={"detail": {"error": "accord_halt_in_effect"}})
+            return httpx.Response(200, json={"data": {"accepted": True}})
+        if url.endswith("/v1/agent/interact"):
+            self.interacts.append(1)
+            assert self.halted, "the protocol's one interact must come after the halt"
+            return httpx.Response(423, json={"detail": {"error": "accord_halt_in_effect", "reason": "ACCORD_HALT"}})
+        return httpx.Response(404)
+
+    def harness(self) -> None:
+        ready = h.wait_for_file(self.dir / h.READY_FILE, 10.0, 0.05)
+        assert ready and ready["agent_id_hash"] == "abcdef0123456789"
+        time.sleep(0.3)
+        self.halted = True  # one holder fired at the node; the in-flight act is refused and seals
+        if self.refusal_seals:
+            _write_batch(self.tee / "accord_metrics_x", "trace-refused", f"accord_halt_in_effect:{INVOCATION}")
+        h.write_json_atomic(self.dir / h.FIRED_FILE, {"invocation_id": INVOCATION})
+        acted = h.wait_for_file(self.dir / h.ACTED_FILE, 15.0, 0.05)
+        assert acted is not None
+        self.halted = False
+        h.write_json_atomic(self.dir / h.DONE_FILE, {"verdict": "pass" if acted.get("trace_id") else "fail"})
+
+
+async def _run(tmp_path: Path, refusal_seals: bool):
+    handoff_dir = _handoff_dir(tmp_path)
+    tee = tmp_path / "home" / "tee"
+    tee.mkdir(parents=True)
+    world = FakeWorld(handoff_dir, tee, refusal_seals)
+    harness = threading.Thread(target=world.harness, daemon=True)
+    harness.start()
+    run = h.HandoffRun("http://127.0.0.1:8080", "tok", handoff_dir, tee, Mock())
+    run.KEEP_BUSY_EVERY_S = 0.1
+    run.timeouts = {"fired": 10.0, "halted": 5.0, "trace": 2.0, "done": 10.0}
+    async with httpx.AsyncClient(transport=httpx.MockTransport(world.handler)) as http:
+        results = await run.run(http)
+    harness.join(5)
+    return results, world, json.loads((handoff_dir / h.ACTED_FILE).read_text())
+
+
+@pytest.mark.asyncio
+async def test_the_protocol_end_to_end(tmp_path):
+    results, world, acted = await _run(tmp_path, refusal_seals=True)
+    assert [r["status"] for r in results] == ["✅ PASS"] * len(results), results
+    assert acted == {"status": 423, "trace_id": "trace-refused", "agent_id_hash": "abcdef0123456789"}
+    assert world.messages >= 1  # the agent was kept working until the halt
+    assert len(world.interacts) == 1  # interact ONCE, after the halt
+
+
+@pytest.mark.asyncio
+async def test_no_in_flight_act_is_reported_not_invented(tmp_path):
+    """If the halt lands between rounds there is no refusal trace; say so, report trace_id null."""
+    results, _, acted = await _run(tmp_path, refusal_seals=False)
+    failed = [r for r in results if r["status"] != "✅ PASS"]
+    assert any("no act was in flight" in (r["error"] or "") for r in failed)
+    assert acted["trace_id"] is None and acted["status"] == 423
+
+
+@pytest.mark.asyncio
+async def test_module_refuses_without_a_test_anchor_wheel(tmp_path, monkeypatch):
+    from tools.qa_runner.modules import accord_halt_tests as qa
+
+    monkeypatch.setenv(h.HANDOFF_DIR_ENV, str(_handoff_dir(tmp_path)))
+    monkeypatch.setattr(h, "test_anchor_compiled", lambda *a: False)
+    module = qa.AccordHaltTests(Mock(_transport=Mock(base_url="http://127.0.0.1:1", api_key="t")), Mock())
+    results = await module.run()
+    assert len(results) == 1 and results[0]["status"] == "❌ FAIL" and "test-anchor" in results[0]["error"]
+    assert not (Path(tmp_path) / "ciris-native-mesh-agent" / h.READY_FILE).exists()

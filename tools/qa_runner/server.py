@@ -1054,6 +1054,25 @@ class APIServerManager:
             env["CIRIS_HOME"] = throwaway
             self.console.print(f"[dim]accord_halt: throwaway CIRIS_HOME={throwaway}[/dim]")
 
+            # CSD-129 handoff mode (CIRISServer#769): the native harness's env
+            # block goes in verbatim, every data path stays in the throwaway home.
+            from .modules.accord_halt_handoff import HANDOFF_DIR_ENV, HANDOFF_FILE, TEE_DIR_ENV
+            from .modules.accord_halt_handoff import prepare_server_env as _halt_handoff_env
+            from .modules.accord_halt_handoff import wait_for_file as _wait_for_handoff
+
+            handoff_dir = os.environ.get(HANDOFF_DIR_ENV)
+            if handoff_dir:
+                if self.config.mock_llm:
+                    raise SystemExit(
+                        "accord_halt handoff mode needs a real LLM (--live ...): mock traces never leave the "
+                        "node, so the harness could never see the refusal reach its canonical"
+                    )
+                if _wait_for_handoff(Path(handoff_dir) / HANDOFF_FILE, timeout_s=300.0) is None:
+                    raise SystemExit(f"accord_halt handoff: no {HANDOFF_FILE} in {handoff_dir} within 300 s")
+                _halt_handoff_env(env, Path(handoff_dir), Path(throwaway))
+                os.environ[TEE_DIR_ENV] = env["CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR"]
+                self.console.print(f"[dim]accord_halt: handoff env from {handoff_dir} applied[/dim]")
+
         # Set CIRIS_HOME for verifier_singleton (required for audit hash chain)
         if "CIRIS_HOME" not in env:
             project_root = Path(__file__).parent.parent.parent

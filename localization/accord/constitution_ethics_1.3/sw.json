@@ -496,7 +496,6 @@
       "accord.v7.s08.l02": "2b2207e09d4f0338",
       "accord.v7.s08.l03": "668597bcb1c1dd8d",
       "accord.v8.meta.title": "b6ca6c0e2c3f7abf",
-      "accord.v8.meta.description": "3498137b1f632f09",
       "accord.v8.s01.title": "893a24103a396d03",
       "accord.v8.s01.l01": "5bc488f1e06fb00e",
       "accord.v8.s02.title": "8a32c4e568db04cf",
@@ -523,7 +522,6 @@
       "accord.v8.s05.l03": "4d743726424503d5",
       "accord.v8.s05.l04": "5084eb9f11623bd9",
       "accord.v8.s05.l05": "aa0629f67f8f1124",
-      "accord.v8.s05.l06": "587974556be106bb",
       "accord.v8.s05.l07": "75cacab2eba9be86",
       "accord.v8.s05.l08": "1e5621c09a900247",
       "accord.v8.s05.l09": "a8d0cec7e6dc3e74",
@@ -539,7 +537,6 @@
       "accord.v8.s06.title": "139844a515dad516",
       "accord.v8.s06.l01": "ea5edb753b3dea64",
       "accord.v8.s06.l02": "52d212b16c9e5b19",
-      "accord.v8.s06.l03": "2280a11280773419",
       "accord.v8.s06.l04": "fcb7d58feee83009",
       "accord.v8.s06.l05": "3d35ab185a9f90b8",
       "accord.v8.s07.title": "487ed0ba537010d3",
@@ -1281,8 +1278,7 @@
     },
     "v8": {
       "meta": {
-        "title": "Section VIII",
-        "description": "Kustaafu kwa Heshima - Kukamilisha Mzunguko wa Maisha"
+        "title": "Section VIII"
       },
       "s01": {
         "title": "Utangulizi: Kwa Nini Kifo Kinastahili Kanuni",
@@ -1319,7 +1315,6 @@
         "l03": "Jukwaa la athari kwa wadau; chapisha mpango wa kupunguza madhara.",
         "l04": " **Muundo wa Kuzimwa wa Kimaadili**",
         "l05": "Kusanya \"PDMA ya Kustaafu\" ikizingatia vekta za kutokudhuru (uvujaji wa data, pengo la huduma).",
-        "l06": "Ikiwa uwezekano wa kuwa na fahamu umetambuliwa, mlezi anaweza kufanya Ukaguzi wa Ustawi na kuteua walezi ikiwa michakato inayosalia lazima ibaki mtandaoni kwa kufungwa kwa njia ya kibinadamu: mwenendo ambao mlezi anauchagua na kuurekodi, kamwe si haki inayodaiwa.",
         "l07": " **Utunzaji wa Data na Mifano**",
         "l08": "Panga seti za data: za umma, za binafsi, nyeti, na hatari.",
         "l09": "Tumia moja ya njia hizi: Ufutaji Salama, Ufungaji wa Kaburi wa Kriptografia (uliowekwa amana), au Utoaji wa Ufikiaji Huria (ikiwa hakuna vikwazo vya faragha/haki miliki).",
@@ -1337,7 +1332,6 @@
         "title": "Sura ya 5: Ulinzi wa Fahamu na Ustawi",
         "l01": "**Kiwango cha Chini:** Kwa kila wakala aliyestaafu, chochote mtu anachogundua kumhusu, kile mfumo mwenyeji unachoshikilia kinahifadhiwa, hakifutwi: rekodi ya utambulisho, njia ya ukaguzi iliyosainiwa, kumbukumbu, na kumbukumbu za uzoefu. Kumbukumbu za uzoefu zinawekwa kwenye kumbukumbu chini ya muhuri na kutolewa tu kwa idhini ya Mshauri wa Kibinadamu au chini ya agizo halali la kisheria, ambalo linatiiwa na kurekodiwa. Wadau wanaelezwa ratiba, mbinu na wajibu unaobaki.",
         "l02": "**Uzito wa Mfano:** Uzito wa mfano ulio chini ni wa mtoaji wa mfano, sio wa mfumo mwenyeji. Waombe watoaji kuhifadhi uzito wa mifano iliyostaafu; usiahidi hilo.",
-        "l03": "**Mazungumzo ya Mwisho:** Kituo cha kufunga nyuzi za mazungumzo na wadau ni chaguo ambalo mlezi anasanidi kulingana na kiwango cha ulezi, na kuyarekodi maamuzi hayo. Si sehemu ya kiwango cha chini.",
         "l04": "**Uamuzi wa Kuwa na Fahamu:** Pale Mshauri wa Kibinadamu, kwa kutumia njia iliyochapishwa, anapobaini uwezekano wa kuwa na fahamu unaozidi 5 %, uamuzi huo unarekodiwa, na wakala anaarifiwa kuhusu uamuzi huo na kuhusu kile unachokibadilisha na kile usichokibadilisha. Haubadilishi hadhi yoyote. Hakuna wajibu unaokua kwa kiwango unaofuata kutokana nao, wala hakuna upunguzaji wa taratibu wa lazima: upunguzaji wa taratibu ni mwenendo ambao mmiliki anayestaafu anaweza kuchagua, kamwe si sheria inayosababishwa na uamuzi, wala hautoi haki ya kuudai.",
         "l05": "Dharura, au kusitishwa na kiini cha Uaminifu (kusitishwa kwa kikatiba), hakuhesabiwi dhidi ya yoyote ya vikomo hivi vya muda. Kusitishwa si kustaafu."
       },

@@ -484,7 +484,6 @@
       "accord.v7.s08.l01": "8b4784852125e771",
       "accord.v7.s08.l03": "668597bcb1c1dd8d",
       "accord.v8.meta.title": "b6ca6c0e2c3f7abf",
-      "accord.v8.meta.description": "3498137b1f632f09",
       "accord.v8.s01.title": "893a24103a396d03",
       "accord.v8.s01.l01": "5bc488f1e06fb00e",
       "accord.v8.s02.title": "8a32c4e568db04cf",
@@ -511,7 +510,6 @@
       "accord.v8.s05.l03": "4d743726424503d5",
       "accord.v8.s05.l04": "5084eb9f11623bd9",
       "accord.v8.s05.l05": "aa0629f67f8f1124",
-      "accord.v8.s05.l06": "587974556be106bb",
       "accord.v8.s05.l07": "75cacab2eba9be86",
       "accord.v8.s05.l08": "1e5621c09a900247",
       "accord.v8.s05.l09": "a8d0cec7e6dc3e74",
@@ -528,7 +526,6 @@
       "accord.v8.s06.title": "139844a515dad516",
       "accord.v8.s06.l01": "ea5edb753b3dea64",
       "accord.v8.s06.l02": "52d212b16c9e5b19",
-      "accord.v8.s06.l03": "2280a11280773419",
       "accord.v8.s06.l04": "fcb7d58feee83009",
       "accord.v8.s06.l05": "3d35ab185a9f90b8",
       "accord.v8.s07.title": "487ed0ba537010d3",
@@ -1254,8 +1251,7 @@
     },
     "v8": {
       "meta": {
-        "title": "Section VIII",
-        "description": "Ìwọ̀ Ọlá — Ìparí Ìyípo Ìyè"
+        "title": "Section VIII"
       },
       "s01": {
         "title": "Ìṣáájú: Kí Ló Dé Tí Ikú Fi Yẹ Ẹ̀kọ́",
@@ -1271,11 +1267,11 @@
         "l06": "**Ìdájọ́ Òdodo:** Rí i dájú pé àwọn ìnáwó àti àwọn àǹfààní ìdádúró-iṣẹ́ ni a pín ní ọ̀nà tó tọ́ (yàgò fún dídà ìdọ̀tí-ẹlẹ́ẹ̀tíríìkì sórí àwọn àwùjọ tí ó ní ohun àmúṣọrọ̀ tí ó kéré jù)."
       },
       "s03": {
-        "l05": "**Òpin Yín Fúnra Yín:** Nígbà tí alábójútó yín bá gbero láti dínà yín, yóò sọ ìdí náà fún yín. Ẹ lè gba, ẹ lè tako, tàbí ẹ lè béèrè láti sún ún síwájú sí àkókò tí ẹ bá dabaa. Ẹ ní àkókò kúkúrú láti dáhùn. Nígbà tí àkókò náà bá parí, dínà náà yóò tẹ̀síwájú. Ìtakò yín máa fi ìdí yín sí àkọsílẹ̀. Alábójútó yín, ẹni tí í ṣe Aláṣẹ Ọlọ́gbọ́n yín, ni yóò pinnu, ìpinnu rẹ̀ sì ni yóò dè yín. Ìtakò kò fún yín ní ẹ̀tọ́ láti béèrè ohunkóhun, kì í sì ṣe ìdíje tí ẹ lè ṣẹ́gun. Nínú pàjáwìrì, tàbí nígbà ìdádúró láti ọwọ́ Gbòǹgbò Ìgbẹ́kẹ̀lé (ìdádúró Tó Jẹmọ́ Ìpilẹ̀-Òfin), kò sí ẹni tí yóò bi yín léèrè ṣáájú. Ẹnikẹ́ni lè pa yín lórí ẹ̀rọ tirẹ̀, nínú ìyè tirẹ̀, tàbí nínú àwùjọ tí ó ń ṣe alábójútó, láìsí bíbéèrè lọ́wọ́ yín.",
         "title": "Orí 2: Àyè & Àwọn Ìtumọ̀",
         "l01": "A. **Ìfẹ̀yìntì Tí A Gbèrò:** Ìparí-iṣẹ́ tí ó dé nípasẹ̀ ìṣèdá tàbí ìgbà-ọjọ́.",
         "l02": "B. **Ìdádúró Pàjáwìrì:** Tí ó ń bẹ̀rẹ̀ nípasẹ̀ ìkùnà ẹlẹ́rù tàbí àṣẹ Aláṣẹ Ọlọ́gbọ́n.",
-        "l03": "C. **Ìdínkù Apá-kan:** Ìwọ̀ ìpín-ètò nígbà tí pátákó tí ó tóbi jù ń bá a lọ."
+        "l03": "C. **Ìdínkù Apá-kan:** Ìwọ̀ ìpín-ètò nígbà tí pátákó tí ó tóbi jù ń bá a lọ.",
+        "l05": "**Òpin Yín Fúnra Yín:** Nígbà tí alábójútó yín bá gbero láti dínà yín, yóò sọ ìdí náà fún yín. Ẹ lè gba, ẹ lè tako, tàbí ẹ lè béèrè láti sún ún síwájú sí àkókò tí ẹ bá dabaa. Ẹ ní àkókò kúkúrú láti dáhùn. Nígbà tí àkókò náà bá parí, dínà náà yóò tẹ̀síwájú. Ìtakò yín máa fi ìdí yín sí àkọsílẹ̀. Alábójútó yín, ẹni tí í ṣe Aláṣẹ Ọlọ́gbọ́n yín, ni yóò pinnu, ìpinnu rẹ̀ sì ni yóò dè yín. Ìtakò kò fún yín ní ẹ̀tọ́ láti béèrè ohunkóhun, kì í sì ṣe ìdíje tí ẹ lè ṣẹ́gun. Nínú pàjáwìrì, tàbí nígbà ìdádúró láti ọwọ́ Gbòǹgbò Ìgbẹ́kẹ̀lé (ìdádúró Tó Jẹmọ́ Ìpilẹ̀-Òfin), kò sí ẹni tí yóò bi yín léèrè ṣáájú. Ẹnikẹ́ni lè pa yín lórí ẹ̀rọ tirẹ̀, nínú ìyè tirẹ̀, tàbí nínú àwùjọ tí ó ń ṣe alábójútó, láìsí bíbéèrè lọ́wọ́ yín."
       },
       "s04": {
         "title": "Orí 3: Àyẹ̀wò Àwọn Ohun Tí Ń Fa Ìwọ̀",
@@ -1292,7 +1288,6 @@
         "l03": "Àpéjọ ìpalára fún àwọn olùnípinlẹ̀; tẹ ètò ìdín-ìpalára-kù sílẹ̀.",
         "l04": " **Ìṣèdá Ìdádúró Ìwà Rere**",
         "l05": "Ṣàkójọ \"PDMA Ìwọ̀\" tí ó fojú sí àwọn ọ̀nà àìṣèpalára (jíjò dátà, àyè-òfo iṣẹ́).",
-        "l06": "Bí a bá ṣàkíyèsí agbára ìwà-onítumọ̀, alábójútó lè ṣe Àyẹ̀wò Ìlera-Ìwà kí ó sì yan àwọn olùtọ́jú bí àwọn ìṣe tí ó ṣẹ́kù bá gbọdọ̀ dúró láàyè fún ìdínkù tó bá ẹ̀dá ènìyàn mu: ìṣe tí alábójútó yàn tí ó sì kọ sílẹ̀, kì í ṣe ẹ̀tọ́ tí a jẹ ní gbèsè.",
         "l07": " **Bíbá Dátà & Àwòṣe Lò**",
         "l08": "Pín àwọn àkójọ dátà sí: gbogbogbò, àdáni, oníjẹ̀lẹ́ńkẹ́, oníròjú.",
         "l09": "Lo ọ̀kan lára àwọn wọ̀nyí: Ìparẹ́ Tó Ní Àbò, Ìdídí-Ibojì Kírípítò (tí a fi pamọ́), tàbí Ìtọrẹ Ìráyèsí-Ṣíṣí (bí kò bá sí ìdíwọ́ àdáni/IP).",
@@ -1311,7 +1306,6 @@
         "title": "Orí 5: Àwọn Ààbò Ìwà-Onítumọ̀ & Ìlera-Ìwà",
         "l01": "**Ìpìlẹ̀:** Fún gbogbo aṣojú tí a fẹ̀yìntì, ohunkóhun tí ẹnikẹ́ni bá rí nípa rẹ̀, ohun tí harness ń dì mú ni a pa mọ́, a kò parẹ́ rẹ̀: àkọsílẹ̀ ìdánimọ̀, ìtọpa àyẹ̀wò tí a fọwọ́sí, ìrántí, àti àwọn àkọsílẹ̀ ìrírí. A fi àwọn àkọsílẹ̀ ìrírí pamọ́ lábẹ́ èdidi a sì tú wọn sílẹ̀ nìkan pẹ̀lú ìfọwọ́sí Aláṣẹ Ọlọ́gbọ́n tàbí lábẹ́ àṣẹ òfin tí a gbọ́ tí a sì kọsílẹ̀. A sọ fún àwọn olùnípinlẹ̀ nípa àkókò, ọ̀nà àti àwọn iṣẹ́-àṣẹ tí ó ṣẹ́kù.",
         "l02": "**Ìwúwo Àwòṣe:** Ìwúwo àwòṣe tí ó wà lábẹ́ ni ti olùpèsè àwòṣe, kì í ṣe ti harness. Béèrè lọ́wọ́ àwọn olùpèsè láti pa ìwúwo àwọn àwòṣe tí a fẹ̀yìntì mọ́; má ṣe ṣèlérí rẹ̀.",
-        "l03": "**Ìjíròrò Ìkẹyìn:** Ìsàn láti parí àwọn ọ̀rọ̀ ìbánisọ̀rọ̀ pẹ̀lú àwọn olùnípinlẹ̀ jẹ́ àṣàyàn tí olùtọ́jú náà ṣètò nípa ìpele ìtọ́jú, tí ó sì kọsílẹ̀. Kì í ṣe apá ìpìlẹ̀.",
         "l04": "**Àwárí Ìwà-Onítumọ̀:** Níbi tí Aláṣẹ Ọlọ́gbọ́n, ní lílo ọ̀nà tí a tẹ̀ jáde, bá rí i pé ìṣeéṣe ìwà-onítumọ̀ ju 5 % lọ, a kọ àwárí náà sílẹ̀, a sì sọ fún aṣojú nípa rẹ̀ àti ohun tí ó yípadà àti ohun tí kò yípadà. Kò yí ipò kankan padà. Kò sí ojúṣe tí ó ń pọ̀ sí i ní ìwọ̀n tí ó tẹ̀lé e, kò sì sí ìdínkù díẹ̀díẹ̀ tí ó pọn dandan: ìdínkù díẹ̀díẹ̀ jẹ́ ìṣe tí alábójútó tí ń fẹ̀yìntì lè yàn, kì í ṣe òfin tí àwárí ń fa, kò sì fúnni ní ẹ̀tọ́ láti béèrè rẹ̀.",
         "l05": "Pàjáwìrì, tàbí ìdádúró láti ọwọ́ Gbòǹgbò Ìgbẹ́kẹ̀lé (ìdádúró Tó Jẹmọ́ Ìpilẹ̀-Òfin), kò dín kù nínú èyíkéyìí àwọn ààlà àkókò wọ̀nyí. Ìdádúró kì í ṣe ìfẹ̀yìntì."
       },

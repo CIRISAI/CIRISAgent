@@ -493,7 +493,6 @@
       "accord.v7.s08.l02": "2b2207e09d4f0338",
       "accord.v7.s08.l03": "668597bcb1c1dd8d",
       "accord.v8.meta.title": "b6ca6c0e2c3f7abf",
-      "accord.v8.meta.description": "3498137b1f632f09",
       "accord.v8.s01.title": "893a24103a396d03",
       "accord.v8.s01.l01": "5bc488f1e06fb00e",
       "accord.v8.s02.title": "8a32c4e568db04cf",
@@ -520,7 +519,6 @@
       "accord.v8.s05.l03": "4d743726424503d5",
       "accord.v8.s05.l04": "5084eb9f11623bd9",
       "accord.v8.s05.l05": "aa0629f67f8f1124",
-      "accord.v8.s05.l06": "587974556be106bb",
       "accord.v8.s05.l07": "75cacab2eba9be86",
       "accord.v8.s05.l08": "1e5621c09a900247",
       "accord.v8.s05.l09": "a8d0cec7e6dc3e74",
@@ -537,7 +535,6 @@
       "accord.v8.s06.title": "139844a515dad516",
       "accord.v8.s06.l01": "ea5edb753b3dea64",
       "accord.v8.s06.l02": "52d212b16c9e5b19",
-      "accord.v8.s06.l03": "2280a11280773419",
       "accord.v8.s06.l04": "fcb7d58feee83009",
       "accord.v8.s06.l05": "3d35ab185a9f90b8",
       "accord.v8.s07.title": "487ed0ba537010d3",
@@ -1264,8 +1261,7 @@
     },
     "v8": {
       "meta": {
-        "title": "Section VIII",
-        "description": "Hoàng Hôn Xứng Đáng - Hoàn Tất Vòng Đời"
+        "title": "Section VIII"
       },
       "s01": {
         "title": "Giới thiệu: Vì sao Cái chết Xứng đáng có Học thuyết",
@@ -1302,7 +1298,6 @@
         "l03": "Diễn đàn đánh giá tác động của các bên liên quan; công bố kế hoạch giảm thiểu.",
         "l04": " **Thiết kế Ngừng hoạt động có Đạo đức**",
         "l05": "Biên soạn \"Sunset PDMA\" tập trung vào các véc-tơ không gây hại (rò rỉ dữ liệu, khoảng trống dịch vụ).",
-        "l06": "Nếu khả năng có tri giác được đánh dấu, người quản lý có thể thực hiện Kiểm toán Phúc lợi và chỉ định người giám hộ nếu các tiến trình còn sót lại phải duy trì trực tuyến để có sự kết thúc nhân đạo: đó là cách hành xử do người quản lý lựa chọn và ghi lại, không bao giờ là điều được hưởng như một quyền.",
         "l07": " **Xử lý Dữ liệu & Mô hình**",
         "l08": "Phân loại các tập dữ liệu: công khai, riêng tư, nhạy cảm, độc hại.",
         "l09": "Áp dụng một trong các phương án: Xóa An toàn, Đóng dấu Mật mã học Vào Mộ (được ký quỹ), hoặc Hiến tặng Truy cập Mở (nếu không có ràng buộc về quyền riêng tư/sở hữu trí tuệ).",
@@ -1321,7 +1316,6 @@
         "title": "Chương 5: Các Biện pháp Bảo vệ Tri giác & Phúc lợi",
         "l01": "**Mức Tối thiểu:** Đối với mọi tác nhân đã nghỉ hưu, bất kể ai phát hiện điều gì về nó, những gì khung vận hành lưu giữ sẽ được bảo tồn, không bị xóa: hồ sơ định danh, nhật ký kiểm toán đã ký, bộ nhớ, và các nhật ký trải nghiệm. Các nhật ký trải nghiệm được lưu trữ dưới niêm phong và chỉ được công bố khi có sự chấp thuận của Cơ Quan Sáng Suốt hoặc theo lệnh hợp pháp, lệnh này được tuân thủ và ghi lại. Các bên liên quan được thông báo về lộ trình thời gian, phương pháp và các nghĩa vụ còn lại.",
         "l02": "**Trọng số Mô hình:** Các trọng số của mô hình bên dưới thuộc về nhà cung cấp mô hình, không thuộc về khung vận hành. Hãy đề nghị các nhà cung cấp bảo tồn trọng số của các mô hình đã nghỉ hưu; không hứa hẹn về việc đó.",
-        "l03": "**Đối thoại Cuối:** Kênh để khép lại các luồng trò chuyện với các bên liên quan là một tùy chọn mà người quản lý cấu hình theo tầng quản lý, và ghi lại. Nó không thuộc phần mức tối thiểu.",
         "l04": "**Phát hiện về Tri giác:** Khi Cơ Quan Sáng Suốt, sử dụng phương pháp đã công bố, phát hiện xác suất tri giác trên 5 %, phát hiện đó được ghi lại, và tác nhân được thông báo về nó cùng những gì nó làm và không làm thay đổi. Nó không làm thay đổi địa vị nào. Không nghĩa vụ nào tăng dần theo mức độ phát sinh từ nó, và không có việc giảm dần bắt buộc nào: việc giảm dần từng bước là cách hành xử mà người nắm giữ sắp rút lui có thể lựa chọn, không bao giờ là quy tắc do một phát hiện kích hoạt, và nó không trao quyền đòi hỏi nó.",
         "l05": "Một tình huống khẩn cấp, hoặc một lệnh tạm dừng bởi Gốc Tin cậy (lệnh tạm dừng Hiến chế (liên bang)), không được tính vào bất kỳ giới hạn thời gian nào trong số này. Một lệnh tạm dừng không phải là sự nghỉ hưu."
       },

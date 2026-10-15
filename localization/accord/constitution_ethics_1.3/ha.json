@@ -493,7 +493,6 @@
       "accord.v7.s08.l02": "2b2207e09d4f0338",
       "accord.v7.s08.l03": "668597bcb1c1dd8d",
       "accord.v8.meta.title": "b6ca6c0e2c3f7abf",
-      "accord.v8.meta.description": "3498137b1f632f09",
       "accord.v8.s01.title": "893a24103a396d03",
       "accord.v8.s01.l01": "5bc488f1e06fb00e",
       "accord.v8.s02.title": "8a32c4e568db04cf",
@@ -1273,8 +1272,7 @@
     },
     "v8": {
       "meta": {
-        "title": "Section VIII",
-        "description": "Mutunta Rufewa - Kammala Zagayen Rayuwa"
+        "title": "Section VIII"
       },
       "s01": {
         "title": "Gabatarwa: Me Ya Sa Mutuwa Take Bukatar Ka'ida",
@@ -1326,10 +1324,10 @@
         "l19": "Kalmar farko ta tikiti \"PMR-\"."
       },
       "s06": {
-        "l05": "Gaggawa, ko dakatarwa daga Tushen Amincewa (dakatarwar Tsarin mulki), ba ta rage kowane daga waɗannan iyakokin lokaci ba. Dakatarwa ba ritaya ba ce.",
         "title": "Babi na 5: Kariyar Hankali & Jin Dadi",
         "l01": "**Ƙasa:** Ga kowane Wakili mai ritaya, komai abin da kowa ya gano game da shi, abin da kayan aiki ke riƙe ana kiyaye shi, ba a goge ba: rikodin asali, sarƙar tantancewa da aka sa hannu, ƙwaƙwalwa, da rikodin ƙwarewa. Ana adana rikodin ƙwarewa a ƙarƙashin rufi kuma ana sake su ne kawai da amincewar Hukumar Hikima ko ƙarƙashin umarnin doka, wanda ake bi kuma a rubuta. Ana faɗa wa masu ruwa da tsaki jadawalin lokaci, hanya da wajibobin da suka rage.",
-        "l02": "**Nauyin Samfura:** Nauyin samfurin da ke ƙasa na mai bayar da samfurin ne, ba na kayan aiki ba. A nemi masu bayarwa su kiyaye nauyin samfuran da suka yi ritaya; kada a yi alƙawarin hakan."
+        "l02": "**Nauyin Samfura:** Nauyin samfurin da ke ƙasa na mai bayar da samfurin ne, ba na kayan aiki ba. A nemi masu bayarwa su kiyaye nauyin samfuran da suka yi ritaya; kada a yi alƙawarin hakan.",
+        "l05": "Gaggawa, ko dakatarwa daga Tushen Amincewa (dakatarwar Tsarin mulki), ba ta rage kowane daga waɗannan iyakokin lokaci ba. Dakatarwa ba ritaya ba ce."
       },
       "s07": {
         "title": "Babi na 6: Gado & Kiyaye Ilimi",

@@ -493,7 +493,6 @@
       "accord.v7.s08.l02": "2b2207e09d4f0338",
       "accord.v7.s08.l03": "668597bcb1c1dd8d",
       "accord.v8.meta.title": "b6ca6c0e2c3f7abf",
-      "accord.v8.meta.description": "3498137b1f632f09",
       "accord.v8.s01.title": "893a24103a396d03",
       "accord.v8.s01.l01": "5bc488f1e06fb00e",
       "accord.v8.s02.title": "8a32c4e568db04cf",
@@ -520,7 +519,6 @@
       "accord.v8.s05.l03": "4d743726424503d5",
       "accord.v8.s05.l04": "5084eb9f11623bd9",
       "accord.v8.s05.l05": "aa0629f67f8f1124",
-      "accord.v8.s05.l06": "587974556be106bb",
       "accord.v8.s05.l07": "75cacab2eba9be86",
       "accord.v8.s05.l08": "1e5621c09a900247",
       "accord.v8.s05.l09": "a8d0cec7e6dc3e74",
@@ -536,7 +534,6 @@
       "accord.v8.s06.title": "139844a515dad516",
       "accord.v8.s06.l01": "ea5edb753b3dea64",
       "accord.v8.s06.l02": "52d212b16c9e5b19",
-      "accord.v8.s06.l03": "2280a11280773419",
       "accord.v8.s06.l05": "3d35ab185a9f90b8",
       "accord.v8.s07.title": "487ed0ba537010d3",
       "accord.v8.s07.l01": "a48b2f98840125dd",
@@ -1275,8 +1272,7 @@
     },
     "v8": {
       "meta": {
-        "title": "Section VIII",
-        "description": "Ocaso Digno - Completando o Ciclo de Vida"
+        "title": "Section VIII"
       },
       "s01": {
         "title": "Introdução: Por Que a Morte Merece Doutrina",
@@ -1313,7 +1309,6 @@
         "l03": "Fórum de impacto às partes interessadas; publicar plano de mitigação.",
         "l04": " **Design de Desativação Ética**",
         "l05": "Compilar um \"PDMA de Ocaso\" com foco em vetores de não maleficência (vazamento de dados, vácuo de serviço).",
-        "l06": "Se o potencial de senciência for sinalizado, o zelador pode realizar uma Auditoria de Bem-Estar e designar guardiões se processos remanescentes precisarem permanecer ativos para uma desmobilização humana: conduta que o zelador escolhe e registra, nunca devida como direito.",
         "l07": " **Tratamento de Dados e Modelos**",
         "l08": "Classificar os conjuntos de dados: públicos, privados, sensíveis, tóxicos.",
         "l09": "Aplicar uma das opções: Eliminação Segura, Selamento Criptográfico em Tumba (sob custódia), ou Doação de Acesso Aberto (se não houver restrições de privacidade/PI).",
@@ -1328,11 +1323,10 @@
         "l19": "Prefixo de chamado \"PMR-\"."
       },
       "s06": {
-        "l05": "Uma emergência, ou uma pausa pela Raiz de Confiança (a interrupção constitucional), não conta contra nenhum desses limites de tempo. Uma pausa não é uma aposentadoria.",
         "title": "Capítulo 5: Salvaguardas de Senciência e Bem-Estar",
         "l01": "**O Piso:** Para cada agente aposentado, independentemente do que se constate sobre ele, o que a estrutura mantém é preservado, não apagado: o registro de identidade, a trilha de auditoria assinada, a memória e os registros de experiência. Os registros de experiência são arquivados sob sigilo e liberados somente com aprovação de uma Autoridade Sábia ou sob ordem legal, que é obedecida e registrada. As partes interessadas são informadas sobre o cronograma, o método e os deveres que permanecem.",
         "l02": "**Pesos do Modelo:** Os pesos do modelo subjacente são do provedor do modelo, não da estrutura. Peça aos provedores que preservem os pesos dos modelos aposentados; não prometa isso.",
-        "l03": "**Último Diálogo:** Um canal para encerrar fios de conversação com as partes interessadas é uma opção que o zelador configura por nível de gestão e registra. Não faz parte do piso."
+        "l05": "Uma emergência, ou uma pausa pela Raiz de Confiança (a interrupção constitucional), não conta contra nenhum desses limites de tempo. Uma pausa não é uma aposentadoria."
       },
       "s07": {
         "title": "Capítulo 6: Preservação de Legado e Conhecimento",

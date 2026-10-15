@@ -223,3 +223,68 @@ async def test_transport_failures_are_retried(budget_env, granted, make_error) -
 
     assert await run_dma_with_retries(run, retry_limit=2, timeout_seconds=30.0) == "ok"
     assert calls["n"] == 2
+
+
+# --- schema-invalid model output is re-drawn, like transport -------------------
+
+
+def _pydantic_validation_error() -> Exception:
+    from pydantic import BaseModel, ValidationError
+
+    class Reply(BaseModel):
+        selected_action: str
+
+    try:
+        Reply.model_validate({"selected_action": None})
+    except ValidationError as e:
+        return e
+    raise AssertionError("unreachable")
+
+
+def _instructor_retry_exception() -> Exception:
+    # Named like instructor's, message deliberately free of the categorizer's
+    # keywords: the type alone must mark it as a schema failure.
+    class InstructorRetryException(Exception):
+        pass
+
+    return InstructorRetryException("reply did not parse after reasks")
+
+
+@pytest.mark.parametrize(
+    "make_error",
+    [
+        # What the LLM service raises for a schema failure after instructor's reasks.
+        lambda: RuntimeError(
+            "LLM response validation failed for ActionSelectionDMAResult - circuit breaker activated for failover"
+        ),
+        _pydantic_validation_error,
+        _instructor_retry_exception,
+    ],
+    ids=["service-wrapped", "pydantic", "instructor"],
+)
+@pytest.mark.asyncio
+async def test_schema_invalid_first_reply_is_redrawn(budget_env, granted, make_error) -> None:
+    """Stochastic schema noise: the first reply fails validation, the re-draw succeeds."""
+    calls = {"n": 0}
+
+    async def run(**_: Any) -> Any:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise make_error()
+        return "ok"
+
+    assert await run_dma_with_retries(run, retry_limit=2, timeout_seconds=30.0) == "ok"
+    assert calls["n"] == 2
+
+
+@pytest.mark.asyncio
+async def test_schema_redraws_stay_within_the_deadline_and_cap(budget_env, granted) -> None:
+    clock = FakeClock()
+
+    async def run(**_: Any) -> Any:
+        clock.now += 5.0
+        raise RuntimeError("LLM response validation failed for CSDMAResult")
+
+    with pytest.raises(DMAFailure, match="failed after 3 attempts"):
+        await run_dma_with_retries(run, deadline=Deadline(1000.0, clock=clock))
+    assert len(granted) == 3  # REMOTE dma_attempt_cap, never more

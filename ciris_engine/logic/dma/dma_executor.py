@@ -90,6 +90,30 @@ logger = logging.getLogger(__name__)
 #: with less than ~10s left is mostly a request we will cancel. When the
 #: per-try itself is shorter (tests, an operator override) the per-try is the
 #: floor instead.
+
+
+#: Answered-but-unusable model output. A schema-invalid reply is stochastic
+#: noise, not a property of the request, so a re-draw (same deadline, same
+#: attempt cap) often succeeds. Not #895's grammar work: just another draw.
+_SCHEMA_REDRAW_CATEGORIES = frozenset({"VALIDATION_ERROR"})
+
+
+def _is_schema_redraw(exc: BaseException, category: str) -> bool:
+    """Is this a schema-validation failure of the model's reply (worth a re-draw)?
+
+    The categorizer checks model-not-available and context overflow first, so
+    a 404 or an over-long prompt never lands here. An exception it could not
+    name is still a re-draw when its type says the reply failed validation.
+    """
+    if category in _SCHEMA_REDRAW_CATEGORIES:
+        return True
+    if category != "UNKNOWN":
+        return False
+    from pydantic import ValidationError
+
+    return isinstance(exc, ValidationError) or type(exc).__name__ == "InstructorRetryException"
+
+
 async def run_dma_with_retries(
     run_fn: Callable[..., Awaitable[Any]],
     *args: Any,
@@ -113,9 +137,10 @@ async def run_dma_with_retries(
     `retry_limit` attempts, as before.
 
     ONE retry policy for every DMA: a timeout, connection error or 5xx is an
-    independent draw and gets another attempt; anything else (auth, model not
-    available, context overflow, an unfunded account, rate limit, an open
-    breaker, a schema failure, an unrecognised error) fails fast -- a fresh
+    independent draw and gets another attempt, and so does schema-invalid
+    model output (stochastic noise: a re-draw often parses). Anything else
+    (auth, model not available, context overflow, an unfunded account, rate
+    limit, an open breaker, an unrecognised error) fails fast -- a fresh
     request would fail the same way. Either way an exhausted DMA raises
     DMAFailure: nothing here ever fails open.
     """
@@ -164,7 +189,7 @@ async def run_dma_with_retries(
             last_error = e
             attempt += 1
             category = categorize_conscience_error(e)
-            retryable = is_transient_transport_failure(e, category)
+            retryable = is_transient_transport_failure(e, category) or _is_schema_redraw(e, category)
             # Ensure we never log empty error messages
             error_msg = str(e).replace("\n", " ").strip()
             if not error_msg:

@@ -13,6 +13,7 @@ Exit 0 = all aligned, Exit 1 = mismatch found.
 import re
 import sys
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).parent.parent.parent
 
@@ -87,8 +88,22 @@ def _check_substrate_client_version() -> list[str]:
         return errors
     req_text = req.read_text()
 
+    # Every requirement line must parse. A pin edit that drops a line's
+    # `name==version` prefix leaves bare prose that pip rejects at install
+    # ("Expected matching RIGHT_PARENTHESIS") -- and, before this, left the
+    # check below silently green (#1262, 0.5.226 re-pin).
+    errors.extend(_unparseable_requirement_lines(req_text))
+
     pin = re.search(r"^ciris-server==([0-9][^\s#]*)", req_text, re.M)
     if not pin:
+        # FAIL, never skip: no pin means the wheel, the Android gradle pin and
+        # the iOS bundle can each resolve a different substrate, and every check
+        # that keys off this pin would otherwise report clean.
+        errors.append(
+            "requirements.txt has no parseable `ciris-server==X.Y.Z` pin. The substrate must be "
+            "pinned exactly (tools/update_substrate_libs.py, apps/android/build.gradle, "
+            "apps/ios/substrate.lock.json all key off it)."
+        )
         return errors
 
     # The CLIENT_VERSION half of this check is GONE, not broken. It compared a
@@ -118,6 +133,30 @@ def _check_substrate_client_version() -> list[str]:
                 f"apps/android/build.gradle ciris-server pin: {g.group(1)} != {pin.group(1)} (requirements.txt)"
             )
 
+    return errors
+
+
+def _requirement_parser() -> Any:
+    try:
+        from packaging.requirements import Requirement
+    except ImportError:  # pip always vendors it
+        from pip._vendor.packaging.requirements import Requirement  # type: ignore[assignment]
+    return Requirement
+
+
+def _unparseable_requirement_lines(req_text: str) -> list[str]:
+    """Each requirement line that pip could not read, as an error."""
+    errors: list[str] = []
+    Requirement = _requirement_parser()
+    for number, raw in enumerate(req_text.splitlines(), 1):
+        line = raw.split(" #", 1)[0].strip() if not raw.lstrip().startswith("#") else ""
+        if not line or line.startswith(("-r", "-c", "--", "-e")):
+            continue
+        try:
+            Requirement(line)
+        except Exception as e:  # noqa: BLE001 - any parse failure is the finding
+            reason = str(e).splitlines()[0][:120]
+            errors.append(f"requirements.txt line {number} is not a valid requirement ({reason}): {raw[:80]!r}")
     return errors
 
 

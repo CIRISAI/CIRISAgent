@@ -301,9 +301,7 @@ def streaming_step(step: StepPoint) -> Callable[[Callable[..., Any]], Callable[.
             # `is_recursive=True`. Without this token, the nested
             # CONSCIENCE_EXECUTION's broadcast collides with the initial
             # one as an un-flagged duplicate (CIRISAgent#772).
-            recursive_token = (
-                _in_recursive_conscience.set(True) if step == StepPoint.RECURSIVE_CONSCIENCE else None
-            )
+            recursive_token = _in_recursive_conscience.set(True) if step == StepPoint.RECURSIVE_CONSCIENCE else None
 
             try:
                 # Execute the original function
@@ -1064,8 +1062,14 @@ def _create_action_complete_data(
         else:
             action_params = {}
 
+    base_fields = _base_data_dict(base_data)
+    # A refused act (CC 4.2.1.1 halt) carries its refusal; the ACTION_RESULT
+    # event reads it from here, so the trace records why nothing happened.
+    if result.error:
+        base_fields["error"] = result.error
+
     return ActionCompleteStepData(
-        **_base_data_dict(base_data),
+        **base_fields,
         action_executed=result.action_type,
         action_parameters=action_params,
         dispatch_success=result.success,
@@ -1809,7 +1813,7 @@ def _create_action_result_event(step_data: StepDataUnion, timestamp: str, create
         execution_success=getattr(step_data, "dispatch_success", True),
         execution_time_ms=getattr(step_data, "execution_time_ms", 0.0),
         follow_up_thought_id=follow_up_thought_id,
-        error=None,
+        error=getattr(step_data, "error", None),
         audit_entry_id=getattr(step_data, "audit_entry_id", None),
         audit_sequence_number=getattr(step_data, "audit_sequence_number", None),
         audit_entry_hash=getattr(step_data, "audit_entry_hash", None),

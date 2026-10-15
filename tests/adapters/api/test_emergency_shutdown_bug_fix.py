@@ -14,8 +14,9 @@ import pytest
 from ciris_engine.logic.adapters.api.routes.emergency import emergency_shutdown
 from ciris_engine.schemas.services.shutdown import EmergencyCommandType, WASignedCommand
 
+
 # #999 — the route no longer carries its own key list; authority comes from the
-# accord verifier, the same trust root the stego kill switch uses. These tests
+# EmergencyAuthorities (accord/authorities.py), the one emergency trust root. These tests
 # want "a key the endpoint will accept", which is now a question for the
 # verifier rather than a module constant.
 #
@@ -26,19 +27,19 @@ from ciris_engine.schemas.services.shutdown import EmergencyCommandType, WASigne
 # person holding the key while a comment asserted otherwise. So these tests were
 # passing against a key nobody holds.
 def _authorized_key() -> str:
-    from ciris_engine.logic.accord.verifier import AccordVerifier
     import base64
 
-    verifier = AccordVerifier()
+    from ciris_engine.logic.accord.authorities import EmergencyAuthorities
+
+    verifier = EmergencyAuthorities()
     authorities = verifier.list_authorities()
-    assert authorities, "no accord authorities loaded — the kill switch would SIGKILL at boot"
+    assert authorities, "no accord authorities loaded — every emergency command would be refused"
     raw = verifier.public_key_for(authorities[0]["wa_id"])
     assert raw is not None
     return base64.urlsafe_b64encode(raw).decode().rstrip("=")
 
 
 ROOT_WA_AUTHORITY_KEYS = [_authorized_key()]
-
 
 
 class TestEmergencyShutdownBugFix:

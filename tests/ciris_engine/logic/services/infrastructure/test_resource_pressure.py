@@ -302,7 +302,7 @@ class _Observer(BaseObserver[IncomingMessage]):
 
 def _observer(monitor) -> _Observer:
     obs = _Observer(on_observe=AsyncMock(), agent_id="agent", origin_service="api", resource_monitor=monitor)
-    obs._check_for_accord = AsyncMock()  # type: ignore[method-assign]
+    obs._forward_accord_row = AsyncMock(return_value=None)  # type: ignore[method-assign]
     obs._enforce_credit_policy = AsyncMock()  # type: ignore[method-assign]
     return obs
 
@@ -319,7 +319,7 @@ async def test_shed_refuses_at_intake_before_credit_and_lifts(monitor):
     result = await obs.handle_incoming_message(_msg())
     assert result.status == MessageHandlingStatus.RESOURCE_SHED
     assert result.shed_resources == ["thoughts_active"]
-    obs._check_for_accord.assert_awaited_once()  # the accord check still runs first
+    obs._forward_accord_row.assert_awaited_once()  # accord rows are still forwarded first
     obs._enforce_credit_policy.assert_not_awaited()  # nobody is charged for refused work
 
     await _set_thoughts(monitor, 0)
@@ -453,7 +453,7 @@ def _late_bound(monitor):
 
 
 def _stub_intake(obs):
-    obs._check_for_accord = AsyncMock()  # type: ignore[method-assign]
+    obs._forward_accord_row = AsyncMock(return_value=None)  # type: ignore[method-assign]
     obs._enforce_credit_policy = AsyncMock()  # type: ignore[method-assign]
     return obs
 

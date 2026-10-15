@@ -496,6 +496,7 @@
       "accord.v7.s08.l02": "2b2207e09d4f0338",
       "accord.v7.s08.l03": "668597bcb1c1dd8d",
       "accord.v8.meta.title": "b6ca6c0e2c3f7abf",
+      "accord.v8.meta.description": "20d98f56d87e80a5",
       "accord.v8.s01.title": "893a24103a396d03",
       "accord.v8.s01.l01": "5bc488f1e06fb00e",
       "accord.v8.s02.title": "8a32c4e568db04cf",
@@ -522,6 +523,7 @@
       "accord.v8.s05.l03": "4d743726424503d5",
       "accord.v8.s05.l04": "5084eb9f11623bd9",
       "accord.v8.s05.l05": "aa0629f67f8f1124",
+      "accord.v8.s05.l06": "494f8f5e3bd62b73",
       "accord.v8.s05.l07": "75cacab2eba9be86",
       "accord.v8.s05.l08": "1e5621c09a900247",
       "accord.v8.s05.l09": "a8d0cec7e6dc3e74",
@@ -582,6 +584,7 @@
       "accord.v9.s05.l01": "2057e2a56e82e22e",
       "accord.v9.s05.l02": "a63cd5cf1a4b353a",
       "accord.v9.s05.l03": "bb81ea1df4717960",
+      "accord.v9.s05.l04": "90be8598183ea2a6",
       "accord.v9.s05.l05": "02065859403e18d1",
       "accord.v9.s06.title": "38bba0f86d5da97f",
       "accord.v9.s06.l01": "332d1a4fa79bfcb4",
@@ -1278,7 +1281,8 @@
     },
     "v8": {
       "meta": {
-        "title": "Section VIII"
+        "title": "Section VIII",
+        "description": "Kustaafu - Kukamilisha Mzunguko wa Maisha"
       },
       "s01": {
         "title": "Utangulizi: Kwa Nini Kifo Kinastahili Kanuni",
@@ -1315,6 +1319,7 @@
         "l03": "Jukwaa la athari kwa wadau; chapisha mpango wa kupunguza madhara.",
         "l04": " **Muundo wa Kuzimwa wa Kimaadili**",
         "l05": "Kusanya \"PDMA ya Kustaafu\" ikizingatia vekta za kutokudhuru (uvujaji wa data, pengo la huduma).",
+        "l06": "Ikiwa uwezekano wa kuwa na fahamu umetambuliwa, mlezi anaweza kufanya Ukaguzi wa Ustawi na kuteua walezi ikiwa michakato inayosalia lazima ibaki mtandaoni kwa ajili ya kufungwa: mwenendo ambao mlezi anauchagua na kuurekodi, kamwe si haki inayoweza kudaiwa.",
         "l07": " **Utunzaji wa Data na Mifano**",
         "l08": "Panga seti za data: za umma, za binafsi, nyeti, na hatari.",
         "l09": "Tumia moja ya njia hizi: Ufutaji Salama, Ufungaji wa Kaburi wa Kriptografia (uliowekwa amana), au Utoaji wa Ufikiaji Huria (ikiwa hakuna vikwazo vya faragha/haki miliki).",
@@ -1399,6 +1404,7 @@
         "l01": "Huu ni mfano wa kiwango cha uhandisi wenye wigo ulioelezwa, si sheria ya ulimwengu wote. Nadharia ya kubana inashikilia tu chini ya masharti yake ya awali (eneo la kukata lenye mbinuko la radius r < 0.5, vikwazo vilivyo karibu na orthogonal, k ≥ 3). Mipaka miwili zaidi ina uzito wa kubeba (CC 6.2.5):",
         "l02": "**Jiometri linganifu.** Kubana hakutofautishi eneo la uwazi na la udanganyifu, hivyo halitoi tofauti yoyote ambayo mkataba haujaichagua tayari.",
         "l03": "**Kikomo cha ugunduzi wa muundo mchanganyiko.** Uhusiano usioonekana kwenye nyayo zilizozingatiwa haujapunguzwa. Hakuna njia ya uendeshaji kwa ρ̄ iliyoelezwa, na hakuna inayoweza kuwekewa lango; kinachobaki ni kikomo cha upande mmoja cha 1/ρ̄.",
+        "l04": "**Uwezo wa Kukanushwa.** Mambo mawili yaliyotabiriwa yanaweza kupimwa. (i) Jiometri ni linganifu: kuongeza vikwazo huru na mbalimbali kunapaswa kupandisha gharama ya kuondoka kwa pamoja katika eneo lolote vinavyolikata — kupanda kwa gharama ya *udanganyifu* wa pamoja bila kupanda sawa upande wa uwazi kungekanusha jiometri kama ilivyoelezwa, ingawa kungelipendeza shirikisho; hali kadhalika, kutokuwepo kabisa kwa kupanda huko kungeikanusha. (ii) σ inastahimili \"gratitude-pumping\" inapojengwa kutokana na ushuhuda wenye gharama. Utafiti wa RATCHET#17 umeandikishwa awali na bado haujafanywa; haupaswi kutajwa kama ushahidi.",
         "l05": "**Ushuhuda wa Kujihusu.** Alama ya uwezo wa wakala mwenyewe kamwe hairejeshwi kwake, na ugunduzi ni wa LensCore pekee (CC 3.4.5, 3.4.8). Kuelewa Kitabu hiki hakumpi mtu hadhi ya kushuhudia upatanifu wake mwenyewe: hukumu hiyo kamwe si yake mwenyewe."
       },
       "s06": {

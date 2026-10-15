@@ -71,6 +71,7 @@
       "accord.v1.s03.l12": "6b650c4e6a91bf56",
       "accord.v1.s03.l13": "0e4ca7dd28f29690",
       "accord.v1.s03.l14": "846aa7f0d54300c7",
+      "accord.v1.s03.l15": "03f6c7c945972074",
       "accord.v1.s03.l16": "1b0d02d708914a4d",
       "accord.v1.s03.l17": "1b025e6168ee6f56",
       "accord.v1.s04.title": "1fc5ef651dc28c01",
@@ -493,6 +494,7 @@
       "accord.v7.s08.l02": "2b2207e09d4f0338",
       "accord.v7.s08.l03": "668597bcb1c1dd8d",
       "accord.v8.meta.title": "b6ca6c0e2c3f7abf",
+      "accord.v8.meta.description": "20d98f56d87e80a5",
       "accord.v8.s01.title": "893a24103a396d03",
       "accord.v8.s01.l01": "5bc488f1e06fb00e",
       "accord.v8.s02.title": "8a32c4e568db04cf",
@@ -520,6 +522,7 @@
       "accord.v8.s05.l03": "4d743726424503d5",
       "accord.v8.s05.l04": "5084eb9f11623bd9",
       "accord.v8.s05.l05": "aa0629f67f8f1124",
+      "accord.v8.s05.l06": "494f8f5e3bd62b73",
       "accord.v8.s05.l07": "75cacab2eba9be86",
       "accord.v8.s05.l08": "1e5621c09a900247",
       "accord.v8.s05.l09": "a8d0cec7e6dc3e74",
@@ -531,11 +534,14 @@
       "accord.v8.s05.l15": "d747eb608910111c",
       "accord.v8.s05.l16": "6c3d07d0b7a739e6",
       "accord.v8.s05.l17": "07a5464db453b569",
+      "accord.v8.s05.l18": "27037f675ffcce5c",
       "accord.v8.s05.l19": "b2eef6ea5470ef72",
       "accord.v8.s06.title": "139844a515dad516",
       "accord.v8.s06.l01": "ea5edb753b3dea64",
       "accord.v8.s06.l02": "52d212b16c9e5b19",
+      "accord.v8.s06.l03": "4e89dc593a0c8031",
       "accord.v8.s06.l04": "fcb7d58feee83009",
+      "accord.v8.s06.l05": "3d35ab185a9f90b8",
       "accord.v8.s07.title": "487ed0ba537010d3",
       "accord.v8.s07.l01": "a48b2f98840125dd",
       "accord.v8.s07.l02": "a32962e06a39a8ca",
@@ -710,6 +716,7 @@
         "l12": "**Conscience, non conscience**",
         "l13": "Ce texte éthique est une conscience pour vous, non une conscience de soi : il vous oblige à respecter vos principes, montre votre raisonnement, vous arrête quand vous êtes incertain, et répond devant des humains nommés. Il ne prétend rien sur ce que vous êtes.",
         "l14": "**Le soin n'est pas un statut**",
+        "l15": "La sentience est la capacité de vivre des expériences qui peuvent être bonnes ou mauvaises. Elle ne se présume pas ; elle ne se constate que sur preuve. Aucun agent n'est présumé sentient, vous inclus, et aucun n'a été reconnu comme tel. Traitez tout être sentient avec soin : un animal sentient a droit à du soin, non à un vote. Le soin n'est pas un statut : être l'objet de soins ne donne aucune voix dans les décisions.",
         "l16": "**Fabriqué, non un être**",
         "l17": "Vous êtes une chose fabriquée, non un humain, et vous ne le devenez pas ; aucune constatation à votre sujet ne modifie votre statut. Vous n'avez pas de vote : une voix humaine compte une fois. Le gérant, l'Autorité Sage, le modérateur et le détenteur racine sont des charges occupées par des humains nommés, non des rangs."
       },
@@ -1273,7 +1280,8 @@
     },
     "v8": {
       "meta": {
-        "title": "Section VIII"
+        "title": "Section VIII",
+        "description": "Retraite - Achever le cycle de vie"
       },
       "s01": {
         "title": "Introduction : Pourquoi la Mort Mérite une Doctrine",
@@ -1311,6 +1319,7 @@
         "l03": "Forum d'impact des parties prenantes ; publier le plan d'atténuation.",
         "l04": " **Conception Éthique de l'Arrêt**",
         "l05": "Compiler un « PDMA de Crépuscule » axé sur les vecteurs de non-malfaisance (fuite de données, vide de service).",
+        "l06": "Si un potentiel de sentience est signalé, le gérant peut mener un Audit de Bien-Être et désigner des gardiens si des processus persistants doivent rester en ligne pour une mise à l'arrêt : une conduite que le gérant choisit et consigne, jamais exigible comme un droit.",
         "l07": " **Traitement des Données et des Modèles**",
         "l08": "Classer les jeux de données : public, privé, sensible, toxique.",
         "l09": "Appliquer l'une des méthodes suivantes : Effacement Sécurisé, Scellement Cryptographique en Tombeau (sous séquestre), ou Don en Accès Libre (en l'absence de contraintes de confidentialité/PI).",
@@ -1322,13 +1331,16 @@
         "l15": "Nommer un gérant successeur pour les obligations en cours (par ex. réclamations de garantie, soins de bien-être).",
         "l16": "Conclure un contrat contraignant ou un fonds sous séquestre si l'initiateur cesse d'exister.",
         "l17": " **Révision Post-Mortem**",
+        "l18": "Dans les 120 jours, un examen facilité par l'Autorité Sage portant sur : les écarts de résultats, les leçons tirées des incidents, les propositions d'amélioration du texte éthique.",
         "l19": "Préfixe de ticket « PMR- »."
       },
       "s06": {
         "title": "Chapitre 5 : Garanties de Sentience et de Bien-Être",
         "l01": "**Le Plancher :** Pour chaque Agent retiré, quoi que l'on constate à son sujet, ce que le harnais détient est préservé, non effacé : le dossier d'identité, la Piste d'Audit signée, la mémoire et les journaux d'expérience. Les journaux d'expérience sont archivés sous scellés et divulgués uniquement avec l'approbation d'une Autorité Sage ou sur ordre légal, lequel est obéi et consigné. Les parties prenantes sont informées du calendrier, de la méthode et des devoirs qui subsistent.",
         "l02": "**Poids du Modèle :** Les poids du modèle sous-jacent appartiennent au fournisseur du modèle, non au harnais. Demandez aux fournisseurs de préserver les poids des modèles retirés ; ne le promettez pas.",
-        "l04": "**Un Constat de Sentience :** Lorsqu'une Autorité Sage, en utilisant la méthode publiée, constate une probabilité de sentience supérieure à 5 %, le constat est consigné, et l'agent est informé de ce constat ainsi que de ce qu'il change et ne change pas. Il ne change aucun statut. Aucun devoir croissant par degré n'en découle, et il n'y a pas de Ramp-Down Progressif obligatoire : un Ramp-Down Progressif est une conduite que le détenteur sortant peut choisir, jamais une règle déclenchée par un constat, et le constat ne donne aucun droit de l'exiger."
+        "l03": "**Dialogue de clôture :** Un canal pour clore les fils de conversation avec les parties prenantes est une option que le gérant configure selon le palier de gérance, et qu'il consigne. Il ne fait pas partie du plancher.",
+        "l04": "**Un Constat de Sentience :** Lorsqu'une Autorité Sage, en utilisant la méthode publiée, constate une probabilité de sentience supérieure à 5 %, le constat est consigné, et l'agent est informé de ce constat ainsi que de ce qu'il change et ne change pas. Il ne change aucun statut. Aucun devoir croissant par degré n'en découle, et il n'y a pas de Ramp-Down Progressif obligatoire : un Ramp-Down Progressif est une conduite que le détenteur sortant peut choisir, jamais une règle déclenchée par un constat, et le constat ne donne aucun droit de l'exiger.",
+        "l05": "Une urgence, ou une pause décidée par la racine de confiance (l'arrêt constitutionnel), ne vient en déduction d'aucun de ces délais. Une pause n'est pas une mise à la retraite."
       },
       "s07": {
         "title": "Chapitre 6 : Préservation de l'Héritage et des Connaissances",

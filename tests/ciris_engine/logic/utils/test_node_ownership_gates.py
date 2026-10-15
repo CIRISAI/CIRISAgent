@@ -39,6 +39,9 @@ from ciris_engine.schemas.runtime.enums import HandlerActionType, ThoughtStatus
 from ciris_engine.schemas.runtime.models import Thought
 from ciris_engine.schemas.runtime.node_ownership import NODE_UNCLAIMED_ERROR, NodeOwnership, NodeOwnershipReading
 
+#: Every test here drives the reader itself; the conftest "owned" stub is off.
+pytestmark = pytest.mark.real_node_ownership
+
 #: Shaped like a real Crockford claim PIN. It must never leave the file.
 PIN = "7QK4-ZX9M"
 
@@ -183,16 +186,52 @@ async def test_a_slow_read_is_bounded_and_unclaimed_and_does_not_block_the_loop(
 
 
 @pytest.mark.asyncio
-async def test_fold_off_is_the_named_no_op(home: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """CIRIS_NODE_FOLD=false (the unit suite): no node, no binding to read, the gate stands aside."""
+async def test_fold_off_is_unowned_and_held(home: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """CIRIS_NODE_FOLD=false: no node, no owner. Held, like the halt latch reads it halted; no bypass."""
     from ciris_engine.logic.runtime import node_fold
 
     monkeypatch.setenv("CIRIS_NODE_FOLD", "false")
     assert node_fold.fold_status() is None
-    monkeypatch.setattr(node_ownership, "_cached", None)
     state = await node_ownership.node_owned(fresh=True)
-    assert state.reading == NodeOwnershipReading.NO_NODE_FOLD_GATE_NOT_APPLIED
-    assert not state.unclaimed
+    assert state.reading == NodeOwnershipReading.NO_NODE
+    assert state.unclaimed
+
+
+@pytest.mark.asyncio
+async def test_fold_off_holds_the_processor(home: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from ciris_engine.logic.utils import shutdown_manager
+
+    monkeypatch.setenv("CIRIS_NODE_FOLD", "false")
+    monkeypatch.setattr(node_ownership, "NODE_OWNERSHIP_HOLD_TICK_SECONDS", 0.01)
+    monkeypatch.setattr(shutdown_manager, "is_global_shutdown_requested", lambda: False)
+    fake = _processor()
+    task = asyncio.create_task(AgentProcessor.start_processing(fake, num_rounds=1))
+    await asyncio.sleep(0.1)
+    assert not task.done()
+    fake.state_manager.transition_to.assert_not_awaited()
+    fake._stop_event.set()
+    await asyncio.wait_for(task, timeout=2)
+
+
+def test_the_owned_answer_comes_only_from_the_pytest_stub() -> None:
+    """The reader has no test mode: no pytest, env or flag check can make it say "owned".
+
+    "owned" without a node exists only as the autouse stub in tests/conftest.py.
+    """
+    import inspect
+
+    source = inspect.getsource(node_ownership)
+    for marker in ("pytest", "PYTEST", "TESTING", "environ", "getenv"):
+        assert marker not in source, f"the reader consults {marker!r}"
+    conftest = (Path(__file__).resolve().parents[3] / "conftest.py").read_text(encoding="utf-8")
+    assert "def _stub_node_ownership(" in conftest and "real_node_ownership" in conftest
+
+
+@pytest.mark.asyncio
+async def test_the_conftest_stub_is_lifted_by_the_marker(home: Path) -> None:
+    """This module opts out, so the real reader answers: fold-off here is held, not stubbed owned."""
+    state = await node_ownership.node_owned(fresh=True)
+    assert state.reading == NodeOwnershipReading.NO_NODE
 
 
 @pytest.mark.asyncio

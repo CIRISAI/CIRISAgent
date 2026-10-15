@@ -595,6 +595,11 @@ def pytest_configure(config):
         "real_halt_latch: opt out of the autouse stub that answers the constitutional-halt "
         "reader with 'no halt stands' (the test drives halt_latch itself)",
     )
+    config.addinivalue_line(
+        "markers",
+        "real_node_ownership: opt out of the autouse stub that answers the node-ownership "
+        "reader with 'owned' (the test drives node_ownership itself)",
+    )
 
 
 # =============================================================================
@@ -689,6 +694,39 @@ def prevent_subprocess_orphans():
                     proc.wait(timeout=1)
             except Exception:
                 pass  # Best effort cleanup
+
+
+@pytest.fixture(autouse=True)
+def _stub_node_ownership(request, monkeypatch):
+    """Answer the node-ownership reader with an explicit "owned".
+
+    The reader fails closed: with CIRIS_NODE_FOLD=false, as set above, every read
+    is NO_NODE and the processor, intake, acts and setup would all hold. This stub
+    is the only place an "owned" answer comes from without a node, and it lives
+    here, under pytest, never in the reader. It replaces only the node read; the
+    cache, edge logging and every gate run for real. Tests that drive the reader
+    opt out with `@pytest.mark.real_node_ownership`.
+    """
+    from datetime import datetime, timezone
+
+    from ciris_engine.logic.utils import node_ownership
+    from ciris_engine.schemas.runtime.node_ownership import NodeOwnership, NodeOwnershipReading
+
+    monkeypatch.setattr(node_ownership, "_cached", None)
+    monkeypatch.setattr(node_ownership, "_cached_at", 0.0)
+    if request.node.get_closest_marker("real_node_ownership"):
+        return
+
+    async def _owned() -> NodeOwnership:
+        return NodeOwnership(
+            reading=NodeOwnershipReading.OWNED,
+            owner_key_id="pytest-stub-owner",
+            node_key_id="pytest-stub-node",
+            read_at=datetime.now(timezone.utc),
+            claim_pin_file=node_ownership.claim_pin_file(),
+        )
+
+    monkeypatch.setattr(node_ownership, "_read_from_node", _owned)
 
 
 @pytest.fixture(autouse=True)

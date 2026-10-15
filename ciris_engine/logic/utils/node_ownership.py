@@ -20,10 +20,11 @@ substrate's ambiguous-owner refusal), a timeout and a JSON ``null`` are all
 UNCLAIMED. The reads are synchronous calls into the substrate, so they run off
 the event loop and are bounded by a timeout.
 
-FOLD OFF. With ``CIRIS_NODE_FOLD=false`` there is no node in the process and no
-owner-binding to read; the reading is `NO_NODE_FOLD_GATE_NOT_APPLIED` and the
-gates stand aside. That is how the unit-test suite runs (tests/conftest.py). It
-is the existing fold switch, not a new one.
+FOLD OFF. With ``CIRIS_NODE_FOLD=false`` there is no node in the process, so
+there is no owner: the reading is `NO_NODE` and the agent holds, exactly as the
+halt latch reads fold-off as halted. There are no deployments without nodes and
+no bypass. The unit suite runs fold-off and stubs `_read_from_node` with an
+explicit "owned" answer in tests/conftest.py, the way the halt latch is stubbed.
 """
 
 from __future__ import annotations
@@ -97,7 +98,7 @@ async def _read_from_node() -> NodeOwnership:
     from ciris_engine.logic.runtime.node_fold import fold_status
 
     if fold_status() is None:
-        return _state(NodeOwnershipReading.NO_NODE_FOLD_GATE_NOT_APPLIED)
+        return _state(NodeOwnershipReading.NO_NODE, read_error="no node in this deployment (CIRIS_NODE_FOLD=false)")
     try:
         return await asyncio.wait_for(asyncio.to_thread(_read_owner_sync), timeout=NODE_OWNERSHIP_READ_TIMEOUT_SECONDS)
     except asyncio.TimeoutError:
@@ -115,12 +116,8 @@ def _observe(state: NodeOwnership) -> None:
         return
     if state.unclaimed:
         logger.warning("Node ownership: the agent is held. %s", state.unclaimed_message())
-    elif state.reading == NodeOwnershipReading.OWNED:
-        logger.info("Node ownership: node %s is owned by %s; the agent may run", state.node_key_id, state.owner_key_id)
     else:
-        logger.warning(
-            "Node ownership: no node is folded in (CIRIS_NODE_FOLD=false); the ownership gate is not applied"
-        )
+        logger.info("Node ownership: node %s is owned by %s; the agent may run", state.node_key_id, state.owner_key_id)
 
 
 async def node_owned(*, fresh: bool = False) -> NodeOwnership:

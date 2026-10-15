@@ -37,10 +37,9 @@ class NodeOwnershipReading(str, Enum):
     NO_ENGINE = "no_engine"
     READ_ERROR = "read_error"
     READ_TIMEOUT = "read_timeout"
-    #: CIRIS_NODE_FOLD=false: this process folds in no node, so there is no
-    #: owner-binding to read and the gate stands aside (the unit-test suite runs
-    #: this way). Not a claim that anyone owns anything.
-    NO_NODE_FOLD_GATE_NOT_APPLIED = "no_node_fold_gate_not_applied"
+    #: CIRIS_NODE_FOLD=false: no node in this process, so no owner. Held like
+    #: any other unowned reading; there are no deployments without nodes.
+    NO_NODE = "no_node"
 
 
 class NodeOwnership(BaseModel):
@@ -56,8 +55,8 @@ class NodeOwnership(BaseModel):
 
     @property
     def unclaimed(self) -> bool:
-        """True when the agent must hold: everything except OWNED, and the fold-off case."""
-        return self.reading not in (NodeOwnershipReading.OWNED, NodeOwnershipReading.NO_NODE_FOLD_GATE_NOT_APPLIED)
+        """True when the agent must hold: every reading except OWNED."""
+        return self.reading != NodeOwnershipReading.OWNED
 
     def unclaimed_message(self) -> str:
         """What is missing and how to supply it. Names the PIN file, never its contents."""

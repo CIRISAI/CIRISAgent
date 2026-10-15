@@ -124,6 +124,24 @@ _UNFUNDED_MARKERS = (
 )
 
 
+def is_transient_transport_failure(exc: BaseException, category: Optional[str] = None) -> bool:
+    """Would a fresh request plausibly succeed? Transient transport only.
+
+    THE transport retry predicate, shared by the conscience facility
+    (`is_retryable_by_facility`) and the DMA retry loop
+    (`run_dma_with_retries`): TIMEOUT / CONNECTION_ERROR / INTERNAL_ERROR,
+    unless the account is unfunded. CIRCUIT_OPEN is deliberately not here: the
+    bus already waited as long as the caller's deadline allowed, so a retry
+    would hit the same open breaker (it stays in TRANSPORT_CATEGORIES, so a
+    shard that meets it is still reported as not run, fail-closed).
+    """
+    cat = category or categorize_conscience_error(exc)
+    if cat not in FACILITY_RETRY_TRANSPORT_CATEGORIES:
+        return False
+    text = str(exc).lower()
+    return not any(marker in text for marker in _UNFUNDED_MARKERS)
+
+
 def is_retryable_by_facility(exc: BaseException, category: Optional[str] = None) -> bool:
     """Should the conscience facility spend another attempt on this failure?
 
@@ -134,10 +152,7 @@ def is_retryable_by_facility(exc: BaseException, category: Optional[str] = None)
     cat = category or categorize_conscience_error(exc)
     if cat in FACILITY_RETRY_LLM_FAULT_CATEGORIES:
         return True
-    if cat in FACILITY_RETRY_TRANSPORT_CATEGORIES:
-        text = str(exc).lower()
-        return not any(marker in text for marker in _UNFUNDED_MARKERS)
-    return False
+    return is_transient_transport_failure(exc, cat)
 
 
 def categorize_conscience_error(exc: BaseException) -> str:
@@ -262,48 +277,12 @@ def unusable_answer_result(
     return result
 
 
-#: Transport categories where a FRESH request is an independent draw that can
-#: succeed: the provider was slow, unreachable, or returned a 5xx this once.
-#: The one retry policy for DMA attempts (`run_dma_with_retries`). Everything
-#: else fails fast: AUTH_ERROR / MODEL_NOT_AVAILABLE fail identically forever,
-#: RATE_LIMIT is already waited out by the bus's cooldown loop,
-#: CONTEXT_LENGTH_EXCEEDED overflows identically on the same payload,
-#: CIRCUIT_OPEN means the bus already waited as long as the deadline allowed,
-#: and an unfunded account cannot be retried into funds.
-TRANSIENT_TRANSPORT_CATEGORIES = frozenset({"TIMEOUT", "CONNECTION_ERROR", "INTERNAL_ERROR"})
-
-#: Phrases meaning the account cannot pay. Providers return some of these as a
-#: 500, which categorises INTERNAL_ERROR, but no retry can fund the account.
-UNFUNDED_MARKERS = (
-    "insufficient credit",
-    "insufficient_quota",
-    "insufficient balance",
-    "credit balance is too low",
-    "credit limit exceeded",
-    "error code: 402",
-    "http 402",
-)
-
-
-def is_transient_transport_failure(exc: BaseException, category: Optional[str] = None) -> bool:
-    """Would a fresh request plausibly succeed? Transient transport only.
-
-    Schema-validation failures (VALIDATION_ERROR, CONTENT_FILTER) are not
-    transport and are not swept in here: the model answered and the answer
-    was unusable, which the LLM service's reask loop owns (#895).
-    """
-    cat = category or categorize_conscience_error(exc)
-    if cat not in TRANSIENT_TRANSPORT_CATEGORIES:
-        return False
-    text = str(exc).lower()
-    return not any(marker in text for marker in UNFUNDED_MARKERS)
-
-
 #: What a DMA evaluator must RAISE rather than fold into a fallback result:
 #: the model was never reached (or the bus had no provider to reach), so a
 #: fallback score would be a number nobody produced. `run_dma_with_retries`
-#: then applies the one retry policy above, and fails the DMA closed.
-SURFACED_TRANSPORT_CATEGORIES = TRANSIENT_TRANSPORT_CATEGORIES | {"CIRCUIT_OPEN"}
+#: then applies the shared retry predicate (`is_transient_transport_failure`)
+#: and fails the DMA closed.
+SURFACED_TRANSPORT_CATEGORIES = FACILITY_RETRY_TRANSPORT_CATEGORIES | {"CIRCUIT_OPEN"}
 
 
 def surfaces_as_transport_failure(exc: BaseException) -> bool:

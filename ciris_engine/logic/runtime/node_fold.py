@@ -244,37 +244,38 @@ def _resolve_key_id() -> Optional[str]:
 
 
 def _surface_first_run_claim_pin() -> None:
-    """Echo the node's one-time first-run CLAIM PIN to the app's console.
+    """Say THAT the node minted a one-time claim PIN, and WHERE it is. Never the PIN.
 
-    ciris-server ≥0.5.119 (CIRISServer#277) exposes
-    ``ciris_server.first_run_claim_pin()`` — an in-process, NON-consuming,
-    never-over-HTTP accessor stashed the instant compose mints the PIN. On the
-    embedded topology the embedding app IS the node's console, but the rust
-    tracing banner is unobservable on Android (0-byte file sink at compose,
-    nothing in logcat). Bridge it here: print + log the PIN in the exact
-    banner vocabulary the client's capture already latches
-    (``parseOwnershipBanner`` — the "CLAIM PIN" marker + the Crockford
-    XXXX-XXXX shape — via BOTH the logcat python.stdout stream and the
-    <home>/logs/latest.log file-tail). No PIN (already-claimed node, or a
-    pre-0.5.119 wheel) ⇒ silent no-op. Security note: this reaches the app's
-    own stdout/log file only — the same trust domain as the desktop console
-    the PIN is designed for; it is never served over HTTP.
+    THE CLAIM PIN IS A FILE ON DISK, NEVER THE LOG (user ruling). The node
+    writes it to ``<CIRIS_HOME>/claim_pin`` (0600) the instant compose mints it;
+    the deployer, the wizard and every harness read that file. This used to
+    print and log the PIN value itself so a client could scrape it from
+    logcat or latest.log, which put a credential in every log file and log
+    shipment. Now one line names the file and the claim route.
+
+    ``ciris_server.first_run_claim_pin()`` (CIRISServer#277) is consulted only to
+    know whether a PIN was minted this boot; its value is never formatted. The
+    line keeps the "one-time CLAIM PIN" marker the mobile order/RCA checks key on.
+    No PIN (already-claimed node, a ROOT present, or a pre-0.5.119 wheel) means
+    no line.
     """
     try:
         import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
 
         accessor = getattr(ciris_server, "first_run_claim_pin", None)
-        if accessor is None:
-            return  # pre-0.5.119 wheel — banner-only capture still applies
-        pin = accessor()
-        if pin:
-            line = (
-                f"Node fold: OWNERSHIP UNCLAIMED — one-time CLAIM PIN: {pin} (console-only; used by setup self-claim)"
-            )
-            print(line, flush=True)  # → logcat python.stdout on Android; console on desktop
-            logger.info(line)  # → <home>/logs/latest.log for the file-tail capture
-    except Exception as exc:  # noqa: BLE001 — never let PIN surfacing break the boot
-        logger.debug("Node fold: first_run_claim_pin probe failed (non-fatal): %s", exc)
+        if accessor is None or not accessor():
+            return
+        from ciris_engine.logic.utils.node_ownership import claim_pin_file
+        from ciris_engine.schemas.runtime.node_ownership import CLAIM_ROUTE
+
+        line = (
+            f"Node fold: OWNERSHIP UNCLAIMED — one-time CLAIM PIN written to {claim_pin_file()} "
+            f"(read the file; claim via {CLAIM_ROUTE})"
+        )
+        print(line, flush=True)
+        logger.info(line)
+    except Exception as exc:  # noqa: BLE001 — never let this break the boot
+        logger.debug("Node fold: first_run_claim_pin probe failed (non-fatal): %s", type(exc).__name__)
 
 
 def _reprime_federation_delivery(path: str) -> None:
@@ -723,8 +724,7 @@ def start_node_fold(brain_port: int, *, home: Optional[str] = None, key_id: Opti
         logger.exception("Node fold: OAuth provider sync failed (agent continues)")
     _reprime_federation_delivery("post-bind")
     _author_federation_consent("post-bind")
-    # Surface the one-time first-run CLAIM PIN (minted during compose, stashed
-    # in-process by ciris-server ≥0.5.119) so the client's capture latches it.
+    # Say where the one-time first-run CLAIM PIN file is (never the PIN).
     _surface_first_run_claim_pin()
     # The node's SIGNED self identity-occurrence publish + trusted-peer boot-prime
     # are owned by the substrate (CIRISServer#227 S1, ciris-server >=0.5.101) — the

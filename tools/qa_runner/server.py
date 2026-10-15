@@ -26,7 +26,7 @@ import time
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 from urllib.parse import urlparse
 
 # `pty` is POSIX-only. Importing it unconditionally made this module unusable on
@@ -598,6 +598,8 @@ class APIServerManager:
             modules: Optional list of QAModule enums being tested
         """
         self.config = config
+        #: (handoff dir, node home) in CSD-129 handoff mode; see accord_halt_handoff.
+        self._halt_handoff: Optional[Tuple[Path, Path]] = None
         self.database_backend = database_backend
         self.modules = modules or []
         self.console = Console()
@@ -1078,6 +1080,7 @@ class APIServerManager:
                         f"accord_halt handoff: no {HANDOFF_FILE} newer than {floor} in {handoff_dir} within 300 s"
                     )
                 _halt_handoff_env(env, Path(handoff_dir), Path(throwaway))
+                self._halt_handoff = (Path(handoff_dir), Path(throwaway))
                 os.environ[TEE_DIR_ENV] = env["CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR"]
                 self.console.print(f"[dim]accord_halt: handoff env from {handoff_dir} applied[/dim]")
 
@@ -2022,6 +2025,21 @@ class APIServerManager:
         extracted_pwd = self._extract_password_from_log()
         if extracted_pwd:
             self._extracted_password = extracted_pwd
+
+        # CSD-129: the harness owner-binds the node with its PIN BEFORE setup;
+        # setup mints a ROOT WA, after which the node mints no PIN.
+        halt_handoff = self._halt_handoff
+        if halt_handoff is not None:
+            from .modules.accord_halt_handoff import CLAIMED_FILE, claim_via_harness
+
+            claimed = claim_via_harness(*halt_handoff)
+            if claimed is None:
+                self.console.print(
+                    f"[red]accord_halt handoff: no claim PIN in {halt_handoff[1]} or no {CLAIMED_FILE} "
+                    f"in {halt_handoff[0]} -- the node stays unowned and would ship no trace[/red]"
+                )
+                return False
+            self.console.print(f"[dim]accord_halt: node claimed by {claimed.get('owner_key_id')}[/dim]")
 
         # If data was wiped, complete setup to create test user before authenticating
         if self.config.wipe_data:

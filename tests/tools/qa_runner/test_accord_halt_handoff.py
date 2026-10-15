@@ -265,3 +265,59 @@ async def test_module_refuses_without_a_test_anchor_wheel(tmp_path, monkeypatch)
     results = await module.run()
     assert len(results) == 1 and results[0]["status"] == "❌ FAIL" and "test-anchor" in results[0]["error"]
     assert not (Path(tmp_path) / "ciris-native-mesh-agent" / h.READY_FILE).exists()
+
+
+def _fake_harness_claim(d: Path, delay_s: float = 0.3) -> threading.Thread:
+    """Claims the node the way the harness does: reads agent_up's node_home PIN, writes agent_claimed."""
+
+    def claim() -> None:
+        deadline = time.monotonic() + 5
+        while not (d / h.UP_FILE).exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        node_home = Path(json.loads((d / h.UP_FILE).read_text())["node_home"])
+        pin = (node_home / h.CLAIM_PIN_FILE).read_text().strip()
+        time.sleep(delay_s)
+        h.write_json_atomic(d / h.CLAIMED_FILE, {"owner_key_id": f"owner-for-{pin}", "token": "owner-bearer"})
+
+    t = threading.Thread(target=claim, daemon=True)
+    t.start()
+    return t
+
+
+def test_agent_up_names_the_home_holding_the_claim_pin(tmp_path):
+    d = _handoff_dir(tmp_path)
+    home = tmp_path / "node-home"
+    home.mkdir()
+
+    def mint_pin_late() -> None:
+        time.sleep(0.4)  # compose reaches the claim phase after the brain is up
+        (home / h.CLAIM_PIN_FILE).write_text("Q4YC-AZQA\n")
+
+    threading.Thread(target=mint_pin_late, daemon=True).start()
+    harness = _fake_harness_claim(d)
+    claimed = h.claim_via_harness(d, home, pin_timeout_s=5, claim_timeout_s=5)
+    harness.join(5)
+    assert claimed == {"owner_key_id": "owner-for-Q4YC-AZQA", "token": "owner-bearer"}
+    up = json.loads((d / h.UP_FILE).read_text())
+    assert Path(up["node_home"]) == home and (Path(up["node_home"]) / h.CLAIM_PIN_FILE).is_file()
+
+
+def test_no_pin_means_no_agent_up_and_no_claim(tmp_path):
+    d = _handoff_dir(tmp_path)
+    home = tmp_path / "node-home"
+    home.mkdir()  # already ROOT-owned: the node minted no PIN
+    assert h.claim_via_harness(d, home, pin_timeout_s=0.5, claim_timeout_s=0.5) is None
+    assert not (d / h.UP_FILE).exists()
+
+
+def test_a_previous_runs_agent_claimed_is_not_this_claim(tmp_path):
+    import os
+
+    d = _handoff_dir(tmp_path)
+    home = tmp_path / "node-home"
+    home.mkdir()
+    (home / h.CLAIM_PIN_FILE).write_text("QCKE-AY69")
+    h.write_json_atomic(d / h.CLAIMED_FILE, {"owner_key_id": "stale", "token": "old"})
+    old = time.time() - 600
+    os.utime(d / h.CLAIMED_FILE, (old, old))
+    assert h.claim_via_harness(d, home, pin_timeout_s=1, claim_timeout_s=0.5) is None

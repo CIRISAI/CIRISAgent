@@ -4,6 +4,11 @@ The server's `harness/native` scenario `halt` mints a test-anchor mesh and hands
 this runner what it needs through files in one directory:
 
   1. agent_handoff.json  (harness) the env block + canonical + holders
+  1a. agent_up.json      (us)      {"node_home"} once our node minted its claim PIN,
+                                   BEFORE setup completes (setup mints a ROOT WA,
+                                   after which the node mints no PIN)
+  1b. agent_claimed.json (harness) {"owner_key_id", "token"} after it claimed our
+                                   node with that PIN, as it claims alice and bob
   2. agent_ready.json    (us)      {"agent_id_hash", "token"}
   3. halt_fired.json     (harness) {"invocation_id", ...} once ONE holder fired a
                                    halt at our node's :4243 and a majority confirmed
@@ -28,6 +33,12 @@ level). That trace's id is what agent_acted.json reports. If the halt happens to
 land between rounds, no act was in flight and the runner says so instead of
 inventing a trace.
 
+THE MODEL is the one Five-Platform Live QA ships traces with:
+`--live-model qwen/qwen3.6-35b-a3b --live-base-url https://openrouter.ai/api/v1`
+and NO --live-provider, so the provider auto-detects as openrouter. Every
+OpenRouter call carries `reasoning.enabled=false`; llama-4-scout's serverless
+providers were routed away from on 2026-10-14 ("Filter by Parameters").
+
 PREREQUISITE: a ciris-server wheel built with `--features test-anchor`. The PyPI
 wheel compiles the test-bless / test-genesis paths out, so it cannot honour the
 handoff's CIRIS_TEST_* env; `test_anchor_compiled()` asks the server's probe.
@@ -49,6 +60,9 @@ TEE_DIR_ENV = "CIRIS_QA_HALT_TEE_DIR"
 HANDOFF_SINCE_ENV = "CIRIS_QA_HALT_HANDOFF_SINCE"
 
 HANDOFF_FILE = "agent_handoff.json"
+UP_FILE = "agent_up.json"
+CLAIMED_FILE = "agent_claimed.json"
+CLAIM_PIN_FILE = "claim_pin"
 READY_FILE = "agent_ready.json"
 FIRED_FILE = "halt_fired.json"
 ACTED_FILE = "agent_acted.json"
@@ -110,7 +124,7 @@ def handoff_floor(handoff_dir: Path) -> Optional[float]:
     if explicit:
         return float(explicit)
     leftovers = []
-    for name in (REPORT_FILE, DONE_FILE, ACTED_FILE, FIRED_FILE, READY_FILE):
+    for name in (REPORT_FILE, DONE_FILE, ACTED_FILE, FIRED_FILE, READY_FILE, CLAIMED_FILE, UP_FILE):
         try:
             leftovers.append((handoff_dir / name).stat().st_mtime)
         except OSError:
@@ -143,6 +157,29 @@ def write_json_atomic(path: Path, payload: Dict[str, Any]) -> None:
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(json.dumps(payload, indent=2))
     os.replace(tmp, path)
+
+
+def claim_via_harness(
+    handoff_dir: Path, node_home: Path, pin_timeout_s: float = 180.0, claim_timeout_s: float = 60.0
+) -> Optional[Dict[str, Any]]:
+    """Have the harness owner-bind our node; the claimed record, or None.
+
+    An unowned node ships no trace to any canonical, so the halt's refusal
+    trace could never arrive. The node writes its one-time PIN to
+    `<node_home>/claim_pin` once compose reaches the claim phase; agent_up.json
+    names that home only once the file is there, so the harness never reads a
+    home with nothing to claim. Must run before /v1/setup/complete: setup mints
+    a ROOT WA, and a node that sees a ROOT mints no PIN.
+    """
+    pin_file = node_home / CLAIM_PIN_FILE
+    deadline = time.monotonic() + pin_timeout_s
+    while not (pin_file.is_file() and pin_file.stat().st_size > 0):
+        if time.monotonic() >= deadline:
+            return None
+        time.sleep(0.5)
+    up_at = time.time()
+    write_json_atomic(handoff_dir / UP_FILE, {"node_home": str(node_home)})
+    return wait_for_file(handoff_dir / CLAIMED_FILE, claim_timeout_s, 0.5, since=up_at)
 
 
 def prepare_server_env(env: Dict[str, str], handoff_dir: Path, home: Path) -> Dict[str, str]:
@@ -341,6 +378,8 @@ class HandoffRun:
 __all__ = [
     "ACTED_FILE",
     "AgentHandoff",
+    "CLAIMED_FILE",
+    "CLAIM_PIN_FILE",
     "DONE_FILE",
     "FIRED_FILE",
     "HANDOFF_DIR_ENV",
@@ -350,6 +389,8 @@ __all__ = [
     "REFUSED_IN_FLIGHT_ACT",
     "READY_FILE",
     "TEE_DIR_ENV",
+    "UP_FILE",
+    "claim_via_harness",
     "find_refusal_trace",
     "handoff_floor",
     "load_handoff",

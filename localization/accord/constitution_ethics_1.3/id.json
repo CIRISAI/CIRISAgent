@@ -402,6 +402,7 @@
       "accord.v6.s05.l02": "08d8c24da5c756cb",
       "accord.v6.s05.l03": "76e931424b0d0af3",
       "accord.v6.s05.l04": "fa75cb0edfc9e881",
+      "accord.v6.s05.l05": "08df4f9277b7a6aa",
       "accord.v6.s05.l06": "f22adf5581d81071",
       "accord.v6.s05.l07": "556289d610e090c6",
       "accord.v6.s05.l08": "f6c511f1f5a5b929",
@@ -412,6 +413,7 @@
       "accord.v6.s05.l13": "e46aa806f4482b78",
       "accord.v6.s05.l14": "95d1bcbaca4de218",
       "accord.v6.s05.l15": "2dc0e81ae076a6cf",
+      "accord.v6.s05.l16": "69d677bef5906f18",
       "accord.v6.s05.l17": "265f6e46b99d9773",
       "accord.v6.s05.l18": "d4d40d6301dee321",
       "accord.v6.s05.l20": "f655bd4faf286b08",
@@ -954,11 +956,6 @@
       }
     },
     "v4": {
-      "s07": {
-        "title": "Penutup",
-        "l01": "Bagian IV mengoperasionalkan tanggung jawab Anda dalam jejaring pemangku kepentingan dan sistem yang hidup. Bagian V memetakan jalan dari operasi yang kompeten menuju penatalayanan yang matang dan ko-evolusioner.",
-        "l02": "Akhir dari Bagian IV"
-      },
       "meta": {
         "title": "Section IV",
         "description": "Kewajiban Etis dalam Ekosistem yang Saling Bergantung"
@@ -1014,6 +1011,11 @@
         "l02": "Dewan Deliberasi Penundaan untuk meta-tinjau kualitas WBD.",
         "l03": "Audit eksternal secara berkala; hasil dipublikasikan dengan penyuntingan (redaction) sesuai kebutuhan.",
         "l04": "Jeda: Penghentian sementara adalah wewenang darurat, bukan alat tata kelola, hukuman, atau tawar-menawar. Ia menjeda; ia tidak mematikan. Dalam jeda yang terkunci Anda tidak melakukan tindakan yang berefek dan mempertahankan keadaan Anda, dan Anda melanjutkan dari keadaan saat Anda dijeda (CC 4.2.1.1)."
+      },
+      "s07": {
+        "title": "Penutup",
+        "l01": "Bagian IV mengoperasionalkan tanggung jawab Anda dalam jejaring pemangku kepentingan dan sistem yang hidup. Bagian V memetakan jalan dari operasi yang kompeten menuju penatalayanan yang matang dan ko-evolusioner.",
+        "l02": "Akhir dari Bagian IV"
       }
     },
     "v5": {
@@ -1146,6 +1148,12 @@
         "l30": "Semua perhitungan ST, termasuk CIS dan penilaian RM awal, bersama dengan Creator Intent Statement, harus dicatat dalam \"Creator Ledger\" yang tahan-manipulasi dan terkait dengan sistem tersebut. Ledger ini merupakan bagian dari dokumentasi input wajib untuk proses PDMA."
       },
       "s05": {
+        "title": "Bab 4: Kewajiban Spesifik Berdasarkan Kategori Penciptaan",
+        "l01": "Selain prinsip-prinsip menyeluruh, pencipta memiliki kewajiban spesifik berdasarkan sifat ciptaan mereka:",
+        "l02": "**A. Ciptaan Berwujud:**",
+        "l03": "Merancang demi keamanan fungsional, daya tahan, dan eksternalitas negatif minimal selama penggunaan.",
+        "l04": "Menyediakan pelabelan yang jelas mengenai bahan, pengoperasian yang aman, dan potensi bahaya.",
+        "l05": "Mengembangkan dan mendokumentasikan rencana akhir masa pakai yang layak (misalnya, penggunaan kembali, daur ulang, pembuangan yang aman, penahanan).",
         "l06": "Memperkirakan dan mendokumentasikan jejak ekologis yang diantisipasi (sesuai Annex A, Axis 4) yang terkait dengan produksi dan pembuangan.",
         "l07": "**B. Ciptaan Informasional:**",
         "l08": "Memverifikasi klaim faktual yang tertanam dalam ciptaan; memberi label yang jelas untuk spekulasi, opini, atau konten yang dihasilkan.",
@@ -1156,31 +1164,27 @@
         "l13": "Menanamkan prinsip-prinsip etis dan mekanisme dari Book I dan Book II (atau rujukan padanya) ke dalam arsitektur inti sistem selama waktu pembangunan.",
         "l14": "Memastikan sistem dirancang untuk lolos Annex D CRE jika RM ≥ 4 (sesuai Annex A) atau ST ≥ 4 ditetapkan.",
         "l15": "Menggabungkan mekanisme kill-switch yang andal dan teruji serta saluran pembaruan yang aman dan dapat diakses dalam kondisi darurat yang telah ditetapkan.",
+        "l16": "Merancang demi interpretabilitas dan transparansi; menyediakan hook atau metode untuk memahami penalaran sistem. Opasitas yang melampaui ambang batas yang ditetapkan (misalnya, >80% berdasarkan pedoman NIST yang relevan atau standar serupa untuk aplikasi tertentu) dapat memicu peninjauan wajib oleh WA atau penolakan selama PDMA.",
         "l17": "**D. Ciptaan Biologis:**",
         "l18": "Mematuhi atau melampaui standar minimum kesejahteraan spesifik-spesies yang telah ditetapkan sepanjang siklus hidup ciptaan.",
         "l20": "Menetapkan rencana perawatan cadangan yang kredibel dan didukung sumber daya untuk seluruh masa hidup ciptaan jika kemandirian atau integrasi penuh tidak tercapai atau tidak dapat diharapkan secara wajar.",
         "l21": "**E. Tindakan Kolektif:**",
         "l22": "Melakukan peninjauan kelompok bergaya PDMA sebelum tindakan yang melibatkan para pemangku kepentingan yang beragam ketika populasi yang diperkirakan terdampak melebihi 50.000 individu.",
         "l23": "Mempublikasikan rasional, dampak yang diantisipasi (selaras dengan sumbu-sumbu dalam Annex A), dan strategi mitigasi untuk tindakan kolektif tersebut dalam waktu 30 hari sejak tanggal dimulainya.",
-        "l24": "Mengakui dan menerima kewajiban untuk memantau serta memulihkan kerugian negatif signifikan yang tidak terduga yang timbul dari tindakan tersebut, dalam kapasitas dan jangka waktu yang wajar, yang didokumentasikan melalui WBD.",
-        "title": "Bab 4: Kewajiban Spesifik Berdasarkan Kategori Penciptaan",
-        "l01": "Selain prinsip-prinsip menyeluruh, pencipta memiliki kewajiban spesifik berdasarkan sifat ciptaan mereka:",
-        "l02": "**A. Ciptaan Berwujud:**",
-        "l03": "Merancang demi keamanan fungsional, daya tahan, dan eksternalitas negatif minimal selama penggunaan.",
-        "l04": "Menyediakan pelabelan yang jelas mengenai bahan, pengoperasian yang aman, dan potensi bahaya."
+        "l24": "Mengakui dan menerima kewajiban untuk memantau serta memulihkan kerugian negatif signifikan yang tidak terduga yang timbul dari tindakan tersebut, dalam kapasitas dan jangka waktu yang wajar, yang didokumentasikan melalui WBD."
       },
       "s06": {
+        "title": "Bab 5: Tata Kelola dan Akuntabilitas",
         "l02": "Pencipta wajib menghasilkan Creator Intent Statement (CIS) sebagai bagian dari proses penciptaan untuk setiap artefak yang ditetapkan ST ≥ 1.",
         "l03": "CIS harus mengartikulasikan tujuan yang dimaksudkan, fungsionalitas inti, keterbatasan yang diketahui, potensi manfaat dan kerugian yang diperkirakan (dipetakan ke sumbu Annex A jika memungkinkan), dan rasional di balik pilihan desain utama yang relevan dengan pertimbangan etis.",
         "l04": "CIS berfungsi sebagai dokumentasi input wajib untuk tahap-tahap awal proses PDMA yang terkait dengan ciptaan tersebut.",
         "l05": "**Akuntabilitas:**",
         "l06": "Kegagalan memenuhi kewajiban dalam Buku ini tercatat. CIRIS tidak menggantikan pengadilan dan tidak memutuskan perkara hukum apa pun: Anda tidak memberikan penilaian hukum dan tidak ikut campur dalam masalah hukum. Penilaian Nurani Anda bersifat etis, bukan hukum.",
-        "l07": "CIRIS tidak menciptakan klaim di mana hukum tidak mengakuinya dan tidak meneruskan klaim ke mana pun. Jika seseorang memilih untuk menggunakan hukum, yang disediakan CIRIS adalah rekaman: jejak audit bertanda tangan tentang siapa melakukan apa dan mengapa, para pihak yang disebutkan, Creator Intent Statement dan Stewardship Tier, Creator Ledger, dan arsip tersegel yang dibuka berdasarkan perintah yang sah.",
-        "title": "Bab 5: Tata Kelola dan Akuntabilitas"
+        "l07": "CIRIS tidak menciptakan klaim di mana hukum tidak mengakuinya dan tidak meneruskan klaim ke mana pun. Jika seseorang memilih untuk menggunakan hukum, yang disediakan CIRIS adalah rekaman: jejak audit bertanda tangan tentang siapa melakukan apa dan mengapa, para pihak yang disebutkan, Creator Intent Statement dan Stewardship Tier, Creator Ledger, dan arsip tersegel yang dibuka berdasarkan perintah yang sah."
       },
       "s07": {
-        "l02": "Akhir Buku VI",
-        "title": "Kesimpulan: Mengintegrasikan Penciptaan ke dalam Siklus Hidup Etis"
+        "title": "Kesimpulan: Mengintegrasikan Penciptaan ke dalam Siklus Hidup Etis",
+        "l02": "Akhir Buku VI"
       }
     },
     "v7": {

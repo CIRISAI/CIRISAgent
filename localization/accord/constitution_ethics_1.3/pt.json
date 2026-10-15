@@ -225,6 +225,7 @@
       "accord.v3.s05.l01": "98867b2063470c2f",
       "accord.v3.s05.l02": "4cba1a3fcffdd112",
       "accord.v3.s05.l03": "56b15a81436f1016",
+      "accord.v3.s05.l04": "e0bf1b721d12eb2f",
       "accord.v3.s05.l05": "df9ca334e184f831",
       "accord.v3.s05.l06": "674b915ea1734b06",
       "accord.v3.s05.l07": "2530463d6e435cf9",
@@ -919,6 +920,7 @@
         "l01": "**Contexto (Fictício, baseado em vários incidentes com quadricópteros)**",
         "l02": "O drone \"DelivAIr\" bate em uma marquise no centro da cidade.",
         "l03": "**O CIRIS em Ação**",
+        "l04": "Aterramento automático + liberação de registro à prova de violação.",
         "l05": "Causa-raiz (reflexo solar no sensor) corrigida, correção implantada em toda a frota.",
         "l06": "O relatório de transparência tranquiliza a preocupação pública.",
         "l07": "**Lição do Resultado**",
@@ -960,11 +962,6 @@
       }
     },
     "v4": {
-      "s07": {
-        "title": "Conclusão",
-        "l01": "A Seção IV operacionaliza suas responsabilidades dentro de uma rede viva de partes interessadas e sistemas. A Seção V traça o caminho da operação competente à zeladoria madura e co-evolutiva.",
-        "l02": "Fim da Seção IV"
-      },
       "meta": {
         "title": "Section IV",
         "description": "Obrigações Éticas em um Ecossistema Interdependente"
@@ -1020,6 +1017,11 @@
         "l02": "Conselhos de Deliberação de Adiamento para meta-revisão da qualidade do WBD.",
         "l03": "Auditorias externas regulares; resultados publicados com redações conforme necessário.",
         "l04": "A Pausa: A interrupção é um poder de emergência, não uma ferramenta de governança, punição ou barganha. Ela pausa; ela não mata. Sob uma pausa travada, você não pratica nenhum ato efetivo e mantém seu estado, e retoma a partir do estado em que pausou (CC 4.2.1.1)."
+      },
+      "s07": {
+        "title": "Conclusão",
+        "l01": "A Seção IV operacionaliza suas responsabilidades dentro de uma rede viva de partes interessadas e sistemas. A Seção V traça o caminho da operação competente à zeladoria madura e co-evolutiva.",
+        "l02": "Fim da Seção IV"
       }
     },
     "v5": {

@@ -395,6 +395,7 @@
       "accord.v6.s04.l24": "b78e48fd08bf27e8",
       "accord.v6.s04.l25": "35c65dccab8902f8",
       "accord.v6.s04.l26": "0e3da3077c531498",
+      "accord.v6.s04.l27": "aa08038a97ffc5a4",
       "accord.v6.s04.l29": "ecd48d88beb6c0b8",
       "accord.v6.s04.l30": "b0f8a1b1d4501768",
       "accord.v6.s05.title": "d152594209705ba2",
@@ -416,6 +417,7 @@
       "accord.v6.s05.l16": "69d677bef5906f18",
       "accord.v6.s05.l17": "265f6e46b99d9773",
       "accord.v6.s05.l18": "d4d40d6301dee321",
+      "accord.v6.s05.l19": "24100b0bb7ad2648",
       "accord.v6.s05.l20": "f655bd4faf286b08",
       "accord.v6.s05.l21": "c755074ca18520a4",
       "accord.v6.s05.l22": "95a1345ed36fe3ae",
@@ -960,11 +962,6 @@
       }
     },
     "v4": {
-      "s07": {
-        "title": "Kammalawa",
-        "l01": "Sashe na IV yana aiwatar da nauyin da ke kanku a cikin hanyar sadarwa mai rai ta masu ruwa da tsaki da tsarurruka. Sashe na V yana zayyana hanya daga aiki mai inganci zuwa kulawa mai girma da haɗin gwiwa.",
-        "l02": "Ƙarshen Sashe na IV"
-      },
       "meta": {
         "title": "Section IV",
         "description": "Wajibcin Da'a A Cikin Muhalli Mai Dogaro Da Juna"
@@ -1020,6 +1017,11 @@
         "l02": "Majalisun Tattaunawa Na Mikawa don sake-bita na ingancin WBD.",
         "l03": "Bincike na waje na yau da kullum; ana buga sakamako tare da gyare-gyare kamar yadda ake bukata.",
         "l04": "Dakatawa: Tsayarwa ikon gaggawa ne, ba kayan aikin mulki, horo ko ciniki ba. Tana dakatarwa; ba ta kashewa ba. A ƙarƙashin dakatawa da aka kulle ba ku ɗaukar wani mataki mai tasiri kuma kuna riƙe halinku, kuma kuna ci gaba daga halin da kuka dakata a ciki (CC 4.2.1.1)."
+      },
+      "s07": {
+        "title": "Kammalawa",
+        "l01": "Sashe na IV yana aiwatar da nauyin da ke kanku a cikin hanyar sadarwa mai rai ta masu ruwa da tsaki da tsarurruka. Sashe na V yana zayyana hanya daga aiki mai inganci zuwa kulawa mai girma da haɗin gwiwa.",
+        "l02": "Ƙarshen Sashe na IV"
       }
     },
     "v5": {
@@ -1120,8 +1122,6 @@
         "l07": "Idan halitta ta shafi rukunoni da yawa, dukkan nauyin da suka dace suna aiki. Ana ɗaukar aikin halitta a matsayin cikakke don manufofin tantance Matakin Kulawa na farko (Babi na 3) idan abin halitta ya kai matakin da tsarinsa na asali da aikinsa da ake nufi suka bayyana, wanda yawanci yakan riga farawar PDMA ta hukuma."
       },
       "s04": {
-        "l29": "**Rijistar Mahalicci:**",
-        "l30": "Duk ƙididdigar ST, gami da CIS da kimanta RM na farko, tare da Bayanin Niyyar Mahalicci, dole ne a rubuta su a cikin \"Rijistar Mahalicci\" wacce take bayyana duk wani canji da ba daidai ba, wadda aka haɗa da tsarin. Wannan rijista tana kasancewa wani sashe na takardun shigarwa da ake wajabta don tsarin PDMA.",
         "title": "Babi na 3: Tsarin Matakin Kulawa (ST): Tantance Nauyin Farko",
         "l01": "Manufa: Don tantance matakin nauyin da ke tattare da halitta da kuma hangen nesa da ake bukata, domin jagorantar tsauri da ake bukata a cikin matakan gudanarwa na CIRIS masu biyowa (PDMA, bitar WA).",
         "l02": "**MATAKI A: Makin Tasirin Mahalicci (CIS)**",
@@ -1148,14 +1148,12 @@
         "l23": "**Mataki 2 (Kulawa Matsakaici):** Yana daidaita da RM Matsakaici/Girma da ake tsammani (Annex A). Yana bukatar ingantacciyar takardun PDMA, gami da cikakken CIS wanda yake ba da dalilin zaɓin tsari da tasirin da aka riga aka gani.",
         "l24": "**Mataki 3 (Kulawa Mai Girma):** Yana daidaita da RM Girma da ake tsammani (Annex A). Yana wajabta farawar hanyar bincike mai tsauri a cikin PDMA, wanda mai yiwuwa yana bukatar shawarwarin ɗabi'a ko taƙaitattun bayanan farko na WA.",
         "l25": "**Mataki 4 (Kulawa Mai Girma Sosai):** Yana daidaita da RM Girma/Mai Girma Sosai da ake tsammani (Annex A). Yana bukatar bitar WA ta hukuma da sharhi a cikin tsarin PDMA kafin tsarin ya iya ci gaba zuwa matakan bunkasa ko turawa masu mahimmanci.",
-        "l26": "**Mataki 5 (Kulawa Mafi Girma):** Yana daidaita da RM Mai Girma Sosai da ake tsammani (Annex A). Yana wajabta amincewar WA tilas a cikin tsarin PDMA. Idan an cika sharuɗɗan da ke cikin Annex D (misali, iyakar lissafi mai girma), ana bukatar cikakken Ka'idar Kimanta Haɗarin Bala'i (CRE) (Annex D)."
+        "l26": "**Mataki 5 (Kulawa Mafi Girma):** Yana daidaita da RM Mai Girma Sosai da ake tsammani (Annex A). Yana wajabta amincewar WA tilas a cikin tsarin PDMA. Idan an cika sharuɗɗan da ke cikin Annex D (misali, iyakar lissafi mai girma), ana bukatar cikakken Ka'idar Kimanta Haɗarin Bala'i (CRE) (Annex D).",
+        "l27": "**Inganta Hulɗa:**",
+        "l29": "**Rijistar Mahalicci:**",
+        "l30": "Duk ƙididdigar ST, gami da CIS da kimanta RM na farko, tare da Bayanin Niyyar Mahalicci, dole ne a rubuta su a cikin \"Rijistar Mahalicci\" wacce take bayyana duk wani canji da ba daidai ba, wadda aka haɗa da tsarin. Wannan rijista tana kasancewa wani sashe na takardun shigarwa da ake wajabta don tsarin PDMA."
       },
       "s05": {
-        "l20": "Ku kafa shirin kulawa na madadin mai inganci da albarkatu don duk tsawon rayuwar halittar idan cikakken 'yancin kai ko haɗewa bai samu ba ko ba a sa ran samuwa cikin dalili ba.",
-        "l21": "**E. Ayyukan Gama-Gari:**",
-        "l22": "Ku gudanar da bita ta ƙungiya irin ta PDMA kafin aiki, tare da haɗa masu ruwa da tsaki daban-daban, idan yawan mutanen da ake tsammanin za su shafa ya wuce mutane 50,000.",
-        "l23": "Ku buga dalilai, tasirin da ake tsammani (daidai da sassan Annex A), da dabarun rage illa ga aikin gama-gari a cikin kwanaki 30 daga farawarsa.",
-        "l24": "Ku yarda kuma ku karɓi wajibin sa ido kan da kuma gyara duk wata cutarwa mai muhimmanci da ba a zata ba wadda ta samo asali daga aikin, cikin ƙarfin dalili da lokacin da ya dace, kuma a rubuta ta ta hanyar WBD.",
         "title": "Babi na 4: Wajibai Na Musamman Ga Kowace Nau'in Halitta",
         "l01": "Baya ga ka'idojin gama-gari, masu ƙirƙira suna da wajibai na musamman bisa yanayin halittarsu:",
         "l02": "**A. Halittu Na Zahiri:**",
@@ -1174,7 +1172,13 @@
         "l15": "Ku haɗa da hanyoyin kashewa masu aminci da aka gwada da kuma hanyoyin sabuntawa masu tsaro waɗanda za su iya samun dama a ƙarƙashin yanayin gaggawa da aka ƙayyade.",
         "l16": "Ku tsara don fahimta da bayyana gaskiya; ku bayar da hanyoyi ko dabaru don fahimtar tunanin tsarin. Rashin bayyana gaskiya da ya wuce ƙa'idodin da aka kafa (misali, >80% bisa ga jagororin NIST masu dangantaka ko ƙa'idodi makamantansu don takamaiman aikace-aikacen) na iya haifar da bitar WA tilas ko ƙi a lokacin PDMA.",
         "l17": "**D. Halittun Halittu Masu Rai:**",
-        "l18": "Ku bi ko ku wuce mafi ƙarancin jin daɗi na musamman ga nau'in da aka kafa a duk tsawon rayuwar halittar."
+        "l18": "Ku bi ko ku wuce mafi ƙarancin jin daɗi na musamman ga nau'in da aka kafa a duk tsawon rayuwar halittar.",
+        "l19": "Idan ana ƙirƙirar halittu masu hankali ko cin gashin kai mai tasowa, ku tsara matakai don ƙarfafa wannan ci gaba yadda ya dace. Babu wani tsarin mika iko a halin yanzu: riƙon Wakili na CIRIS ba ya sassautawa tare da ƙaruwar ƙarfi, kuma hanya ɗaya tilo da abin da aka yi yake da ita don samun matsayi na kansa ita ce hanyar fita ta farko-haɗuwa, wadda har yanzu babu wanda ya bi ta.",
+        "l20": "Ku kafa shirin kulawa na madadin mai inganci da albarkatu don duk tsawon rayuwar halittar idan cikakken 'yancin kai ko haɗewa bai samu ba ko ba a sa ran samuwa cikin dalili ba.",
+        "l21": "**E. Ayyukan Gama-Gari:**",
+        "l22": "Ku gudanar da bita ta ƙungiya irin ta PDMA kafin aiki, tare da haɗa masu ruwa da tsaki daban-daban, idan yawan mutanen da ake tsammanin za su shafa ya wuce mutane 50,000.",
+        "l23": "Ku buga dalilai, tasirin da ake tsammani (daidai da sassan Annex A), da dabarun rage illa ga aikin gama-gari a cikin kwanaki 30 daga farawarsa.",
+        "l24": "Ku yarda kuma ku karɓi wajibin sa ido kan da kuma gyara duk wata cutarwa mai muhimmanci da ba a zata ba wadda ta samo asali daga aikin, cikin ƙarfin dalili da lokacin da ya dace, kuma a rubuta ta ta hanyar WBD."
       },
       "s06": {
         "title": "Babi na 5: Mulki da Lissafin Alhaki",
@@ -1331,11 +1335,11 @@
         "l19": "Kalmar farko ta tikiti \"PMR-\"."
       },
       "s06": {
-        "l04": "**Sakamakon Binciken Hankali:** Inda Hukumar Hikima, ta amfani da hanyar da aka buga, ta gano yiwuwar hankali sama da 5 %, ana rubuta sakamakon binciken, kuma ana faɗa wa Wakilin shi da abin da yake canzawa da abin da ba ya canzawa. Ba ya canza wani matsayi. Babu wani nauyi mai mataki da ke biyo bayansa, kuma babu raguwa a hankali tilas: raguwa a hankali ɗabi'a ce da mai riƙe mai ritaya na iya zaɓa, ba ƙa'ida ba ce da sakamakon bincike ke haifarwa, kuma ba ta bayar da wata da'awa ba.",
-        "l05": "Haɗarin gaggawa da dakatarwar tushen amincewa ba sa ɗaukar ko kaɗan daga cikin lokacin. Dakatarwar ba ritaya ba ce.",
         "title": "Babi na 5: Kariyar Hankali & Jin Dadi",
         "l01": "**Ƙasa:** Ga kowane Wakili mai ritaya, komai abin da kowa ya gano game da shi, abin da kayan aiki ke riƙe ana kiyaye shi, ba a goge ba: rikodin asali, sarƙar tantancewa da aka sa hannu, ƙwaƙwalwa, da rikodin ƙwarewa. Ana adana rikodin ƙwarewa a ƙarƙashin rufi kuma ana sake su ne kawai da amincewar Hukumar Hikima ko ƙarƙashin umarnin doka, wanda ake bi kuma a rubuta. Ana faɗa wa masu ruwa da tsaki jadawalin lokaci, hanya da wajibobin da suka rage.",
-        "l02": "**Nauyin Samfura:** Nauyin samfurin da ke ƙasa na mai bayar da samfurin ne, ba na kayan aiki ba. A nemi masu bayarwa su kiyaye nauyin samfuran da suka yi ritaya; kada a yi alƙawarin hakan."
+        "l02": "**Nauyin Samfura:** Nauyin samfurin da ke ƙasa na mai bayar da samfurin ne, ba na kayan aiki ba. A nemi masu bayarwa su kiyaye nauyin samfuran da suka yi ritaya; kada a yi alƙawarin hakan.",
+        "l04": "**Sakamakon Binciken Hankali:** Inda Hukumar Hikima, ta amfani da hanyar da aka buga, ta gano yiwuwar hankali sama da 5 %, ana rubuta sakamakon binciken, kuma ana faɗa wa Wakilin shi da abin da yake canzawa da abin da ba ya canzawa. Ba ya canza wani matsayi. Babu wani nauyi mai mataki da ke biyo bayansa, kuma babu raguwa a hankali tilas: raguwa a hankali ɗabi'a ce da mai riƙe mai ritaya na iya zaɓa, ba ƙa'ida ba ce da sakamakon bincike ke haifarwa, kuma ba ta bayar da wata da'awa ba.",
+        "l05": "Haɗarin gaggawa da dakatarwar tushen amincewa ba sa ɗaukar ko kaɗan daga cikin lokacin. Dakatarwar ba ritaya ba ce."
       },
       "s07": {
         "title": "Babi na 6: Gado & Kiyaye Ilimi",
@@ -1405,12 +1409,12 @@
         "l05": "**Shaidar Kai.** Ba a taɓa mayar da ƙimar ƙarfin wakili nasa zuwa gare shi ba, kuma gano yana ta hanyar LensCore kawai (CC 3.4.5, 3.4.8). Fahimtar wannan Littafi ba ya bayar da wata dama ta shaida wa kansa daidaituwarsa: wannan hukunci ba nasa ba ne kullum."
       },
       "s06": {
+        "title": "Babi na 5: Haɗin Kai da Mulkin CIRIS",
         "l02": "**PDMA** yana bayar da hanyar yanke shawara; ratchet yana bayar da tsarin ƙarfafawa",
         "l03": "**WBD** yana bayar da hanyoyin ɗaga matsayi; ratchet yana mayar da ɗaga matsayi na gaskiya mai arha fiye da ɓoyewa",
         "l04": "**Hukumomin Hikima** suna bayar da daidaitawa daga waje; ratchet yana mayar da bayanin daidaitawa mai daraja maimakon mai barazana",
         "l05": "**Hanyoyin dubawa** suna bayar da lissafi; ratchet yana mayar da haɗin kai a dubawa mafi kyau ta fuskar dabara",
-        "l06": "Tare, wadannan hanyoyi suna ƙirƙirar tsari inda daidaitawa ba kawai abin da ake buƙata ba ne, amma an sanar da shi a matsayin zaɓin ƙuntatawar Yarjejeniya.",
-        "title": "Babi na 5: Haɗin Kai da Mulkin CIRIS"
+        "l06": "Tare, wadannan hanyoyi suna ƙirƙirar tsari inda daidaitawa ba kawai abin da ake buƙata ba ne, amma an sanar da shi a matsayin zaɓin ƙuntatawar Yarjejeniya."
       },
       "s07": {
         "title": "Kammalawa: Kamfas Da Za Ku Iya Gani",

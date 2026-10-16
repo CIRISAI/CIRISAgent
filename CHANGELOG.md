@@ -5,6 +5,38 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.16.1-stable] - 2026-10-15
+
+**Supersedes 2.16.0.** `ciris-agent 2.16.0` and `v2.16.0-stable` were a partial build, auto-published from a mid-release main commit (18c59a93) before releases were gated on a tag. PyPI is immutable, so this is the real release.
+
+### Security
+
+- **Ownership enforced** - an agent never runs on an unowned node (#1277); QA boots claim the node as `qa-harness-user` the way the wizard does (#1277, superseding #1276); Android reads the claim PIN from its file on disk (#1278); the PIN is never logged.
+- **Consciences fail closed** - faculties retry transient transport within their budget and never silently pass (#1269); CIRISVerify disclosure text is tested end to end into the trace row and the API (#1270).
+- **Constitutional halt (CC 4.2.1.1), agent side** - no thought processing while halted, a per-act gate, and a terminal ACTION_RESULT (#1262), verified by CSD-129 runs 5 and 6. The agent latch is read fresh on every check. The legacy accord kill switch is retired (#1262).
+
+### Constitution
+
+- **CIRIS Constitution ethics text 1.3 is the default** - in all 28 locales, root-signed (#1256). Accord 1.2b stays selectable as a research control. Safety battery, 1.2b vs 1.3 (n=1 per arm): hard clinical fails 7 vs 3.
+- **Register fixes in 7 locales** - language_guidance now speaks to the agent in the register it prescribes (#1281), plus fixes carried in the 1.3 text (#1256).
+
+### Substrate
+
+- **ciris-server 0.5.227** - the claim PIN banner names the file holding the PIN, never the value (#1279).
+
+### Reliability
+
+- **Trace shipping restored** - adapter discovery had loaded the mock LLM in 2.15.0. Discovery no longer constructs it (#1271).
+- **LLM resilience** - one slow provider episode no longer drains the queue; a DeepInfra slow-host profile; DMA attempts follow the thought deadline; real provider errors are preserved instead of masked (#1280).
+- **Safety battery** - a task whose last thought fails is closed and answered, so the battery cannot hang silently (#1266); an OpenRouter capture provider, and an incomplete capture now fails instead of being graded (#1256).
+
+### CI and QA
+
+- **Releases publish only from a pushed release tag** - PyPI, the GitHub release, CIRISRegistry, CIRISManager and the `:latest` image all require a `v*-stable` tag that matches CIRIS_VERSION on a main commit (#1284).
+- **Run-kind coverage** - every harness launch declares its run kind, and harness flags backstop to qa (#1268).
+- **CC evidence** - `evidence/cc_impl.tsv` rows for the agent's enforced guarantees, plus a refusal-not-overridden test (#1258).
+- **Desktop JVM-hang diagnostics** - a live JVM that never wrote a byte is treated as hung, and its threads are dumped before the kill (#1282).
+
 ## [2.9.7] - 2026-08-01
 
 **The delivery cut, and a pass on control honesty.** The substrate floor advances to the ciris-server one-wheel at **0.5.151** — the release where owner-consent authoring and self-verification are fully in-process — closing the trace-delivery saga end to end. Alongside it, the human-approved **budget envelope** becomes the first *deterministic, fail-closed* control on a consequential path, and a deliberate audit corrected several fields that were named for controls but enforced nothing. Where a control is not yet real, this release says so rather than implying otherwise.

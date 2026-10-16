@@ -26,7 +26,7 @@ import time
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 from urllib.parse import urlparse
 
 # `pty` is POSIX-only. Importing it unconditionally made this module unusable on
@@ -598,6 +598,8 @@ class APIServerManager:
             modules: Optional list of QAModule enums being tested
         """
         self.config = config
+        #: (handoff dir, node home) in CSD-129 handoff mode; see accord_halt_handoff.
+        self._halt_handoff: Optional[Tuple[Path, Path]] = None
         self.database_backend = database_backend
         self.modules = modules or []
         self.console = Console()
@@ -1060,6 +1062,43 @@ class APIServerManager:
             env["CIRIS_QA_THROWAWAY_HOME"] = throwaway
             env["CIRIS_HOME"] = throwaway
             self.console.print(f"[dim]accord_halt: throwaway CIRIS_HOME={throwaway}[/dim]")
+
+            # CSD-129 handoff mode (CIRISServer#769): the native harness's env
+            # block goes in verbatim, every data path stays in the throwaway home.
+            from .modules.accord_halt_handoff import HANDOFF_DIR_ENV, HANDOFF_FILE, TEE_DIR_ENV
+            from .modules.accord_halt_handoff import prepare_server_env as _halt_handoff_env
+            from .modules.accord_halt_handoff import wait_for_file as _wait_for_handoff
+
+            handoff_dir = os.environ.get(HANDOFF_DIR_ENV)
+            if handoff_dir:
+                if self.config.mock_llm:
+                    raise SystemExit(
+                        "accord_halt handoff mode needs a real LLM (--live ...): mock traces never leave the "
+                        "node, so the harness could never see the refusal reach its canonical"
+                    )
+                # Fresh only: a directory an earlier harness run left behind must
+                # not be read as this run's handoff. The harness may write it
+                # before we launch, so the floor is the leftovers, not our start.
+                from .modules.accord_halt_handoff import handoff_floor as _handoff_floor
+
+                floor = _handoff_floor(Path(handoff_dir))
+                if _wait_for_handoff(Path(handoff_dir) / HANDOFF_FILE, timeout_s=300.0, since=floor) is None:
+                    raise SystemExit(
+                        f"accord_halt handoff: no {HANDOFF_FILE} newer than {floor} in {handoff_dir} within 300 s"
+                    )
+                from .modules.accord_halt_handoff import load_handoff as _load_handoff
+                from .modules.accord_halt_handoff import runner_env_is_clean as _halt_runner_test_keys
+
+                leaked = _halt_runner_test_keys(_load_handoff(Path(handoff_dir)).env)
+                if leaked:
+                    raise SystemExit(
+                        f"accord_halt handoff: the runner's own env already carries {leaked}; the handoff's "
+                        "CIRIS_TEST_* env belongs to the agent subprocess only"
+                    )
+                _halt_handoff_env(env, Path(handoff_dir), Path(throwaway))
+                self._halt_handoff = (Path(handoff_dir), Path(throwaway))
+                os.environ[TEE_DIR_ENV] = env["CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR"]
+                self.console.print(f"[dim]accord_halt: handoff env from {handoff_dir} applied[/dim]")
 
         # Set CIRIS_HOME for verifier_singleton (required for audit hash chain)
         if "CIRIS_HOME" not in env:
@@ -2047,6 +2086,21 @@ class APIServerManager:
         extracted_pwd = self._extract_password_from_log()
         if extracted_pwd:
             self._extracted_password = extracted_pwd
+
+        # CSD-129: the harness owner-binds the node with its PIN BEFORE setup;
+        # setup mints a ROOT WA, after which the node mints no PIN.
+        halt_handoff = self._halt_handoff
+        if halt_handoff is not None:
+            from .modules.accord_halt_handoff import CLAIMED_FILE, claim_via_harness
+
+            claimed = claim_via_harness(*halt_handoff)
+            if claimed is None:
+                self.console.print(
+                    f"[red]accord_halt handoff: no claim PIN in {halt_handoff[1]} or no {CLAIMED_FILE} "
+                    f"in {halt_handoff[0]} -- the node stays unowned and would ship no trace[/red]"
+                )
+                return False
+            self.console.print(f"[dim]accord_halt: node claimed by {claimed.get('owner_key_id')}[/dim]")
 
         # If data was wiped, complete setup to create test user before authenticating
         if self.config.wipe_data:

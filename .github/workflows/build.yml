@@ -1,16 +1,32 @@
 name: Build and Deploy
 # GitHub Container Registry permissions fixed in org settings
 
+# RELEASES PUBLISH ONLY FROM A PUSHED RELEASE TAG (v<CIRIS_VERSION>, e.g.
+# v2.16.1-stable). Main pushes and PRs build and test everything -- wheels,
+# installer, images -- but publish nothing. That used to be gated on
+# `refs/heads/main` + "this version is not on PyPI yet", which shipped an
+# incomplete ciris-agent 2.16.0 + v2.16.0-stable from a mid-release main commit
+# (18c59a93); PyPI is immutable, so the real release had to become 2.16.1.
+#
+# Release flow: merge the bump to main -> push the tag on that commit -> the
+# tag's run of THIS workflow rebuilds and retests every artefact, `release-gate`
+# refuses unless the tag == "v" + CIRIS_VERSION and the commit is on main, and
+# only then do the publish jobs run. tests/workflows/test_release_only_on_tag.py
+# holds every publishing job to that gate.
 on:
   push:
     branches:
       - main
+    tags:
+      - 'v*-stable'
   pull_request:
     types: [opened, synchronize, reopened]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Never cancel a release half-way through publishing (a re-pushed tag would
+  # otherwise kill a run between the PyPI upload and the GitHub release).
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
   # Run mypy in parallel with tests for faster feedback
@@ -1118,14 +1134,63 @@ jobs:
           path: dist/*.whl
           retention-days: 30
 
+  # The tag is the release's source of truth, and it must agree with the code.
+  # Every publishing job needs this AND repeats the tag condition in its own
+  # `if:` (tests/workflows/test_release_only_on_tag.py checks both), so a job
+  # cannot be made to publish on main by editing one line.
+  release-gate:
+    name: Release Gate (tag == CIRIS_VERSION)
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && endsWith(github.ref, '-stable') && github.repository == 'CIRISAI/CIRISAgent'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Refuse to publish unless the tag names the version in code
+        id: check
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          VERSION=$(awk -F'"' '/^CIRIS_VERSION = /{print $2; exit}' ciris_engine/constants.py)
+          if [ -z "$VERSION" ]; then
+            echo "::error::could not read CIRIS_VERSION from ciris_engine/constants.py"
+            exit 1
+          fi
+          if [ "$TAG_NAME" != "v$VERSION" ]; then
+            echo "::error::tag '$TAG_NAME' != v$VERSION (CIRIS_VERSION). Refusing to publish."
+            echo "::error::Bump with tools/dev/bump_version.py, merge, then tag THAT commit."
+            exit 1
+          fi
+          # Every other version site (Android versionName, mobile version files,
+          # client pins) must agree too -- a tag on a half-bumped tree is the
+          # same incomplete release this gate exists to stop.
+          python3 tools/dev/check_version_alignment.py
+          # Only a commit that is on main may be released: a tag pushed on an
+          # unmerged branch would otherwise publish code nobody reviewed.
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::tagged commit $GITHUB_SHA is not on origin/main. Refusing to publish."
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Releasing CIRIS $VERSION from $TAG_NAME ($GITHUB_SHA)"
+
   # Collect all wheels and publish to PyPI + alias packages + SDK
   publish-wheels:
     name: Publish Wheels
-    # Choke point gating all release-side jobs: tests must have passed AND
-    # all wheels must have built. register-build / deploy / android-release
-    # transitively depend on this through their `needs` chains.
-    needs: [test-summary, build-wheel, build-wheel-headless]
-    if: success()
+    # Choke point gating all release-side jobs: the release gate must have
+    # passed, tests must have passed AND all wheels must have built.
+    # register-build / deploy / android-release transitively depend on this
+    # through their `needs` chains.
+    needs: [release-gate, test-summary, build-wheel, build-wheel-headless]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && endsWith(github.ref, '-stable') && github.repository == 'CIRISAI/CIRISAgent'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -1154,7 +1219,6 @@ jobs:
           pip install build twine
 
       - name: Publish to PyPI
-        if: github.ref == 'refs/heads/main' && github.repository == 'CIRISAI/CIRISAgent'
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
@@ -1169,7 +1233,6 @@ jobs:
           python -m twine upload dist/*.whl --skip-existing --verbose
 
       - name: Build and publish alias packages
-        if: github.ref == 'refs/heads/main' && github.repository == 'CIRISAI/CIRISAgent'
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
@@ -1186,7 +1249,6 @@ jobs:
           done
 
       - name: Build and publish SDK
-        if: github.ref == 'refs/heads/main' && github.repository == 'CIRISAI/CIRISAgent'
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
@@ -1242,10 +1304,29 @@ jobs:
 
       - name: Get version from constants
         id: version
+        env:
+          REF: ${{ github.ref }}
+          TAG_NAME: ${{ github.ref_name }}
         run: |
           VERSION=$(grep "^CIRIS_VERSION = " ciris_engine/constants.py | cut -d'"' -f2)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Version: $VERSION"
+          # The :<version> and :latest image tags are a release (CIRISManager
+          # deploys :latest). They are pushed only from a release tag that names
+          # this exact version; this job does not wait for release-gate (it runs
+          # in parallel with the tests), so it repeats the check itself rather
+          # than push a mislabelled :latest before the gate fails.
+          RELEASE=false
+          case "$REF" in
+            refs/tags/v*-stable)
+              if [ "$TAG_NAME" != "v$VERSION" ]; then
+                echo "::error::tag '$TAG_NAME' != v$VERSION (CIRIS_VERSION). Refusing to push release images."
+                exit 1
+              fi
+              RELEASE=true
+              ;;
+          esac
+          echo "release=$RELEASE" >> $GITHUB_OUTPUT
 
       - name: Extract metadata
         id: meta
@@ -1256,8 +1337,8 @@ jobs:
             type=ref,event=branch
             type=ref,event=pr
             type=sha
-            type=raw,value=${{ steps.version.outputs.version }},enable={{is_default_branch}}
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ steps.version.outputs.version }},enable=${{ steps.version.outputs.release == 'true' }}
+            type=raw,value=latest,enable=${{ steps.version.outputs.release == 'true' }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
@@ -1284,8 +1365,8 @@ jobs:
           tags: |
             type=ref,event=branch
             type=sha
-            type=raw,value=${{ steps.version.outputs.version }},enable={{is_default_branch}}
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ steps.version.outputs.version }},enable=${{ steps.version.outputs.release == 'true' }}
+            type=raw,value=latest,enable=${{ steps.version.outputs.release == 'true' }}
 
       - name: Build and push research capture image
         uses: docker/build-push-action@v5
@@ -1321,10 +1402,10 @@ jobs:
 
   register-build:
     name: Register Build with CIRISRegistry
-    needs: [build, publish-wheels]
+    needs: [release-gate, build, publish-wheels]
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    if: github.ref == 'refs/heads/main' && github.repository == 'CIRISAI/CIRISAgent'
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && endsWith(github.ref, '-stable') && github.repository == 'CIRISAI/CIRISAgent'
     permissions:
       contents: read
     steps:
@@ -1653,10 +1734,10 @@ jobs:
 
   deploy:
     name: Notify CIRISManager of Update
-    needs: [build, register-build]
+    needs: [release-gate, build, register-build]
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    if: github.ref == 'refs/heads/main' && github.repository == 'CIRISAI/CIRISAgent'
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && endsWith(github.ref, '-stable') && github.repository == 'CIRISAI/CIRISAgent'
     environment: production
     permissions:
       contents: read
@@ -1750,14 +1831,16 @@ jobs:
           echo "CIRISManager will handle the deployment orchestration."
           echo "Agents will be notified based on the canary deployment strategy."
 
-  # Build Android debug APK + attach Windows installer, create GitHub release with tag.
-  # Single release per version with both APK and Windows .exe as assets.
+  # Build Android debug APK + attach Windows installer, create the GitHub
+  # release for the pushed tag. Single release per version with both APK and
+  # Windows .exe as assets. The tag already exists (it triggered this run), so
+  # the release attaches to it rather than minting one on github.sha.
   android-release:
     name: Publish Release (Android APK + Windows Installer)
-    needs: [build, register-build, build-windows-installer]
+    needs: [release-gate, build, register-build, build-windows-installer]
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: github.ref == 'refs/heads/main' && github.repository == 'CIRISAI/CIRISAgent'
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && endsWith(github.ref, '-stable') && github.repository == 'CIRISAI/CIRISAgent'
     permissions:
       contents: write  # Required for creating releases and tags
     steps:
@@ -1846,7 +1929,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@26994186c0ac3ef5cae75ac16aa32e8153525f77  # v1
         with:
-          tag_name: v${{ steps.version.outputs.version }}
+          tag_name: ${{ github.ref_name }}
           name: CIRIS Agent v${{ steps.version.outputs.version }}
           draft: false
           prerelease: false

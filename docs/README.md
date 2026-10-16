@@ -55,6 +55,7 @@ Welcome to the CIRIS (Core Identity, Integrity, Resilience, Incompleteness, and 
 ## Technical Specifications
 - [Authentication System](../FSD/AUTHENTICATION.md) - OAuth, JWT, and WA certificates
 - [Graceful Shutdown](../FSD/GRACEFUL_SHUTDOWN.md) - Clean termination procedures
+- [Retirement Standard](../FSD/RETIREMENT_STANDARD.md) - The `retirement_record` workflow for ending an agent for everyone it runs for (CC 7.5.5, `CLM-humane-ending`, #1250); design, not shipped
 - [Environment Variables](../config/environment_variables.md) - Configuration reference
 
 ## Quick Links

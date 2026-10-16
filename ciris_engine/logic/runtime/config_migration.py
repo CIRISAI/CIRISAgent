@@ -276,6 +276,11 @@ async def migrate_cognitive_state_behaviors_to_graph(runtime: Any, force_from_te
         logger.error(f"[COGNITIVE_MIGRATION] FAILED to migrate cognitive state behaviors to graph: {e}")
 
 
+def _attr(node: Any, key: str) -> Any:
+    attrs = node.attributes.model_dump() if hasattr(node.attributes, "model_dump") else node.attributes
+    return attrs.get(key) if isinstance(attrs, dict) else None
+
+
 async def migrate_founding_partnerships(runtime: Any) -> None:
     """Backfill founding PARTNERED consent records for pre-existing ROOT users.
 
@@ -283,6 +288,9 @@ async def migrate_founding_partnerships(runtime: Any) -> None:
     that were created without a consent GraphNode.  This migration creates
     PARTNERED consent for each ROOT WA that lacks one, using the same
     _create_founding_partnership() helper used by the setup wizard.
+
+    Also rekeys a founding record stranded under ``provider:subject`` (OAuth
+    owners set up on 2.10.0-2.16.x) onto the owner's wa_id.
 
     Skips first-run mode (new installs get the record from the setup wizard).
     Idempotent: checks for existing consent node before creating.
@@ -305,13 +313,19 @@ async def migrate_founding_partnerships(runtime: Any) -> None:
         logger.error(f"[PARTNERSHIP_MIGRATION] Failed to list WAs: {e}")
         return
 
-    from ciris_engine.logic.persistence.models.graph import get_graph_node
+    from ciris_engine.logic.persistence.models.graph import delete_graph_node, get_graph_node
     from ciris_engine.schemas.services.authority_core import WARole
     from ciris_engine.schemas.services.graph_core import GraphScope
 
-    # (wa_id, name) pairs, because the two sources return different shapes.
-    roots: list[tuple[str, str]] = [
-        (wa.wa_id, wa.name) for wa in all_was if getattr(wa, "role", None) == WARole.ROOT
+    # (wa_id, provider:subject the founding record was mis-keyed under before
+    # 2.9.14's auth fold, or None), because the two sources return different shapes.
+    def _legacy_key(provider: object, subject: object) -> Optional[str]:
+        return f"{provider}:{subject}" if provider and subject else None
+
+    roots: list[tuple[str, Optional[str]]] = [
+        (wa.wa_id, _legacy_key(getattr(wa, "oauth_provider", None), getattr(wa, "oauth_external_id", None)))
+        for wa in all_was
+        if getattr(wa, "role", None) == WARole.ROOT
     ]
 
     # AND the node-owner roots, which `list_was()` cannot return.
@@ -340,15 +354,13 @@ async def migrate_founding_partnerships(runtime: Any) -> None:
     # active rows — the same primitive the setup probe uses, so the two agree
     # about who the owner is rather than each deciding separately.
     try:
-        from ciris_engine.logic.persistence.stores.authentication_store import (
-            _list_active_by_role,
-        )
+        from ciris_engine.logic.persistence.stores.authentication_store import _list_active_by_role
 
         known = {wa_id for wa_id, _ in roots}
         for row in _list_active_by_role(WARole.ROOT.value):
             node_wa_id = str(row.get("wa_id") or "")
             if node_wa_id and node_wa_id not in known:
-                roots.append((node_wa_id, str(row.get("name") or node_wa_id)))
+                roots.append((node_wa_id, _legacy_key(row.get("oauth_provider"), row.get("oauth_external_id"))))
                 logger.info(
                     "[PARTNERSHIP_MIGRATION] including node-owner root %s — invisible to "
                     "list_was() by design (#922), but stewardship and partnership are "
@@ -366,21 +378,26 @@ async def migrate_founding_partnerships(runtime: Any) -> None:
         return
 
     backfilled = 0
-    for wa_id, wa_name in roots:
-        # Check consent/{wa_id} (canonical) and consent/{name} (legacy)
-        existing_by_waid = get_graph_node(f"consent/{wa_id}", GraphScope.LOCAL)
-        existing_by_name = get_graph_node(f"consent/{wa_name}", GraphScope.LOCAL)
-        if existing_by_waid is not None:
-            logger.debug(f"[PARTNERSHIP_MIGRATION] consent/{wa_id} already exists - skipping")
-            continue
-        if existing_by_name is not None:
-            logger.debug(f"[PARTNERSHIP_MIGRATION] consent/{wa_name} (legacy) already exists - skipping")
+    for wa_id, legacy_key in roots:
+        # consent/{wa_id} is the only key: every node login resolves to the wa_id.
+        existing = get_graph_node(f"consent/{wa_id}", GraphScope.LOCAL)
+        # REKEY (one-shot): 2.10.0-2.16.x setup wrote an OAuth owner's founding
+        # partnership under provider:subject, which nothing reads; their first
+        # interact then minted a TEMPORARY row at the wa_id. Move the founding
+        # record onto the wa_id, over that TEMPORARY, and drop the stray key.
+        legacy = get_graph_node(f"consent/{legacy_key}", GraphScope.LOCAL) if legacy_key else None
+        stranded = legacy is not None and _attr(legacy, "founding_partnership") is True
+        if existing is not None and not (stranded and _attr(existing, "stream") == "temporary"):
+            if stranded:
+                delete_graph_node(f"consent/{legacy_key}", GraphScope.LOCAL)
             continue
 
         try:
             from ciris_engine.logic.adapters.api.routes.setup.complete import _create_founding_partnership
 
             _create_founding_partnership(wa_id)
+            if stranded:
+                delete_graph_node(f"consent/{legacy_key}", GraphScope.LOCAL)
             backfilled += 1
         except Exception as e:
             logger.error(f"[PARTNERSHIP_MIGRATION] Failed to create partnership for {wa_id}: {e}")

@@ -1,7 +1,8 @@
 """Setup completion endpoint and helpers for CIRIS.
 
 This module provides the /complete endpoint and all helper functions
-for saving configuration and creating users during setup.
+for saving configuration during setup. Users are the node's: setup reads the
+node-claimed owner and keys the agent's consent and preferences to it.
 """
 
 import asyncio
@@ -23,7 +24,7 @@ from ciris_engine.schemas.runtime.node_ownership import CLAIM_ROUTE, NODE_UNCLAI
 
 from .._common import RESPONSES_400_403_500
 from .dependencies import SetupOnlyDep
-from .helpers import _log_oauth_linking_skip, _validate_setup_passwords
+from .helpers import _validate_setup_passwords
 from .llm_validation import _get_provider_base_url
 from .models import SetupCompleteRequest
 
@@ -45,55 +46,6 @@ _background_tasks: set[asyncio.Task[None]] = set()
 # =============================================================================
 
 
-async def _link_oauth_identity_to_wa(auth_service: Any, setup: SetupCompleteRequest, wa_cert: Any) -> Any:
-    """Link OAuth identity to WA, handling existing links gracefully.
-
-    Returns the WA cert to use (may be updated if existing link found).
-    """
-    from ciris_engine.schemas.services.authority_core import WARole
-
-    logger.debug("CIRIS_SETUP_DEBUG *** ENTERING OAuth linking block ***")
-    # NOTHING DERIVED FROM `setup` REACHES THE LOGGER. SetupCompleteRequest
-    # carries system_admin_password, so CodeQL taints every value read off it —
-    # including one already redacted to `google:…1383`. Redacting harder does not
-    # clear it; only not logging it does. The substrate prints the pair, redacted,
-    # when it binds them, and the WA id below correlates our lines to that.
-    logger.debug("CIRIS_SETUP_DEBUG Linking OAuth identity to WA %s", wa_cert.wa_id)
-
-    try:
-        # First check if OAuth identity is already linked to another WA
-        existing_wa = await auth_service.get_wa_by_oauth(setup.oauth_provider, setup.oauth_external_id)
-        if existing_wa and existing_wa.wa_id != wa_cert.wa_id:
-            logger.info(f"CIRIS_SETUP_DEBUG OAuth identity already linked to WA {existing_wa.wa_id}")
-            logger.info(
-                "CIRIS_SETUP_DEBUG During first-run setup, we'll update the existing WA to be ROOT instead of creating new"
-            )
-            # Update the existing WA to have ROOT role and update its name
-            await auth_service.update_wa(
-                wa_id=existing_wa.wa_id,
-                name=setup.admin_username,
-                role=WARole.ROOT,
-            )
-            logger.info(f"CIRIS_SETUP_DEBUG [OK] Updated existing WA {existing_wa.wa_id} to ROOT role")
-            return existing_wa
-
-        # No existing link or same WA - safe to link
-        await auth_service.link_oauth_identity(
-            wa_id=wa_cert.wa_id,
-            provider=setup.oauth_provider,
-            external_id=setup.oauth_external_id,
-            account_name=setup.admin_username,
-            metadata={"email": setup.oauth_email} if setup.oauth_email else None,
-            primary=True,
-        )
-        logger.debug("CIRIS_SETUP_DEBUG [OK] SUCCESS: Linked OAuth identity to WA %s", wa_cert.wa_id)
-    except Exception as e:
-        logger.error(f"CIRIS_SETUP_DEBUG [FAIL] FAILED to link OAuth identity: {e}", exc_info=True)
-        # Don't fail setup if OAuth linking fails - user can still use password
-
-    return wa_cert
-
-
 async def _update_system_admin_password(auth_service: Any, setup: SetupCompleteRequest, exclude_wa_id: str) -> None:
     """Update the default admin password if specified."""
     if not setup.system_admin_password:
@@ -111,58 +63,25 @@ async def _update_system_admin_password(auth_service: Any, setup: SetupCompleteR
         logger.warning("[WARN] Default admin WA not found")
 
 
-async def _check_existing_oauth_wa(auth_service: Any, setup: SetupCompleteRequest) -> tuple[Optional[Any], bool]:
-    """Check if OAuth user already exists and update to ROOT if found.
-
-    Returns:
-        Tuple of (wa_cert, was_found) where wa_cert is the WA certificate and
-        was_found indicates if an existing WA was found and updated.
-    """
-    from ciris_engine.schemas.services.authority_core import WARole
-
-    if not (setup.oauth_provider and setup.oauth_external_id):
-        return None, False
-
-    logger.debug("CIRIS_USER_CREATE: Checking for an existing WA on the setup OAuth identity")
-    existing_wa = await auth_service.get_wa_by_oauth(setup.oauth_provider, setup.oauth_external_id)
-
-    if not existing_wa:
-        logger.info("CIRIS_USER_CREATE: No existing WA found for OAuth user - will create new")
-        return None, False
-
-    logger.info(f"CIRIS_USER_CREATE: [OK] Found existing WA for OAuth user: {existing_wa.wa_id}")
-    logger.info(f"CIRIS_USER_CREATE:   Current role: {existing_wa.role}")
-    logger.info(f"CIRIS_USER_CREATE:   Current name: {existing_wa.name}")
-
-    # Update existing WA to ROOT role instead of creating new one
-    logger.info(
-        f"CIRIS_USER_CREATE: Updating existing WA {existing_wa.wa_id} to ROOT role (keeping name: {existing_wa.name})"
-    )
-    await auth_service.update_wa(wa_id=existing_wa.wa_id, role=WARole.ROOT)
-    logger.info(f"CIRIS_USER_CREATE: [OK] Updated existing OAuth WA to ROOT: {existing_wa.wa_id}")
-
-    return existing_wa, True
-
-
 #: Roles a node-claimed owner can hold. Mirrors `setup/dependencies.py`, which
 #: needs the same "is there already a human in charge?" answer for the wizard gate.
 _OWNER_ROLES = ("root", "authority")
 
 
-class _AdoptedNodeOwner:
-    """The node-claimed owner, carried in the shape the setup flow expects.
+class _NodeOwner:
+    """The node-claimed owner: the ONE user setup completes for.
 
     NOT a `WACertificate`, and it cannot be one: `WACertificate.wa_id` is pinned
     to `^wa-\\d{4}-\\d{2}-\\d{2}-[A-Z0-9]{6}$`, and a node-claimed owner's id is
-    `wa-root-<fed-id>-<suffix>`. That regex is exactly why `_is_brain_wa_row`
-    exists and why this owner is invisible to `list_was()`.
+    `wa-root-<...>`. That regex is exactly why `_is_brain_wa_row` exists and why
+    this owner is invisible to `list_was()`.
 
-    Deliberately carries NO credential. The right to manage this node and
-    responsibility for this agent come from CEG; the node has native auth and
-    the server owns the password. This type exists only so the CEG artifacts the
-    AGENT still owns — the founding-partnership consent node and the user's
-    language/location preferences — can be keyed to the owner's id. Both take a
-    plain string, so nothing here needs the brain's certificate schema.
+    Deliberately carries NO credential. The node owns auth and user creation
+    (CIRISServer#9), ROOT bootstrap (#19) and the upgrade claim (#37); every
+    login it accepts resolves to this `wa_id`, which is therefore the
+    `AuthContext.user_id` every brain route sees. This type exists only so the
+    artifacts the AGENT still owns, the founding-partnership consent node and
+    the user's language/location preferences, are keyed to that same id.
     """
 
     __slots__ = ("wa_id", "name", "role")
@@ -173,153 +92,78 @@ class _AdoptedNodeOwner:
         self.role = role
 
 
-def _node_owner_named(username: str) -> Optional[_AdoptedNodeOwner]:
-    """The node-claimed owner answering to `username`, if one already exists.
+def _node_owner_rows() -> list[_NodeOwner]:
+    """Every active node-claimed owner row (ROOT or AUTHORITY, not a brain cert).
 
-    WHY THIS EXISTS. Setup performs the node self-claim FIRST — the saga logs
-    it as `E5 claim_accepted role=SYSTEM_ADMIN waId=wa-root-…` — and only then
-    runs `completeSetup`. By that point the owner the user asked for already
-    exists. But the duplicate check in `_create_new_wa` goes through
-    `list_was()`, which ends in `if _is_brain_wa_row(row)` (#922) and therefore
-    CANNOT see `wa-root-*`. The brain concludes nobody exists and mints a second
-    ROOT certificate under the same name.
-
-    Nothing is corrupt afterwards and nothing raises. The agent reports
-    `status=healthy state=work init=True` — and every login attempt gets 409
-    from the node:
-
-        2 active certificates answer to the name "qaadmin"
-        (wa-2026-08-16-143618, wa-root-qa-node-…) — refusing to choose
-        between them.
-
-    That refusal is correct: picking one would silently authenticate the user as
-    whichever row the node happened to order first, and only one of them carries
-    the password. So the fix belongs here, at the site that creates the
-    ambiguity, not at the node that reports it.
-
-    HOW IT GOT HERE (2a26daba0, 2026-07-15, shipped since v2.9.10). The
-    claim-then-complete REORDER made the node write its owner row before
-    `/v1/setup/complete` read it. `_row_to_wa` then raised on that row and
-    `completeSetup` 500'd — loud, and it blocked setup, so nobody ended up with
-    a broken install. That commit fixed the crash by filtering `wa-root-*` out
-    of the brain's WA world, explicitly to restore "the brain's WA world to
-    exactly its pre-node-claim state".
-
-    That is the flaw. Pre-node-claim state means the brain still believes no
-    owner exists, so it goes on to mint one. The 500 became a silent duplicate:
-    setup now COMPLETES, the agent comes up healthy, and login is impossible
-    forever. Seven releases carried it because nothing errors and no unit test
-    looks across both identity kinds — keeping them apart is the filter's job.
-
-    This is the fourth call site blinded by that filter, after the setup-wizard
-    lockout and the missing founding partnership (both fixed in 2.9.16 the same
-    way, by consulting `_list_active_by_role` alongside `list_was()`).
+    A failed read yields what it read, never an invented owner: the caller
+    refuses setup when it cannot name one, so a read error fails closed.
     """
-    try:
-        from ciris_engine.logic.persistence.stores.authentication_store import _is_brain_wa_row, _list_active_by_role
-    except Exception:  # pragma: no cover - store unavailable in some test rigs
-        return None
+    from ciris_engine.logic.persistence.stores.authentication_store import _is_brain_wa_row, _list_active_by_role
 
-    wanted = (username or "").strip().casefold()
-    if not wanted:
-        return None
-
+    owners: list[_NodeOwner] = []
     for role in _OWNER_ROLES:
         try:
             rows = _list_active_by_role(role)
         except Exception as exc:  # noqa: BLE001
-            # A failed probe is NOT evidence of absence. Minting on a read error
-            # is what creates the lockout, so treat it as "unknown" and let the
-            # caller fall through to its normal path rather than asserting the
-            # owner is missing.
             logger.warning("CIRIS_USER_CREATE: could not enumerate %s rows (%s)", role, type(exc).__name__)
             continue
         for row in rows or []:
-            if _is_brain_wa_row(row):
-                continue  # a brain cert is visible to list_was(); not our concern
-            if str(row.get("name") or "").strip().casefold() != wanted:
+            if _is_brain_wa_row(row) or not row.get("wa_id"):
                 continue
-            return _AdoptedNodeOwner(
-                wa_id=str(row.get("wa_id")),
-                name=str(row.get("name")),
-                role=str(row.get("role") or role),
+            owners.append(
+                _NodeOwner(
+                    wa_id=str(row.get("wa_id")),
+                    name=str(row.get("name") or ""),
+                    role=str(row.get("role") or role),
+                )
             )
+    return owners
+
+
+def _resolve_node_owner(setup: SetupCompleteRequest) -> Optional[_NodeOwner]:
+    """THE ONE USER SOURCE: the owner the node already holds for this setup.
+
+    The wizard claims the node (claim-remote, or upgrade-owner) BEFORE it posts
+    /v1/setup/complete, so the user exists by the time this runs, and the node
+    made it. The agent mints nothing. It used to: a brain ROOT cert, OAuth
+    linking, a password hash, then a provisional-cert retirement and a
+    single-holder repair to undo the duplicates its own minting created. All of
+    that is the node's (CIRISServer#9/#19/#37) and is gone.
+
+    Which owner row, in order of precision:
+      1. OAuth: the cert the substrate bound this provider identity to at claim.
+      2. The owner row answering to the setup username.
+      3. The node's single owner row, when there is exactly one.
+    None when the node holds no owner this setup can name; the caller refuses
+    with 409 node_unclaimed and writes nothing.
+    """
+    from ciris_engine.logic.persistence.stores import authentication_store
+
+    owners = _node_owner_rows()
+
+    if setup.oauth_provider and setup.oauth_external_id:
+        try:
+            holder = authentication_store.fabric_oauth_holder_id(
+                str(setup.oauth_provider), str(setup.oauth_external_id)
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("CIRIS_USER_CREATE: could not read the provider identity's holder (%s)", type(exc).__name__)
+            holder = None
+        if holder:
+            for owner in owners:
+                if owner.wa_id == holder:
+                    return owner
+            return _NodeOwner(wa_id=holder, name=setup.admin_username, role="root")
+
+    wanted = (setup.admin_username or "").strip().casefold()
+    if wanted:
+        for owner in owners:
+            if owner.name.strip().casefold() == wanted:
+                return owner
+
+    if len(owners) == 1:
+        return owners[0]
     return None
-
-
-async def _create_new_wa(auth_service: Any, setup: SetupCompleteRequest) -> Any:
-    """Create a new WA certificate for the setup user, or adopt the node's owner.
-
-    Returns:
-        WA certificate for the newly created user, or the already-existing
-        node-claimed owner of the same name (see `_node_owner_named`).
-    """
-    from ciris_engine.schemas.services.authority_core import WARole
-
-    # Ask the substrate before minting. `list_was()` below cannot answer this.
-    adopted = _node_owner_named(setup.admin_username)
-    if adopted is not None:
-        logger.info(
-            "CIRIS_USER_CREATE: node-claimed owner %s already answers to this "
-            "username — adopting it instead of minting a second ROOT cert "
-            "(a same-named rival makes every login 409 at the node)",
-            adopted.wa_id,
-        )
-        return adopted
-
-    logger.info(f"CIRIS_USER_CREATE: Creating NEW user: {setup.admin_username} with role: {WARole.ROOT}")
-
-    # Use OAuth email if available, otherwise generate local email
-    user_email = setup.oauth_email or f"{setup.admin_username}@local"
-    masked_email = (user_email[:3] + "***@" + user_email.split("@")[-1]) if "@" in user_email else user_email
-    logger.debug(f"CIRIS_USER_CREATE: User email: {masked_email}")  # NOSONAR - email masked
-
-    # List existing WAs before creation for debugging
-    existing_was = await auth_service.list_was(active_only=False)
-    logger.info(f"CIRIS_USER_CREATE: Existing WAs before creation: {len(existing_was)}")
-    for wa in existing_was:
-        logger.info(f"CIRIS_USER_CREATE:   - {wa.wa_id}: name={wa.name}, role={wa.role}")
-
-    # Create WA certificate
-    wa_cert = await auth_service.create_wa(
-        name=setup.admin_username,
-        email=user_email,
-        scopes=["read:any", "write:any"],  # ROOT gets full scopes
-        role=WARole.ROOT,
-    )
-    logger.info(f"CIRIS_USER_CREATE: [OK] Created NEW WA: {wa_cert.wa_id}")
-
-    return wa_cert
-
-
-async def _set_password_for_wa(auth_service: Any, setup: SetupCompleteRequest, wa_cert: Any) -> None:
-    """Set password hash for non-OAuth users the BRAIN owns.
-
-    Never for a node-claimed owner. The node has native auth and the server owns
-    the credential — it was already set there, and `E6 owner_login ok` fires in
-    the setup saga BEFORE `/v1/setup/complete` runs, which is the proof: the node
-    had authenticated that owner before the brain did anything. Writing a second
-    password here would make the agent an authority on a credential it does not
-    own, and leave two places to rotate it.
-    """
-    if isinstance(wa_cert, _AdoptedNodeOwner):
-        logger.info(
-            "CIRIS_USER_CREATE: skipping password for node-claimed owner %s — " "the node owns auth for this identity",
-            wa_cert.wa_id,
-        )
-        return
-
-    is_oauth_setup = bool(setup.oauth_provider and setup.oauth_external_id)
-
-    if is_oauth_setup:
-        logger.info(f"CIRIS_USER_CREATE: Skipping password hash for OAuth user: {wa_cert.wa_id}")
-        return
-
-    # Hash password and update WA (admin_password is guaranteed set by validation above)
-    assert setup.admin_password is not None, "admin_password should be set by validation"
-    password_hash = auth_service.hash_password(setup.admin_password)
-    await auth_service.update_wa(wa_id=wa_cert.wa_id, password_hash=password_hash)
-    logger.info(f"CIRIS_USER_CREATE: Password hash set for WA: {wa_cert.wa_id}")
 
 
 async def _ensure_system_wa(auth_service: Any) -> None:
@@ -331,7 +175,7 @@ async def _ensure_system_wa(auth_service: Any) -> None:
         logger.warning("[WARN] Could not create system WA - deferral handling may not work")
 
 
-def _create_founding_partnership(wa_id: str, oauth_user_id: Optional[str] = None) -> None:
+def _create_founding_partnership(wa_id: str, ingress_user_id: Optional[str] = None) -> None:
     """Create a default PARTNERED consent record for the setup user.
 
     The user who completes the setup wizard has explicitly consented by
@@ -343,14 +187,22 @@ def _create_founding_partnership(wa_id: str, oauth_user_id: Optional[str] = None
     Creates a GraphNode with type=CONSENT using the consent/{user_id}
     pattern that matches the ConsentService lookups.
 
-    IMPORTANT: For OAuth users, we must use the OAuth external ID (e.g.,
-    "google:102773749033681671083") as the consent node ID, because that's
-    what the consent service looks up when the user authenticates.
+    THE KEY IS THE ID THE USER AUTHENTICATES AS. ConsentService looks consent
+    up by `AuthContext.user_id`. Every node login (password, Google, Apple, the
+    OAuth callback, the device grant) resolves to the owner's `wa_id`
+    (`ciris_server.resolve_bearer`), so the node owner's consent lives at
+    `consent/{wa_id}`. Keying OAuth owners by `provider:subject` instead was
+    correct only while the brain issued its own OAuth tokens; once auth folded
+    into the node (2.9.14) the owner's first interact missed this record and got
+    the TEMPORARY default.
+
+    The one exception is ingress auth (HA Supervisor and similar), whose
+    `AuthContext.user_id` is still `provider:external_id`.
 
     Args:
-        wa_id: The WA certificate ID (e.g., "wa-2026-04-01-337AE1")
-        oauth_user_id: The OAuth external ID if available (e.g., "google:12345")
-                       This takes precedence over wa_id for consent node ID.
+        wa_id: The owner's WA id (e.g. "wa-root-..." for a node-claimed owner)
+        ingress_user_id: Ingress setup only: the ingress identity
+                         ("provider:external_id") that ingress auth resolves to.
     """
     from ciris_engine.logic.persistence import add_graph_node
     from ciris_engine.logic.services.lifecycle.time.service import TimeService
@@ -359,10 +211,7 @@ def _create_founding_partnership(wa_id: str, oauth_user_id: Optional[str] = None
 
     now = datetime.now(timezone.utc)
 
-    # Use OAuth user ID if available, otherwise fall back to WA ID
-    # This is critical: ConsentService looks up consent by the user_id from auth,
-    # which for OAuth users is the OAuth external ID (e.g., "google:12345")
-    consent_user_id = oauth_user_id if oauth_user_id else wa_id
+    consent_user_id = ingress_user_id if ingress_user_id else wa_id
 
     partnered_status = ConsentStatus(
         user_id=consent_user_id,
@@ -379,9 +228,7 @@ def _create_founding_partnership(wa_id: str, oauth_user_id: Optional[str] = None
         attribution_count=0,
     )
 
-    # ConsentService stores nodes as consent/{user_id}
-    # For OAuth users, user_id is the OAuth external ID (e.g., "google:12345")
-    # For password users, user_id is the WA ID (e.g., "wa-2026-04-01-337AE1")
+    # ConsentService stores nodes as consent/{user_id}, user_id = AuthContext.user_id
     node_id = f"consent/{consent_user_id}"
 
     node = GraphNode(
@@ -411,9 +258,9 @@ def _create_founding_partnership(wa_id: str, oauth_user_id: Optional[str] = None
     time_service = TimeService()
     add_graph_node(node, time_service)
     # FALSE POSITIVE (py/clear-text-logging-sensitive-data). `node_id` is a graph
-    # node key -- `consent/{user_id}` -- where user_id is an OAuth external id
-    # ("google:12345") or a WA id ("wa-2026-04-01-337AE1"). Both are identifiers
-    # that appear throughout the audit trail by design; neither is a credential.
+    # node key -- `consent/{user_id}` -- where user_id is the owner's WA id (or,
+    # for ingress setup, the ingress id). Identifiers that appear throughout the
+    # audit trail by design; not a credential.
     # CodeQL flags it because the value derives from the setup request, which
     # ALSO carries a password field it never reaches.
     #
@@ -494,72 +341,6 @@ def _store_user_preferences(user_id: str, setup: SetupCompleteRequest) -> None:
     logger.info("Stored user preferences for the setup user: %d key(s) %s", len(stored), stored)
 
 
-async def _log_wa_list(auth_service: Any, phase: str) -> None:
-    """Log list of WAs for debugging purposes."""
-    was = await auth_service.list_was(active_only=False)
-    logger.info(f"CIRIS_USER_CREATE: WAs {phase}: {len(was)}")
-    for wa in was:
-        logger.info(f"CIRIS_USER_CREATE:   - {wa.wa_id}: name={wa.name}, role={wa.role}")
-
-
-def _enforce_single_holder(setup: SetupCompleteRequest, wa_cert: Any) -> None:
-    """Setup must not FINISH with two live certs on one provider identity.
-
-    The mint guard above should make this unreachable. It is here anyway because
-    the cost of being wrong is a user who cannot sign in with Google (the node
-    refuses an ambiguous identity, correctly) and cannot sign in locally either
-    (an OAuth user has no password). A closed door on both sides, discovered one
-    sign-in too late — the failure this whole change exists to end.
-
-    Checking the POST-condition rather than trusting the pre-condition also means
-    any future path that mints — a new flow, a retry, a migration — is covered
-    without knowing about it.
-
-    The repair is surgical: retire the cert WE just minted, leaving the fabric's
-    owner-binding as the single holder. Ownership is the fabric's to produce; if
-    both exist, ours is the one that should not.
-    """
-    if not (setup.oauth_provider and setup.oauth_external_id):
-        return
-
-    from ciris_engine.logic.persistence.stores import authentication_store
-
-    try:
-        holders = authentication_store.live_oauth_holders(str(setup.oauth_provider), str(setup.oauth_external_id))
-    except Exception:  # noqa: BLE001
-        logger.exception("CIRIS_USER_CREATE: could not verify the single-holder invariant")
-        return
-
-    if len(holders) <= 1:
-        return
-
-    # COUNTS, NOT IDS. `holders` is derived from `setup`, and SetupCompleteRequest
-    # carries system_admin_password — so CodeQL taints every value read off it and
-    # logging one is a HIGH clear-text-logging finding. That is an
-    # over-approximation (a wa_id is not a secret), but the diagnostic here does
-    # not need the ids: the substrate already prints them, redacted and
-    # authoritative, in the refusal this exists to prevent —
-    #     AMBIGUOUS provider identity … holders=2 wa_ids=[…]
-    # What only WE can say is that setup created the second one and retired it,
-    # and a count carries that.
-    ours = getattr(wa_cert, "wa_id", None)
-    logger.error(
-        "CIRIS_USER_CREATE: setup left %d live holders on one provider identity. "
-        "The node refuses an ambiguous identity, and an OAuth user has no password "
-        "to fall back to — this is the lockout. Retiring the cert WE minted so the "
-        "fabric's owner-binding stands alone. The substrate logs the wa_ids.",
-        len(holders),
-    )
-    if ours in holders and len(holders) > 1:
-        authentication_store.update_wa_certificate(str(ours), {"active": False})
-        remaining = authentication_store.live_oauth_holders(str(setup.oauth_provider), str(setup.oauth_external_id))
-        logger.error(
-            "CIRIS_USER_CREATE: retired our own cert; %d live holder(s) remain "
-            "(1 is correct — the fabric's owner-binding).",
-            len(remaining),
-        )
-
-
 async def _create_setup_users(
     setup: SetupCompleteRequest,
     main_db_path: str,
@@ -567,13 +348,13 @@ async def _create_setup_users(
     ingress_user_name: Optional[str] = None,
     ingress_user_email: Optional[str] = None,
 ) -> None:
-    """Create users immediately during setup completion.
+    """Attach the agent's per-user artifacts to the node-claimed owner.
 
-    This is called during setup completion to create users without waiting for restart.
-    Creates users directly in the database using authentication store functions.
-
-    IMPORTANT: For OAuth users, we check if they already exist and update to ROOT instead
-    of creating a duplicate WA. This prevents multiple ROOT users from being created.
+    The node creates the user (CIRISServer#9 auth, #19 ROOT bootstrap, #37
+    upgrade-owner) when the wizard claims it, before this runs. Setup mints no
+    user: it resolves that owner (`_resolve_node_owner`), refuses with 409
+    node_unclaimed when there is none, and writes the founding partnership and
+    preferences under the owner's wa_id.
 
     When skip_user_creation=True (external auth like HA ingress, CIRISMedical enterprise),
     we skip regular user creation but AUTO-MINT a WA and create founding partnership
@@ -681,199 +462,32 @@ async def _create_setup_users(
             await time_service.stop()
         return
 
-    logger.info(f"CIRIS_USER_CREATE: admin_username = {setup.admin_username}")
-    logger.info(f"CIRIS_USER_CREATE: oauth_provider = {repr(setup.oauth_provider)}")
-    logger.info(f"CIRIS_USER_CREATE: oauth_external_id = {repr(setup.oauth_external_id)}")
-    logger.info(f"CIRIS_USER_CREATE: oauth_email = {repr(setup.oauth_email)}")
+    # THE NODE-CLAIMED OWNER IS THE USER. The node created it at claim time; the
+    # agent reads it and keys its own artifacts to it. Resolved before anything
+    # is written, so a node with no owner this setup can name writes nothing.
+    owner = _resolve_node_owner(setup)
+    if owner is None:
+        raise _NodeUnclaimedRefusal(
+            "The node holds no owner for this setup user. The node creates the user when it is "
+            f"claimed ({CLAIM_ROUTE}, or {' then '.join(UPGRADE_CLAIM_ROUTES)} on an upgraded node); "
+            "the agent mints none."
+        )
+    logger.info("CIRIS_USER_CREATE: setup completes for the node-claimed owner; the agent mints no user")
 
-    # Create temporary authentication service for user creation
     time_service = TimeService()
     await time_service.start()
 
-    auth_service = AuthenticationService(
-        db_path=main_db_path, time_service=time_service, key_dir=None  # Use default ~/.ciris/
-    )
+    auth_service = AuthenticationService(db_path=main_db_path, time_service=time_service, key_dir=None)
     await auth_service.start()
 
     try:
-        from ciris_engine.logic.persistence.stores import authentication_store
-
-        # WORKAROUND (#1098 — drop once ciris-server mints OAuth WA ids as proper
-        # `wa-…`): the OAuth browser-handoff parks the session as a live wa_cert
-        # whose id is the placeholder `oauth-<provider>-<sub>`. Capture it BEFORE
-        # we mint+link (linking can repoint the primary oauth index) so we can
-        # retire it afterwards and leave exactly one live cert for the identity.
-        provisional_oauth_wa_id: Optional[str] = None
-        if setup.oauth_provider and setup.oauth_external_id:
-            provisional_oauth_wa_id = authentication_store.provisional_oauth_cert_id(
-                setup.oauth_provider, setup.oauth_external_id
-            )
-
-        # Check if OAuth user already exists and update to ROOT if found
-        existing_wa, _ = await _check_existing_oauth_wa(auth_service, setup)
-
-        # DOES THE FABRIC ALREADY HOLD THIS IDENTITY?
-        #
-        # claim-remote (substrate) binds the provider identity to the owner it
-        # mints — `wa-root-<user>` — BEFORE completeSetup runs. That cert cannot
-        # be materialized as a WACertificate (its wa_id does not match our minting
-        # pattern), so `existing_wa` comes back None for an identity that is very
-        # much taken, and the branch below used to mint a SECOND ROOT and link the
-        # same provider identity to it.
-        #
-        # The substrate then correctly refused every later sign-in:
-        #   AMBIGUOUS provider identity — multiple live certs claim this account
-        #   holders=2 wa_ids=["wa-2026-…", "wa-root-mooreericnyc-…"]
-        # Google failed on the ambiguity and local failed because an OAuth user has
-        # no password: a closed door on both sides, on a fresh install.
-        #
-        # We must not author a second claim on an identity the fabric has already
-        # bound. Ownership is the fabric's to produce and ours to surface.
-        fabric_holder_id: Optional[str] = None
-        fabric_provider: str = ""
-        fabric_provider_subject: str = ""
-        if existing_wa is None and setup.oauth_provider and setup.oauth_external_id:
-            fabric_provider = str(setup.oauth_provider)
-            fabric_provider_subject = str(setup.oauth_external_id)
-            fabric_holder_id = authentication_store.fabric_oauth_holder_id(fabric_provider, fabric_provider_subject)
-
-        if fabric_holder_id:
-            # LOG THE FACT, NOT THE SUBJECT.
-            #
-            # `oauth_external_id` is the provider's subject identifier — PII, and
-            # the substrate redacts it to a tail (`subject=…1383`) for exactly that
-            # reason. Reading attributes off `setup` also taints the statement for
-            # CodeQL, because SetupCompleteRequest carries system_admin_password:
-            # three HIGH "clear-text logging of sensitive information" alerts, all
-            # on this one call.
-            #
-            # The diagnostic value here is "the identity was already bound, and to
-            # whom" — the provider and a tail are enough to correlate with the
-            # substrate's own line, and the holder id is not sensitive.
-            # LOG ONLY THE HOLDER. Binding the provider and subject to locals did
-            # NOT clear the CodeQL taint — it propagates through `str()`, so any
-            # value derived from `setup` keeps carrying it. Laundering the taint
-            # through more locals would only hide the finding rather than answer
-            # it.
-            #
-            # And nothing is actually lost. The substrate already logs the pair,
-            # redacted, at the moment it binds them:
-            #     oauth sign-in CREATED a local identity provider=google subject=…1383
-            # The fact THIS line has to carry is the one the substrate cannot know:
-            # that setup declined to mint a second ROOT, and which cert it deferred
-            # to. `fabric_holder_id` comes from the store, not from `setup`, and is
-            # not sensitive.
-            # FALSE POSITIVE (py/clear-text-logging-sensitive-data). `fabric_holder_id`
-            # is a WA certificate id — `wa-root-<user>` — read back OUT of the
-            # certificate store. It is the same class of identifier as the `node_id`
-            # suppressed above, appears throughout the audit trail by design, and is
-            # not a credential.
-            #
-            # CodeQL taints it transitively: the store lookup takes the provider and
-            # subject as arguments, those derive from the setup request, and the
-            # request object also carries a password field the lookup never reads.
-            # Two earlier attempts to satisfy the analyser rather than suppress it —
-            # binding the values to locals, then logging only a redacted subject
-            # tail — did not clear it, because taint propagates through `str()` and
-            # through the call's return value. Laundering it further would hide the
-            # finding rather than answer it.
-            #
-            # The PII half of the original finding WAS real and is fixed: the
-            # provider subject is no longer logged here at all.
-            # codeql[py/clear-text-logging-sensitive-data]
-            # LOG THE FACT, NOT THE VALUE. `fabric_holder_id` came back from a call
-            # that TOOK setup's provider and subject, so CodeQL taints it too — the
-            # same over-approximation that survived a redaction helper written
-            # specifically to satisfy it. Only removing the interpolation clears it,
-            # and nothing is lost: the substrate names the holding cert itself in the
-            # refusal this exists to prevent (AMBIGUOUS provider identity … wa_ids=[…]).
-            logger.info(
-                "CIRIS_USER_CREATE: this provider identity is ALREADY bound by the substrate "
-                "(claim-remote owner-binding) — NOT minting a second ROOT. Minting here is "
-                "what produced 'AMBIGUOUS provider identity / holders=2' and locked "
-                "first-run OAuth users out. The substrate logs which cert holds it."
-            )
-            # Annotated because this is now the FIRST binding in the function, so
-            # an unannotated str here makes mypy reject the later `= None` on the
-            # normal path.
-            oauth_user_id: Optional[str] = f"{fabric_provider}:{fabric_provider_subject}"
-            # The agent-tier work still applies, keyed on the FABRIC's cert.
-            _create_founding_partnership(fabric_holder_id, oauth_user_id)
-            _store_user_preferences(fabric_holder_id, setup)
-            await _ensure_system_wa(auth_service)
-            # THE ADOPTION PATH STILL OWES THE CALLER EVERYTHING ELSE IT PROMISED.
-            # An earlier version of this branch returned here, which skipped
-            # _update_system_admin_password() below — so a request carrying
-            # system_admin_password got a response saying both credentials were
-            # configured while the default admin password was silently unchanged.
-            # Declining to mint a duplicate ROOT is not a licence to drop the rest
-            # of the contract.
-            await _update_system_admin_password(auth_service, setup, fabric_holder_id)
-
-            # The provisional placeholder is the substrate's to retire, and it
-            # already did (claim-remote logs "retired a duplicate cert"). Nothing
-            # of ours to clean up.
-            return
-
-        # Create new WA if we didn't find an existing OAuth user
-        if existing_wa is None:
-            wa_cert = await _create_new_wa(auth_service, setup)
-        else:
-            wa_cert = existing_wa
-
-        # Set password for non-OAuth users
-        await _set_password_for_wa(auth_service, setup, wa_cert)
-
-        # Log WAs after creation for debugging
-        await _log_wa_list(auth_service, "after setup")
-
-        # Create founding partnership for setup user — the user consented by
-        # completing setup, the agent's consent is configured in its template
-        # For OAuth users, use the OAuth external ID as the consent node ID
-        # (this is what ConsentService looks up when the user authenticates)
-        oauth_user_id = None
-        if setup.oauth_provider and setup.oauth_external_id:
-            oauth_user_id = f"{setup.oauth_provider}:{setup.oauth_external_id}"
-        _create_founding_partnership(wa_cert.wa_id, oauth_user_id)
-
-        # Store user preferences keyed by wa_id for consistency
-        _store_user_preferences(wa_cert.wa_id, setup)
-
-        # Ensure system WA exists
+        # Founding partnership: the user consented by completing setup, the
+        # agent's consent is configured in its template. Keyed to the owner's
+        # wa_id, the id every node login resolves to (AuthContext.user_id).
+        _create_founding_partnership(owner.wa_id)
+        _store_user_preferences(owner.wa_id, setup)
         await _ensure_system_wa(auth_service)
-
-        # CIRIS_SETUP_DEBUG: Log OAuth linking decision
-        logger.debug("CIRIS_SETUP_DEBUG _create_setup_users() OAuth linking check:")
-        logger.debug(f"CIRIS_SETUP_DEBUG   setup.oauth_provider = {repr(setup.oauth_provider)}")
-        logger.debug(f"CIRIS_SETUP_DEBUG   setup.oauth_external_id = {repr(setup.oauth_external_id)}")
-        logger.debug(f"CIRIS_SETUP_DEBUG   bool(setup.oauth_provider) = {bool(setup.oauth_provider)}")
-        logger.debug(f"CIRIS_SETUP_DEBUG   bool(setup.oauth_external_id) = {bool(setup.oauth_external_id)}")
-        oauth_link_condition = bool(setup.oauth_provider) and bool(setup.oauth_external_id)
-        logger.debug(f"CIRIS_SETUP_DEBUG   Condition (provider AND external_id) = {oauth_link_condition}")
-
-        # Link OAuth identity if provided - THIS IS CRITICAL for OAuth login to work
-        if setup.oauth_provider and setup.oauth_external_id:
-            wa_cert = await _link_oauth_identity_to_wa(auth_service, setup, wa_cert)
-        else:
-            _log_oauth_linking_skip(setup)
-
-        # Retire the substrate's provisional OAuth cert so it does not duplicate
-        # the WA we just minted+linked (#1098 workaround — drop once ciris-server
-        # mints OAuth WA ids correctly). Raw set_active, so the placeholder id is
-        # never materialized into a WACertificate.
-        if provisional_oauth_wa_id and provisional_oauth_wa_id != wa_cert.wa_id:
-            authentication_store.update_wa_certificate(provisional_oauth_wa_id, {"active": False})
-            _enforce_single_holder(setup, wa_cert)
-            logger.info(
-                "CIRIS_USER_CREATE: retired provisional OAuth cert %s (kept minted %s)",
-                provisional_oauth_wa_id,
-                wa_cert.wa_id,
-            )
-
-        # Update default admin password if specified
-        assert wa_cert is not None, "wa_cert should be set by create_wa or existing WA lookup"
-        await _update_system_admin_password(auth_service, setup, wa_cert.wa_id)
-
+        await _update_system_admin_password(auth_service, setup, owner.wa_id)
     finally:
         await auth_service.stop()
         await time_service.stop()
@@ -1269,42 +883,13 @@ def _save_setup_config(setup: SetupCompleteRequest) -> Path:
     return config_path
 
 
-def _log_setup_debug_info(setup: SetupCompleteRequest) -> bool:
-    """Log comprehensive debug information for OAuth identity linking.
-
-    Args:
-        setup: Setup configuration request
-
-    Returns:
-        Whether OAuth linking will happen
-    """
+def _log_setup_debug_info(setup: SetupCompleteRequest) -> None:
+    """Log which kind of setup this is. Never the provider subject or email (PII)."""
     logger.info("CIRIS_SETUP_DEBUG " + "=" * 60)
     logger.info("CIRIS_SETUP_DEBUG complete_setup() endpoint called")
     logger.info("CIRIS_SETUP_DEBUG " + "=" * 60)
 
-    # Log ALL OAuth-related fields received from frontend
-    logger.info("CIRIS_SETUP_DEBUG OAuth fields received from frontend:")
-    logger.info(f"CIRIS_SETUP_DEBUG   oauth_provider = {repr(setup.oauth_provider)}")
-    logger.info(f"CIRIS_SETUP_DEBUG   oauth_external_id = {repr(setup.oauth_external_id)}")
-    logger.info(f"CIRIS_SETUP_DEBUG   oauth_email = {repr(setup.oauth_email)}")
-
-    # Check truthiness explicitly
-    logger.debug("CIRIS_SETUP_DEBUG Truthiness checks:")
-    logger.debug(f"CIRIS_SETUP_DEBUG   bool(oauth_provider) = {bool(setup.oauth_provider)}")
-    logger.debug(f"CIRIS_SETUP_DEBUG   bool(oauth_external_id) = {bool(setup.oauth_external_id)}")
-    logger.debug(f"CIRIS_SETUP_DEBUG   oauth_external_id is None = {setup.oauth_external_id is None}")
-    logger.debug(f"CIRIS_SETUP_DEBUG   oauth_external_id == '' = {setup.oauth_external_id == ''}")
-
-    # The critical check that determines OAuth linking
-    will_link_oauth = bool(setup.oauth_provider) and bool(setup.oauth_external_id)
-    logger.debug(
-        f"CIRIS_SETUP_DEBUG CRITICAL: Will OAuth linking happen? = {will_link_oauth}"
-    )  # NOSONAR - boolean status only
-    if not will_link_oauth:
-        if not setup.oauth_provider:
-            logger.debug("CIRIS_SETUP_DEBUG   Reason: oauth_provider is falsy")
-        if not setup.oauth_external_id:
-            logger.debug("CIRIS_SETUP_DEBUG   Reason: oauth_external_id is falsy")
+    logger.info(f"CIRIS_SETUP_DEBUG   oauth setup = {bool(setup.oauth_provider)}")
 
     # Log other setup fields
     logger.debug("CIRIS_SETUP_DEBUG Other setup fields:")
@@ -1324,8 +909,6 @@ def _log_setup_debug_info(setup: SetupCompleteRequest) -> bool:
     logger.info(f"CIRIS_SETUP_DEBUG   signing_key_id = {repr(setup.signing_key_id)}")
     # NOTE: signing_key_provisioned and provisioned_signing_key_b64 are DEPRECATED
     # Under self-custody (FSD-002), agent generates its own key - Portal never sends private keys
-
-    return will_link_oauth
 
 
 async def _node_only_restart(runtime: Any) -> None:
@@ -1521,7 +1104,6 @@ async def complete_setup(
     For ingress auth scenarios (HA Supervisor, CIRISMedical), the user completing
     setup gets an auto-minted WA with ROOT role and a founding partnership.
     """
-    # Log debug info and determine if OAuth linking will happen
     _log_setup_debug_info(setup)
 
     # Try to detect ingress user completing setup (for auto-mint)

@@ -67,21 +67,6 @@ class StoredAPIKey:
 
 
 @dataclass
-class OAuthUser:
-    """OAuth user information."""
-
-    user_id: str  # Format: provider:external_id
-    provider: str
-    external_id: str
-    email: Optional[str]
-    name: Optional[str]
-    role: UserRole
-    created_at: datetime
-    last_login: datetime
-    marketing_opt_in: bool = False  # User consent for marketing communications
-
-
-@dataclass
 class User:
     """Unified user representation combining auth methods and WA status."""
 
@@ -124,7 +109,6 @@ class APIAuthService:
 
         # In-memory caches for performance
         self._api_keys: Dict[str, StoredAPIKey] = {}
-        self._oauth_users: Dict[str, OAuthUser] = {}
         self._users: Dict[str, User] = {}
 
         logger.debug(
@@ -303,10 +287,6 @@ class APIAuthService:
             primary_key = f"{wa.oauth_provider}:{wa.oauth_external_id}"
             self._users[primary_key] = user
             logger.debug(f"[AUTH DEBUG] Stored user under OAuth key: '{primary_key}'")
-            # Clear from _oauth_users cache - DB record is authoritative
-            if primary_key in self._oauth_users:
-                logger.debug(f"[AUTH DEBUG] Clearing stale _oauth_users entry: '{primary_key}'")
-                del self._oauth_users[primary_key]
 
         for link in wa.oauth_links:
             link_key = f"{link.provider}:{link.external_id}"
@@ -466,46 +446,6 @@ class APIAuthService:
         stored_key = self._api_keys.get(key_id)
         if stored_key:
             stored_key.is_active = False
-
-    def create_oauth_user(
-        self,
-        provider: str,
-        external_id: str,
-        email: Optional[str],
-        name: Optional[str],
-        role: UserRole,
-        marketing_opt_in: bool = False,
-    ) -> OAuthUser:
-        """Create or update an OAuth user."""
-        user_id = f"{provider}:{external_id}"
-        now = datetime.now(timezone.utc)
-
-        if user_id in self._oauth_users:
-            # Update existing user
-            user = self._oauth_users[user_id]
-            user.last_login = now
-            if email:
-                user.email = email
-            if name:
-                user.name = name
-            # Update marketing opt-in (user can change their preference)
-            user.marketing_opt_in = marketing_opt_in
-        else:
-            # Create new user
-            user = OAuthUser(
-                user_id=user_id,
-                provider=provider,
-                external_id=external_id,
-                email=email,
-                name=name,
-                role=role,
-                created_at=now,
-                last_login=now,
-                marketing_opt_in=marketing_opt_in,
-            )
-            self._oauth_users[user_id] = user
-
-        return user
 
     # ========== User Management Methods ==========
 
@@ -727,44 +667,6 @@ class APIAuthService:
 
             users.append((user_id, user))  # Use the dict key as the canonical user_id
 
-        # Add OAuth users not in _users
-        for oauth_user in self._oauth_users.values():
-            oauth_user_id = oauth_user.user_id
-            # Check if already in users by matching oauth_external_id
-            # This handles cases where the DB WA has a different wa_id (e.g., wa-2025-12-03-xxx)
-            # but represents the same OAuth user (same oauth_external_id)
-            if any(uid == oauth_user_id or u.oauth_external_id == oauth_user.external_id for uid, u in users):
-                continue
-
-            # Convert OAuth user to User
-            user = User(
-                wa_id=oauth_user.user_id,
-                name=oauth_user.name or oauth_user.email or oauth_user.user_id,
-                auth_type="oauth",
-                api_role=self._user_role_to_api_role(oauth_user.role),
-                oauth_provider=oauth_user.provider,
-                oauth_email=oauth_user.email,
-                oauth_external_id=oauth_user.external_id,
-                oauth_name=oauth_user.name,  # Map OAuth name to oauth_name field
-                created_at=oauth_user.created_at,
-                last_login=oauth_user.last_login,
-                is_active=True,
-            )
-
-            # Apply filters
-            if search and search.lower() not in user.name.lower():
-                continue
-            if auth_type and user.auth_type != auth_type:
-                continue
-            if api_role and user.api_role != api_role:
-                continue
-            if wa_role is not None:
-                continue  # OAuth users without WA role
-            if is_active is not None and user.is_active != is_active:
-                continue
-
-            users.append((oauth_user_id, user))
-
         return sorted(users, key=lambda tu: tu[1].created_at or datetime.min, reverse=True)
 
     def _user_role_to_api_role(self, role: UserRole) -> APIRole:
@@ -776,93 +678,9 @@ class APIAuthService:
         }
         return mapping.get(role, APIRole.OBSERVER)
 
-    def _merge_oauth_with_stored_user(self, oauth_user: OAuthUser, stored_user: User) -> User:
-        """Merge OAuth session data with persistent database user data."""
-        return User(
-            wa_id=stored_user.wa_id,  # Use the actual WA ID from database!
-            name=stored_user.name or oauth_user.name or oauth_user.email or oauth_user.user_id,
-            auth_type="oauth",
-            api_role=stored_user.api_role,  # Preserve DB role
-            wa_role=stored_user.wa_role,  # Preserve WA role
-            oauth_provider=oauth_user.provider,
-            oauth_email=oauth_user.email,
-            oauth_external_id=oauth_user.external_id,
-            created_at=stored_user.created_at or oauth_user.created_at,
-            last_login=oauth_user.last_login,
-            is_active=stored_user.is_active,
-            wa_parent_id=stored_user.wa_parent_id,
-            wa_auto_minted=stored_user.wa_auto_minted,
-            oauth_name=stored_user.oauth_name or oauth_user.name,
-            oauth_picture=stored_user.oauth_picture,
-            permission_requested_at=stored_user.permission_requested_at,
-            custom_permissions=stored_user.custom_permissions,
-            oauth_links=stored_user.oauth_links,
-            marketing_opt_in=oauth_user.marketing_opt_in,
-        )
-
-    def _create_user_from_oauth(self, oauth_user: OAuthUser) -> User:
-        """Create a User object from an OAuth user (not yet minted as WA)."""
-        return User(
-            wa_id=oauth_user.user_id,  # OAuth user_id as placeholder
-            name=oauth_user.name or oauth_user.email or oauth_user.user_id,
-            auth_type="oauth",
-            api_role=self._user_role_to_api_role(oauth_user.role),
-            oauth_provider=oauth_user.provider,
-            oauth_email=oauth_user.email,
-            oauth_external_id=oauth_user.external_id,
-            created_at=oauth_user.created_at,
-            last_login=oauth_user.last_login,
-            is_active=True,
-            oauth_name=oauth_user.name,
-            marketing_opt_in=oauth_user.marketing_opt_in,
-        )
-
-    def _lookup_oauth_user(self, user_id: str) -> Optional[User]:
-        """Look up user in OAuth users dictionary."""
-        if user_id not in self._oauth_users:
-            return None
-
-        oauth_user = self._oauth_users[user_id]
-        stored_user = self._users.get(user_id)
-
-        # If stored_user exists, merge OAuth session data with persistent DB data
-        if stored_user:
-            return self._merge_oauth_with_stored_user(oauth_user, stored_user)
-
-        # No stored user - pure OAuth user not yet minted as WA
-        return self._create_user_from_oauth(oauth_user)
-
-    def _lookup_by_external_id(self, user_id: str) -> Optional[User]:
-        """Fallback lookup by OAuth external_id (without provider prefix)."""
-        # Try stored users first
-        for key, user in self._users.items():
-            if user.oauth_external_id == user_id:
-                return user
-
-        # Try OAuth users
-        for key, oauth_user in self._oauth_users.items():
-            if oauth_user.external_id == user_id:
-                stored_user = self._users.get(key)
-                if stored_user:
-                    return stored_user
-                return self._create_user_from_oauth(oauth_user)
-
-        return None
-
     def get_user(self, user_id: str) -> Optional[User]:
         """Get a specific user by ID."""
-        # Check stored users first (includes users loaded from DB with OAuth links)
-        if user_id in self._users:
-            return self._users[user_id]
-
-        # Check OAuth users (in-memory only, for users who haven't been minted as WA yet)
-        oauth_result = self._lookup_oauth_user(user_id)
-        if oauth_result:
-            return oauth_result
-
-        # Fallback: Try to find user by OAuth external_id (without provider prefix)
-        # This handles cases where frontend passes just "googleUserId" without "google:" prefix
-        return self._lookup_by_external_id(user_id)
+        return self._users.get(user_id)
 
     async def update_user(
         self, user_id: str, api_role: Optional[APIRole] = None, is_active: Optional[bool] = None
@@ -911,19 +729,6 @@ class APIAuthService:
                         await self._auth_service.revoke_wa(user_id, reason="User deactivated via API")
             except Exception as e:
                 logger.debug(f"[AUTH DEBUG] Error updating user in database: {e}")
-
-        # Also update OAuth user if applicable
-        if user_id in self._oauth_users:
-            oauth_user = self._oauth_users[user_id]
-            if api_role is not None:
-                # Convert APIRole back to UserRole
-                role_mapping = {
-                    APIRole.OBSERVER: UserRole.OBSERVER,
-                    APIRole.ADMIN: UserRole.ADMIN,
-                    APIRole.AUTHORITY: UserRole.ADMIN,  # No direct mapping
-                    APIRole.SYSTEM_ADMIN: UserRole.SYSTEM_ADMIN,
-                }
-                oauth_user.role = role_mapping.get(api_role, UserRole.OBSERVER)
 
         return user
 
@@ -1010,11 +815,6 @@ class APIAuthService:
                 await self._auth_service.revoke_wa(user_id, reason="User deactivated via API")
             except Exception as e:
                 logger.debug(f"[AUTH DEBUG] Error deactivating user in database: {e}")
-
-        # Also deactivate OAuth user if applicable
-        if user_id in self._oauth_users:
-            # Can't really deactivate OAuth users in this simple implementation
-            pass
 
         return True
 
@@ -1401,9 +1201,7 @@ class APIAuthService:
         if not self._auth_service:
             return
 
-        from ciris_engine.logic.services.infrastructure.authentication.service import (
-            AuthenticationService,
-        )
+        from ciris_engine.logic.services.infrastructure.authentication.service import AuthenticationService
 
         permissions: Optional[List[str]] = None
         if wa_role in (WARole.AUTHORITY, WARole.ROOT):

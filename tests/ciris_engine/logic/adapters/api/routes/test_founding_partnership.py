@@ -62,6 +62,7 @@ def _get_consent_node(db_path: str, user_id: str) -> dict | None:
     connection don't see persist's uncommitted WAL writes.
     """
     import json
+
     from ciris_engine.logic.persistence import get_graph_node
     from ciris_engine.schemas.services.graph_core import GraphScope
 
@@ -248,30 +249,32 @@ class TestCreateFoundingPartnership:
         assert attrs["impact_score"] == 0.0
         assert attrs["attribution_count"] == 0
 
-    def test_oauth_user_uses_oauth_id_for_consent_node(self, test_db):
-        """OAuth users should have consent node keyed by OAuth external ID."""
+    def test_ingress_user_uses_ingress_id_for_consent_node(self, test_db):
+        """Ingress setup keys consent by the ingress id, which is what ingress auth resolves to.
+
+        Node logins (password, Google, Apple) resolve to the owner's wa_id and
+        are keyed by it; only ingress auth still authenticates as provider:id.
+        """
         from ciris_engine.logic.adapters.api.routes.setup.complete import _create_founding_partnership
 
-        _create_founding_partnership("wa-test-123", "google:987654321")
+        _create_founding_partnership("wa-test-123", "home_assistant:987654321")
 
-        # Consent node should be at the OAuth ID, not the WA ID
-        node = _get_consent_node(test_db, "google:987654321")
-        assert node is not None, "Consent node should be keyed by OAuth ID"
-        assert node["node_id"] == "consent/google:987654321"
+        node = _get_consent_node(test_db, "home_assistant:987654321")
+        assert node is not None, "Consent node should be keyed by the ingress id"
+        assert node["node_id"] == "consent/home_assistant:987654321"
 
-        # WA ID should be stored in attributes for auditing
         attrs = json.loads(node["attributes_json"])
         assert attrs["linked_wa_id"] == "wa-test-123"
-        assert attrs["user_id"] == "user/google:987654321"
+        assert attrs["user_id"] == "user/home_assistant:987654321"
 
-    def test_non_oauth_user_uses_wa_id_for_consent_node(self, test_db):
-        """Non-OAuth (password) users should have consent node keyed by WA ID."""
+    def test_node_owner_uses_wa_id_for_consent_node(self, test_db):
+        """Node-authenticated owners (password or OAuth) are keyed by their WA ID."""
         from ciris_engine.logic.adapters.api.routes.setup.complete import _create_founding_partnership
 
-        _create_founding_partnership("wa-password-user", None)
+        _create_founding_partnership("wa-password-user")
 
         node = _get_consent_node(test_db, "wa-password-user")
-        assert node is not None, "Consent node should be keyed by WA ID for non-OAuth users"
+        assert node is not None, "Consent node should be keyed by WA ID"
         assert node["node_id"] == "consent/wa-password-user"
 
         attrs = json.loads(node["attributes_json"])
@@ -280,14 +283,37 @@ class TestCreateFoundingPartnership:
 
 
 class TestFoundingPartnershipInSetupFlow:
-    """Integration-style tests verifying the partnership is created during setup."""
+    """Integration-style tests verifying the partnership is created during setup.
+
+    The node creates the user at claim; setup keys the partnership to that
+    node-claimed owner's wa_id (the id every node login resolves to).
+    """
+
+    @staticmethod
+    def _node_owner(monkeypatch, name):
+        import ciris_engine.logic.persistence.stores.authentication_store as store
+
+        row = {"wa_id": f"wa-root-{name}-node-1", "name": name, "role": "root", "active": 1}
+        monkeypatch.setattr(store, "_list_active_by_role", lambda role, limit=1000: [row] if role == "root" else [])
+        monkeypatch.setattr(store, "live_oauth_holders", lambda p, s: [])
+        return row["wa_id"]
+
+    @staticmethod
+    def _auth(MockAuth):
+        mock_auth_instance = MockAuth.return_value
+        mock_auth_instance.start = _async_noop
+        mock_auth_instance.stop = _async_noop
+        mock_auth_instance.list_was = _async_empty_list
+        mock_auth_instance.ensure_system_wa_exists = _async_system_wa
+        return mock_auth_instance
 
     @pytest.mark.asyncio
-    async def test_create_setup_users_calls_founding_partnership(self, test_db):
-        """_create_setup_users should call _create_founding_partnership."""
+    async def test_create_setup_users_calls_founding_partnership(self, test_db, monkeypatch):
+        """_create_setup_users should call _create_founding_partnership with the owner's wa_id."""
         from ciris_engine.logic.adapters.api.routes.setup.complete import _create_setup_users
         from ciris_engine.logic.adapters.api.routes.setup.models import SetupCompleteRequest
 
+        owner_wa_id = self._node_owner(monkeypatch, "test_setup_user")
         setup = SetupCompleteRequest(
             admin_username="test_setup_user",
             admin_password="TestPassword123!",
@@ -304,28 +330,18 @@ class TestFoundingPartnershipInSetupFlow:
             with patch(
                 "ciris_engine.logic.services.infrastructure.authentication.service.AuthenticationService"
             ) as MockAuth:
-                mock_auth_instance = MockAuth.return_value
-                mock_auth_instance.start = _async_noop
-                mock_auth_instance.stop = _async_noop
-                mock_auth_instance.get_wa_by_oauth = _async_none
-                mock_auth_instance.list_was = _async_empty_list
-                mock_auth_instance.create_wa = _async_mock_wa_cert
-                mock_auth_instance.hash_password = lambda p: "hashed"
-                mock_auth_instance.update_wa = _async_noop
-                mock_auth_instance.ensure_system_wa_exists = _async_system_wa
-
+                self._auth(MockAuth)
                 await _create_setup_users(setup, test_db)
 
-            # _create_founding_partnership is called with (wa_id, oauth_user_id)
-            # The mock returns wa_id = "wa-test-001", and no OAuth creds means oauth_user_id=None
-            mock_fp.assert_called_once_with("wa-test-001", None)
+            mock_fp.assert_called_once_with(owner_wa_id)
 
     @pytest.mark.asyncio
-    async def test_setup_flow_creates_actual_node(self, test_db):
+    async def test_setup_flow_creates_actual_node(self, test_db, monkeypatch):
         """Full setup flow actually persists the founding partnership node."""
         from ciris_engine.logic.adapters.api.routes.setup.complete import _create_setup_users
         from ciris_engine.logic.adapters.api.routes.setup.models import SetupCompleteRequest
 
+        owner_wa_id = self._node_owner(monkeypatch, "real_setup_user")
         setup = SetupCompleteRequest(
             admin_username="real_setup_user",
             admin_password="TestPassword123!",
@@ -339,26 +355,16 @@ class TestFoundingPartnershipInSetupFlow:
         with patch(
             "ciris_engine.logic.services.infrastructure.authentication.service.AuthenticationService"
         ) as MockAuth:
-            mock_auth_instance = MockAuth.return_value
-            mock_auth_instance.start = _async_noop
-            mock_auth_instance.stop = _async_noop
-            mock_auth_instance.get_wa_by_oauth = _async_none
-            mock_auth_instance.list_was = _async_empty_list
-            mock_auth_instance.create_wa = _async_mock_wa_cert
-            mock_auth_instance.hash_password = lambda p: "hashed"
-            mock_auth_instance.update_wa = _async_noop
-            mock_auth_instance.ensure_system_wa_exists = _async_system_wa
-
+            self._auth(MockAuth)
             await _create_setup_users(setup, test_db)
 
-        # Verify the node was actually persisted
-        # The mock WA has wa_id = "wa-test-001", so node is at consent/wa-test-001
-        node = _get_consent_node(test_db, "wa-test-001")
+        node = _get_consent_node(test_db, owner_wa_id)
         assert node is not None, "Setup flow should create founding partnership node"
         attrs = json.loads(node["attributes_json"])
         assert attrs["stream"] == "partnered"
         assert attrs["founding_partnership"] is True
         assert attrs["partnership_approved"] is True
+        assert attrs["linked_wa_id"] == owner_wa_id
 
 
 # -- Async helper stubs for mocking auth service --
@@ -368,22 +374,8 @@ async def _async_noop(*args, **kwargs):
     pass
 
 
-async def _async_none(*args, **kwargs):
-    return None
-
-
 async def _async_empty_list(*args, **kwargs):
     return []
-
-
-class _MockWACert:
-    wa_id = "wa-test-001"
-    name = "test_user"
-    role = "ROOT"
-
-
-async def _async_mock_wa_cert(*args, **kwargs):
-    return _MockWACert()
 
 
 async def _async_system_wa(*args, **kwargs):

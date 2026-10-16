@@ -126,7 +126,6 @@ class TestAuthServiceAsyncIOBug:
         # Create auth service without calling the buggy __init__
         auth_service = APIAuthService.__new__(APIAuthService)
         auth_service._api_keys = {}
-        auth_service._oauth_users = {}
         auth_service._users = {}
         auth_service._auth_service = mock_auth_service
 
@@ -153,7 +152,6 @@ class TestAuthServiceAsyncIOBug:
         # Create auth service
         auth_service = APIAuthService.__new__(APIAuthService)
         auth_service._api_keys = {}
-        auth_service._oauth_users = {}
         auth_service._users = {}
         auth_service._auth_service = mock_auth_service
 

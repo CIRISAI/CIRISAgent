@@ -3,7 +3,7 @@ Unit tests for memory filter helper functions.
 
 Tests the memory filtering functions that provide role-based access control:
 - filter_nodes_by_user_attribution (Defense Layer 2)
-- get_user_allowed_ids (OAuth identity resolution)
+- get_user_allowed_ids (one id per user)
 - build_user_filter_sql (Defense Layer 1)
 - should_apply_user_filtering (Role-based filtering decision)
 """
@@ -312,7 +312,7 @@ class TestFilterNodesByUserAttribution:
 
 
 class TestGetUserAllowedIds:
-    """Tests for get_user_allowed_ids (OAuth identity resolution)."""
+    """Tests for get_user_allowed_ids (one id per user)."""
 
     @pytest.mark.asyncio
     async def test_base_user_id_always_included(self):
@@ -333,69 +333,27 @@ class TestGetUserAllowedIds:
         assert len(result) == 1
 
     @pytest.mark.asyncio
-    async def test_oauth_identities_added(self, persist_engine):
-        """Should add OAuth identities to allowed set.
-
-        Post-A1 (CIRISAgent#763): `get_user_allowed_ids` routes through
-        `authentication_store.get_wa_by_id` (typed persist substrate). Seed a
-        single WA certificate with OAuth fields populated. WA-id format is
-        enforced (`wa-YYYY-MM-DD-XXXXXX`), so we use a valid id and pass it
-        as user_id.
-
-        Persist's wa_cert substrate is single-row-per-wa_id (upsert
-        semantics); the legacy raw-SQL fixture inserted two rows under the
-        same wa_id (one per OAuth provider) which the substrate cannot
-        represent. Verify the primary OAuth-link path (provider +
-        external_id) instead.
-        """
+    async def test_no_oauth_derived_alias(self, persist_engine):
+        """A user has one id; an OAuth link on the cert adds no provider:subject alias."""
         from ciris_engine.logic.persistence.stores import authentication_store
         from ciris_engine.schemas.services.authority_core import WACertificate, WARole
 
         wa_id = "wa-2026-05-19-USR001"
-        wa = WACertificate(
-            wa_id=wa_id,
-            name="Test User",
-            role=WARole.OBSERVER,
-            pubkey="test_pubkey",
-            jwt_kid="test_kid",
-            scopes_json="[]",
-            oauth_provider="discord",
-            oauth_external_id="discord_123",
-            created_at=datetime.now(timezone.utc),
+        authentication_store.store_wa_certificate(
+            WACertificate(
+                wa_id=wa_id,
+                name="Test User",
+                role=WARole.OBSERVER,
+                pubkey="test_pubkey",
+                jwt_kid="test_kid",
+                scopes_json="[]",
+                oauth_provider="discord",
+                oauth_external_id="discord_123",
+                created_at=datetime.now(timezone.utc),
+            )
         )
-        authentication_store.store_wa_certificate(wa)
 
-        auth_service = Mock()
-        auth_service.db_path = ":memory:"
-
-        result = await get_user_allowed_ids(wa_id)
-
-        assert wa_id in result
-        assert "discord:discord_123" in result
-        assert "discord_123" in result
-
-    @pytest.mark.asyncio
-    async def test_database_error_handling(self, persist_engine):
-        """Should handle database errors gracefully.
-
-        Post-A1 (CIRISAgent#763): force the persist `wa_cert_get` to raise via
-        patching the typed store. The helper should still return the base
-        user_id.
-        """
-        from unittest.mock import patch
-
-        auth_service = Mock()
-        auth_service.db_path = "/nonexistent/path/to/db.db"
-
-        with patch(
-            "ciris_engine.logic.persistence.stores.authentication_store.get_wa_by_id",
-            side_effect=Exception("DB error"),
-        ):
-            result = await get_user_allowed_ids("user123")
-
-        # Should still include base user_id even when DB query fails
-        assert "user123" in result
-        assert len(result) == 1
+        assert await get_user_allowed_ids(wa_id) == {wa_id}
 
 
 class TestBuildUserFilterSql:

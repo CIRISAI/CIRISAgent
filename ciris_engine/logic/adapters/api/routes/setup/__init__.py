@@ -37,7 +37,6 @@ from .helpers import (
     _get_agent_templates,
     _get_available_adapters,
     _is_setup_allowed_without_auth,
-    _log_oauth_linking_skip,
     _should_skip_manifest,
     _validate_setup_passwords,
 )
@@ -127,7 +126,6 @@ __all__ = [
     "_get_available_adapters",
     "_get_llm_providers",
     "_is_setup_allowed_without_auth",
-    "_log_oauth_linking_skip",
     "_should_skip_manifest",
     "_validate_api_key_for_provider",
     "_validate_llm_connection",

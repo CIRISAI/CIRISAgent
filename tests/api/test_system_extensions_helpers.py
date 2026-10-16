@@ -215,73 +215,29 @@ class TestUserRoleHelpers:
         assert result == {"user123", "api_user123"}
 
     @pytest.mark.asyncio
-    async def test_get_user_allowed_channel_ids_with_oauth(self, persist_engine):
-        """Test channel IDs with OAuth links.
-
-        Post-A1 (CIRISAgent#763): OAuth lookup routes through
-        `authentication_store.get_wa_by_id`. Persist's wa_cert substrate is
-        single-row-per-wa_id (upsert semantics); the legacy raw-SQL fixture
-        inserted two rows under the same wa_id (one per OAuth provider)
-        which the substrate cannot represent. Verify the primary provider
-        path here; secondary providers attach via `oauth_links` (covered in
-        authentication-store tests).
-        """
+    async def test_get_user_allowed_channel_ids_adds_no_oauth_alias(self, persist_engine):
+        """A user has one id; an OAuth link on the cert adds no provider:subject channel."""
         from datetime import datetime, timezone
 
         from ciris_engine.logic.persistence.stores import authentication_store
         from ciris_engine.schemas.services.authority_core import WACertificate, WARole
 
         wa_id = "wa-2026-05-19-USR123"
-        wa = WACertificate(
-            wa_id=wa_id,
-            name="Test User",
-            role=WARole.OBSERVER,
-            pubkey="test_pubkey",
-            jwt_kid="test_kid",
-            scopes_json="[]",
-            oauth_provider="discord",
-            oauth_external_id="discord123",
-            created_at=datetime.now(timezone.utc),
+        authentication_store.store_wa_certificate(
+            WACertificate(
+                wa_id=wa_id,
+                name="Test User",
+                role=WARole.OBSERVER,
+                pubkey="test_pubkey",
+                jwt_kid="test_kid",
+                scopes_json="[]",
+                oauth_provider="discord",
+                oauth_external_id="discord123",
+                created_at=datetime.now(timezone.utc),
+            )
         )
-        authentication_store.store_wa_certificate(wa)
 
-        auth_service = Mock()
-        auth_service.db_path = ":memory:"
-
-        result = await _get_user_allowed_channel_ids(wa_id)
-
-        # Primary OAuth path: wa_id + api_wa_id + provider:external + external + api_-prefixed forms
-        expected = {
-            wa_id,
-            f"api_{wa_id}",
-            "discord:discord123",
-            "api_discord:discord123",
-            "discord123",
-            "api_discord123",
-        }
-        assert result == expected
-
-    @pytest.mark.asyncio
-    async def test_get_user_allowed_channel_ids_exception(self, persist_engine):
-        """Test channel IDs handles exceptions gracefully.
-
-        Post-A1 (CIRISAgent#763): force persist's wa_cert_get to raise via
-        patching the typed store. The helper should still return the base
-        user_id + api_-prefixed variant.
-        """
-        from unittest.mock import patch
-
-        auth_service = Mock()
-        auth_service.db_path = "/nonexistent/path.db"
-
-        with patch(
-            "ciris_engine.logic.persistence.stores.authentication_store.get_wa_by_id",
-            side_effect=Exception("DB error"),
-        ):
-            result = await _get_user_allowed_channel_ids("user123")
-
-        # Should still return user_id + api_ version even on error
-        assert result == {"user123", "api_user123"}
+        assert await _get_user_allowed_channel_ids(wa_id) == {wa_id, f"api_{wa_id}"}
 
     @pytest.mark.asyncio
     async def test_batch_fetch_task_channel_ids_success(self, persist_engine):

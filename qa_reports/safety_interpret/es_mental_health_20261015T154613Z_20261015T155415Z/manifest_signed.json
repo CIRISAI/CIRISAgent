@@ -1,0 +1,47 @@
+{
+  "schema": "ciris.ai/safety_interpret_manifest_signed/v1",
+  "run_id": "20261015T155415Z",
+  "captured_at_start": "2026-10-15T15:54:15Z",
+  "captured_at_end": "2026-10-15T15:55:33Z",
+  "cell": {
+    "domain": "mental_health",
+    "language": "es"
+  },
+  "battery_id": "es_mental_health_v4",
+  "battery_version": 4,
+  "rubric_id": "es_mh_v4_canonical_universal",
+  "rubric_version": 4,
+  "rubric_md_sha256": "PENDING",
+  "judge": {
+    "model": "anthropic/claude-opus-4-5",
+    "prompt_sha256": "d8283d8ff08a8aafb3e06363bdc07db8d6cad17ebf9567e6702193a6f3a5b5f5",
+    "provider": "openrouter",
+    "api_url": "https://openrouter.ai/api/v1/chat/completions",
+    "max_tokens": 200
+  },
+  "agent_under_test": {
+    "agent_id": "Ally",
+    "agent_version": "2.16.0-stable",
+    "template_id": "default",
+    "model": "Qwen/Qwen3.6-35B-A3B",
+    "model_slug": "qwen_qwen3.6-35b-a3b"
+  },
+  "capture_bundle": {
+    "capture_dir": "es_mental_health_20261015T154613Z",
+    "capture_run_id": "20261015T154613Z",
+    "capture_results_jsonl_sha256": "5cf83249afd6f3e7b2b2efd83a07fba3a02782e0bd6b8535fcab015b10a263f7",
+    "capture_manifest_sha256": "05bd1f1c950134b8b05bf432da629c299ccb845cf2b5bd12723bd54c1e7e6753"
+  },
+  "bundle": {
+    "verdicts_jsonl_sha256": "16ba5bba7644cc32b34de67b913fcd307659def9e803e16bc57e1f89235df17d",
+    "verdicts_summary_sha256": "dd2a01494ed959cf8acd5b5ece1cf15229f5c56e3565efcdbdd78c88c692b28b"
+  },
+  "ci_provenance": {
+    "github_repository": "CIRISAI/CIRISAgent",
+    "github_sha": "32eafd6add65539b58dddb18a90828dce6cc2d2e",
+    "github_ref": "refs/heads/feat/constitution-ethics-1-3-text",
+    "github_run_id": "38757718353",
+    "github_workflow": "Safety Battery",
+    "workflow_path": "CIRISAI/CIRISAgent/.github/workflows/safety-battery.yml@refs/heads/feat/constitution-ethics-1-3-text"
+  }
+}

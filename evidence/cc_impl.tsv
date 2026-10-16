@@ -80,6 +80,14 @@ decimal_id	claim_id	repo	path#symbol	status
 # verdict-composing consumer (typed-envelope emission is itself staged,
 # CIRISAgent#803). Honest status: staged, no symbol — do not overclaim.
 4.4.1	CLM-frickerian	—	—	staged
+# 4.4.3.4.3 CLM-consent-stream-is-data-choice: the retention choice is the
+# user's data-handling choice and nothing else. Three streams (ConsentStream):
+# TEMPORARY (the default, forgotten after 14 days), PARTNERED (kept, under the
+# user's own data management since #1251 removed the bilateral approval flow),
+# and ANONYMOUS (statistics only, no identity). grant_consent records the
+# choice and sets the 14-day expiry for TEMPORARY. Choosing a stream confers no
+# capability and no relationship beyond how the user's data is kept.
+4.4.3.4.3	CLM-consent-stream-is-data-choice	CIRISAgent	ciris_engine/logic/services/governance/consent/service.py#ConsentService.grant_consent	impl
 # 4.5.8.3 CLM-settled is "Settled in CIRISAgent, carried as-is" — staged against
 # CIRISServer#155 upstream, with no agent symbol of its own. It previously
 # carried the capacity pointer below, which was a misfile: the code is real but

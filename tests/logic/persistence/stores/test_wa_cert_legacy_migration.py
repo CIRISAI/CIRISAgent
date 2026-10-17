@@ -144,9 +144,7 @@ def dest() -> FakeDestination:
 STORE = "ciris_engine.logic.persistence.stores.authentication_store"
 
 
-def _run_with_store(
-    legacy_paths: List[str], list_impl: Any, store_impl: Any
-) -> migration.WACertMigrationResult:
+def _run_with_store(legacy_paths: List[str], list_impl: Any, store_impl: Any) -> migration.WACertMigrationResult:
     """Run the migration against explicit legacy paths and a stubbed store."""
     with patch.object(migration, "_candidate_legacy_paths", return_value=legacy_paths), patch(
         f"{STORE}.list_wa_certificates", side_effect=list_impl
@@ -223,22 +221,47 @@ class TestImportsLegacyRows:
         assert result.skipped_inactive == 1
         assert dest.certs == {}
 
-    def test_same_file_twice_is_scanned_once(self, tmp_path, dest):
-        """audit and main configured to the same path must not double-import."""
-        legacy = str(tmp_path / "ciris_engine.db")
-        _write_legacy_db(legacy, [_legacy_row()])
+    def test_main_db_is_never_a_candidate(self, tmp_path):
+        """The main DB is persist's; only the audit DB is scanned."""
+        audit = str(tmp_path / "ciris_audit.db")
+        main = str(tmp_path / "ciris_engine.db")
+        with patch("ciris_engine.logic.config.db_paths.get_audit_db_full_path", return_value=audit), patch(
+            "ciris_engine.logic.config.db_paths.get_sqlite_db_full_path", return_value=main
+        ):
+            assert migration._candidate_legacy_paths(None) == [audit]
 
-        # Bypass the patch on _candidate_legacy_paths to exercise real dedup.
-        with patch(
-            "ciris_engine.logic.config.db_paths.get_audit_db_full_path", return_value=legacy
-        ), patch("ciris_engine.logic.config.db_paths.get_sqlite_db_full_path", return_value=legacy):
-            paths = migration._candidate_legacy_paths(None)
+    def test_audit_resolving_to_main_db_is_not_scanned(self, tmp_path):
+        """audit and main configured to the same file: persist owns it, skip it."""
+        same = str(tmp_path / "ciris_engine.db")
+        with patch("ciris_engine.logic.config.db_paths.get_audit_db_full_path", return_value=same), patch(
+            "ciris_engine.logic.config.db_paths.get_sqlite_db_full_path", return_value=same
+        ):
+            assert migration._candidate_legacy_paths(None) == []
 
-        assert paths == [legacy]
+    def test_boot_never_opens_the_persist_database_with_sqlite3(self, tmp_path, dest):
+        """Regression: a second libsqlite on persist's WAL DB resets its -shm and
+        the process dies with SIGBUS (exit -7) at boot."""
+        main = str(tmp_path / "ciris_engine.db")
+        _write_legacy_db(main, [_legacy_row()])
+        audit = str(tmp_path / "ciris_audit.db")  # absent: a post-2.9 install
 
-        result = _run(paths, dest)
-        assert result.found == 1
-        assert result.imported == 1
+        opened: List[str] = []
+        real_connect = sqlite3.connect
+
+        def spy(database: Any, *args: Any, **kwargs: Any) -> sqlite3.Connection:
+            opened.append(str(database))
+            return real_connect(database, *args, **kwargs)
+
+        with patch("ciris_engine.logic.config.db_paths.get_audit_db_full_path", return_value=audit), patch(
+            "ciris_engine.logic.config.db_paths.get_sqlite_db_full_path", return_value=main
+        ), patch.object(migration.sqlite3, "connect", side_effect=spy), patch(
+            f"{STORE}.list_wa_certificates", side_effect=dest.list_wa_certificates
+        ), patch(
+            f"{STORE}.store_wa_certificate", side_effect=dest.store_wa_certificate
+        ):
+            migration.migrate_legacy_wa_certificates(None)
+
+        assert not [o for o in opened if "ciris_engine.db" in o], opened
 
 
 # --------------------------------------------------------------------------- #
@@ -483,9 +506,7 @@ class TestBootHookIsNonFatal:
         init = ServiceInitializer.__new__(ServiceInitializer)
         init.essential_config = None  # type: ignore[attr-defined]
 
-        with patch.object(
-            migration, "migrate_legacy_wa_certificates", side_effect=RuntimeError("boom")
-        ):
+        with patch.object(migration, "migrate_legacy_wa_certificates", side_effect=RuntimeError("boom")):
             # Must not propagate — an agent that won't start is worse than
             # one whose owner must re-run setup.
             init._recover_stranded_wa_certificates()

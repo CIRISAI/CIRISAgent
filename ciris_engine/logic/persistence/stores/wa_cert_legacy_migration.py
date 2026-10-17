@@ -121,47 +121,52 @@ def _is_sqlite_path(dsn: str) -> bool:
 
 
 def _candidate_legacy_paths(config: Optional["EssentialConfig"] = None) -> List[str]:
-    """Legacy databases to scan, deduplicated by real path.
+    """Legacy databases to scan: the audit DB, never the main DB.
 
-    The audit DB is where 2.7.x actually put `wa_cert`. The main DB is
-    included because older/other builds passed the main path, and because
-    when audit and main are configured to the *same file* the dedup below
-    collapses them to a single scan rather than importing everything twice.
+    The audit DB is where 2.7.x actually put `wa_cert`. The main DB is the
+    persist engine's, and it is already open in this process when the
+    migration runs. Opening it again with Python's `sqlite3` is a second
+    libsqlite on the same WAL file: POSIX locks are per-process, so the
+    second library believes it is the first connection, resets the `-shm`
+    file to 3 bytes, and persist's mapping of that file faults with SIGBUS
+    (the agent exits -7 at boot). So the main DB is excluded, and so is an
+    audit path that resolves to the same file.
     """
     from ciris_engine.logic.config.db_paths import get_audit_db_full_path, get_sqlite_db_full_path
 
-    candidates: List[str] = []
-    for label, getter in (("audit_db", get_audit_db_full_path), ("main_db", get_sqlite_db_full_path)):
-        try:
-            dsn = getter(config)
-        except Exception as e:
-            # get_sqlite_db_full_path raises when no config is available at
-            # all. That is a caller problem, not a migration problem.
-            logger.warning("wa_cert migration: could not resolve %s path: %s", label, e)
-            continue
-        if not dsn or not _is_sqlite_path(dsn):
-            logger.info(
-                "wa_cert migration: %s is not a sqlite path (%s backend); skipping legacy scan",
-                label,
-                "postgres" if dsn else "unset",
-            )
-            continue
-        candidates.append(dsn)
+    try:
+        audit = get_audit_db_full_path(config)
+    except Exception as e:
+        # Raises when no config is available at all. That is a caller
+        # problem, not a migration problem.
+        logger.warning("wa_cert migration: could not resolve audit_db path: %s", e)
+        return []
+    if not audit or not _is_sqlite_path(audit):
+        logger.info(
+            "wa_cert migration: audit_db is not a sqlite path (%s backend); skipping legacy scan",
+            "postgres" if audit else "unset",
+        )
+        return []
 
-    # Dedup on real path so audit-and-main-are-the-same-file scans once.
-    seen: Set[str] = set()
-    unique: List[str] = []
-    for path in candidates:
-        try:
-            key = os.path.realpath(path)
-        except OSError:
-            key = path
-        if key in seen:
-            logger.debug("wa_cert migration: %s already scanned (same file); skipping", path)
-            continue
-        seen.add(key)
-        unique.append(path)
-    return unique
+    try:
+        main = get_sqlite_db_full_path(config)
+    except Exception:
+        main = None
+    if main and _is_sqlite_path(main) and _same_file(audit, main):
+        logger.info(
+            "wa_cert migration: audit_db is the persist engine's database (%s); "
+            "not opening it with a second sqlite library",
+            audit,
+        )
+        return []
+    return [audit]
+
+
+def _same_file(a: str, b: str) -> bool:
+    try:
+        return os.path.realpath(a) == os.path.realpath(b)
+    except OSError:
+        return a == b
 
 
 def _open_readonly(path: str) -> Optional[sqlite3.Connection]:
@@ -326,9 +331,7 @@ def _order_parents_first(certs: List[WACertificate]) -> List[WACertificate]:
 # --------------------------------------------------------------------------- #
 
 
-def _collect_legacy_certificates(
-    paths: List[str], result: WACertMigrationResult
-) -> List[WACertificate]:
+def _collect_legacy_certificates(paths: List[str], result: WACertMigrationResult) -> List[WACertificate]:
     """Read and map every legacy row across all candidate databases."""
     certs: List[WACertificate] = []
     seen_ids: Set[str] = set()
@@ -363,10 +366,7 @@ def _collect_legacy_certificates(
 
 def _import_certificates(certs: List[WACertificate], result: WACertMigrationResult) -> None:
     """Insert the certificates that are absent from the destination store."""
-    from ciris_engine.logic.persistence.stores.authentication_store import (
-        list_wa_certificates,
-        store_wa_certificate,
-    )
+    from ciris_engine.logic.persistence.stores.authentication_store import list_wa_certificates, store_wa_certificate
 
     existing = list_wa_certificates(active_only=True)
     existing_ids = {wa.wa_id for wa in existing}

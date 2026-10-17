@@ -254,6 +254,7 @@ class CIRISVerifyAdapter(Service):
 
         except asyncio.CancelledError:
             logger.info("CIRISVerify adapter lifecycle cancelled")
+            raise
         finally:
             await self.stop()
 

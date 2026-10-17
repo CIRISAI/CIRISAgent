@@ -38,12 +38,9 @@ class FakeEngine:
         self.calls.append(("widen_audience", (prior_id, ci, list(strip))))
         return dict(self.widen or {})
 
-    # the two reads the grant decision makes first (CIRISAgent#1289): no grant yet, owner bound
+    # the read the grant decision makes first (CIRISAgent#1289): no grant yet
     def list_attestations(self, query: str, cursor: Optional[str], limit: int, key_id: str) -> str:
         return '{"items": []}'
-
-    def owner_of_json(self, key_id: str) -> str:
-        return '"owner-1"'
 
     # the write door, unchanged
     def attestation_upsert_local(self, payload: str) -> str:

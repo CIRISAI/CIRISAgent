@@ -49,7 +49,7 @@ def test_grant_carries_original_timestamp(monkeypatch, tmp_path):
 
     captured = {}
 
-    def fake_emit(granted_at=None):
+    def fake_emit(granted_at=None, **_):
         captured["granted_at"] = granted_at
         return "att-123"
 

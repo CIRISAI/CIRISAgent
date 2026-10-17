@@ -42,7 +42,7 @@ def authored(monkeypatch: pytest.MonkeyPatch) -> List[Tuple[str, Optional[list],
     # is about the ship grant's third argument.
     monkeypatch.setattr(
         "ciris_engine.logic.services.governance.consent.attestation.emit_community_consent_grant",
-        lambda granted_at=None: "att-capture-1",
+        lambda granted_at=None, **_: "att-capture-1",
     )
     monkeypatch.setattr(trace_sharing, "trace_sharing_status", lambda: TraceSharingConsent())
     return calls

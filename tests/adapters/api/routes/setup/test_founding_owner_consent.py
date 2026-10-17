@@ -387,3 +387,27 @@ async def test_boot_leaves_a_temporary_with_no_stranded_founding_record(
 
     stream, _ = (await _first_interact(OWNER_WA_ID)).split("|", 1)
     assert stream == ConsentStream.TEMPORARY.value
+
+
+@pytest.mark.asyncio
+async def test_boot_leaves_an_ingress_founding_record_alone(graph_db: str, node_store: Dict[str, Any]) -> None:
+    """Ingress auth authenticates as provider:id, so its founding record is correctly keyed there."""
+    from ciris_engine.logic.persistence import get_graph_node
+    from ciris_engine.logic.runtime.config_migration import migrate_founding_partnerships
+    from ciris_engine.schemas.services.graph_core import GraphScope
+
+    ingress_wa = MagicMock()
+    ingress_wa.wa_id = "wa-2026-10-16-INGRES"
+    ingress_wa.role = "root"
+    from ciris_engine.schemas.services.authority_core import WARole
+
+    ingress_wa.role = WARole.ROOT
+    C._create_founding_partnership(ingress_wa.wa_id, "home_assistant:abc123")
+    node_store["rows"] = []
+    runtime = MagicMock()
+    runtime.service_initializer.auth_service.list_was = AsyncMock(return_value=[ingress_wa])
+
+    with patch("ciris_engine.logic.setup.first_run.is_first_run", return_value=False):
+        await migrate_founding_partnerships(runtime)
+
+    assert get_graph_node("consent/home_assistant:abc123", GraphScope.LOCAL) is not None

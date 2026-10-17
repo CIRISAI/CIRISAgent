@@ -38,18 +38,17 @@ and revocation (withdraws/recants) only function if these emits run.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import hashlib
 import logging
 import os
 import uuid
+from datetime import datetime, timezone
 from enum import Enum
 from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from ciris_engine.logic.utils.log_sanitizer import sanitize_for_log
-
 from ciris_engine.schemas.consent.core import ConsentStatus, ConsentStream
 
 logger = logging.getLogger(__name__)
@@ -282,11 +281,15 @@ def cross_to_mesh(engine: object, attestation_id: str, *, label: str) -> "tuple[
     return w_outcome, placed
 
 
-def _log_crossing(label: str, attestation_id: str, outcome: str, placed: Optional[str], *, waiting_reads_as: str) -> None:
+def _log_crossing(
+    label: str, attestation_id: str, outcome: str, placed: Optional[str], *, waiting_reads_as: str
+) -> None:
     if outcome == "awaiting_actor":
         logger.warning(
             "consent-CEG: %s %s is waiting for its actor's signature -- it has NOT reached the mesh; %s",
-            label, attestation_id, waiting_reads_as,
+            label,
+            attestation_id,
+            waiting_reads_as,
         )
     elif placed and placed != str(attestation_id):
         logger.info("consent-CEG: %s %s placed at federation as %s (%s)", label, attestation_id, placed, outcome)
@@ -323,8 +326,13 @@ def emit_consent_revocation(user_id: str, reason: Optional[str] = None, promote:
     if promote:
         try:
             outcome, placed = cross_to_mesh(engine, str(attestation_id), label="revocation")
-            _log_crossing("revocation", str(attestation_id), outcome, placed,
-                          waiting_reads_as='peers keep reading the consent as GRANTED until it does')
+            _log_crossing(
+                "revocation",
+                str(attestation_id),
+                outcome,
+                placed,
+                waiting_reads_as="peers keep reading the consent as GRANTED until it does",
+            )
         except Exception as exc:  # noqa: BLE001
             # Expected in CLIENT mode (no PQC signer): the local row stands. An axis
             # refusal also lands here and its message names the axis -- keep it visible.
@@ -578,26 +586,38 @@ def current_community_grant_id() -> Optional[str]:
     if engine is None or not key_id:
         return None
     try:
-        import json as _json
-
-        # dimension_exact is honored at the substrate as of persist v17.5.2
-        # (CIRISPersist#461 — it was a silent no-op before), so the query is
-        # dimension-scoped and the community-trust row can't fall off page 1 as
-        # per-user consent rows accumulate. list_attestations (not list_scores)
-        # is still required: it sees ALL tiers AND subjectless rows, so the
-        # UNDIRECTED interim grant remains findable for revocation targeting.
-        page = _json.loads(
-            engine.list_attestations(_json.dumps({"dimension_exact": _COMMUNITY_TRUST_DIMENSION}), None, 100, key_id)  # type: ignore[attr-defined]
-        )
-        rows = page.get("items", [])
-        grants = [r for r in rows if r.get("attestation_type") == "scores"]
-        if not grants:
-            return None
-        grants.sort(key=_grant_sort_key, reverse=True)
-        return str(grants[0].get("attestation_id"))
+        grant = _newest_community_grant(_community_trust_rows(engine, key_id))
+        return str(grant.get("attestation_id")) if grant else None
     except Exception as exc:  # pragma: no cover - defensive
         logger.debug("consent-CEG: grant lookup failed: %s", exc)
         return None
+
+
+def _community_trust_rows(engine: object, key_id: str) -> "list[dict[str, object]]":
+    """Every row this key attested on the community-trust dimension. Raises when unreadable.
+
+    dimension_exact is honored at the substrate as of persist v17.5.2
+    (CIRISPersist#461 — it was a silent no-op before), so the query is
+    dimension-scoped and the community-trust row can't fall off page 1 as
+    per-user consent rows accumulate. list_attestations (not list_scores) is
+    still required: it sees ALL tiers AND subjectless rows, so the UNDIRECTED
+    interim grant remains findable for revocation targeting.
+    """
+    import json as _json
+
+    page = _json.loads(
+        engine.list_attestations(_json.dumps({"dimension_exact": _COMMUNITY_TRUST_DIMENSION}), None, 100, key_id)  # type: ignore[attr-defined]
+    )
+    return list(page.get("items", []))
+
+
+def _newest_community_grant(rows: "list[dict[str, object]]") -> "Optional[dict[str, object]]":
+    """The newest ``scores`` row (widest placement on a tie), revoked or not."""
+    grants = [r for r in rows if r.get("attestation_type") == "scores"]
+    if not grants:
+        return None
+    grants.sort(key=_grant_sort_key, reverse=True)
+    return grants[0]
 
 
 def current_community_grant_asserted_at() -> Optional[str]:
@@ -617,17 +637,8 @@ def current_community_grant_asserted_at() -> Optional[str]:
     if engine is None or not key_id:
         return None
     try:
-        import json as _json
-
-        page = _json.loads(
-            engine.list_attestations(_json.dumps({"dimension_exact": _COMMUNITY_TRUST_DIMENSION}), None, 100, key_id)  # type: ignore[attr-defined]
-        )
-        rows = page.get("items", [])
-        grants = [r for r in rows if r.get("attestation_type") == "scores"]
-        if not grants:
-            return None
-        grants.sort(key=_grant_sort_key, reverse=True)
-        asserted_at = grants[0].get("asserted_at")
+        grant = _newest_community_grant(_community_trust_rows(engine, key_id))
+        asserted_at = grant.get("asserted_at") if grant else None
         return str(asserted_at) if asserted_at else None
     except Exception as exc:  # pragma: no cover - defensive
         logger.debug("consent-CEG: grant timestamp lookup failed: %s", exc)
@@ -665,6 +676,20 @@ def emit_community_consent_grant(granted_at: Optional[str] = None) -> Optional[s
       seek, blind to it). See current_community_grant_id for why that read
       split must be preserved.
 
+    ONE DECISION, ONE ROW (CIRISAgent#1289). Every opt-in path lands here, and
+    several of them fire on every boot (legacy migration, node fold, the delivery
+    probe's 15 s retry). Each used to mint a new signed row that replicates to the
+    canonical, so a refused crossing became a new row on every tick. Now:
+
+    - a grant to this community already in force (newest ``scores`` row, not
+      withdrawn/recanted after it) is REUSED and nothing is written;
+    - a directed grant is written only while the owner binding over the
+      attesting key is held — persist refuses it otherwise (CC 3.3.1), so
+      writing it first only leaves an uncrossable row behind;
+    - an unreadable consent state writes nothing (can't check ⇒ don't mint).
+
+    Exactly one INFO line per distinct decision; a repeat logs at DEBUG.
+
     No-op (None) when the kill-switch is set or engine/key are unavailable.
     """
     if not consent_ceg_attestations_enabled():
@@ -676,42 +701,110 @@ def emit_community_consent_grant(granted_at: Optional[str] = None) -> Optional[s
         return None
     community = canonical_community_key_id()
     try:
+        rows = _community_trust_rows(engine, key_id)
+    except Exception as exc:  # noqa: BLE001
+        _log_grant_decision(f"deferred: consent state unreadable ({type(exc).__name__})")
+        return None
+    standing = _in_force_grant(rows)
+    bound = bool(community) and _owner_binding_held(engine, key_id)
+    if standing is not None and (not community or _directed_at(standing, community)):
+        grant_id = str(standing.get("attestation_id"))
+        _log_grant_decision(f"reusing grant {grant_id}")
+        unplaced = str(standing.get("cohort_scope") or "self") != _CROSSING_TARGET_FEDERATION
+        if bound and unplaced and grant_id not in _crossing_attempted:
+            grant_id = _cross_grant(engine, grant_id)
+        return grant_id
+    if community and not bound:
+        _log_grant_decision(f"deferred: no owner binding over {key_id} is held yet")
+        return None
+    if standing is not None:
+        reason = f"directs interim grant {standing.get('attestation_id')} at {community}"
+    elif _newest_community_grant(rows) is not None:
+        reason = "prior grant withdrawn"
+    else:
+        reason = "no grant in force"
+    try:
         grant = build_community_consent_grant(key_id, community or _PENDING_COMMUNITY_SENTINEL, granted_at=granted_at)
         if community:
             attestation_id = engine.attestation_upsert_local(_directed_payload(grant, community))  # type: ignore[attr-defined]
-            logger.info(
-                "consent-CEG: emitted directed traces-consent grant %s → community %s", attestation_id, community
-            )
-            # The directed grant IS the CEG promotion event self→community —
-            # promote it to federation tier so the counterparty can actually
-            # receive it (a local-tier row never leaves the occurrence).
-            # Best-effort, mirroring the revocation path: deferred in CLIENT
-            # mode (no PQC signer); the local row still gates the seal.
-            try:
-                outcome, placed = cross_to_mesh(engine, str(attestation_id), label="directed grant")
-                _log_crossing("directed grant", str(attestation_id), outcome, placed,
-                              waiting_reads_as='the community cannot see the grant, so traces will seal locally and not replicate')
-                if placed:
-                    # THE COMMUNITY IDENTITY OF THE GRANT IS THE WIDENED ROW'S ID: capture_grant_id
-                    # and the revocation target carry it to peers; the self-scoped original is
-                    # a row they cannot read (CIRISAgent#1144).
-                    attestation_id = placed
-            except Exception as exc:  # noqa: BLE001
-                # Expected in CLIENT mode (no PQC signer): the local row stands. An axis
-                # refusal also lands here and its message names the axis -- keep it visible.
-                logger.warning("consent-CEG: %s crossing deferred (non-fatal): %s", "directed grant", exc)
-        else:
-            attestation_id = engine.attestation_upsert_local(grant.model_dump_json())  # type: ignore[attr-defined]
-            logger.info(
-                "consent-CEG: emitted INTERIM local-tier traces-consent grant %s "
-                "(canonical community key unpublished — gates local emission only, "
-                "directed grant supersedes when the key ships)",
-                attestation_id,
-            )
+            _log_grant_decision(f"emitted grant {attestation_id} ({reason}, directed at {community})")
+            return _cross_grant(engine, str(attestation_id))
+        attestation_id = engine.attestation_upsert_local(grant.model_dump_json())  # type: ignore[attr-defined]
+        _log_grant_decision(f"emitted grant {attestation_id} ({reason}, interim local-tier)")
         return str(attestation_id)
     except Exception as exc:
         logger.warning("consent-CEG: community grant emit failed (non-fatal): %s", exc)
         return None
+
+
+#: Grants whose crossing this process has already attempted while bound. A
+#: refused crossing is retried on the next boot, never on the next tick.
+_crossing_attempted: "set[str]" = set()
+_last_grant_decision: Optional[str] = None
+_REVOKING_TYPES = frozenset({RevocationIntent.WITHDRAW.value, RevocationIntent.RECANT.value})
+
+
+def _log_grant_decision(line: str) -> None:
+    global _last_grant_decision
+    if line == _last_grant_decision:
+        logger.debug("consent-CEG: %s", line)
+        return
+    _last_grant_decision = line
+    logger.info("consent-CEG: %s", line)
+
+
+def _in_force_grant(rows: "list[dict[str, object]]") -> "Optional[dict[str, object]]":
+    """The newest grant, unless a withdraws/recants row is at least as new (newest wins)."""
+    grant = _newest_community_grant(rows)
+    if grant is None:
+        return None
+    revoked = [_instant(r) for r in rows if r.get("attestation_type") in _REVOKING_TYPES]
+    return None if revoked and max(revoked) >= _instant(grant) else grant
+
+
+def _directed_at(row: "dict[str, object]", community: str) -> bool:
+    subjects = row.get("subject_key_ids")
+    if isinstance(subjects, list) and community in subjects:
+        return True
+    envelope = row.get("attestation_envelope")
+    claim = envelope.get("claim") if isinstance(envelope, dict) else None
+    return isinstance(claim, dict) and claim.get("user_id") == community
+
+
+def _owner_binding_held(engine: object, key_id: str) -> bool:
+    """Does an owner binding over ``key_id`` stand? Fails closed (unreadable ⇒ no)."""
+    import json as _json
+
+    try:
+        owner = _json.loads(engine.owner_of_json(key_id))  # type: ignore[attr-defined]
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("consent-CEG: owner binding unreadable for %s: %s", key_id, exc)
+        return False
+    return isinstance(owner, str) and bool(owner)
+
+
+def _cross_grant(engine: object, attestation_id: str) -> str:
+    """Cross the directed grant to the community, once per grant per process.
+
+    The directed grant IS the CEG promotion event self→community — a local-tier
+    row never leaves the occurrence. Returns the id peers read: the widened row's
+    when one was placed (CIRISAgent#1144), else the local row's.
+    """
+    _crossing_attempted.add(attestation_id)
+    try:
+        outcome, placed = cross_to_mesh(engine, attestation_id, label="directed grant")
+        _log_crossing(
+            "directed grant",
+            attestation_id,
+            outcome,
+            placed,
+            waiting_reads_as="the community cannot see the grant, so traces will seal locally and not replicate",
+        )
+        return placed or attestation_id
+    except Exception as exc:  # noqa: BLE001
+        # The local row stands. An axis refusal also lands here and its message names the axis -- keep it visible.
+        logger.warning("consent-CEG: %s crossing deferred (non-fatal): %s", "directed grant", exc)
+        return attestation_id
 
 
 def emit_community_consent_revocation(
@@ -753,8 +846,13 @@ def emit_community_consent_revocation(
     if community:
         try:
             outcome, placed = cross_to_mesh(engine, str(attestation_id), label=f"{intent.value} revocation")
-            _log_crossing(f"{intent.value} revocation", str(attestation_id), outcome, placed,
-                          waiting_reads_as='the community keeps reading the grant as in force')
+            _log_crossing(
+                f"{intent.value} revocation",
+                str(attestation_id),
+                outcome,
+                placed,
+                waiting_reads_as="the community keeps reading the grant as in force",
+            )
         except Exception as exc:  # noqa: BLE001
             # Expected in CLIENT mode (no PQC signer): the local row stands. An axis
             # refusal also lands here and its message names the axis -- keep it visible.

@@ -38,6 +38,13 @@ class FakeEngine:
         self.calls.append(("widen_audience", (prior_id, ci, list(strip))))
         return dict(self.widen or {})
 
+    # the two reads the grant decision makes first (CIRISAgent#1289): no grant yet, owner bound
+    def list_attestations(self, query: str, cursor: Optional[str], limit: int, key_id: str) -> str:
+        return '{"items": []}'
+
+    def owner_of_json(self, key_id: str) -> str:
+        return '"owner-1"'
+
     # the write door, unchanged
     def attestation_upsert_local(self, payload: str) -> str:
         self.calls.append(("attestation_upsert_local", (payload,)))
@@ -45,8 +52,10 @@ class FakeEngine:
 
 
 def test_crossed_then_widened_returns_the_placed_id_and_composes_like_the_server() -> None:
-    eng = FakeEngine(enter={"outcome": "crossed", "attestation_id": "att-1"},
-                     widen={"outcome": "crossed", "attestation_id": "att-1-widened"})
+    eng = FakeEngine(
+        enter={"outcome": "crossed", "attestation_id": "att-1"},
+        widen={"outcome": "crossed", "attestation_id": "att-1-widened"},
+    )
     outcome, placed = att.cross_to_mesh(eng, "att-1", label="t")
     assert (outcome, placed) == ("crossed", "att-1-widened")
     names = [c[0] for c in eng.calls]
@@ -65,8 +74,10 @@ def test_awaiting_actor_is_read_by_name_and_nothing_is_widened() -> None:
 
 
 def test_already_widened_places_nothing_new() -> None:
-    eng = FakeEngine(enter={"outcome": "already_in_mesh", "attestation_id": "att-1"},
-                     widen={"outcome": "already_widened", "attestation_id": "att-1-prior"})
+    eng = FakeEngine(
+        enter={"outcome": "already_in_mesh", "attestation_id": "att-1"},
+        widen={"outcome": "already_widened", "attestation_id": "att-1-prior"},
+    )
     assert att.cross_to_mesh(eng, "att-1", label="t") == ("already_widened", None)
 
 
@@ -80,16 +91,18 @@ def test_an_axis_refusal_is_raised_with_the_axis_named() -> None:
 
 
 def _revocation_with(engine: FakeEngine, caplog: Any) -> Optional[str]:
-    with patch.object(att, "_resolve_engine", return_value=engine), \
-         patch.object(att, "_resolve_attesting_key_id", return_value="fedaddr-node"), \
-         patch.object(att, "build_consent_revocation_input") as build:
+    with patch.object(att, "_resolve_engine", return_value=engine), patch.object(
+        att, "_resolve_attesting_key_id", return_value="fedaddr-node"
+    ), patch.object(att, "build_consent_revocation_input") as build:
         build.return_value.model_dump_json.return_value = "{}"
         return att.emit_consent_revocation("user-1", "because", promote=True)
 
 
 def test_revocation_returns_the_placed_id_when_widened(caplog: Any) -> None:
-    eng = FakeEngine(enter={"outcome": "crossed", "attestation_id": "att-local-1"},
-                     widen={"outcome": "crossed", "attestation_id": "att-fed-9"})
+    eng = FakeEngine(
+        enter={"outcome": "crossed", "attestation_id": "att-local-1"},
+        widen={"outcome": "crossed", "attestation_id": "att-fed-9"},
+    )
     assert _revocation_with(eng, caplog) == "att-fed-9"
 
 
@@ -97,7 +110,9 @@ def test_revocation_waiting_for_its_actor_returns_the_local_id_and_warns(caplog:
     eng = FakeEngine(enter={"outcome": "awaiting_actor"})
     with caplog.at_level("WARNING"):
         assert _revocation_with(eng, caplog) == "att-local-1"
-    assert any("waiting for its actor's signature" in r.getMessage() and "GRANTED" in r.getMessage() for r in caplog.records)
+    assert any(
+        "waiting for its actor's signature" in r.getMessage() and "GRANTED" in r.getMessage() for r in caplog.records
+    )
 
 
 def test_revocation_survives_an_axis_refusal_and_names_it(caplog: Any) -> None:
@@ -136,19 +151,29 @@ def _community_patches(engine: FakeEngine, community: Optional[str] = "community
 
 
 def test_directed_grant_adopts_the_widened_row_as_its_identity(caplog: Any) -> None:
-    eng = FakeEngine(enter={"outcome": "crossed", "attestation_id": "att-local-1"},
-                     widen={"outcome": "crossed", "attestation_id": "att-fed-7"})
+    eng = FakeEngine(
+        enter={"outcome": "crossed", "attestation_id": "att-local-1"},
+        widen={"outcome": "crossed", "attestation_id": "att-fed-7"},
+    )
     patches = _community_patches(eng)
     with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5] as build, patches[6]:
         build.return_value.model_dump_json.return_value = "{}"
         assert att.emit_community_consent_grant() == "att-fed-7"
-    assert [c[0] for c in eng.calls] == ["attestation_upsert_local", "describe_crossing", "enter_mesh", "describe_crossing", "widen_audience"]
+    assert [c[0] for c in eng.calls] == [
+        "attestation_upsert_local",
+        "describe_crossing",
+        "enter_mesh",
+        "describe_crossing",
+        "widen_audience",
+    ]
 
 
 def test_directed_grant_keeps_the_local_id_when_the_crossing_is_refused(caplog: Any) -> None:
     eng = FakeEngine(enter={"outcome": "crossed"}, refuse="audience")
     patches = _community_patches(eng)
-    with caplog.at_level("WARNING"), patches[0], patches[1], patches[2], patches[3], patches[4], patches[5] as build, patches[6]:
+    with caplog.at_level("WARNING"), patches[0], patches[1], patches[2], patches[3], patches[4], patches[
+        5
+    ] as build, patches[6]:
         build.return_value.model_dump_json.return_value = "{}"
         assert att.emit_community_consent_grant() == "att-local-1"
     assert any("axis audience refused" in r.getMessage() for r in caplog.records)
@@ -162,8 +187,10 @@ def test_community_revocation_returns_the_placed_id(caplog: Any) -> None:
             self.calls.append(("attestation_insert_local", (payload,)))
             return "att-rev-1"
 
-    eng = _Eng(enter={"outcome": "crossed", "attestation_id": "att-rev-1"},
-               widen={"outcome": "crossed", "attestation_id": "att-rev-fed"})
+    eng = _Eng(
+        enter={"outcome": "crossed", "attestation_id": "att-rev-1"},
+        widen={"outcome": "crossed", "attestation_id": "att-rev-fed"},
+    )
     patches = _community_patches(eng)
     with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6] as build:
         build.return_value.model_dump_json.return_value = "{}"
@@ -180,10 +207,14 @@ def test_community_revocation_waiting_for_its_actor_keeps_the_local_id_and_warns
 
     eng = _Eng(enter={"outcome": "awaiting_actor"})
     patches = _community_patches(eng)
-    with caplog.at_level("WARNING"), patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6] as build:
+    with caplog.at_level("WARNING"), patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[
+        6
+    ] as build:
         build.return_value.model_dump_json.return_value = "{}"
         assert att.emit_community_consent_revocation(intent, "att-fed-7", None) == "att-rev-1"
-    assert any("waiting for its actor's signature" in r.getMessage() and "in force" in r.getMessage() for r in caplog.records)
+    assert any(
+        "waiting for its actor's signature" in r.getMessage() and "in force" in r.getMessage() for r in caplog.records
+    )
 
 
 def test_log_crossing_reports_a_no_op_outcome_by_name(caplog: Any) -> None:
@@ -193,31 +224,69 @@ def test_log_crossing_reports_a_no_op_outcome_by_name(caplog: Any) -> None:
 
 
 def test_current_grant_picker_prefers_the_widened_copy_of_the_newest_claim() -> None:
-    rows = {"items": [
-        {"attestation_type": "scores", "attestation_id": "g-self", "asserted_at": "2026-09-04T10:00:00.123Z", "cohort_scope": "self"},
-        {"attestation_type": "scores", "attestation_id": "g-fed", "asserted_at": "2026-09-04T10:00:00.123Z", "cohort_scope": "federation"},
-        {"attestation_type": "withdraws", "attestation_id": "w-1", "asserted_at": "2026-09-04T11:00:00.000Z", "cohort_scope": "federation"},
-    ]}
+    rows = {
+        "items": [
+            {
+                "attestation_type": "scores",
+                "attestation_id": "g-self",
+                "asserted_at": "2026-09-04T10:00:00.123Z",
+                "cohort_scope": "self",
+            },
+            {
+                "attestation_type": "scores",
+                "attestation_id": "g-fed",
+                "asserted_at": "2026-09-04T10:00:00.123Z",
+                "cohort_scope": "federation",
+            },
+            {
+                "attestation_type": "withdraws",
+                "attestation_id": "w-1",
+                "asserted_at": "2026-09-04T11:00:00.000Z",
+                "cohort_scope": "federation",
+            },
+        ]
+    }
 
     class _Eng:
         def list_attestations(self, query: str, cursor: Any, limit: int, key_id: str) -> str:
             assert "consent" in query or "community" in query or query
             return json.dumps(rows)
 
-    with patch.object(att, "_resolve_engine", return_value=_Eng()), patch.object(att, "_resolve_attesting_key_id", return_value="fedaddr-node"):
+    with patch.object(att, "_resolve_engine", return_value=_Eng()), patch.object(
+        att, "_resolve_attesting_key_id", return_value="fedaddr-node"
+    ):
         assert att.current_community_grant_id() == "g-fed"
 
 
 def test_grant_instant_picker_resolves_the_same_row_as_the_id_picker() -> None:
-    rows = {"items": [
-        {"attestation_type": "scores", "attestation_id": "g-self", "asserted_at": "2026-09-04T10:00:00.123Z", "cohort_scope": "self"},
-        {"attestation_type": "scores", "attestation_id": "g-fed", "asserted_at": "2026-09-04T10:00:00.123Z", "cohort_scope": "federation"},
-        {"attestation_type": "scores", "attestation_id": "g-old", "asserted_at": "2026-09-03T10:00:00.000Z", "cohort_scope": "federation"},
-    ]}
+    rows = {
+        "items": [
+            {
+                "attestation_type": "scores",
+                "attestation_id": "g-self",
+                "asserted_at": "2026-09-04T10:00:00.123Z",
+                "cohort_scope": "self",
+            },
+            {
+                "attestation_type": "scores",
+                "attestation_id": "g-fed",
+                "asserted_at": "2026-09-04T10:00:00.123Z",
+                "cohort_scope": "federation",
+            },
+            {
+                "attestation_type": "scores",
+                "attestation_id": "g-old",
+                "asserted_at": "2026-09-03T10:00:00.000Z",
+                "cohort_scope": "federation",
+            },
+        ]
+    }
 
     class _Eng:
         def list_attestations(self, query: str, cursor: Any, limit: int, key_id: str) -> str:
             return json.dumps(rows)
 
-    with patch.object(att, "_resolve_engine", return_value=_Eng()), patch.object(att, "_resolve_attesting_key_id", return_value="fedaddr-node"):
+    with patch.object(att, "_resolve_engine", return_value=_Eng()), patch.object(
+        att, "_resolve_attesting_key_id", return_value="fedaddr-node"
+    ):
         assert att.current_community_grant_asserted_at() == "2026-09-04T10:00:00.123Z"

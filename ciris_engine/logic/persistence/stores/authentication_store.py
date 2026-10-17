@@ -47,8 +47,7 @@ def _get_engine() -> Any:
     engine = get_persist_engine()
     if engine is None:
         raise RuntimeError(
-            "persist engine not initialized — call initialize_database() "
-            "before any wa_cert operation"
+            "persist engine not initialized — call initialize_database() " "before any wa_cert operation"
         )
     return engine
 
@@ -154,8 +153,7 @@ def _scopes_to_persist(value: Any) -> List[str]:
     # length identify the defect ("a dict arrived", "an 8KB blob arrived")
     # without copying unknown row bytes into the log.
     logger.warning(
-        "wa_cert scopes did not decode to a list (type=%s, len=%d) — storing an "
-        "empty scope set",
+        "wa_cert scopes did not decode to a list (type=%s, len=%d) — storing an " "empty scope set",
         type(value).__name__,
         len(str(value)),
     )
@@ -397,7 +395,9 @@ def _wa_to_persist_payload(wa: WACertificate) -> Dict[str, Any]:
     cust_perm_json = wa_dict.get("custom_permissions_json")
     if cust_perm_json:
         try:
-            payload["custom_permissions"] = json.loads(cust_perm_json) if isinstance(cust_perm_json, str) else cust_perm_json
+            payload["custom_permissions"] = (
+                json.loads(cust_perm_json) if isinstance(cust_perm_json, str) else cust_perm_json
+            )
         except json.JSONDecodeError as e:
             logger.warning("Invalid custom_permissions_json for %s: %s", wa.wa_id, e)
 
@@ -629,9 +629,9 @@ def fabric_oauth_holder_id(provider: str, external_id: str) -> Optional[str]:
     # mint the second claim that locked a real user out.
     for wa_id in live_oauth_holders(provider, external_id):
         if _MINTED_WA_ID.match(wa_id):
-            continue  # ours — the normal path already handles it
+            continue  # a brain-minted cert, not the node-claimed owner
         if _OAUTH_PLACEHOLDER_WA_ID.match(wa_id):
-            continue  # provisional — retired after we mint+link
+            continue  # provisional OAuth placeholder, not an owner
         return wa_id
     return None
 
@@ -657,31 +657,6 @@ def get_wa_by_oauth(provider: str, external_id: str) -> Optional[WACertificate]:
             for link in wa.oauth_links:
                 if link.provider == provider and link.external_id == external_id:
                     return wa
-    return None
-
-
-def provisional_oauth_cert_id(provider: str, external_id: str) -> Optional[str]:
-    """Return the id of the substrate's PROVISIONAL OAuth cert, or None.
-
-    WORKAROUND for #1098 — drop once ciris-server mints OAuth WA ids as proper
-    ``wa-…`` (server issue). The OAuth browser-handoff parks the session as a
-    live wa_cert keyed by (provider, external_id) whose wa_id is the placeholder
-    ``oauth-<provider>-<sub>``. Once setup mints+links a real WA for the same
-    identity, that placeholder becomes a DUPLICATE and the node refuses the
-    ambiguous account. Callers capture this id BEFORE linking (linking can
-    repoint the primary oauth index) and deactivate it afterwards via
-    ``update_wa_certificate(id, {"active": False})`` — the raw set_active path,
-    since materializing the placeholder id would fail the wa_id pattern.
-    Returns None when the primary row is already a minted WA or absent.
-    """
-    engine = _get_engine()
-    raw = engine.wa_cert_get_by_oauth(provider, external_id)
-    row = _parse_persist_payload(raw)
-    if not isinstance(row, dict):
-        return None
-    wa_id = row.get("wa_id")
-    if isinstance(wa_id, str) and wa_id and not _MINTED_WA_ID.match(wa_id):
-        return wa_id
     return None
 
 

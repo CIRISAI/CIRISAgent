@@ -496,7 +496,7 @@ async def _handle_consent_for_user(auth: AuthContext, channel_id: str, request: 
             await consent_manager.grant_consent(consent_req, channel_id=channel_id)
 
             # Return notice to add to response
-            return "\n\n📝 Privacy Notice: We forget about you in 14 days unless you say otherwise. Visit /v1/consent to manage your data preferences."
+            return "\n\nPrivacy Notice: We forget about you in 14 days unless you say otherwise. Visit /v1/consent to manage your data preferences."
 
     except Exception as e:
         logger.warning(f"Could not check consent for user {auth.user_id}: {e}")

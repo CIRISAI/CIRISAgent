@@ -614,29 +614,12 @@ def _determine_user_role(current_user: JSONDict) -> Any:
 
 
 async def _get_user_allowed_channel_ids(user_id: str) -> set[str]:
-    """Get set of channel IDs user is allowed to see (user_id + OAuth links + API-prefixed versions)."""
-    allowed_channel_ids = {user_id}
-    # BUGFIX: API adapter prefixes channel_id with "api_"
-    # See agent.py:221: channel_id = f"api_{auth.user_id}"
-    allowed_channel_ids.add(f"api_{user_id}")
+    """Channel ids this user may see: their id, and the API adapter's `api_` prefix of it.
 
-    try:
-        # Post-A1 absorption (CIRISAgent#763): route OAuth identity lookup
-        # through persist's wa_cert substrate instead of raw SQL.
-        from ciris_engine.logic.persistence.stores import authentication_store
-
-        wa = authentication_store.get_wa_by_id(user_id)
-        if wa is not None and wa.oauth_provider and wa.oauth_external_id:
-            oauth_channel = f"{wa.oauth_provider}:{wa.oauth_external_id}"
-            allowed_channel_ids.add(oauth_channel)
-            allowed_channel_ids.add(wa.oauth_external_id)
-            # BUGFIX: Also add API-prefixed versions for SSE filtering
-            allowed_channel_ids.add(f"api_{oauth_channel}")
-            allowed_channel_ids.add(f"api_{wa.oauth_external_id}")
-    except Exception as e:
-        logger.error(f"Error fetching OAuth links for user {user_id}: {e}", exc_info=True)
-
-    return allowed_channel_ids
+    A user has one id, the wa_id every node login resolves to; no OAuth-derived alias.
+    """
+    # The API adapter prefixes channel_id with "api_" (agent.py: channel_id = f"api_{auth.user_id}").
+    return {user_id, f"api_{user_id}"}
 
 
 async def _batch_fetch_task_channel_ids(task_ids: List[str]) -> Dict[str, str]:

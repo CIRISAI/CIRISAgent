@@ -743,16 +743,25 @@ class TestSetupHelperFunctions:
         assert "DISCORD_BOT_TOKEN=test-token" in content
         assert "DISCORD_CHANNEL_ID=123456" in content
 
+    @staticmethod
+    def _node_owner(monkeypatch, name="newuser"):
+        """The owner claim-remote left behind: the node created the user."""
+        import ciris_engine.logic.persistence.stores.authentication_store as store
+
+        row = {"wa_id": "wa-root-newuser-node-1", "name": name, "role": "root", "active": 1}
+        monkeypatch.setattr(store, "_list_active_by_role", lambda role, limit=1000: [row] if role == "root" else [])
+        monkeypatch.setattr(store, "live_oauth_holders", lambda p, s: [])
+        return row["wa_id"]
+
     @pytest.mark.asyncio
-    async def test_create_setup_users_new_user(self, tmp_path):
-        """Test _create_setup_users creates new user."""
+    async def test_create_setup_users_reads_the_node_owner(self, tmp_path, monkeypatch):
+        """_create_setup_users mints no user: the node-claimed owner is the user."""
         from ciris_engine.logic.adapters.api.routes.setup import _create_setup_users
 
+        owner_wa_id = self._node_owner(monkeypatch)
         setup = SetupCompleteRequest(
             llm_provider="openai",
             llm_api_key="sk-test123",
-            llm_base_url=None,
-            llm_model=None,
             template_id="general",
             enabled_adapters=["api"],
             adapter_config={},
@@ -761,50 +770,33 @@ class TestSetupHelperFunctions:
             agent_port=8080,
         )
 
-        with patch("ciris_engine.logic.config.db_paths.get_audit_db_full_path") as mock_db_path:
-            with patch(
-                "ciris_engine.logic.services.infrastructure.authentication.service.AuthenticationService"
-            ) as mock_auth:
-                with patch("ciris_engine.logic.services.lifecycle.time.service.TimeService") as mock_time:
-                    # Setup mocks
-                    mock_db_path.return_value = str(tmp_path / "audit.db")
+        with patch(
+            "ciris_engine.logic.services.infrastructure.authentication.service.AuthenticationService"
+        ) as mock_auth:
+            with patch("ciris_engine.logic.services.lifecycle.time.service.TimeService") as mock_time:
+                with patch(
+                    "ciris_engine.logic.adapters.api.routes.setup.complete._create_founding_partnership"
+                ) as mock_fp:
                     mock_auth_instance = AsyncMock()
                     mock_auth.return_value = mock_auth_instance
-                    mock_time_instance = AsyncMock()
-                    mock_time.return_value = mock_time_instance
+                    mock_time.return_value = AsyncMock()
 
-                    # Mock create_wa to return a WA cert
-                    mock_wa_cert = Mock()
-                    mock_wa_cert.wa_id = "test-wa-id"
-                    mock_auth_instance.create_wa.return_value = mock_wa_cert
+                    await _create_setup_users(setup, str(tmp_path / "ciris_engine.db"))
 
-                    # Call function
-                    await _create_setup_users(setup, str(tmp_path / "audit.db"))
-
-                    # Verify auth service was created and started
-                    mock_auth.assert_called_once()
                     mock_auth_instance.start.assert_called_once()
-
-                    # Verify WA was created (this is how users are created)
-                    mock_auth_instance.create_wa.assert_called_once()
-                    call_kwargs = mock_auth_instance.create_wa.call_args[1]
-                    assert call_kwargs["name"] == "newuser"
-                    assert call_kwargs["email"] == "newuser@local"
-
-                    # Verify password was hashed and updated
-                    mock_auth_instance.hash_password.assert_called_once_with("secure_password_123")
-                    mock_auth_instance.update_wa.assert_called_once()
+                    mock_auth_instance.create_wa.assert_not_called()
+                    mock_auth_instance.update_wa.assert_not_called()  # the node owns the credential
+                    mock_fp.assert_called_once_with(owner_wa_id)
 
     @pytest.mark.asyncio
-    async def test_create_setup_users_dual_password(self, tmp_path):
-        """Test _create_setup_users with dual password support."""
+    async def test_create_setup_users_dual_password(self, tmp_path, monkeypatch):
+        """system_admin_password still updates the default admin WA, and nothing else."""
         from ciris_engine.logic.adapters.api.routes.setup import _create_setup_users
 
+        self._node_owner(monkeypatch)
         setup = SetupCompleteRequest(
             llm_provider="openai",
             llm_api_key="sk-test123",
-            llm_base_url=None,
-            llm_model=None,
             template_id="general",
             enabled_adapters=["api"],
             adapter_config={},
@@ -814,40 +806,25 @@ class TestSetupHelperFunctions:
             agent_port=8080,
         )
 
-        with patch("ciris_engine.logic.config.db_paths.get_audit_db_full_path") as mock_db_path:
-            with patch(
-                "ciris_engine.logic.services.infrastructure.authentication.service.AuthenticationService"
-            ) as mock_auth:
-                with patch("ciris_engine.logic.services.lifecycle.time.service.TimeService") as mock_time:
-                    # Setup mocks
-                    mock_db_path.return_value = str(tmp_path / "audit.db")
+        with patch(
+            "ciris_engine.logic.services.infrastructure.authentication.service.AuthenticationService"
+        ) as mock_auth:
+            with patch("ciris_engine.logic.services.lifecycle.time.service.TimeService") as mock_time:
+                with patch("ciris_engine.logic.adapters.api.routes.setup.complete._create_founding_partnership"):
                     mock_auth_instance = AsyncMock()
                     mock_auth.return_value = mock_auth_instance
-                    mock_time_instance = AsyncMock()
-                    mock_time.return_value = mock_time_instance
+                    mock_time.return_value = AsyncMock()
+                    mock_auth_instance.hash_password = Mock(return_value="hashed")
 
-                    # Mock create_wa to return a WA cert for new user
-                    mock_new_wa = Mock()
-                    mock_new_wa.wa_id = "new-user-wa-id"
-                    mock_auth_instance.create_wa.return_value = mock_new_wa
-
-                    # Mock list_was to return existing admin WA
                     mock_admin_wa = Mock()
                     mock_admin_wa.name = "admin"
                     mock_admin_wa.wa_id = "admin-wa-id"
-                    mock_auth_instance.list_was.return_value = [mock_admin_wa, mock_new_wa]
+                    mock_auth_instance.list_was.return_value = [mock_admin_wa]
 
-                    # Call function
-                    await _create_setup_users(setup, str(tmp_path / "audit.db"))
+                    await _create_setup_users(setup, str(tmp_path / "ciris_engine.db"))
 
-                    # Verify new user was created
-                    mock_auth_instance.create_wa.assert_called_once()
-
-                    # Verify system admin password was updated
-                    # Should call list_was to find admin WA (called multiple times for different checks)
-                    mock_auth_instance.list_was.assert_any_call(active_only=True)
-                    # Should call update_wa twice: once for new user, once for admin
-                    assert mock_auth_instance.update_wa.call_count == 2
+                    mock_auth_instance.create_wa.assert_not_called()
+                    mock_auth_instance.update_wa.assert_called_once_with(wa_id="admin-wa-id", password_hash="hashed")
 
 
 class TestResumeFromFirstRun:

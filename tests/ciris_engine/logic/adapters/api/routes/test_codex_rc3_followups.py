@@ -192,14 +192,6 @@ class TestEveryMintedAuthorityCanActuallyResolve:
 
     RESOURCE = "medical_defer_001"
 
-    def test_setup_minted_authority_scopes_pass_the_gate(self) -> None:
-        src = (REPO / "ciris_engine/logic/runtime/service_initializer.py").read_text()
-        assert '"resolve_deferral:any"' in src, "setup-created AUTHORITY must be minted with jurisdiction"
-        assert any(
-            scope_grants(s, "resolve_deferral", self.RESOURCE)
-            for s in ["read:any", "write:any", "resolve_deferral:any"]
-        )
-
     def test_the_old_setup_scopes_alone_would_have_been_refused(self) -> None:
         assert not any(
             scope_grants(s, "resolve_deferral", self.RESOURCE) for s in ["read:any", "write:any"]
@@ -433,9 +425,9 @@ class TestATimerCannotOverturnAnAnswerItRacedWith:
         scheduled = SimpleNamespace(task_id="sched-1", origin_thought_id="th-1")
 
         assert service._reactivate_deferred_task(scheduled, "task-1") is True
-        assert not any(kind == "thought" for kind, _ in calls), (
-            f"the refused thought must NOT be re-pended; calls={calls}"
-        )
+        assert not any(
+            kind == "thought" for kind, _ in calls
+        ), f"the refused thought must NOT be re-pended; calls={calls}"
         assert calls[-1] == ("task", TaskStatus.COMPLETED), f"answer must be restored, got {calls}"
 
     def test_an_unraced_timer_still_reactivates(self, monkeypatch) -> None:
@@ -453,9 +445,7 @@ class TestATimerCannotOverturnAnAnswerItRacedWith:
             lambda tid: SimpleNamespace(status=TaskStatus.DEFERRED, agent_occurrence_id="occ-1"),
         )
         monkeypatch.setattr(persistence, "get_task_raw_context", lambda tid: {"deferral": {}})
-        monkeypatch.setattr(
-            persistence, "update_task_status", lambda t, s, o: (calls.append(("task", s)), True)[1]
-        )
+        monkeypatch.setattr(persistence, "update_task_status", lambda t, s, o: (calls.append(("task", s)), True)[1])
         monkeypatch.setattr(
             persistence,
             "update_thought_status",

@@ -72,13 +72,13 @@ async def resolve_certificate_id(request: Request, auth: AuthContext) -> str:
     certificate one because ``WiseAuthorityService.authorize()`` resolves it
     with an exact ``get_wa()`` lookup.
 
-    * Password / API-key auth already carries it: ``_handle_password_auth``
-      sets ``user_id=user.wa_id``.
-    * Ingress / OAuth auth does NOT. ``dependencies/auth.py`` builds
+    * Node logins (password, Google, Apple, OAuth callback) and API keys
+      already carry it: the node resolves every session to the ``wa_id``.
+    * Ingress auth does NOT. ``dependencies/auth.py`` builds
       ``user_id`` as ``"{provider}:{external_id}"`` while the certificate is
       stored under a generated ``wa-YYYY-MM-DD-XXXXXX`` id and merely LINKED
       to that OAuth identity via ``oauth_provider`` / ``oauth_external_id``.
-      Passing the external identity straight through made every OAuth
+      Passing the external identity straight through made every ingress
       authority a ``WA_NOT_FOUND`` and therefore a 403 on every domain-tagged
       deferral.
 

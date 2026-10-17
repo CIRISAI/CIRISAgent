@@ -4,7 +4,6 @@ Covers uncovered helper functions:
 - _validate_api_key_for_provider
 - _classify_llm_connection_error
 - _validate_setup_passwords
-- _log_oauth_linking_skip
 - _get_llm_providers
 - _get_available_adapters
 - should_filter_adapter (shared module, replaces _should_skip_manifest)
@@ -27,7 +26,6 @@ from ciris_engine.logic.adapters.api.routes.setup import (
     _classify_llm_connection_error,
     _get_available_adapters,
     _get_llm_providers,
-    _log_oauth_linking_skip,
     _validate_api_key_for_provider,
     _validate_setup_passwords,
 )
@@ -226,36 +224,6 @@ class TestValidateSetupPasswords:
             _validate_setup_passwords(setup, is_oauth_user=False)
         assert exc_info.value.status_code == 400
         assert "System admin password" in exc_info.value.detail
-
-
-class TestLogOAuthLinkingSkip:
-    """Tests for _log_oauth_linking_skip helper."""
-
-    def test_logs_missing_provider(self):
-        """Logs reason when oauth_provider is missing."""
-        setup = SetupCompleteRequest(
-            llm_provider="openai",
-            llm_api_key="sk-test",
-            admin_username="testuser",
-            admin_password="password123",
-            oauth_provider=None,
-            oauth_external_id="12345",
-        )
-        # Should not raise, just logs
-        _log_oauth_linking_skip(setup)
-
-    def test_logs_missing_external_id(self):
-        """Logs reason when oauth_external_id is missing."""
-        setup = SetupCompleteRequest(
-            llm_provider="openai",
-            llm_api_key="sk-test",
-            admin_username="testuser",
-            admin_password="password123",
-            oauth_provider="google",
-            oauth_external_id=None,
-        )
-        # Should not raise, just logs
-        _log_oauth_linking_skip(setup)
 
 
 class TestGetLLMProviders:

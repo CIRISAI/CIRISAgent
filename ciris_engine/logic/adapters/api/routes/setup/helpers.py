@@ -304,12 +304,3 @@ def _validate_setup_passwords(setup: SetupCompleteRequest, is_oauth_user: bool) 
         )
 
     return admin_password
-
-
-def _log_oauth_linking_skip(setup: SetupCompleteRequest) -> None:
-    """Log debug information when OAuth linking is skipped."""
-    logger.info("CIRIS_SETUP_DEBUG *** SKIPPING OAuth linking block - condition not met ***")
-    if not setup.oauth_provider:
-        logger.info("CIRIS_SETUP_DEBUG   Reason: oauth_provider is falsy/empty")
-    if not setup.oauth_external_id:
-        logger.info("CIRIS_SETUP_DEBUG   Reason: oauth_external_id is falsy/empty")

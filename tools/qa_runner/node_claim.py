@@ -10,9 +10,9 @@ node, and an unowned node ships no trace to any canonical. The wizard
 
 The PIN: the node mints a one-time claim PIN at boot while it is UNOWNED and
 writes it to `<node home>/claim_pin` (the node's home is the backend's
-CIRIS_HOME). Setup must not run first: it mints a ROOT WA, and a node that sees
-a ROOT mints no PIN at all. `/v1/setup/complete` then adopts the node-claimed
-owner of the same username instead of minting a second ROOT (`_node_owner_named`).
+CIRIS_HOME). Setup must run after the claim: the claim is what creates the
+user. `/v1/setup/complete` mints no user; it reads the node-claimed owner
+(`_resolve_node_owner`) and answers 409 node_unclaimed when there is none.
 
 Used by the QA runner's own setup (tools/qa_runner/server.py, every QA boot,
 live and mock) and by the setup_e2e module. Fail closed: no PIN, or a claim
@@ -64,7 +64,9 @@ def _parse_pin(raw: str) -> str:
     return raw
 
 
-def find_claim_pin(homes: Iterable[Optional[str]], since: Optional[float] = None) -> Tuple[Optional[str], Optional[Path]]:
+def find_claim_pin(
+    homes: Iterable[Optional[str]], since: Optional[float] = None
+) -> Tuple[Optional[str], Optional[Path]]:
     """The first readable PIN in `<home>/claim_pin`, written at or after `since` when given.
 
     `since` keeps a PIN a previous run left behind (the node removes the file
@@ -185,7 +187,10 @@ async def claim_node(
     )
     if response.status_code != 200:
         return ClaimOutcome(
-            False, "claim", f"Status code: {response.status_code}: {response.text[:400]}", node_code_prefix=node_code[:24]
+            False,
+            "claim",
+            f"Status code: {response.status_code}: {response.text[:400]}",
+            node_code_prefix=node_code[:24],
         )
     data = response.json()
     data = data if isinstance(data, dict) else {}

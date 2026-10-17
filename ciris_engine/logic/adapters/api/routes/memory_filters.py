@@ -21,35 +21,12 @@ logger = logging.getLogger(__name__)
 
 
 async def get_user_allowed_ids(user_id: str) -> Set[str]:
+    """The user ids whose memories this user may see: only their own.
+
+    A user has one id, the wa_id every node login resolves to. The agent
+    never maps it to an OAuth-derived alias (``provider:subject``).
     """
-    Get set of user IDs user is allowed to see (user_id + OAuth links).
-
-    Matches the same logic as reasoning event stream filtering for consistency.
-
-    Args:
-        user_id: Primary user ID
-
-    Returns:
-        Set of allowed user IDs (primary + OAuth linked accounts)
-    """
-    allowed_ids = {user_id}
-
-    try:
-        # Post-A1 absorption (CIRISAgent#763): route OAuth identity lookup
-        # through persist's wa_cert substrate instead of raw SQL.
-        from ciris_engine.logic.persistence.stores import authentication_store
-
-        wa = authentication_store.get_wa_by_id(user_id)
-        if wa is not None and wa.oauth_provider and wa.oauth_external_id:
-            allowed_ids.add(f"{wa.oauth_provider}:{wa.oauth_external_id}")
-            allowed_ids.add(wa.oauth_external_id)
-    except Exception as e:
-        logger.error(
-            f"Error fetching OAuth links for user {user_id}: {e}",
-            exc_info=True,
-        )
-
-    return allowed_ids
+    return {user_id}
 
 
 def build_user_filter_sql(allowed_user_ids: Set[str]) -> tuple[str, List[str]]:

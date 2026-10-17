@@ -147,7 +147,7 @@ class TestCoreEndpoints:
 
             assert response.status_code == 200
             data = response.json()
-            expected_response = "Hello! How can I help you?\n\n📝 Privacy Notice: We forget about you in 14 days unless you say otherwise. Visit /v1/consent to manage your data preferences."
+            expected_response = "Hello! How can I help you?\n\nPrivacy Notice: We forget about you in 14 days unless you say otherwise. Visit /v1/consent to manage your data preferences."
             assert data["data"]["response"] == expected_response
             assert data["data"]["state"] == "WORK"
         finally:

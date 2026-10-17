@@ -5,6 +5,27 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.16.2-stable] - 2026-10-17
+
+### Substrate
+
+- **ciris-server 0.5.229**, which also carries the 0.5.228 changes (#1293):
+  - An owner key that the keyring stranded in the software tier is reopened from that tier. The process is pinned to the tier, and a key that is already stranded is restored on boot.
+  - The contacts batch, and additive add-device routes.
+  - The self room works on split installs, because its drive uses the bound node key.
+  - The import-time keyring pin inspects one home only.
+
+### Identity and consent
+
+- **One user id** - the node-claimed owner is the only user. The founding owner's consent is keyed to the node owner, and the agent no longer mints users (#1287).
+- **One traces-consent grant** - the grant in force is reused, never re-emitted on every tick (#1294).
+- **CC evidence** - an `evidence/cc_impl.tsv` row for CLM-consent-stream-is-data-choice (#1292).
+
+### Reliability
+
+- **No boot SIGBUS** - the wa_cert migration no longer opens persist's database with a second sqlite connection (#1288).
+- **iOS** - the localization bundle is re-synced to client 0.5.228 with the missing keys, and the 2.16.1 build is repaired (#1286).
+
 ## [2.16.1-stable] - 2026-10-15
 
 **Supersedes 2.16.0.** `ciris-agent 2.16.0` and `v2.16.0-stable` were a partial build, auto-published from a mid-release main commit (18c59a93) before releases were gated on a tag. PyPI is immutable, so this is the real release.

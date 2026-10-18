@@ -5,6 +5,15 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.16.3-stable] - 2026-10-18
+
+### Substrate
+
+- **ciris-server 0.5.231**, which also carries the 0.5.230 changes:
+  - Add-device applies the claim at the end of first run (FSD/ADD_DEVICE.md §2.1). This is additive, and nothing changes for agents that do not call it.
+  - From 0.5.230: KEX/announce (CIRISServer#788), edge #876, and the peering pull.
+  - Persist and verify are unchanged and edge is v41.1.1. There is no DB migration and no API removal.
+
 ## [2.16.2-stable] - 2026-10-17
 
 ### Substrate

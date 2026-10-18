@@ -3,7 +3,7 @@
 Covers uncovered helper functions:
 - _validate_api_key_for_provider
 - _classify_llm_connection_error
-- _validate_setup_passwords
+- _validate_system_admin_password
 - _get_llm_providers
 - _get_available_adapters
 - should_filter_adapter (shared module, replaces _should_skip_manifest)
@@ -27,7 +27,7 @@ from ciris_engine.logic.adapters.api.routes.setup import (
     _get_available_adapters,
     _get_llm_providers,
     _validate_api_key_for_provider,
-    _validate_setup_passwords,
+    _validate_system_admin_password,
 )
 
 
@@ -147,83 +147,30 @@ class TestClassifyLLMConnectionError:
         assert "Some other network error" in result.error
 
 
-class TestValidateSetupPasswords:
-    """Tests for _validate_setup_passwords helper."""
+class TestValidateSystemAdminPassword:
+    """Setup checks only the local admin replacement; the owner's credential is the node's."""
 
-    def test_oauth_user_without_password_generates_random(self):
-        """OAuth user without password gets a generated one."""
-        setup = SetupCompleteRequest(
-            llm_provider="openai",
-            llm_api_key="sk-test",
-            admin_username="testuser",
-            admin_password=None,
-            oauth_provider="google",
-        )
-        result = _validate_setup_passwords(setup, is_oauth_user=True)
-        assert len(result) > 8  # Generated password should be long
+    def _setup(self, **kw):
+        base = dict(llm_provider="openai", llm_api_key="sk-test", admin_username="testuser")
+        base.update(kw)
+        return SetupCompleteRequest(**base)
 
-    def test_oauth_user_with_empty_password_generates_random(self):
-        """OAuth user with empty password gets a generated one."""
-        setup = SetupCompleteRequest(
-            llm_provider="openai",
-            llm_api_key="sk-test",
-            admin_username="testuser",
-            admin_password="",
-            oauth_provider="google",
-        )
-        result = _validate_setup_passwords(setup, is_oauth_user=True)
-        assert len(result) > 8
+    def test_add_device_setup_without_any_password_is_accepted(self):
+        """Add-device (no owner password, no OAuth) must not be refused (FSD/ADD_DEVICE.md §4.2)."""
+        _validate_system_admin_password(self._setup(admin_password=None))
 
-    def test_non_oauth_user_without_password_raises_error(self):
-        """Non-OAuth user without password raises HTTPException."""
-        setup = SetupCompleteRequest(
-            llm_provider="openai",
-            llm_api_key="sk-test",
-            admin_username="testuser",
-            admin_password=None,
-        )
-        with pytest.raises(HTTPException) as exc_info:
-            _validate_setup_passwords(setup, is_oauth_user=False)
-        assert exc_info.value.status_code == 400
-        assert "at least 8 characters" in exc_info.value.detail
-
-    def test_password_too_short_raises_error(self):
-        """Password shorter than 8 characters raises HTTPException."""
-        setup = SetupCompleteRequest(
-            llm_provider="openai",
-            llm_api_key="sk-test",
-            admin_username="testuser",
-            admin_password="short",
-        )
-        with pytest.raises(HTTPException) as exc_info:
-            _validate_setup_passwords(setup, is_oauth_user=False)
-        assert exc_info.value.status_code == 400
-        assert "at least 8 characters" in exc_info.value.detail
-
-    def test_valid_password_returns_same(self):
-        """Valid password is returned unchanged."""
-        setup = SetupCompleteRequest(
-            llm_provider="openai",
-            llm_api_key="sk-test",
-            admin_username="testuser",
-            admin_password="validpassword123",
-        )
-        result = _validate_setup_passwords(setup, is_oauth_user=False)
-        assert result == "validpassword123"
+    def test_owner_password_is_not_validated(self):
+        """A short owner password is not setup's to judge -- the node set it at claim."""
+        _validate_system_admin_password(self._setup(admin_password="short"))
 
     def test_system_admin_password_too_short_raises_error(self):
-        """System admin password too short raises HTTPException."""
-        setup = SetupCompleteRequest(
-            llm_provider="openai",
-            llm_api_key="sk-test",
-            admin_username="testuser",
-            admin_password="validpassword123",
-            system_admin_password="short",
-        )
         with pytest.raises(HTTPException) as exc_info:
-            _validate_setup_passwords(setup, is_oauth_user=False)
+            _validate_system_admin_password(self._setup(system_admin_password="short"))
         assert exc_info.value.status_code == 400
         assert "System admin password" in exc_info.value.detail
+
+    def test_valid_system_admin_password_is_accepted(self):
+        _validate_system_admin_password(self._setup(system_admin_password="validpassword123"))
 
 
 class TestGetLLMProviders:

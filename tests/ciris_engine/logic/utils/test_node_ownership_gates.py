@@ -499,6 +499,33 @@ async def test_owned_setup_complete_creates_users(node: Node, setup_rig: SimpleN
     setup_rig.users.assert_awaited_once()
 
 
+@pytest.mark.asyncio
+async def test_add_device_setup_without_owner_password_completes(node: Node, setup_rig: SimpleNamespace) -> None:
+    """Add-device claims carry no owner password and no OAuth (CIRISServer FSD/ADD_DEVICE.md §4.2).
+
+    The node owns the owner's credential, so setup must not refuse for its absence.
+    """
+    node.own()
+    add_device = {k: v for k, v in _SETUP.items() if k not in ("admin_password", "system_admin_password")}
+    result = await complete.complete_setup(SetupCompleteRequest(**add_device), setup_rig.request, MagicMock())
+    assert result.data["status"] == "completed"
+    setup_rig.users.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_short_system_admin_password_still_refused(node: Node, setup_rig: SimpleNamespace) -> None:
+    """The local admin replacement keeps its minimum length."""
+    from fastapi import HTTPException
+
+    node.own()
+    with pytest.raises(HTTPException) as exc_info:
+        await complete.complete_setup(
+            SetupCompleteRequest(**{**_SETUP, "system_admin_password": "short"}), setup_rig.request, MagicMock()
+        )
+    assert exc_info.value.status_code == 400
+    setup_rig.users.assert_not_awaited()
+
+
 # --------------------------------------------------------------------------- health + the PIN
 
 

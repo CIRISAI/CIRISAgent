@@ -230,31 +230,29 @@ def grant_trace_sharing(
 
     # 1. CAPTURE — consent:community_trust:v1. Reuses a grant already in force;
     # the one decision (and its one log line) lives in emit_community_consent_grant.
-    from ciris_engine.logic.services.governance.consent.attestation import (
-        consent_ceg_attestations_enabled,
-        emit_community_consent_grant,
-    )
+    from ciris_engine.logic.services.governance.consent.attestation import emit_community_consent_grant
 
     try:
-        attestation_id = emit_community_consent_grant(granted_at=granted_at)
+        attestation_id = emit_community_consent_grant(granted_at=granted_at, attempt=source.value)
         if attestation_id:
             result.capture_grant_id = str(attestation_id)
         else:
-            result.errors.append("capture grant deferred (see the consent-CEG decision line)")
+            result.errors.append("capture grant not written (see the consent-CEG decision line)")
     except Exception as exc:  # noqa: BLE001
         result.errors.append(f"capture grant failed: {exc}")
 
-    # 2. SHIP + SCORE — consent:replication:v1 (+ analyze). Not before the capture
-    # grant stands: it is refused for the same missing owner binding, and a retry
-    # loop would otherwise author it on every tick (CIRISAgent#1289).
-    if result.capture_grant_id or not consent_ceg_attestations_enabled():
-        _author_ship_grant(result, recorded_analyze_stance() if analyze is None else analyze)
+    # 2. SHIP + SCORE — consent:replication:v1 (+ analyze). Authored as in 2.16.1,
+    # independent of the capture half; the node's own door decides.
+    _author_ship_grant(result, recorded_analyze_stance() if analyze is None else analyze)
 
     result.status = trace_sharing_status()
 
+    # One line per distinct outcome — the delivery probe retries every 15 s.
+    state = (result.complete, result.capture_grant_id, tuple(result.peers_authored), tuple(result.errors))
+    repeat = _last_incomplete.get("state") == state
+    _last_incomplete["state"] = state
     if result.complete:
-        _last_incomplete.clear()
-        logger.info(
+        (logger.debug if repeat else logger.info)(
             "trace-consent: GRANTED via %s — capture=%s ship=%s. Sealed traces can now promote.",
             source.value,
             result.capture_grant_id,
@@ -262,12 +260,8 @@ def grant_trace_sharing(
         )
     else:
         # Loud: this is the difference between traces shipping and stranding, and
-        # the half-granted state failed silently for a full day. Loud ONCE per
-        # distinct failure — the delivery probe retries every 15 s.
-        state = (result.capture_grant_id, tuple(result.peers_authored), tuple(result.errors))
-        log = logger.debug if _last_incomplete.get("state") == state else logger.warning
-        _last_incomplete["state"] = state
-        log(
+        # the half-granted state failed silently for a full day.
+        (logger.debug if repeat else logger.warning)(
             "trace-consent: INCOMPLETE via %s — capture=%s ship=%s errors=%s. "
             "Traces will seal but may not replicate; the probe retries the ship "
             "grant once a canonical peer is rooted.",

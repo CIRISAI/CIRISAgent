@@ -655,7 +655,7 @@ def current_community_grant_asserted_at() -> Optional[str]:
 _PENDING_COMMUNITY_SENTINEL = "ciris:canonical-community:pending"
 
 
-def emit_community_consent_grant(granted_at: Optional[str] = None) -> Optional[str]:
+def emit_community_consent_grant(granted_at: Optional[str] = None, *, attempt: str = "") -> Optional[str]:
     """Best-effort emit the traces-consent grant. Returns attestation_id.
 
     This is THE consent wire artifact (2.9.6 #866). In the sovereign LensClient
@@ -683,9 +683,14 @@ def emit_community_consent_grant(granted_at: Optional[str] = None) -> Optional[s
 
     - a grant to this community already in force (newest ``scores`` row, not
       withdrawn/recanted after it) is REUSED and nothing is written;
-    - a directed grant is written only while the owner binding over the
-      attesting key is held — persist refuses it otherwise (CC 3.3.1), so
-      writing it first only leaves an uncrossable row behind;
+    - otherwise the LOCAL row is written, always — it is what the capture gate
+      reads, and it must never wait on an owner binding (CIRISAgent#1294 gated
+      it on ``owner_of_json(engine key)``, which is None on every actor/node
+      split install, and authored 0 traces on all five platforms);
+    - only the CROSSING to the community is left to persist's door. A refusal
+      mints nothing; it is retried once per ``attempt`` label per process (each
+      opt-in path fires at a distinct lifecycle moment — node_fold runs after
+      the bind), so the 15 s probe tick retries it at most once;
     - an unreadable consent state writes nothing (can't check ⇒ don't mint).
 
     Exactly one INFO line per distinct decision; a repeat logs at DEBUG.
@@ -706,17 +711,13 @@ def emit_community_consent_grant(granted_at: Optional[str] = None) -> Optional[s
         _log_grant_decision(f"deferred: consent state unreadable ({type(exc).__name__})")
         return None
     standing = _in_force_grant(rows)
-    bound = bool(community) and _owner_binding_held(engine, key_id)
     if standing is not None and (not community or _directed_at(standing, community)):
         grant_id = str(standing.get("attestation_id"))
         _log_grant_decision(f"reusing grant {grant_id}")
         unplaced = str(standing.get("cohort_scope") or "self") != _CROSSING_TARGET_FEDERATION
-        if bound and unplaced and grant_id not in _crossing_attempted:
-            grant_id = _cross_grant(engine, grant_id)
+        if community and unplaced and (grant_id, attempt) not in _crossing_attempted:
+            grant_id = _cross_grant(engine, grant_id, attempt)
         return grant_id
-    if community and not bound:
-        _log_grant_decision(f"deferred: no owner binding over {key_id} is held yet")
-        return None
     if standing is not None:
         reason = f"directs interim grant {standing.get('attestation_id')} at {community}"
     elif _newest_community_grant(rows) is not None:
@@ -728,7 +729,7 @@ def emit_community_consent_grant(granted_at: Optional[str] = None) -> Optional[s
         if community:
             attestation_id = engine.attestation_upsert_local(_directed_payload(grant, community))  # type: ignore[attr-defined]
             _log_grant_decision(f"emitted grant {attestation_id} ({reason}, directed at {community})")
-            return _cross_grant(engine, str(attestation_id))
+            return _cross_grant(engine, str(attestation_id), attempt)
         attestation_id = engine.attestation_upsert_local(grant.model_dump_json())  # type: ignore[attr-defined]
         _log_grant_decision(f"emitted grant {attestation_id} ({reason}, interim local-tier)")
         return str(attestation_id)
@@ -737,9 +738,9 @@ def emit_community_consent_grant(granted_at: Optional[str] = None) -> Optional[s
         return None
 
 
-#: Grants whose crossing this process has already attempted while bound. A
-#: refused crossing is retried on the next boot, never on the next tick.
-_crossing_attempted: "set[str]" = set()
+#: (grant, attempt) pairs whose crossing this process has already tried. A refused
+#: crossing is retried by the next lifecycle path or the next boot, never the next tick.
+_crossing_attempted: "set[tuple[str, str]]" = set()
 _last_grant_decision: Optional[str] = None
 _REVOKING_TYPES = frozenset({RevocationIntent.WITHDRAW.value, RevocationIntent.RECANT.value})
 
@@ -771,26 +772,17 @@ def _directed_at(row: "dict[str, object]", community: str) -> bool:
     return isinstance(claim, dict) and claim.get("user_id") == community
 
 
-def _owner_binding_held(engine: object, key_id: str) -> bool:
-    """Does an owner binding over ``key_id`` stand? Fails closed (unreadable ⇒ no)."""
-    import json as _json
+def _cross_grant(engine: object, attestation_id: str, attempt: str) -> str:
+    """Cross the directed grant to the community, once per (grant, attempt) per process.
 
-    try:
-        owner = _json.loads(engine.owner_of_json(key_id))  # type: ignore[attr-defined]
-    except Exception as exc:  # noqa: BLE001
-        logger.debug("consent-CEG: owner binding unreadable for %s: %s", key_id, exc)
-        return False
-    return isinstance(owner, str) and bool(owner)
-
-
-def _cross_grant(engine: object, attestation_id: str) -> str:
-    """Cross the directed grant to the community, once per grant per process.
+    Persist's door decides — no owner pre-check here: the binding lives on the
+    NODE key on split installs, so a pre-check on the engine key never opens.
 
     The directed grant IS the CEG promotion event self→community — a local-tier
     row never leaves the occurrence. Returns the id peers read: the widened row's
     when one was placed (CIRISAgent#1144), else the local row's.
     """
-    _crossing_attempted.add(attestation_id)
+    _crossing_attempted.add((attestation_id, attempt))
     try:
         outcome, placed = cross_to_mesh(engine, attestation_id, label="directed grant")
         _log_crossing(

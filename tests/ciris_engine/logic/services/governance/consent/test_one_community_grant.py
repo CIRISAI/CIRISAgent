@@ -25,12 +25,16 @@ from ciris_engine.logic.services.governance.consent import trace_sharing
 from ciris_engine.schemas.consent.trace_sharing import TraceConsentSource, TraceSharingConsent
 
 AGENT_KEY = "ciris-agent-bootstrap-test"
+NODE_KEY = "ciris-node-test"
 CANONICAL = "ciris-canonical-1-test"
 
 
 class FakeCorpus:
     def __init__(self, owner: Optional[str] = "owner-1") -> None:
+        # Whether persist's door admits the crossing. On an actor/node split install
+        # the owner binding is over the NODE key, never the engine key.
         self.owner = owner
+        self.crossing_attempts = 0
         self.rows: List[Dict[str, Any]] = []
         self._clock = datetime(2026, 10, 16, 15, 19, tzinfo=timezone.utc)
 
@@ -63,10 +67,12 @@ class FakeCorpus:
         return json.dumps({"items": list(self.rows)})
 
     def owner_of_json(self, key_id: str) -> str:
-        return json.dumps(self.owner)
+        """Split install (every install since 2.9.42): the engine key is never bound."""
+        return json.dumps(self.owner if key_id == NODE_KEY else None)
 
     # v40 crossing — refused while unbound, exactly as persist refuses it
     def describe_crossing(self, attestation_id: str, scope: str, cohort: Optional[str], basis: str) -> str:
+        self.crossing_attempts += 1
         if not self.owner:
             raise ValueError(f'federation_invalid_argument: no owner binding over "{AGENT_KEY}" is in force')
         return "{}"
@@ -138,29 +144,44 @@ def test_every_path_in_one_boot_produces_one_grant(corpus: FakeCorpus) -> None:
     assert [r for r in corpus.rows if r["cohort_scope"] == "federation"]
 
 
-def test_unbound_owner_ticks_mint_nothing_and_log_once(corpus: FakeCorpus, caplog: pytest.LogCaptureFixture) -> None:
+def test_unbound_owner_writes_one_local_grant_and_defers_only_the_crossing(
+    corpus: FakeCorpus, caplog: pytest.LogCaptureFixture
+) -> None:
     corpus.owner = None
     caplog.set_level(logging.DEBUG)
 
-    opt_in(TraceConsentSource.DELIVERY_PROBE)
+    first = opt_in(TraceConsentSource.DELIVERY_PROBE)  # emitted grant
+    assert opt_in(TraceConsentSource.DELIVERY_PROBE) == first  # reusing grant: one new decision line
     first_tick = len([r for r in caplog.records if r.levelno >= logging.INFO])
-    for _ in range(12):
-        opt_in(TraceConsentSource.DELIVERY_PROBE)
+    for _ in range(11):
+        assert opt_in(TraceConsentSource.DELIVERY_PROBE) == first
 
-    assert corpus.minted_grants() == []
-    assert corpus.rows == [], "no row of any kind before the owner binding is held"
-    deferred = [
-        r for r in caplog.records if "deferred: no owner binding" in r.getMessage() and r.levelno >= logging.INFO
-    ]
-    assert len(deferred) == 1
-    later = [r for r in caplog.records if r.levelno >= logging.INFO]
-    assert len(later) == first_tick, "ticks 2..N must add no INFO/WARN lines"
-
-    # The binding landing IS the state change that lets it emit — once.
-    corpus.owner = "owner-1"
-    opt_in(TraceConsentSource.DELIVERY_PROBE)
-    opt_in(TraceConsentSource.DELIVERY_PROBE)
+    # The LOCAL capture row is what lens-core's capture gate reads: it is written,
+    # once, whatever the binding. Only the crossing waits on persist's door.
     assert len(corpus.minted_grants()) == 1
+    assert [r for r in corpus.rows if r["cohort_scope"] == "federation"] == []
+    assert corpus.crossing_attempts == 1, "a refused crossing is not retried per tick"
+    later = [r for r in caplog.records if r.levelno >= logging.INFO]
+    assert len(later) == first_tick, "ticks 3..13 must add no INFO/WARN lines"
+
+    # The binding landing, seen by the next lifecycle path, crosses the SAME row.
+    corpus.owner = "owner-1"
+    opt_in(TraceConsentSource.NODE_FOLD)
+    assert len(corpus.minted_grants()) == 1
+    assert [r for r in corpus.rows if r["cohort_scope"] == "federation"]
+
+
+def test_split_install_writes_the_capture_grant_at_setup(corpus: FakeCorpus) -> None:
+    """Regression for #1294: owner bound over the NODE key, engine key unbound.
+
+    #1294 pre-checked owner_of_json(engine key), which is None on every split
+    install, so the capture grant was never written and 0 traces were authored on
+    all five platforms (run 39044230449).
+    """
+    result = trace_sharing.grant_trace_sharing(TraceConsentSource.SETUP_WIZARD, require_opt_in=False)
+    assert result.capture_grant_id
+    assert len(corpus.minted_grants()) == 1
+    assert corpus.minted_grants()[0]["subject_key_ids"] == [CANONICAL]
 
 
 @pytest.mark.parametrize("recant", [False, True], ids=["withdraw", "recant"])

@@ -68,7 +68,7 @@ def test_every_opt_in_path_is_refused(
     # The capture grant is local (seals into this node's persist); stub it.
     from ciris_engine.logic.services.governance.consent import attestation
 
-    monkeypatch.setattr(attestation, "emit_community_consent_grant", lambda granted_at=None: "grant-1")
+    monkeypatch.setattr(attestation, "emit_community_consent_grant", lambda granted_at=None, **_: "grant-1")
     result = trace_sharing.grant_trace_sharing(source, require_opt_in=False, analyze=True)
     assert fake_server == []
     assert result.peers_authored == []

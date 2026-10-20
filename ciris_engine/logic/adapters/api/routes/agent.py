@@ -14,6 +14,14 @@ from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 from fastapi import APIRouter, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
+from ciris_engine.logic.adapters.api.api_attachments import (
+    AttachmentOutcome,
+    AttachmentPolicy,
+    ProcessedAttachments,
+    attachment_policy,
+    process_attachments,
+    refusal_note,
+)
 from ciris_engine.logic.adapters.base_observer import BillingServiceError, CreditCheckFailed, CreditDenied
 from ciris_engine.schemas.api.agent import AgentLineage, MessageContext, ServiceAvailability
 from ciris_engine.schemas.api.auth import ROLE_PERMISSIONS, AuthContext, Permission, UserRole
@@ -148,6 +156,11 @@ class InteractResponse(BaseModel):
     )
     accord_forward: Optional[AccordRowForward] = Field(
         None, description="The node's verdict, when the message was an accord row (outcome accord_row_forwarded)"
+    )
+    attachments: List[AttachmentOutcome] = Field(
+        default_factory=list,
+        description="One entry per attached image/document: accepted, or refused with a stable reason id. "
+        "Empty when nothing was attached.",
     )
 
 
@@ -333,52 +346,21 @@ def _check_send_messages_permission(auth: AuthContext, request: Request) -> None
     raise HTTPException(status_code=403, detail=error_detail)
 
 
-def _process_request_images(body: InteractRequest | MessageRequest) -> List[Any]:
-    """Process images from InteractRequest if present."""
-    if not isinstance(body, InteractRequest) or not body.images:
-        return []
-
-    from ciris_engine.logic.adapters.api.api_vision import get_api_vision_helper
-
-    vision_helper = get_api_vision_helper()
-    images = []
-    for img_payload in body.images:
-        image_content = vision_helper.process_image_payload(
-            img_payload.data,
-            img_payload.media_type,
-            img_payload.filename,
-        )
-        if image_content:
-            images.append(image_content)
-    if images:
-        logger.info(f"Processed {len(images)} images for multimodal interaction")
-    return images
-
-
-async def _process_request_documents(body: InteractRequest | MessageRequest) -> str:
-    """Process documents from InteractRequest if present, return additional content string."""
-    if not isinstance(body, InteractRequest) or not body.documents:
-        return ""
-
-    from ciris_engine.logic.adapters.api.api_document import get_api_document_helper
-
-    document_helper = get_api_document_helper()
-    if not document_helper.is_available():
-        logger.warning("Document processing requested but not available (missing libraries)")
-        return ""
-
-    doc_payloads = [
-        {"data": doc.data, "media_type": doc.media_type, "filename": doc.filename} for doc in body.documents
-    ]
-    document_text = await document_helper.process_document_list(doc_payloads)
-    if document_text:
-        logger.info(f"Processed {len(body.documents)} documents for interaction")
-        return "\n\n[Document Analysis]\n" + document_text
-    return ""
+async def _process_request_attachments(body: InteractRequest | MessageRequest) -> ProcessedAttachments:
+    """Gate every attached image and document; each one gets an outcome (api_attachments)."""
+    if not isinstance(body, InteractRequest) or not (body.images or body.documents):
+        return ProcessedAttachments()
+    return await process_attachments(
+        [(img.data, img.media_type, img.filename) for img in body.images or []],
+        [(doc.data, doc.media_type, doc.filename) for doc in body.documents or []],
+    )
 
 
 async def _create_interaction_message(
-    auth: AuthContext, body: InteractRequest | MessageRequest, request: Request
+    auth: AuthContext,
+    body: InteractRequest | MessageRequest,
+    request: Request,
+    attachments: Optional[ProcessedAttachments] = None,
 ) -> Tuple[str, str, IncomingMessage]:
     """Create message ID, channel ID, and IncomingMessage for interaction."""
     message_id = str(uuid.uuid4())
@@ -389,9 +371,10 @@ async def _create_interaction_message(
     else:
         channel_id = f"api_{auth.user_id}"  # User-specific channel
 
-    images = _process_request_images(body)
-    additional_content = await _process_request_documents(body)
-    final_content = body.message + additional_content
+    if attachments is None:
+        attachments = await _process_request_attachments(body)
+    images = attachments.images
+    final_content = body.message + attachments.document_text + refusal_note(attachments.outcomes)
 
     # Look up user's display name for author_name. Priority:
     #   1. user_preferred_name (set via PUT /v1/users/me/settings — explicit display preference)
@@ -1214,7 +1197,8 @@ async def interact(request: Request, body: InteractRequest, auth: AuthObserverDe
     await _raise_if_node_unclaimed()
 
     # Create message and tracking
-    message_id, channel_id, msg = await _create_interaction_message(auth, body, request)
+    attachments = await _process_request_attachments(body)
+    message_id, channel_id, msg = await _create_interaction_message(auth, body, request, attachments)
     msg = _attach_credit_metadata(msg, request, auth, channel_id)
 
     event = asyncio.Event()
@@ -1316,6 +1300,7 @@ async def interact(request: Request, body: InteractRequest, auth: AuthObserverDe
             processing_time_ms=processing_time_ms,
             task_id=task_id,
             outcome=_outcome_for_answered_task(task_id),
+            attachments=attachments.outcomes,
         )
 
         return SuccessResponse(data=response)
@@ -1356,9 +1341,20 @@ async def interact(request: Request, body: InteractRequest, auth: AuthObserverDe
             processing_time_ms=int(timeout * 1000),  # Use actual timeout value
             task_id=timed_out_task_id,
             outcome=InteractOutcome.TIMEOUT,
+            attachments=attachments.outcomes,
         )
 
         return SuccessResponse(data=response)
+
+
+@router.get("/attachments/policy", response_model=None)
+async def get_attachment_policy(auth: AuthObserverDep) -> SuccessResponse[AttachmentPolicy]:
+    """The limits `/interact` applies to attached images and documents.
+
+    A client reads this to refuse a file up front instead of hard-coding
+    limits that drift. `document_types` lists only what this build can read.
+    """
+    return SuccessResponse(data=attachment_policy())
 
 
 @router.get("/history", response_model=None, responses=RESPONSES_500)

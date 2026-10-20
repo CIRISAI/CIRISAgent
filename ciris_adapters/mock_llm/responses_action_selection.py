@@ -46,6 +46,19 @@ from .response_packaging import (
 _logger = logging.getLogger(__name__)
 
 
+
+def attachment_markers(context: List[str]) -> str:
+    """`[DOCUMENT_DETECTED:N] [DOCUMENT_TOKENS:a,b] [ATTACHMENT_REFUSED:N]`, from context items."""
+    parts = []
+    for item in context:
+        if item.startswith("attached_documents:"):
+            parts.append(f"[DOCUMENT_DETECTED:{item.split(':', 1)[1]}]")
+        elif item.startswith("attachment_tokens:"):
+            parts.append(f"[DOCUMENT_TOKENS:{item.split(':', 1)[1]}]")
+        elif item.startswith("attachments_refused:"):
+            parts.append(f"[ATTACHMENT_REFUSED:{item.split(':', 1)[1]}]")
+    return " ".join(parts)
+
 def _extract_text_content(content: Any) -> str:
     """Extract text from message content, handling multimodal list format.
 
@@ -642,6 +655,9 @@ def action_selection(
                 pass
             break
 
+    # Attachment markers (documents, sentinels, refusals), for the attachments QA module
+    attachment_marker = attachment_markers(context)
+
     # Debug logging
     logger.info(
         f"[MOCK_LLM] Action selection - forced_action: {forced_action}, user_speech: {user_speech}, command_from_context: {command_from_context}, is_followup_thought: {is_followup_thought}, multimodal_images: {multimodal_image_count}"
@@ -707,6 +723,8 @@ def action_selection(
             # Add multimodal marker if images were detected (for vision testing)
             if multimodal_image_count > 0:
                 packaged_content = f"[MULTIMODAL_DETECTED:{multimodal_image_count}] {packaged_content}"
+            if attachment_marker:
+                packaged_content = f"{attachment_marker} {packaged_content}"
 
             return ActionSelectionDMAResult(
                 selected_action=HandlerActionType.SPEAK,
@@ -1077,6 +1095,8 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
                 speak_content = f"[MULTIMODAL_DETECTED:{multimodal_image_count}] [MOCK LLM] I can see you've shared {multimodal_image_count} image(s). Response to user message"
             else:
                 speak_content = "[MOCK LLM] Response to user message"
+            if attachment_marker:
+                speak_content = f"{attachment_marker} {speak_content}"
             params = SpeakParams(content=speak_content)
             rationale = "[MOCK LLM] Responding to user speech"
 

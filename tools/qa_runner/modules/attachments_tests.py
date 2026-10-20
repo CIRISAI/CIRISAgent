@@ -150,7 +150,10 @@ class AttachmentsTests:
                 f"{reply[:300]}"
             )
         else:
-            assert sentinel in reply, f"live reply does not quote the code word {sentinel}: {reply[:300]}"
+            assert sentinel in reply, (
+                f"reply is neither a mock reply nor quotes the code word {sentinel} "
+                f"(an LLM error notice lands here too): {reply[:300]}"
+            )
 
     @staticmethod
     def _outcome(outcomes: List[Dict[str, Any]], kind: str, index: int) -> Dict[str, Any]:

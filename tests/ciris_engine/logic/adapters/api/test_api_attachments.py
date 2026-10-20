@@ -192,3 +192,17 @@ def test_mock_llm_sees_document_text_in_the_prompt():
     items = extract_context_from_messages([{"role": "user", "content": content}])
     assert "attached_documents:1" in items
     assert f"attachment_tokens:{token}" in items
+
+
+@pytest.mark.asyncio
+async def test_mock_llm_counts_the_refusal_notice_the_gate_writes():
+    """The mock's count must parse the gate's own notice lines (CI found a regex that read 0)."""
+    from ciris_adapters.mock_llm.responses import extract_context_from_messages
+
+    result = await process_attachments(
+        [(b64(fx.png()), "image/jpeg", "m.jpg"), (b64(b"x"), "image/heic", "p.heic")],
+        [(b64(b"PK\x03\x04x"), "application/vnd.ms-excel", "b.xlsx")],
+    )
+    items = extract_context_from_messages([{"role": "user", "content": "files" + refusal_note(result.outcomes)}])
+    assert "attachments_refused:3" in items
+

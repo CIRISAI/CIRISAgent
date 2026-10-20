@@ -154,7 +154,7 @@ def extract_context_from_messages(messages: List[Dict[str, Any]]) -> List[str]:
     if tokens:
         context_items.append(f"attachment_tokens:{','.join(tokens)}")
     if "[Attachment notice]" in all_text:
-        refused = len(re.findall(r"^- '.*': [a-z_]+$", all_text.split("[Attachment notice]", 1)[1], re.MULTILINE))
+        refused = len(re.findall(r"^- '.*' \(.*\): [a-z_]+$", all_text.split("[Attachment notice]", 1)[1], re.MULTILINE))
         context_items.append(f"attachments_refused:{refused}")
 
     # Look for passive observation pattern in user messages ONLY

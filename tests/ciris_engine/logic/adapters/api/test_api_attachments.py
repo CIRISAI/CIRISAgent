@@ -203,6 +203,10 @@ async def test_mock_llm_counts_the_refusal_notice_the_gate_writes():
         [(b64(fx.png()), "image/jpeg", "m.jpg"), (b64(b"x"), "image/heic", "p.heic")],
         [(b64(b"PK\x03\x04x"), "application/vnd.ms-excel", "b.xlsx")],
     )
-    items = extract_context_from_messages([{"role": "user", "content": "files" + refusal_note(result.outcomes)}])
+    note = "files" + refusal_note(result.outcomes)
+    items = extract_context_from_messages([{"role": "user", "content": note}])
+    assert "attachments_refused:3" in items
+    # The same message twice in one prompt (task + history) still counts 3 (CI run 39497231922).
+    items = extract_context_from_messages([{"role": "system", "content": note}, {"role": "user", "content": note + "\nmore"}])
     assert "attachments_refused:3" in items
 

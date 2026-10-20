@@ -154,7 +154,14 @@ def extract_context_from_messages(messages: List[Dict[str, Any]]) -> List[str]:
     if tokens:
         context_items.append(f"attachment_tokens:{','.join(tokens)}")
     if "[Attachment notice]" in all_text:
-        refused = len(re.findall(r"^- '.*' \(.*\): [a-z_]+$", all_text.split("[Attachment notice]", 1)[1], re.MULTILINE))
+        # Count the lines of the LAST notice only: the same message can appear in
+        # the prompt more than once (task description and conversation history).
+        block = all_text.rsplit("[Attachment notice]", 1)[1].splitlines()[1:]
+        refused = 0
+        for line in block:
+            if not re.match(r"^- '.*' \(.*\): [a-z_]+\s*$", line):
+                break
+            refused += 1
         context_items.append(f"attachments_refused:{refused}")
 
     # Look for passive observation pattern in user messages ONLY

@@ -209,4 +209,8 @@ async def test_mock_llm_counts_the_refusal_notice_the_gate_writes():
     # The same message twice in one prompt (task + history) still counts 3 (CI run 39497231922).
     items = extract_context_from_messages([{"role": "system", "content": note}, {"role": "user", "content": note + "\nmore"}])
     assert "attachments_refused:3" in items
+    # A history copy cut short AFTER the full one (CI run 39510568940 saw 0, 2 and 3).
+    cut = note[: note.index("- 'b.xlsx'")]
+    items = extract_context_from_messages([{"role": "user", "content": note}, {"role": "user", "content": cut}])
+    assert "attachments_refused:3" in items
 

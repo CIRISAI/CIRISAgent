@@ -144,7 +144,8 @@ def extract_context_from_messages(messages: List[Dict[str, Any]]) -> List[str]:
 
     # Attachment markers for the `attachments` QA module. The document text and
     # the refusal notice ride in the message text (api_attachments), so scan it.
-    all_text = " ".join(
+    # Newline-joined: a space would run one message's last notice line into the next message.
+    all_text = "\n".join(
         _extract_text_content(m.get("content", "")) for m in messages if isinstance(m, dict)
     )
     document_count = len(re.findall(r"Document '[^']*':", all_text))
@@ -154,14 +155,17 @@ def extract_context_from_messages(messages: List[Dict[str, Any]]) -> List[str]:
     if tokens:
         context_items.append(f"attachment_tokens:{','.join(tokens)}")
     if "[Attachment notice]" in all_text:
-        # Count the lines of the LAST notice only: the same message can appear in
-        # the prompt more than once (task description and conversation history).
-        block = all_text.rsplit("[Attachment notice]", 1)[1].splitlines()[1:]
+        # The same message can appear in the prompt more than once (task
+        # description, conversation history), and a history copy may be cut
+        # short. Each copy's notice lists the refused files; take the fullest.
         refused = 0
-        for line in block:
-            if not re.match(r"^- '.*' \(.*\): [a-z_]+\s*$", line):
-                break
-            refused += 1
+        for block in all_text.split("[Attachment notice]")[1:]:
+            count = 0
+            for line in block.splitlines()[1:]:
+                if not re.match(r"^- '.*' \(.*\): [a-z_]+\s*$", line):
+                    break
+                count += 1
+            refused = max(refused, count)
         context_items.append(f"attachments_refused:{refused}")
 
     # Look for passive observation pattern in user messages ONLY

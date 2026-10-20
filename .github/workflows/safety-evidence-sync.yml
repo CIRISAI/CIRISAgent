@@ -74,6 +74,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # pipefail: the default run shell is `bash -e` WITHOUT it, so a failed
+          # harvest piped through tee would exit 0 and the sync would go green.
+          set -o pipefail
           python3 -u tools/harvest_safety_evidence.py qa_reports | tee harvest.log
 
       - name: What changed
@@ -98,7 +101,7 @@ jobs:
             echo "| bundles held (interpret) | $BUNDLES_I |"
             echo "| files changed this run | $CHANGED |"
             echo ""
-            grep -E '^  (live|wrote|bundles now|qa_reports)' harvest.log || true
+            grep -E '^  (listed|live|wrote|bundles now|qa_reports)' harvest.log || true
           } >> $GITHUB_STEP_SUMMARY
 
           if [ "$BUNDLES_I" -eq 0 ]; then

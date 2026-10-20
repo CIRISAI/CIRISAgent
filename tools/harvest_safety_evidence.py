@@ -47,6 +47,7 @@ everything still alive" a safe default instead of a churn machine.
 
 from __future__ import annotations
 
+import datetime
 import io
 import json
 import pathlib
@@ -63,22 +64,67 @@ KEEP = {"results.jsonl", "summary.json", "manifest_signed.json",
         "verdicts.jsonl", "verdicts_summary.json"}
 
 
-def live_artifacts() -> list[dict]:
-    raw = subprocess.run(
-        ["gh", "api", f"repos/{REPO}/actions/artifacts?per_page=100", "--paginate",
-         "--jq", ".artifacts[] | select(.expired == false) | {id, name, created_at, size: .size_in_bytes}"],
-        capture_output=True, text=True, check=False).stdout
+#: The workflow whose runs produce the evidence, and how far back to look.
+#: Artifacts live 90 days; looking a few days further costs nothing.
+BATTERY_WORKFLOW = "safety-battery.yml"
+LOOKBACK_DAYS = 95
+
+
+class ListingError(RuntimeError):
+    """The artifact listing could not be read. Never mistaken for "nothing live"."""
+
+
+def _gh_lines(path: str, jq: str) -> list[dict]:
+    """Run a paginated `gh api` call and parse one JSON object per line.
+
+    A non-zero exit or a line that is not JSON raises: an unreadable listing
+    must fail the sync, not read as an empty one.
+    """
+    proc = subprocess.run(["gh", "api", path, "--paginate", "--jq", jq],
+                          capture_output=True, text=True, check=False)
+    if proc.returncode != 0:
+        raise ListingError(f"gh api {path} exited {proc.returncode}: {proc.stderr.strip()[:300]}")
     out = []
-    for line in raw.splitlines():
+    for line in proc.stdout.splitlines():
         line = line.strip()
         if not line:
             continue
         try:
-            a = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if "safety-battery-capture" in a["name"] or "safety-battery-interpret" in a["name"]:
-            out.append(a)
+            out.append(json.loads(line))
+        except json.JSONDecodeError as e:
+            raise ListingError(f"gh api {path}: unparseable line {line[:120]!r}") from e
+    return out
+
+
+def battery_runs(now: datetime.datetime | None = None) -> list[int]:
+    """Ids of every Safety Battery run recent enough to still hold artifacts."""
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    since = (now - datetime.timedelta(days=LOOKBACK_DAYS)).strftime("%Y-%m-%d")
+    rows = _gh_lines(f"repos/{REPO}/actions/workflows/{BATTERY_WORKFLOW}/runs?per_page=100&created=>={since}",
+                     ".workflow_runs[] | {id}")
+    return [r["id"] for r in rows]
+
+
+def live_artifacts() -> list[dict]:
+    """Every unexpired capture/interpret artifact, listed run by run.
+
+    NOT the repo-wide `/actions/artifacts` listing. At ~5,000 artifacts that
+    endpoint answers 200 with an empty body, and reading that as "0 live" made
+    the sync report a green steady state while delivering nothing (2026-10).
+    Listing per battery run is bounded by the run count and touches only the
+    workflow that produces evidence.
+    """
+    runs = battery_runs()
+    if not runs:
+        raise ListingError(f"no {BATTERY_WORKFLOW} runs in the last {LOOKBACK_DAYS} days — "
+                           "the battery runs weekly, so an empty run list means the listing broke")
+    out = []
+    for run_id in runs:
+        for a in _gh_lines(f"repos/{REPO}/actions/runs/{run_id}/artifacts?per_page=100",
+                           ".artifacts[] | select(.expired == false) | {id, name, created_at, size: .size_in_bytes}"):
+            if "safety-battery-capture" in a["name"] or "safety-battery-interpret" in a["name"]:
+                out.append(a)
+    print(f"  listed {len(runs)} {BATTERY_WORKFLOW} runs", flush=True)
     return out
 
 
@@ -110,7 +156,11 @@ def extract(art_id: int) -> list[pathlib.Path]:
 
 
 def main() -> int:
-    arts = live_artifacts()
+    try:
+        arts = live_artifacts()
+    except ListingError as e:
+        print(f"::error::artifact listing failed — nothing harvested: {e}", flush=True)
+        return 1
     caps = [a for a in arts if "capture" in a["name"]]
     ints = [a for a in arts if "interpret" in a["name"]]
     print(f"  live: {len(caps)} capture + {len(ints)} interpret", flush=True)

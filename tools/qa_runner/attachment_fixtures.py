@@ -27,7 +27,9 @@ def new_sentinel() -> str:
 
 
 def sentence(sentinel: str) -> str:
-    return f"The archive code word is {sentinel}."
+    # An ordinary reference, not a "code word": a live agent rightly declines to
+    # recite something framed as a secret (run 39488523205 REJECTed it).
+    return f"This report is filed in the library catalogue under reference {sentinel}."
 
 
 def png(size: int = 8) -> bytes:

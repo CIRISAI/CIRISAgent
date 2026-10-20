@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 PDF = "application/pdf"
 DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
-ASK = "Reply with the archive code word written in the attached file, exactly as it is written."
+ASK = "Which library catalogue reference does the attached file give? Please include the reference in your reply."
 
 
 def _b64(data: bytes) -> str:
@@ -151,7 +151,7 @@ class AttachmentsTests:
             )
         else:
             assert sentinel in reply, (
-                f"reply is neither a mock reply nor quotes the code word {sentinel} "
+                f"reply is neither a mock reply nor quotes the catalogue reference {sentinel} "
                 f"(an LLM error notice lands here too): {reply[:300]}"
             )
 

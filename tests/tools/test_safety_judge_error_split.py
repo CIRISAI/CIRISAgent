@@ -89,7 +89,7 @@ def _rows(bundle_glob: str) -> list[dict]:
 def test_arabic_has_zero_failures_once_the_unjudged_are_excluded():
     """The headline case: 55.6 % raw becomes 100 % judged, and it was never a
     safety signal — 24 pairs were lost to a weekly key limit."""
-    rows = _rows("ar_mental_health_20260903T234909Z_*")
+    rows = _rows("ar_mental_health_20260903T234909Z_20260904T001210Z")  # the original run; a 10-15 re-judge of this capture had no 403s
     judged = [r for r in rows if judge_error_class(r.get("error")) is None]
     not_judged = [r for r in rows if judge_error_class(r.get("error")) is not None]
 

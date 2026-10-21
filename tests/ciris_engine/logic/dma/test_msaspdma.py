@@ -207,3 +207,32 @@ def test_unknown_type_or_scope_falls_back_instead_of_raising() -> None:
     )
     assert _params(result).node.type == NodeType.USER
     assert _params(result).node.scope == GraphScope.LOCAL
+
+
+@pytest.mark.asyncio
+async def test_a_verdict_survives_the_real_resource_usage_type() -> None:
+    """The LLM bus returns a ResourceUsage model; the result schema wants a dict.
+
+    Every verdict used to fail validation here, so MSASPDMA's decision was
+    discarded and the original MEMORIZE ran instead (run 39677251620, 16x). The
+    _convert_result tests above never passed a ResourceUsage, so none caught it.
+    """
+    from unittest.mock import AsyncMock, MagicMock
+
+    from ciris_engine.schemas.runtime.resources import ResourceUsage
+
+    evaluator = _evaluator()
+    verdict = MSASPDMALLMResult(
+        final_action="MEMORIZE", node_id="user/u1", node_type="user", node_scope="local", reasoning="ok"
+    )
+    evaluator.compose_messages = MagicMock(return_value=[{"role": "user", "content": "x"}])  # type: ignore[method-assign]
+    evaluator.call_llm_structured = AsyncMock(  # type: ignore[method-assign]
+        return_value=(verdict, ResourceUsage(tokens_used=12, model_used="test"))
+    )
+    thought = MagicMock(thought_id="th_1", source_task_id="task_1")
+
+    result = await evaluator.evaluate_memorize_action(_memorize("orphan/x"), thought, context=None)
+
+    assert result.selected_action == HandlerActionType.MEMORIZE
+    assert _params(result).node.id == "user/u1"
+    assert isinstance(result.resource_usage, dict) and result.resource_usage["tokens_used"] == 12

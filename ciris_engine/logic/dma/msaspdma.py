@@ -339,7 +339,15 @@ class MSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
             thought_id=original_thought.thought_id,
             task_id=original_thought.source_task_id,
         )
-        return self._convert_result(llm_result, current_params, resource_usage)
+        # ActionSelectionDMAResult.resource_usage is a JSONDict; the LLM bus
+        # returns a ResourceUsage model. Passing the model failed validation, so
+        # EVERY verdict this pass produced was discarded and the original action
+        # ran instead (seen once the mock answered it: run 39677251620, 16x).
+        # DSASPDMA converts the same way.
+        usage: Optional[JSONDict] = (
+            resource_usage.model_dump() if hasattr(resource_usage, "model_dump") else resource_usage
+        )
+        return self._convert_result(llm_result, current_params, usage)
 
     async def evaluate(
         self,

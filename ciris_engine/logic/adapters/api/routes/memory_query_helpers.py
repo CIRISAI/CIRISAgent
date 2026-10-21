@@ -175,6 +175,14 @@ class DateTimeParser:
         return None
 
 
+#: Node types the agent models. Anything else in the graph is substrate-owned.
+_AGENT_NODE_TYPES = frozenset(t.value for t in NodeType)
+
+
+def _content_or_none(value: Any) -> Optional[str]:
+    return None if value is None else str(value)
+
+
 class GraphNodeBuilder:
     """Build GraphNode objects from persist `cirisgraph_query_nodes` rows."""
 
@@ -191,6 +199,13 @@ class GraphNodeBuilder:
             # uses lowercase values.
             scope_lower = str(scope).lower()
             node_type = row.get("node_type", "")
+            # The node's graph also holds substrate-owned rows whose types the
+            # agent does not model (e.g. "attestation", "family"). They are not
+            # agent memory; listing a scope must skip them, not log an ERROR per
+            # row (run 39677251620: 10x on one identity-scope listing).
+            if str(node_type).lower() not in _AGENT_NODE_TYPES:
+                logger.debug("Skipping non-agent node %s of type %r", node_id, node_type)
+                return None
             attributes_blob = row.get("attributes")
             version = row.get("version", 1)
             updated_by = row.get("updated_by") or "system"
@@ -209,6 +224,10 @@ class GraphNodeBuilder:
                 updated_at=updated_at or datetime.now(),
                 created_by=created_by,
                 tags=tags if isinstance(tags, list) else [],
+                # Content was dropped here, so every node the memory API returned
+                # came back with its content stripped: a MEMORIZE could not be
+                # read back through /v1/memory/query (#1303).
+                content=_content_or_none(attributes_dict.get("content")),
             )
 
             return GraphNode(

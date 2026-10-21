@@ -26,6 +26,24 @@ EXT_PDF = ".pdf"
 EXT_DOCX = ".docx"
 
 
+#: Pages read from one PDF before it is refused as too large.
+MAX_PDF_PAGES = 50
+
+
+class ExtractionRefused(Exception):
+    """A document's text could not be extracted. ``reason`` is one of the class constants."""
+
+    PARSER_UNAVAILABLE = "parser_unavailable"
+    TOO_LARGE = "too_large"
+    NO_TEXT = "no_text"
+    UNREADABLE = "unreadable"
+
+    def __init__(self, reason: str, message: str) -> None:
+        super().__init__(message)
+        self.reason = reason
+        self.message = message
+
+
 class DocumentParser:
     """Minimal secure document parser for text extraction."""
 
@@ -260,9 +278,16 @@ class DocumentParser:
             return f"Extraction error: {str(e)}"
 
     def _extract_pdf_text(self, file_data: bytes) -> Optional[str]:
-        """Extract text from PDF bytes."""
+        """Extract text from PDF bytes. Failures come back as a message string (Discord path)."""
+        try:
+            return self.extract_pdf_text_strict(file_data)
+        except ExtractionRefused as e:
+            return e.message
+
+    def extract_pdf_text_strict(self, file_data: bytes) -> str:
+        """Extract text from PDF bytes, or raise :class:`ExtractionRefused` saying why not."""
         if not self._pdf_available:
-            return "PDF parsing not available"
+            raise ExtractionRefused(ExtractionRefused.PARSER_UNAVAILABLE, "PDF parsing not available")
 
         try:
             import pypdf
@@ -284,8 +309,11 @@ class DocumentParser:
                     reader = pypdf.PdfReader(pdf_file)
 
                     # Security check - limit number of pages
-                    if len(reader.pages) > 50:
-                        return f"PDF too large ({len(reader.pages)} pages, max 50)"
+                    if len(reader.pages) > MAX_PDF_PAGES:
+                        raise ExtractionRefused(
+                            ExtractionRefused.TOO_LARGE,
+                            f"PDF too large ({len(reader.pages)} pages, max {MAX_PDF_PAGES})",
+                        )
 
                     texts = []
                     for page_num, page in enumerate(reader.pages):
@@ -299,17 +327,25 @@ class DocumentParser:
 
                     if texts:
                         return "\n\n".join(texts)
-                    else:
-                        return "No text found in PDF"
+                    raise ExtractionRefused(ExtractionRefused.NO_TEXT, "No text found in PDF")
 
+        except ExtractionRefused:
+            raise
         except Exception as e:
             logger.exception(f"PDF extraction error: {e}")
-            return f"PDF error: {str(e)}"
+            raise ExtractionRefused(ExtractionRefused.UNREADABLE, f"PDF error: {str(e)}") from e
 
     def _extract_docx_text(self, file_data: bytes) -> Optional[str]:
-        """Extract text from DOCX bytes."""
+        """Extract text from DOCX bytes. Failures come back as a message string (Discord path)."""
+        try:
+            return self.extract_docx_text_strict(file_data)
+        except ExtractionRefused as e:
+            return e.message
+
+    def extract_docx_text_strict(self, file_data: bytes) -> str:
+        """Extract text from DOCX bytes, or raise :class:`ExtractionRefused` saying why not."""
         if not self._docx_available:
-            return "DOCX parsing not available"
+            raise ExtractionRefused(ExtractionRefused.PARSER_UNAVAILABLE, "DOCX parsing not available")
 
         try:
             import docx2txt
@@ -327,12 +363,13 @@ class DocumentParser:
 
                 if text and text.strip():
                     return str(text.strip())
-                else:
-                    return "No text found in DOCX"
+                raise ExtractionRefused(ExtractionRefused.NO_TEXT, "No text found in DOCX")
 
+        except ExtractionRefused:
+            raise
         except Exception as e:
             logger.exception(f"DOCX extraction error: {e}")
-            return f"DOCX error: {str(e)}"
+            raise ExtractionRefused(ExtractionRefused.UNREADABLE, f"DOCX error: {str(e)}") from e
 
     def get_status(self) -> JSONDict:
         """Get parser status for debugging."""

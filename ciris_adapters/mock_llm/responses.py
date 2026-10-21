@@ -16,6 +16,9 @@ from ciris_engine.schemas.dma.results import (
 )
 
 logger = logging.getLogger(__name__)
+
+#: Sentinel carried by attachment fixtures (tools/qa_runner/attachment_fixtures.py).
+ATTACHMENT_SENTINEL = re.compile(r"CIRIS-ATTACH-[0-9A-F]{8}")
 from ciris_engine.schemas.conscience.core import (
     CoherenceCheckResult,
     CoherenceResult,
@@ -138,6 +141,32 @@ def extract_context_from_messages(messages: List[Dict[str, Any]]) -> List[str]:
                 )
                 context_items.append(f"multimodal_images:{image_count}")
                 context_items.append(f"multimodal_text:{text_content}")
+
+    # Attachment markers for the `attachments` QA module. The document text and
+    # the refusal notice ride in the message text (api_attachments), so scan it.
+    # Newline-joined: a space would run one message's last notice line into the next message.
+    all_text = "\n".join(
+        _extract_text_content(m.get("content", "")) for m in messages if isinstance(m, dict)
+    )
+    document_count = len(re.findall(r"Document '[^']*':", all_text))
+    if document_count:
+        context_items.append(f"attached_documents:{document_count}")
+    tokens = sorted(set(ATTACHMENT_SENTINEL.findall(all_text)))
+    if tokens:
+        context_items.append(f"attachment_tokens:{','.join(tokens)}")
+    if "[Attachment notice]" in all_text:
+        # The same message can appear in the prompt more than once (task
+        # description, conversation history), and a history copy may be cut
+        # short. Each copy's notice lists the refused files; take the fullest.
+        refused = 0
+        for block in all_text.split("[Attachment notice]")[1:]:
+            count = 0
+            for line in block.splitlines()[1:]:
+                if not re.match(r"^- '.*' \(.*\): [a-z_]+\s*$", line):
+                    break
+                count += 1
+            refused = max(refused, count)
+        context_items.append(f"attachments_refused:{refused}")
 
     # Look for passive observation pattern in user messages ONLY
     actual_user_message = ""
@@ -695,7 +724,13 @@ def idma(context: Optional[List[str]] = None) -> IDMAResult:
 
 from typing import List, Optional
 
-from .responses_action_selection import action_selection, aspdma_llm_result, dsaspdma_llm_result, tsaspdma_llm_result
+from .responses_action_selection import (
+    _extract_text_content,
+    action_selection,
+    aspdma_llm_result,
+    dsaspdma_llm_result,
+    tsaspdma_llm_result,
+)
 from .responses_epistemic import coherence, coherence_raw, entropy, entropy_raw
 from .responses_feedback import epistemic_humility, optimization_veto
 

@@ -59,6 +59,10 @@ ALLOWED: dict[str, str] = {
     # Enumerates .md as a non-Python content extension to EXCLUDE from mobile
     # bundling — the exclusion list itself, not a runtime dependency on a .md.
     "ciris_engine/logic/utils/mobile_exclusions.py": "lists .md as a mobile-excluded extension",
+    # Maps a USER's attached file's extension to text/markdown so the attachment
+    # gate can type it (the bytes must still pass the gate) -- an external file
+    # the user sent, never a .md the runtime reads as its own state.
+    "ciris_engine/logic/adapters/api/api_attachments.py": "types a user-attached .md file by extension",
 }
 
 

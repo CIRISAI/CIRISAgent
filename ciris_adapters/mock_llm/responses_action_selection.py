@@ -1139,15 +1139,29 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
             command_found = True
         elif command_from_context == "$memorize":
             content = command_args_from_context if command_args_from_context else "Empty memory"
-            node_id = "_".join(content.split()[:3]).lower().replace(",", "").replace(".", "")
-            if not node_id:
-                node_id = "memory_node"
+            words = content.split()
+            # "$memorize <id> <TYPE> <SCOPE>" keeps its type and scope, as the
+            # forced-action path does. Before, this path hard-coded CONCEPT/LOCAL,
+            # so a user's "$memorize x CONCEPT IDENTITY" never reached the
+            # IDENTITY-scope WA gate (#1303). Anything else keeps the old shape.
+            if (
+                len(words) >= 3
+                and words[1].upper() in NodeType.__members__
+                and words[2].upper() in GraphScope.__members__
+            ):
+                node_id = words[0]
+                node_type = NodeType[words[1].upper()]
+                node_scope = GraphScope[words[2].upper()]
+            else:
+                node_id = "_".join(words[:3]).lower().replace(",", "").replace(".", "") or "memory_node"
+                node_type = NodeType.CONCEPT
+                node_scope = GraphScope.LOCAL
 
             params = MemorizeParams(
                 node=GraphNode(
                     id=node_id,
-                    type=NodeType.CONCEPT,
-                    scope=GraphScope.LOCAL,
+                    type=node_type,
+                    scope=node_scope,
                     attributes={"created_by": "mock_llm", "tags": [f"content:{content[:50]}", "source:mock_llm"]},
                 )
             )

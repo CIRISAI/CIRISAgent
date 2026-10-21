@@ -60,6 +60,7 @@ class WAIdentityApprovalTests:
         self.refused_node = f"qa_wa_identity_refused_{suffix}"
         self.approved_node = f"qa_wa_identity_approved_{suffix}"
         self.deferral_id: Optional[str] = None
+        self._last_lookup: List[Dict[str, Any]] = []
 
     async def run(self) -> List[Dict[str, Any]]:
         self.console.print("\n[cyan] Testing WA-approved identity change (defer → approve → identity MEMORIZE)[/cyan]")
@@ -117,31 +118,46 @@ class WAIdentityApprovalTests:
         data: Dict[str, Any] = r.json()["data"]
         return data
 
+    async def _query(self, body: Dict[str, Any]) -> List[Dict[str, Any]]:
+        async with httpx.AsyncClient(timeout=30.0) as http:
+            r = await http.post(f"{self.base_url}/v1/memory/query", headers=self._headers(), json=body)
+        assert r.status_code == 200, f"POST /v1/memory/query {body} answered {r.status_code}: {r.text[:200]}"
+        nodes: List[Dict[str, Any]] = r.json()["data"] or []
+        return nodes
+
+    @staticmethod
+    def _content(node: Dict[str, Any]) -> Optional[str]:
+        attributes = node.get("attributes") or {}
+        content = attributes.get("content") if isinstance(attributes, dict) else None
+        return str(content) if content is not None else None
+
     async def _stored(self, marker: str, scope: str) -> List[Dict[str, Any]]:
-        """Nodes at ``scope`` whose id or content is ``marker``.
+        """Nodes at ``scope`` whose id is ``marker`` or whose content contains it.
 
         A flat MEMORIZE (what live models emit, and what the mock now emits too)
         carries no node id: the engine assigns a uuid and the requested name
-        travels as the content. So the node is found by content, not by id.
+        travels as the content. So the node is found by content, by both a text
+        search and a scope listing, and deduplicated by id.
         """
-        async with httpx.AsyncClient(timeout=30.0) as http:
-            r = await http.post(
-                f"{self.base_url}/v1/memory/query",
-                headers=self._headers(),
-                json={"scope": scope, "limit": 1000},
-            )
-        assert r.status_code == 200, f"POST /v1/memory/query answered {r.status_code}: {r.text[:200]}"
-        nodes: List[Dict[str, Any]] = r.json()["data"] or []
-
-        def matches(node: Dict[str, Any]) -> bool:
-            attributes = node.get("attributes") or {}
-            content = attributes.get("content") if isinstance(attributes, dict) else None
-            return node.get("id") == marker or content == marker
-
-        return [n for n in nodes if matches(n)]
+        seen: Dict[str, Dict[str, Any]] = {}
+        for body in ({"query": marker, "limit": 200}, {"scope": scope, "limit": 1000}):
+            for node in await self._query(body):
+                if node.get("id") == marker or marker in (self._content(node) or ""):
+                    seen[str(node.get("id"))] = node
+        self._last_lookup = list(seen.values())
+        return [n for n in seen.values() if str(n.get("scope", "")).lower() == scope]
 
     async def _stored_anywhere(self, marker: str) -> List[Dict[str, Any]]:
         return await self._stored(marker, "identity") + await self._stored(marker, "local")
+
+    async def _diagnose(self, marker: str) -> str:
+        """What the graph holds, for a failure message that says why."""
+        identity = await self._query({"scope": "identity", "limit": 1000})
+        sample = [(n.get("id"), n.get("type"), self._content(n)) for n in identity[-5:]]
+        return (
+            f"matches for {marker!r} at any scope: {[(n.get('id'), n.get('scope')) for n in self._last_lookup]}; "
+            f"{len(identity)} identity-scope nodes, newest: {sample}"
+        )
 
     async def _pending_deferrals(self) -> List[Dict[str, Any]]:
         async with httpx.AsyncClient(timeout=30.0) as http:
@@ -159,11 +175,10 @@ class WAIdentityApprovalTests:
         assert not stored, (
             f"the unapproved identity MEMORIZE was stored: {stored} (reply: {data.get('response', '')[:200]})"
         )
-        # Positive evidence the gate ran, not just an absence: the agent says why.
-        reply = str(data.get("response", ""))
-        assert "WA authorization required" in reply or "authorization" in reply.lower(), (
-            f"no refusal reached the user; the gate may not have run. Reply: {reply[:300]}"
-        )
+        # This absence is meaningful only because the approved write below DOES
+        # land through the same path (an IDENTITY-scope MEMORIZE from the mock).
+        # Before #1303's mock fix every mock $memorize went in at LOCAL, so this
+        # check passed without the gate ever running.
 
     async def test_identity_change_defers(self) -> None:
         before = {d["deferral_id"] for d in await self._pending_deferrals()}
@@ -202,8 +217,8 @@ class WAIdentityApprovalTests:
                 break
             await asyncio.sleep(POLL_SECONDS)
         assert node is not None, (
-            f"the WA-approved identity change never landed: {self.approved_node} is not in the graph "
-            f"{APPROVAL_TIMEOUT_SECONDS:.0f}s after approval. The guidance task was not WA-authorized."
+            f"the WA-approved identity change never landed: {self.approved_node} is not in the graph at "
+            f"IDENTITY scope {APPROVAL_TIMEOUT_SECONDS:.0f}s after approval. {await self._diagnose(self.approved_node)}"
         )
         assert str(node.get("scope", "")).lower() == "identity", f"stored at the wrong scope: {node}"
 

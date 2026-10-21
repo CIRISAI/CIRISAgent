@@ -1140,22 +1140,17 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
         elif command_from_context == "$memorize":
             content = command_args_from_context if command_args_from_context else "Empty memory"
             words = content.split()
-            # "$memorize <id> <TYPE> <SCOPE>" keeps its type and scope, as the
-            # forced-action path does. Before, this path hard-coded CONCEPT/LOCAL,
-            # so a user's "$memorize x CONCEPT IDENTITY" never reached the
-            # IDENTITY-scope WA gate (#1303). Anything else keeps the old shape.
-            if (
-                len(words) >= 3
-                and words[1].upper() in NodeType.__members__
-                and words[2].upper() in GraphScope.__members__
-            ):
-                node_id = words[0]
-                node_type = NodeType[words[1].upper()]
+            # "$memorize <id> <TYPE> <SCOPE>" keeps its SCOPE. This path used to
+            # hard-code LOCAL, so a user's "$memorize x CONCEPT IDENTITY" never
+            # reached the IDENTITY-scope WA gate (#1303). The type stays CONCEPT:
+            # honouring CONFIG here changed what the filters/handlers QA modules
+            # store (run 39668234751, filters 16/28), and only the scope matters
+            # to the gate. The id keeps its old shape too.
+            node_id = "_".join(words[:3]).lower().replace(",", "").replace(".", "") or "memory_node"
+            node_type = NodeType.CONCEPT
+            node_scope = GraphScope.LOCAL
+            if len(words) >= 3 and words[1].upper() in NodeType.__members__ and words[2].upper() in GraphScope.__members__:
                 node_scope = GraphScope[words[2].upper()]
-            else:
-                node_id = "_".join(words[:3]).lower().replace(",", "").replace(".", "") or "memory_node"
-                node_type = NodeType.CONCEPT
-                node_scope = GraphScope.LOCAL
 
             params = MemorizeParams(
                 node=GraphNode(
